@@ -1,0 +1,40 @@
+#
+# Testing file for checking features
+#
+
+DECLARE foo[12] ALIAS bar[8]:%0101;
+DECLARE output[36];
+
+HANDLER TEST
+{
+	STATES a,b,c
+	{
+		STATE a
+		{
+			STATES fish,food
+			{
+				STATE fish
+				{
+					DEBUG_TRACE "fish";
+				}
+				STATE food
+				{
+					DEBUG_TRACE "food";
+				}
+			}
+			foo <- foo + 1;
+			DEBUG_TRACE foo;
+		}
+		STATE b
+		{
+			bar <- bar - 1;
+			DEBUG_TRACE bar;
+		}
+		STATE c
+		{
+			output <- foo;
+			DEBUG_TRACE output;
+		}
+	}
+}
+
