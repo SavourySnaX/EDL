@@ -21,7 +21,7 @@ clean:
 	rmdir out
 	$(RM) edl.exe
 
-out/parser.cpp: src/edl.y
+out/parser.cpp: src/edl.y 
 	mkdir -p out
 	bison -d -o $@ $^
 	

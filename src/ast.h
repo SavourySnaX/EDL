@@ -1,18 +1,24 @@
 #include <iostream>
 #include <vector>
 #include <llvm/Value.h>
+#include <llvm/Function.h>
 #include <llvm/ADT/APInt.h>
+#include <llvm/BasicBlock.h>
 
 class CodeGenContext;
 class CStatement;
 class CExpression;
 class CVariableDeclaration;
 class CStateDeclaration;
+class CAliasDeclaration;
+class CDebugTrace;
 
 typedef std::vector<CStatement*> StatementList;
 typedef std::vector<CExpression*> ExpressionList;
 typedef std::vector<CVariableDeclaration*> VariableList;
 typedef std::vector<CStateDeclaration*> StateList;
+typedef std::vector<CAliasDeclaration*> AliasList;
+typedef std::vector<CDebugTrace*> DebugList;
 
 class CNode {
 public:
@@ -58,6 +64,10 @@ public:
 		}
 
 		integer = llvm::APInt(numBits,data,radix);
+		if (integer.getActiveBits())						/* this shrinks the value to the correct number of bits - fixes over allocation for decimal numbers */
+			integer = integer.trunc(integer.getActiveBits());
+		else
+			integer = integer.trunc(1);
 	}
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
@@ -66,8 +76,17 @@ class CIdentifier : public CExpression {
 public:
 	std::string name;
 	CIdentifier(const std::string& name) : name(name) { }
+	llvm::Value* trueSize(llvm::Value*,CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
+
+class CString : public CExpression {
+public:
+	std::string quoted;
+	CString(const std::string& quoted) : quoted(quoted) { }
+	virtual llvm::Value* codeGen(CodeGenContext& context);
+};
+
 
 class CMethodCall : public CExpression {
 public:
@@ -105,6 +124,55 @@ public:
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
 
+class CDebugTrace : public CStatement
+{
+public:
+	int currentBase;
+	virtual bool isModifier() { return false; }
+};
+
+class CDebugLine : public CStatement
+{
+public:
+	DebugList debug;
+	CDebugLine(DebugList& debug) :
+		debug(debug) { }
+	virtual llvm::Value* codeGen(CodeGenContext& context);
+};
+
+class CDebugTraceString : public CDebugTrace {
+public:
+	CString& string;
+	CDebugTraceString(CString& string) :
+		string(string) { }
+	virtual llvm::Value* codeGen(CodeGenContext& context);
+};
+
+class CDebugTraceInteger : public CDebugTrace {
+public:
+	CInteger& integer;
+	CDebugTraceInteger(CInteger& integer) :
+		integer(integer) { }
+	virtual llvm::Value* codeGen(CodeGenContext& context);
+};
+
+class CDebugTraceIdentifier : public CDebugTrace {
+public:
+	CIdentifier& ident;
+	CDebugTraceIdentifier(CIdentifier& ident) :
+		ident(ident) { }
+	virtual llvm::Value* codeGen(CodeGenContext& context);
+};
+
+class CDebugTraceBase : public CDebugTrace {
+public:
+	CInteger& integer;
+	CDebugTraceBase(CInteger& integer) :
+		integer(integer) { }
+	virtual bool isModifier() { return true; }
+	virtual llvm::Value* codeGen(CodeGenContext& context) {return NULL; }
+};
+
 class CExpressionStatement : public CStatement {
 public:
 	CExpression& expression;
@@ -117,24 +185,64 @@ class CVariableDeclaration : public CStatement {
 public:
 	CIdentifier& id;
 	CInteger& size;
+	AliasList aliases;
 	CVariableDeclaration(CIdentifier& id, CInteger& size) :
 		id(id), size(size) { }
+	CVariableDeclaration(CIdentifier& id, CInteger& size,AliasList& aliases) :
+		id(id), size(size),aliases(aliases) { }
+	virtual llvm::Value* codeGen(CodeGenContext& context);
+};
+
+class CAliasDeclaration : public CStatement {
+public:
+	CIdentifier& idOrEmpty;
+	CInteger& sizeOrValue;
+	static CIdentifier empty;
+	CAliasDeclaration(CIdentifier& id, CInteger& size) :
+		idOrEmpty(id), sizeOrValue(size) { }
+	CAliasDeclaration(CInteger& value) :
+		idOrEmpty(empty), sizeOrValue(value) { }
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
 
 class CStateDeclaration : public CStatement {
 public:
 	CIdentifier& id;
+	llvm::BasicBlock* block;
 	CStateDeclaration(CIdentifier& id) :
-		id(id) { }
-	virtual llvm::Value* codeGen(CodeGenContext& context);
+		id(id),block(NULL) { }
+	virtual llvm::Value* codeGen(CodeGenContext& context,llvm::Function* parent);
 };
 
 class CStatesDeclaration : public CStatement {
 public:
 	StateList states;
-	CStatesDeclaration(StateList& states) :
-		states(states) { }
+	llvm::BasicBlock* exitState;
+	CBlock& block;
+	CStatesDeclaration(StateList& states,CBlock& block) :
+		states(states),block(block) { }
+
+	CStateDeclaration* getStateDeclaration(const CIdentifier& id) { for (int a=0;a<states.size();a++) { if (states[a]->id.name == id.name) return states[a]; } return NULL; }
+
+	virtual llvm::Value* codeGen(CodeGenContext& context);
+};
+
+class CIfStatement : public CStatement
+{
+public:
+	CExpression& expr;
+	CBlock& block;
+	CIfStatement(CExpression& expr, CBlock& block) :
+		expr(expr),block(block) { }
+	virtual llvm::Value* codeGen(CodeGenContext& context);
+};
+
+class CStateDefinition : public CStatement {
+public:
+	const CIdentifier& id;
+	CBlock& block;
+	CStateDefinition(const CIdentifier& id, CBlock& block) :
+		id(id), block(block) { }
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
 

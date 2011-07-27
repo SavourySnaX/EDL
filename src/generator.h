@@ -23,29 +23,62 @@
 using namespace llvm;
 
 class CBlock;
+class CStatesDeclaration;
 
-class CodeGenBlock {
+class BitVariable
+{
 public:
-    BasicBlock *block;
-    std::map<std::string, Value*> locals;
+	Value* value;
+	APInt	size;
+	APInt	trueSize;
+	APInt	mask;
+	APInt	cnst;
+	APInt	shft;
+	bool	aliased;
 };
 
-class CodeGenContext {
+class CodeGenBlock 
+{
+public:
+    BasicBlock *block;
+    std::map<std::string, BitVariable> locals;
+};
+
+class CodeGenContext 
+{
     std::stack<CodeGenBlock *> blocks;
+    std::stack<CStatesDeclaration *> statesStack;
     Function *mainFunction;
 
 public:
     Module *module;
-	ExecutionEngine		*ee;
+    ExecutionEngine		*ee;
     CodeGenContext() { module = new Module("main", getGlobalContext()); }
-    
-    std::map<std::string, Value*> m_globals;
+    Function *debugTraceString;
+    Function *debugTraceChar;
+    Function *handlerToTest;		/* ONLY USED FOR TESTING PURPOSES */
+
+    std::map<std::string, BitVariable> m_globals;
 
     void generateCode(CBlock& root);
     GenericValue runCode();
-    std::map<std::string, Value*>& locals() { return blocks.top()->locals; }
-    std::map<std::string, Value*>& globals() { return m_globals; }
+    std::map<std::string, BitVariable>& locals() { return blocks.top()->locals; }
+    std::map<std::string, BitVariable>& globals() { return m_globals; }
     BasicBlock *currentBlock() { if (blocks.size()>0) return blocks.top()->block; else return NULL; }
-    void pushBlock(BasicBlock *block) { blocks.push(new CodeGenBlock()); blocks.top()->block = block; }
-    void popBlock() { CodeGenBlock *top = blocks.top(); blocks.pop(); delete top; }
+    void setBlock(BasicBlock *block) { blocks.top()->block = block; }
+    void pushBlock(BasicBlock *block) 
+    { 
+	    std::cout << "Pushing new Block " << std::endl;
+	    std::map<std::string,BitVariable> tLocals; 
+	    if (blocks.size()>0) 
+		    tLocals = blocks.top()->locals; 
+	    blocks.push(new CodeGenBlock()); 
+	    blocks.top()->block = block; 
+	    blocks.top()->locals = tLocals;
+	    std::cout << "Num Locals : " << tLocals.size() << std::endl;
+    }
+    void popBlock() { std::cout << "Popping old Block" << std::endl; CodeGenBlock *top = blocks.top(); blocks.pop(); delete top; }
+    CStatesDeclaration* currentState() { if (statesStack.empty()) return NULL; else return statesStack.top(); }
+    void pushState(CStatesDeclaration *state) { statesStack.push(state); }
+    void popState() { statesStack.pop(); }
 };
