@@ -7,7 +7,7 @@ DECLARE output[36];
 
 HANDLER TEST
 {
-	STATES a,b,c
+	STATES a|b|c
 	{
 		STATE a
 		{
@@ -15,26 +15,29 @@ HANDLER TEST
 			{
 				STATE fish
 				{
-					DEBUG_TRACE "fish";
+					bar <- bar + foo;
+					DEBUG_TRACE "FISH",bar;
 				}
 				STATE food
 				{
-					DEBUG_TRACE "food";
+					foo <- bar + 1;
+					DEBUG_TRACE "FOOD",foo;
 				}
 			}
 			foo <- foo + 1;
-			DEBUG_TRACE foo;
+			DEBUG_TRACE BASE 16,foo;
 		}
 		STATE b
 		{
 			bar <- bar - 1;
-			DEBUG_TRACE bar;
+			DEBUG_TRACE BASE 16,bar;
 		}
 		STATE c
 		{
 			output <- foo;
-			DEBUG_TRACE output;
+			DEBUG_TRACE BASE 16,output;
 		}
 	}
+
 }
 

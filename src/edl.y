@@ -37,7 +37,7 @@
 %token <string> TOK_IDENTIFIER TOK_INTEGER TOK_STRING
 %token <token>	TOK_DECLARE TOK_HANDLER	TOK_STATES TOK_STATE TOK_ALIAS TOK_IF			/* Reserved words */
 %token <token>	TOK_TRACE TOK_BASE								/* Debug reserved words */
-%token <token> TOK_LSQR TOK_RSQR TOK_LBRACE TOK_RBRACE TOK_COMMA TOK_COLON TOK_EOS TOK_ASSIGNLEFT TOK_ASSIGNRIGHT TOK_ADD TOK_SUB TOK_OBR TOK_CBR TOK_CMPEQ
+%token <token> TOK_LSQR TOK_RSQR TOK_LBRACE TOK_RBRACE TOK_COMMA TOK_COLON TOK_EOS TOK_ASSIGNLEFT TOK_ASSIGNRIGHT TOK_ADD TOK_SUB TOK_OBR TOK_CBR TOK_CMPEQ TOK_BAR
 
 %type <strng> quoted
 %type <ident> ident
@@ -95,7 +95,8 @@ handler_decl : TOK_HANDLER ident block	{ $$ = new CHandlerDeclaration(*$2,*$3); 
 
 state_decl : ident { $$ = new CStateDeclaration(*$1); }
 
-states_list : states_list TOK_COMMA state_decl { $1->push_back($<state_decl>3); }
+states_list : states_list TOK_COMMA state_decl { $1->back()->autoIncrement=true; $1->push_back($<state_decl>3); }
+	    | states_list TOK_BAR state_decl { $1->push_back($<state_decl>3); }
 	    | state_decl { $$ = new StateList(); $$->push_back($<state_decl>1); }
 		;
 

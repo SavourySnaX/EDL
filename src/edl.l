@@ -43,6 +43,7 @@ BASE					{ return TOKEN(TOK_BASE); }
 "-"					{ return TOKEN(TOK_SUB); }
 "("					{ return TOKEN(TOK_OBR); }
 ")"					{ return TOKEN(TOK_CBR); }
+"|"					{ return TOKEN(TOK_BAR); }
 
 [ \t\r]					{ /* Consume white space */ }
 #.*					{ /* Ignore comments */ }

@@ -573,11 +573,29 @@ Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 	block.codeGen(context);
 	context.popState();
 
+	bool lastStateAutoIncrement=false;
+	int startOfAutoIncrementIdx=-1;
 	for (int a=0;a<states.size();a++)
 	{
-		ConstantInt* nextState = ConstantInt::get(getGlobalContext(),APInt(bitsNeeded, a==states.size()-1 ? 0 : a+1,false));
-		StoreInst* newState = new StoreInst(nextState,global,false,states[a]->block);
+		if (states[a]->autoIncrement)
+		{
+			if (!lastStateAutoIncrement)
+			{
+				startOfAutoIncrementIdx=a;
+			}
+			ConstantInt* nextState = ConstantInt::get(getGlobalContext(),APInt(bitsNeeded, a==states.size()-1 ? 0 : a+1,false));
+			StoreInst* newState = new StoreInst(nextState,global,false,states[a]->block);
+		}
+		else
+		{
+			if (lastStateAutoIncrement)
+			{
+				ConstantInt* nextState = ConstantInt::get(getGlobalContext(),APInt(bitsNeeded, startOfAutoIncrementIdx,false));
+				StoreInst* newState = new StoreInst(nextState,global,false,states[a]->block);
+			}
+		}
 		BranchInst::Create(exitState,states[a]->block);			// this terminates the final blocks from our states
+		lastStateAutoIncrement=states[a]->autoIncrement;
 	}
 
 //	if (context.currentState())

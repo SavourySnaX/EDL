@@ -64,10 +64,13 @@ public:
 		}
 
 		integer = llvm::APInt(numBits,data,radix);
-		if (integer.getActiveBits())						/* this shrinks the value to the correct number of bits - fixes over allocation for decimal numbers */
-			integer = integer.trunc(integer.getActiveBits());
-		else
-			integer = integer.trunc(1);
+		if (radix==10)
+		{
+			if (integer.getActiveBits())						// this shrinks the value to the correct number of bits - fixes over allocation for decimal numbers
+				integer = integer.trunc(integer.getActiveBits());		// only performed on decimal numbers (otherwise we loose important leading zeros)
+			else
+				integer = integer.trunc(1);
+		}
 	}
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
@@ -208,9 +211,10 @@ public:
 class CStateDeclaration : public CStatement {
 public:
 	CIdentifier& id;
+	bool autoIncrement;
 	llvm::BasicBlock* block;
 	CStateDeclaration(CIdentifier& id) :
-		id(id),block(NULL) { }
+		id(id),autoIncrement(false),block(NULL) { }
 	virtual llvm::Value* codeGen(CodeGenContext& context,llvm::Function* parent);
 };
 
