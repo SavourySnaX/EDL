@@ -37,6 +37,13 @@ public:
 	bool	aliased;
 };
 
+class StateVariable
+{
+public:
+	Value* value;
+	CStatesDeclaration* decl;
+};
+
 class CodeGenBlock 
 {
 public:
@@ -51,6 +58,7 @@ class CodeGenContext
     Function *mainFunction;
 
 public:
+    std::string stateLabelStack;
     Module *module;
     ExecutionEngine		*ee;
     CodeGenContext() { module = new Module("main", getGlobalContext()); }
@@ -59,11 +67,13 @@ public:
     Function *handlerToTest;		/* ONLY USED FOR TESTING PURPOSES */
 
     std::map<std::string, BitVariable> m_globals;
+    std::map<std::string, StateVariable> m_states;
 
     void generateCode(CBlock& root);
     GenericValue runCode();
     std::map<std::string, BitVariable>& locals() { return blocks.top()->locals; }
     std::map<std::string, BitVariable>& globals() { return m_globals; }
+    std::map<std::string, StateVariable>& states() { return m_states; }
     BasicBlock *currentBlock() { if (blocks.size()>0) return blocks.top()->block; else return NULL; }
     void setBlock(BasicBlock *block) { blocks.top()->block = block; }
     void pushBlock(BasicBlock *block) 

@@ -38,6 +38,10 @@ HANDLER TEST
 			DEBUG_TRACE BASE 16,output;
 		}
 	}
-
+	
+	IF TEST.a.fish@
+	{
+		DEBUG_TRACE "Currently in sub state fish of state a of TEST handler";
+	}
 }
 

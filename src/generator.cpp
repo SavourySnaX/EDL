@@ -381,9 +381,17 @@ Value* CDebugTraceIdentifier::codeGen(CodeGenContext& context)
 	return fcall;
 }
 
-Value* CDebugLine::codeGen(CodeGenContext& context)
+Value* CDebugLine::codeGen(CodeGenContext& context)		// Refactored away onto its own block - TODO factor away to a function - need to take care of passing identifiers forward though
 {
 	int currentBase=2;
+
+	BasicBlock *trac = BasicBlock::Create(getGlobalContext(),"debug_trace_helper",context.currentBlock()->getParent());
+	BasicBlock *cont = BasicBlock::Create(getGlobalContext(),"continue",context.currentBlock()->getParent());
+	
+	BranchInst::Create(trac,context.currentBlock());
+
+	context.pushBlock(trac);
+
 	for (unsigned a=0;a<debug.size();a++)
 	{
 		if (debug[a]->isModifier())
@@ -396,12 +404,18 @@ Value* CDebugLine::codeGen(CodeGenContext& context)
 			debug[a]->codeGen(context);
 		}
 	}
-		
+
 	std::vector<Value*> args;
 	args.push_back(ConstantInt::get(getGlobalContext(), APInt(32, '\n')));
 	CallInst* fcall = CallInst::Create(context.debugTraceChar,args.begin(),args.end(),"DEBUGTRACE",context.currentBlock());
+	
+	BranchInst::Create(cont,context.currentBlock());
 
-	return fcall;
+	context.popBlock();
+
+	context.setBlock(cont);
+
+	return NULL;
 }
 
 Value* CBinaryOperator::codeGen(CodeGenContext& context)
@@ -527,7 +541,9 @@ Value* CStateDeclaration::codeGen(CodeGenContext& context,Function* parent)
 	std::cout << "Creating state enumeration " << id.name << endl;
 		
 	// We need to create a bunch of labels - one for each case.. we will need a finaliser for the blocks when we pop out of our current block.
-	block = BasicBlock::Create(getGlobalContext(),id.name,parent);
+	entry = BasicBlock::Create(getGlobalContext(),id.name+"entry",parent);
+	exit = BasicBlock::Create(getGlobalContext(),id.name+"exit",parent);
+	stateAdjust = BasicBlock::Create(getGlobalContext(),id.name+"adjust",parent);
 
 	return NULL;
 }
@@ -537,14 +553,22 @@ Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 	Twine numStatesTwine(states.size());
 	std::string numStates = numStatesTwine.str();
 	APInt overSized(4*numStates.length(),numStates,10);
-	unsigned bitsNeeded = overSized.getActiveBits();		// +1 because of sign bit (in debug output)
+	unsigned bitsNeeded = overSized.getActiveBits();
 	
 	std::cout << "Generating state machine entry " << endl;
 
 	std::cout << "Number of states : " << numStates << " " << bitsNeeded << endl;
 	
-	GlobalVariable *global = new GlobalVariable(*context.module,Type::getIntNTy(getGlobalContext(),bitsNeeded), false, GlobalValue::InternalLinkage,NULL,"STATE" + context.currentBlock()->getParent()->getName());
-  
+	std::string stateLabel = "STATE" + context.stateLabelStack;
+
+	GlobalVariable *global = new GlobalVariable(*context.module,Type::getIntNTy(getGlobalContext(),bitsNeeded), false, GlobalValue::InternalLinkage,NULL,stateLabel);
+ 
+	StateVariable newStateVar;
+	newStateVar.value = global;
+	newStateVar.decl = this;
+
+	context.states()[stateLabel]=newStateVar;
+
 	// Constant Definitions
 	ConstantInt* const_int32_n = ConstantInt::get(getGlobalContext(), APInt(bitsNeeded, 0, false));
   
@@ -566,7 +590,7 @@ Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 	{
 		states[a]->codeGen(context,bb->getParent());
 		ConstantInt* tt = ConstantInt::get(getGlobalContext(),APInt(bitsNeeded,a,false));
-		void_6->addCase(tt,states[a]->block);
+		void_6->addCase(tt,states[a]->entry);
 	}
 
 	context.pushState(this);
@@ -584,25 +608,20 @@ Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 				startOfAutoIncrementIdx=a;
 			}
 			ConstantInt* nextState = ConstantInt::get(getGlobalContext(),APInt(bitsNeeded, a==states.size()-1 ? 0 : a+1,false));
-			StoreInst* newState = new StoreInst(nextState,global,false,states[a]->block);
+			StoreInst* newState = new StoreInst(nextState,global,false,states[a]->stateAdjust);
 		}
 		else
 		{
 			if (lastStateAutoIncrement)
 			{
 				ConstantInt* nextState = ConstantInt::get(getGlobalContext(),APInt(bitsNeeded, startOfAutoIncrementIdx,false));
-				StoreInst* newState = new StoreInst(nextState,global,false,states[a]->block);
+				StoreInst* newState = new StoreInst(nextState,global,false,states[a]->stateAdjust);
 			}
 		}
-		BranchInst::Create(exitState,states[a]->block);			// this terminates the final blocks from our states
+		BranchInst::Create(states[a]->exit,states[a]->stateAdjust);	// this terminates the final blocks from our states
+		BranchInst::Create(exitState,states[a]->exit);			// this terminates the final blocks from our states
 		lastStateAutoIncrement=states[a]->autoIncrement;
 	}
-
-//	if (context.currentState())
-//	{
-//		BranchInst::Create(context.currentState()->exitState,exitState);
-//	}
-
 
 	return void_6;
 }
@@ -717,10 +736,17 @@ Value* CStateDefinition::codeGen(CodeGenContext& context)
 
 	       	if (pState)
 		{
-			context.pushBlock(pState->block);
+			std::string oldStateLabelStack = context.stateLabelStack;
+			context.stateLabelStack+="." + id.name;
+	
+			std::cout << "STATE LABEL : " << context.stateLabelStack << std::endl;
+
+			context.pushBlock(pState->entry);
 			block.codeGen(context);
-			pState->block = context.currentBlock();
+			BranchInst::Create(pState->stateAdjust,context.currentBlock());
 			context.popBlock();
+
+			context.stateLabelStack=oldStateLabelStack;
 		}
 		else
 		{
@@ -749,15 +775,61 @@ Value* CHandlerDeclaration::codeGen(CodeGenContext& context)
 
 	context.pushBlock(bblock);
 
+	std::string oldStateLabelStack = context.stateLabelStack;
+	context.stateLabelStack+="." + id.name;
+
+	std::cout << "STATE LABEL : " << context.stateLabelStack << std::endl;
+
 	block.codeGen(context);
 
 	ReturnInst::Create(getGlobalContext(), context.currentBlock());			/* block may well have changed by time we reach here */
+
+	context.stateLabelStack=oldStateLabelStack;
 
 	context.popBlock();
 
 	std::cout << "Creating function: " << id.name << endl;
 
 	return function;
+}
+
+Value* CStateTest::codeGen(CodeGenContext& context)
+{
+	unsigned int a;
+
+	// Locate the parent variable and value for the test
+	std::string findString = "STATE";
+	for (a=0;a<stateIdents.size()-1;a++)
+	{
+		findString+="." + stateIdents[a]->name;
+	}
+
+	if (context.states().find(findString) == context.states().end())
+	{
+		std::cout << "Unable to find HANDLER/SUBSTATE " << std::endl;
+		return NULL;
+	}
+	
+	StateVariable state = context.states()[findString];
+
+	int stateIndex = state.decl->getStateDeclarationIndex(stateIdents[stateIdents.size()-1]->name);
+	if (stateIndex == -1)
+	{
+		std::cout << "Unable to find value for state " << std::endl;
+		return NULL;
+	}
+
+	// Load value from state variable, test against being equal to found index, jump on result
+	Twine numStatesTwine(state.decl->states.size());
+	std::string numStates = numStatesTwine.str();
+	APInt overSized(4*numStates.length(),numStates,10);
+	unsigned bitsNeeded = overSized.getActiveBits();
+	
+	Value* load = new LoadInst(state.value, "", false, context.currentBlock());
+	
+	CmpInst* cmp = CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_EQ,load, ConstantInt::get(getGlobalContext(), APInt(bitsNeeded,stateIndex)), "", context.currentBlock());
+
+	return cmp;
 }
 
 Value* CIfStatement::codeGen(CodeGenContext& context)

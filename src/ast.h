@@ -12,6 +12,7 @@ class CVariableDeclaration;
 class CStateDeclaration;
 class CAliasDeclaration;
 class CDebugTrace;
+class CStateIdent;
 
 typedef std::vector<CStatement*> StatementList;
 typedef std::vector<CExpression*> ExpressionList;
@@ -19,6 +20,7 @@ typedef std::vector<CVariableDeclaration*> VariableList;
 typedef std::vector<CStateDeclaration*> StateList;
 typedef std::vector<CAliasDeclaration*> AliasList;
 typedef std::vector<CDebugTrace*> DebugList;
+typedef std::vector<CStateIdent*> StateIdentList;
 
 class CNode {
 public:
@@ -81,6 +83,13 @@ public:
 	CIdentifier(const std::string& name) : name(name) { }
 	llvm::Value* trueSize(llvm::Value*,CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
+};
+
+class CStateIdent : public CExpression {
+public:
+	std::string name;
+	CStateIdent(const std::string& name) : name(name) { }
+	virtual llvm::Value* codeGen(CodeGenContext& context) { }
 };
 
 class CString : public CExpression {
@@ -212,21 +221,34 @@ class CStateDeclaration : public CStatement {
 public:
 	CIdentifier& id;
 	bool autoIncrement;
-	llvm::BasicBlock* block;
+	llvm::BasicBlock* entry;
+	llvm::BasicBlock* stateAdjust;
+	llvm::BasicBlock* exit;
 	CStateDeclaration(CIdentifier& id) :
-		id(id),autoIncrement(false),block(NULL) { }
+		id(id),autoIncrement(false),entry(NULL),stateAdjust(NULL),exit(NULL) { }
 	virtual llvm::Value* codeGen(CodeGenContext& context,llvm::Function* parent);
 };
 
 class CStatesDeclaration : public CStatement {
 public:
 	StateList states;
+	std::string label;
 	llvm::BasicBlock* exitState;
 	CBlock& block;
 	CStatesDeclaration(StateList& states,CBlock& block) :
 		states(states),block(block) { }
 
 	CStateDeclaration* getStateDeclaration(const CIdentifier& id) { for (int a=0;a<states.size();a++) { if (states[a]->id.name == id.name) return states[a]; } return NULL; }
+	int getStateDeclarationIndex(const CIdentifier& id) { for (int a=0;a<states.size();a++) { if (states[a]->id.name == id.name) return a; } return -1; }
+
+	virtual llvm::Value* codeGen(CodeGenContext& context);
+};
+
+class CStateTest : public CExpression {
+public:
+	StateIdentList stateIdents;
+	CStateTest(StateIdentList& stateIdents) :
+		stateIdents(stateIdents) { }
 
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };

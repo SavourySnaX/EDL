@@ -63,7 +63,7 @@ HANDLER		TEST
 # Each clock in here is one state in the cpu machine. The first 3 states for all instructions are identical, and these are the instruction fetch / decode part
 # Still need to do HOLD/INT proessing
 
-	STATES FETCH,MEMIN,MEMOUT,PORTIN,PORTOUT,SPREAD,SPWRITE,DADCYCLE,TW,TWH,RESET
+	STATES FETCH|MEMIN|MEMOUT|PORTIN|PORTOUT|SPREAD|SPWRITE|DADCYCLE|TW|TWH|RESET
 	{
 		STATE FETCH
 		{

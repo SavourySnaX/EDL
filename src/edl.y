@@ -26,29 +26,35 @@
 	CStateDeclaration *state_decl;
 	CAliasDeclaration *alias_decl;
 	CDebugTrace *debug;
+	CStateIdent *state_ident;
 	std::vector<CAliasDeclaration*> *aliasvec;
 	std::vector<CStateDeclaration*> *varvec;
 	std::vector<CExpression*> *exprvec;
 	std::vector<CDebugTrace*> *debugvec;
+	std::vector<CStateIdent*> *staterefvec;
 	std::string *string;
 	int token;
 }
 
 %token <string> TOK_IDENTIFIER TOK_INTEGER TOK_STRING
-%token <token>	TOK_DECLARE TOK_HANDLER	TOK_STATES TOK_STATE TOK_ALIAS TOK_IF			/* Reserved words */
-%token <token>	TOK_TRACE TOK_BASE								/* Debug reserved words */
-%token <token> TOK_LSQR TOK_RSQR TOK_LBRACE TOK_RBRACE TOK_COMMA TOK_COLON TOK_EOS TOK_ASSIGNLEFT TOK_ASSIGNRIGHT TOK_ADD TOK_SUB TOK_OBR TOK_CBR TOK_CMPEQ TOK_BAR
+%token <token>	TOK_DECLARE TOK_HANDLER	TOK_STATES TOK_STATE TOK_ALIAS TOK_IF				/* Reserved words */
+%token <token>	TOK_TRACE TOK_BASE									/* Debug reserved words */
+%token <token> TOK_LSQR TOK_RSQR TOK_LBRACE TOK_RBRACE TOK_COMMA TOK_COLON TOK_EOS 			/* Operators/Seperators */
+%token <token> TOK_ASSIGNLEFT TOK_ASSIGNRIGHT TOK_ADD TOK_SUB TOK_OBR TOK_CBR TOK_CMPEQ TOK_BAR		/* Operators/Seperators */
+%token <token> TOK_DOT TOK_AT										/* Operators/Seperators */
 
 %type <strng> quoted
 %type <ident> ident
+%type <state_ident> state_ident
 %type <intgr> numeric 
 %type <expr> expr
 %type <varvec> states_list
 %type <aliasvec> aliases
 %type <debugvec> debuglist
+%type <staterefvec> state_ident_list
 /* %type <exprvec> call_args */
 %type <block> program block stmts
-%type <stmt> stmt var_decl handler_decl state_decl states_decl state_def alias_decl ifblock debug
+%type <stmt> stmt var_decl handler_decl state_decl states_decl state_def alias_decl ifblock debug /*state_test*/
 
 %right TOK_ASSIGNRIGHT
 %left TOK_ASSIGNLEFT
@@ -71,6 +77,7 @@ stmt : var_decl TOK_EOS
      | state_def
      | handler_decl
      | ifblock
+/*     | state_test*/
      | TOK_TRACE debuglist TOK_EOS { $$ = new CDebugLine(*$2); delete $2; }
      | expr TOK_EOS { $$ = new CExpressionStatement(*$1); }
      ;
@@ -88,6 +95,16 @@ debuglist : debuglist TOK_COMMA debug { $1->push_back($<debug>3); }
 ifblock : TOK_IF expr block { $$ = new CIfStatement(*$2,*$3); }
 	;
 
+state_ident : TOK_IDENTIFIER { $$ = new CStateIdent(*$1); delete $1; }
+	    ;
+
+state_ident_list : state_ident_list TOK_DOT state_ident { $$->push_back($<state_ident>3); }
+		 | state_ident { $$ = new StateIdentList(); $$->push_back($<state_ident>1); }
+		;
+/*
+state_test : state_ident_list TOK_AT block { $$ = new CStateTest(*$1,*$3); delete $1; }
+	   ;
+*/
 block : TOK_LBRACE stmts TOK_RBRACE {$$ = $2; }
       | TOK_LBRACE TOK_RBRACE { $$ = new CBlock(); }
 
@@ -123,6 +140,7 @@ expr : ident TOK_ASSIGNLEFT expr { $$ = new CAssignment(*$<ident>1,*$3); }
      | expr TOK_ADD expr { $$ = new CBinaryOperator(*$1,TOK_ADD,*$3); }
      | expr TOK_SUB expr { $$ = new CBinaryOperator(*$1,TOK_SUB,*$3); }
      | expr TOK_CMPEQ expr { $$ = new CBinaryOperator(*$1,TOK_CMPEQ,*$3); }
+     | state_ident_list TOK_AT { $$ = new CStateTest(*$1); }
      | ident { $<ident>$ = $1; }
      | numeric { $$ = new CInteger(*$1); delete $1; }
      | TOK_OBR expr TOK_CBR { $$ = $2; }

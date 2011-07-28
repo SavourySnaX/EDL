@@ -44,6 +44,8 @@ BASE					{ return TOKEN(TOK_BASE); }
 "("					{ return TOKEN(TOK_OBR); }
 ")"					{ return TOKEN(TOK_CBR); }
 "|"					{ return TOKEN(TOK_BAR); }
+"."					{ return TOKEN(TOK_DOT); }
+"@"					{ return TOKEN(TOK_AT); }
 
 [ \t\r]					{ /* Consume white space */ }
 #.*					{ /* Ignore comments */ }
