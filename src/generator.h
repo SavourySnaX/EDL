@@ -64,7 +64,8 @@ public:
     CodeGenContext() { module = new Module("main", getGlobalContext()); }
     Function *debugTraceString;
     Function *debugTraceChar;
-    Function *handlerToTest;		/* ONLY USED FOR TESTING PURPOSES */
+
+    std::vector<Function *> handlersToTest;		/* ONLY USED FOR TESTING PURPOSES */
 
     std::map<std::string, BitVariable> m_globals;
     std::map<std::string, StateVariable> m_states;

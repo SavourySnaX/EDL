@@ -18,6 +18,7 @@ STATES					{ return TOKEN(TOK_STATES); }
 STATE					{ return TOKEN(TOK_STATE); }
 ALIAS					{ return TOKEN(TOK_ALIAS); }
 IF					{ return TOKEN(TOK_IF); }
+NEXT					{ return TOKEN(TOK_NEXT); }
 
 
 DEBUG_TRACE				{ return TOKEN(TOK_TRACE); }
@@ -30,6 +31,8 @@ BASE					{ return TOKEN(TOK_BASE); }
 \"(\\.|[^"])*\"				{ SAVE_TOKEN; return TOK_STRING; }
 
 "=="					{ return TOKEN(TOK_CMPEQ); }
+"||"					{ return TOKEN(TOK_DBAR); }
+"&&"					{ return TOKEN(TOK_DAMP); }
 "{"					{ return TOKEN(TOK_LBRACE); }
 "}"					{ return TOKEN(TOK_RBRACE); }
 "["					{ return TOKEN(TOK_LSQR); }

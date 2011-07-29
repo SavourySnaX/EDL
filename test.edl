@@ -58,7 +58,7 @@ DECLARE	SYNC_HALT_ACK[8]	ALIAS %10001010;
 DECLARE	SYNC_INT_ACK_HALTED[8]	ALIAS %00101011;
 
 
-HANDLER		TEST
+HANDLER		O1
 {
 # Each clock in here is one state in the cpu machine. The first 3 states for all instructions are identical, and these are the instruction fetch / decode part
 # Still need to do HOLD/INT proessing
@@ -290,7 +290,6 @@ HANDLER		TEST
 			{
 #			RETURN;
 			}
-#		JUMP TW;
 		}
 
 		STATE TWH
@@ -313,11 +312,11 @@ HANDLER		TEST
 					PIN_WAIT <- 1;
 					IF (INT_LATCH == 0)
 					{
-#					JUMP TWH.TWH;
+						NEXT O1.TWH.TWH;
 					}
 					IF (INT_LATCH == 1)
 					{
-#					JUMP O1.FETCH;
+						NEXT O1.FETCH;
 					}
 				}
 			}
@@ -341,95 +340,104 @@ HANDLER		TEST
 				}
 				STATE TREST
 				{
-#				JUMP TREST;
+					NEXT O1.RESET.TREST;
 				}
 			}
 		}
 	}
+
+	DEBUG_TRACE "O1 CLOCK :: ";
+	DEBUG_TRACE BASE 16,PC," ",ADDR_BUFF," ",DATA_BUFF;
+	DEBUG_TRACE PIN_READY;
+
 }
-#
-#HANDLER		O2	TRANSITION(0,1)
-#{
-## Each clock here determines update to the external state of the pins (e.g. making address/data available etc)
-#
-#	O1.FETCH,
-#	O1.MEMIN,
-#	O1.SPREAD,
-#	O1.PORTIN@
+
+HANDLER		O2
+{
+# Each clock here determines update to the external state of the pins (e.g. making address/data available etc)
+
+	IF O1.FETCH.T1@  ||
+	   O1.MEMIN.T1@  ||
+	   O1.SPREAD.T1@ ||
+	   O1.PORTIN.T1@
+	{
+		PIN_D <- DATA_BUFF;
+		PIN_A <- ADDR_BUFF;
+		PIN_SYNC <- 1;
+		IF (INT_LATCH==1)
+		{
+			PIN_INTE <- 0;
+		}
+	}
+	
+	IF O1.FETCH.T2@  ||
+	   O1.MEMIN.T2@  ||
+	   O1.SPREAD.T2@ ||
+	   O1.PORTIN.T2@
+	{
+		PIN_SYNC <-0;
+#		PIN_D <- FLOATING;
+		PIN_DBIN <- 1;
+	}
+
+	IF O1.FETCH.T3@  ||
+	   O1.MEMIN.T3@  ||
+	   O1.SPREAD.T3@ ||
+	   O1.PORTIN.T3@
+	{
+		PIN_DBIN <- 0;
+	}
+
+#	IF O1.FETCH.T4@  ||
+#	   O1.MEMIN.T4@  ||
+#	   O1.SPREAD.T4@ ||
+#	   O1.PORTIN.T4@
 #	{
-#		T1@	
-#		{
-#			PIN_D <- DATA_BUFF;
-#			PIN_A <- ADDR_BUFF;
-#			PIN_SYNC <- 1;
-#			IF (INT_LATCH==1)
-#			{
-#				PIN_INTE <- 0;
-#			}
-#		}
-#	
-#		T2@
-#		{
-#			PIN_SYNC <-0;
-#			PIN_D <- FLOATING;
-#			PIN_DBIN <- 1;
-#		}
-#
-#		T3@
-#		{
-#			PIN_DBIN <- 0;
-#		}
-#
-#		T4@
-#		{
-#			PIN_A <- FLOATING;
-#		}
+#		PIN_A <- FLOATING;
 #	}
-#
-#	O1.MEMOUT,
-#	O1.SPWRITE,
-#	O1.PORTOUT@
-#	{
-#		T1@
-#		{
-#			PIN_D <- DATA_BUFF;
-#			PIN_A <- ADDR_BUFF;
-#			PIN_SYNC <- 1;
-#		}
-#
-#		T2@
-#		{
-#			PIN_SYNC <- 0;
-#			PIN_D <- DATA_BUFF;
-#		}
-#	}
-#
-#	O1.TWH@
-#	{
-#		T1@
-#		{
-#			PIN_A <- FLOATING;
-#			PIN_D <- DATA_BUFF;
-#			PIN_SYNC <- 1;
-#		}
-#
-#		T2@
-#		{
-#			PIN_SYNC <- 0;
-#			PIN_D <- FLOATING;
-#		}
-#	}
-#
-#	O1.RESET@
-#	{
+
+	IF O1.MEMOUT.T1@  ||
+	   O1.SPWRITE.T1@ ||
+	   O1.PORTOUT.T1@
+	{
+		PIN_D <- DATA_BUFF;
+		PIN_A <- ADDR_BUFF;
+		PIN_SYNC <- 1;
+	}
+
+	IF O1.MEMOUT.T2@  ||
+	   O1.SPWRITE.T2@ ||
+	   O1.PORTOUT.T2@
+	{
+		PIN_SYNC <- 0;
+		PIN_D <- DATA_BUFF;
+	}
+
+	IF O1.TWH.T1@
+	{
+#		PIN_A <- FLOATING;
+		PIN_D <- DATA_BUFF;
+		PIN_SYNC <- 1;
+	}
+
+	IF O1.TWH.T2@
+	{
+		PIN_SYNC <- 0;
+#		PIN_D <- FLOATING;
+	}
+
+	IF O1.RESET@
+	{
 #		PIN_D <- FLOATING;		# If we are in a reseting state, reset outputs - does not matter which sub cycle we are in
 #		PIN_A <- FLOATING;
-#		PIN_SYNC <- 0;
-#		PIN_DBIN <- 0;
-#		PIN_WR <- 0;
-#	}
-#}
-#
+		PIN_SYNC <- 0;
+		PIN_DBIN <- 0;
+		PIN_WR <- 0;
+	}
+
+	DEBUG_TRACE BASE 16,PIN_A," ",PIN_D;
+}
+
 #HANDLER		RESET	TRANSITION(0,1)
 #{
 #	TRIGGERED@

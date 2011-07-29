@@ -5,7 +5,7 @@
 DECLARE foo[12] ALIAS bar[8]:%0101;
 DECLARE output[36];
 
-HANDLER TEST
+HANDLER O1
 {
 	STATES a|b|c
 	{
@@ -21,6 +21,7 @@ HANDLER TEST
 				STATE food
 				{
 					foo <- bar + 1;
+					NEXT O1.a.food;
 					DEBUG_TRACE "FOOD",foo;
 				}
 			}
@@ -39,9 +40,23 @@ HANDLER TEST
 		}
 	}
 	
-	IF TEST.a.fish@
+	IF O1.b@
 	{
-		DEBUG_TRACE "Currently in sub state fish of state a of TEST handler";
+		DEBUG_TRACE "Currently in state b";
+	}
+
+	IF O1.a.food@
+	{
+		DEBUG_TRACE "Currently in sub state food of state a of O1 handler";
+		NEXT O1.b;
 	}
 }
 
+HANDLER O2
+{
+	IF O1.a@ || O1.b@
+	{
+		DEBUG_TRACE "bingo";
+	}
+
+}

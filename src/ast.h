@@ -222,10 +222,11 @@ public:
 	CIdentifier& id;
 	bool autoIncrement;
 	llvm::BasicBlock* entry;
+	llvm::BasicBlock* stateCheck;
 	llvm::BasicBlock* stateAdjust;
 	llvm::BasicBlock* exit;
 	CStateDeclaration(CIdentifier& id) :
-		id(id),autoIncrement(false),entry(NULL),stateAdjust(NULL),exit(NULL) { }
+		id(id),autoIncrement(false),entry(NULL),stateCheck(NULL),stateAdjust(NULL),exit(NULL) { }
 	virtual llvm::Value* codeGen(CodeGenContext& context,llvm::Function* parent);
 };
 
@@ -234,9 +235,10 @@ public:
 	StateList states;
 	std::string label;
 	llvm::BasicBlock* exitState;
+	llvm::Value* stateChanged;
 	CBlock& block;
 	CStatesDeclaration(StateList& states,CBlock& block) :
-		states(states),block(block) { }
+		states(states),stateChanged(NULL),block(block) { }
 
 	CStateDeclaration* getStateDeclaration(const CIdentifier& id) { for (int a=0;a<states.size();a++) { if (states[a]->id.name == id.name) return states[a]; } return NULL; }
 	int getStateDeclarationIndex(const CIdentifier& id) { for (int a=0;a<states.size();a++) { if (states[a]->id.name == id.name) return a; } return -1; }
@@ -248,6 +250,15 @@ class CStateTest : public CExpression {
 public:
 	StateIdentList stateIdents;
 	CStateTest(StateIdentList& stateIdents) :
+		stateIdents(stateIdents) { }
+
+	virtual llvm::Value* codeGen(CodeGenContext& context);
+};
+
+class CStateJump : public CStatement {
+public:
+	StateIdentList stateIdents;
+	CStateJump(StateIdentList& stateIdents) :
 		stateIdents(stateIdents) { }
 
 	virtual llvm::Value* codeGen(CodeGenContext& context);

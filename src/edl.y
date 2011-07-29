@@ -37,11 +37,11 @@
 }
 
 %token <string> TOK_IDENTIFIER TOK_INTEGER TOK_STRING
-%token <token>	TOK_DECLARE TOK_HANDLER	TOK_STATES TOK_STATE TOK_ALIAS TOK_IF				/* Reserved words */
+%token <token>	TOK_DECLARE TOK_HANDLER	TOK_STATES TOK_STATE TOK_ALIAS TOK_IF TOK_NEXT			/* Reserved words */
 %token <token>	TOK_TRACE TOK_BASE									/* Debug reserved words */
 %token <token> TOK_LSQR TOK_RSQR TOK_LBRACE TOK_RBRACE TOK_COMMA TOK_COLON TOK_EOS 			/* Operators/Seperators */
 %token <token> TOK_ASSIGNLEFT TOK_ASSIGNRIGHT TOK_ADD TOK_SUB TOK_OBR TOK_CBR TOK_CMPEQ TOK_BAR		/* Operators/Seperators */
-%token <token> TOK_DOT TOK_AT										/* Operators/Seperators */
+%token <token> TOK_DOT TOK_AT TOK_DBAR TOK_DAMP								/* Operators/Seperators */
 
 %type <strng> quoted
 %type <ident> ident
@@ -58,6 +58,7 @@
 
 %right TOK_ASSIGNRIGHT
 %left TOK_ASSIGNLEFT
+%left TOK_DBAR TOK_DAMP
 %left TOK_CMPEQ
 %left TOK_ADD TOK_SUB
 
@@ -77,7 +78,7 @@ stmt : var_decl TOK_EOS
      | state_def
      | handler_decl
      | ifblock
-/*     | state_test*/
+     | TOK_NEXT state_ident_list TOK_EOS { $$ = new CStateJump(*$2); delete $2; }
      | TOK_TRACE debuglist TOK_EOS { $$ = new CDebugLine(*$2); delete $2; }
      | expr TOK_EOS { $$ = new CExpressionStatement(*$1); }
      ;
@@ -101,10 +102,7 @@ state_ident : TOK_IDENTIFIER { $$ = new CStateIdent(*$1); delete $1; }
 state_ident_list : state_ident_list TOK_DOT state_ident { $$->push_back($<state_ident>3); }
 		 | state_ident { $$ = new StateIdentList(); $$->push_back($<state_ident>1); }
 		;
-/*
-state_test : state_ident_list TOK_AT block { $$ = new CStateTest(*$1,*$3); delete $1; }
-	   ;
-*/
+
 block : TOK_LBRACE stmts TOK_RBRACE {$$ = $2; }
       | TOK_LBRACE TOK_RBRACE { $$ = new CBlock(); }
 
@@ -140,6 +138,8 @@ expr : ident TOK_ASSIGNLEFT expr { $$ = new CAssignment(*$<ident>1,*$3); }
      | expr TOK_ADD expr { $$ = new CBinaryOperator(*$1,TOK_ADD,*$3); }
      | expr TOK_SUB expr { $$ = new CBinaryOperator(*$1,TOK_SUB,*$3); }
      | expr TOK_CMPEQ expr { $$ = new CBinaryOperator(*$1,TOK_CMPEQ,*$3); }
+     | expr TOK_DBAR expr { $$ = new CBinaryOperator(*$1,TOK_DBAR,*$3); }
+     | expr TOK_DAMP expr { $$ = new CBinaryOperator(*$1,TOK_DAMP,*$3); }
      | state_ident_list TOK_AT { $$ = new CStateTest(*$1); }
      | ident { $<ident>$ = $1; }
      | numeric { $$ = new CInteger(*$1); delete $1; }

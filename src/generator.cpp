@@ -11,8 +11,6 @@ void CodeGenContext::generateCode(CBlock& root)
 	
 	ee = EngineBuilder(module).create();
 
-	handlerToTest=NULL;
- 
 	PointerType* PointerTy_4 = PointerType::get(IntegerType::get(getGlobalContext(), 8), 0);
 
   	std::vector<const Type*>FuncTy_8_args;
@@ -43,17 +41,12 @@ void CodeGenContext::generateCode(CBlock& root)
 	/* Push a new variable/block context */
 	pushBlock(bblock);
 
-	if (handlerToTest)
+	for (int a=0;a<9;a++)
 	{
-		CallInst::Create(handlerToTest,"",bblock);
-		CallInst::Create(handlerToTest,"",bblock);
-		CallInst::Create(handlerToTest,"",bblock);
-		CallInst::Create(handlerToTest,"",bblock);
-		CallInst::Create(handlerToTest,"",bblock);
-		CallInst::Create(handlerToTest,"",bblock);
-		CallInst::Create(handlerToTest,"",bblock);
-		CallInst::Create(handlerToTest,"",bblock);
-		CallInst::Create(handlerToTest,"",bblock);
+		for (int b=0;b<handlersToTest.size();b++)
+		{
+			CallInst::Create(handlersToTest[b],"",bblock);
+		}
 	}
 
 	ReturnInst::Create(getGlobalContext(), bblock);
@@ -346,12 +339,20 @@ Value* CDebugTraceIdentifier::codeGen(CodeGenContext& context)
 		cnt++;
 	}
 
+	std::cout << "currentBase " << currentBase << std::endl;
+
 	baseDivisor=oldBaseDivisor.trunc(bitWidth);
+	if (baseDivisor.getLimitedValue()==0)
+	{
+		baseDivisor = APInt(bitWidth,1);
+	}
 
 	for (unsigned a=0;a<cnt;a++)
 	{
 		std::vector<Value*> args;
 		
+		std::cout << " SHIT BEANS : " << cnt << " : " << baseDivisor.toString(10,false) << std::endl;
+
 		ConstantInt* const_intDiv = ConstantInt::get(getGlobalContext(), baseDivisor);
 		BinaryOperator* shiftInst = BinaryOperator::Create(Instruction::UDiv,loadedValue,const_intDiv, "Dividing", context.currentBlock());
 		
@@ -371,7 +372,10 @@ Value* CDebugTraceIdentifier::codeGen(CodeGenContext& context)
 		
 		BinaryOperator* mulUp = BinaryOperator::Create(Instruction::Mul,shiftInst,const_intDiv,"mulUp",context.currentBlock());
 		loadedValue = BinaryOperator::Create(Instruction::Sub,loadedValue,mulUp,"fixup",context.currentBlock());
-		baseDivisor=baseDivisor.udiv(APInt(bitWidth,currentBase));
+		if (cnt!=1)
+		{
+			baseDivisor=baseDivisor.udiv(APInt(bitWidth,currentBase));
+		}
 	}
 	{
 		std::vector<Value*> args;
@@ -453,6 +457,10 @@ Value* CBinaryOperator::codeGen(CodeGenContext& context)
 			return BinaryOperator::Create(Instruction::Sub,left,right,"",context.currentBlock());
 		case TOK_CMPEQ:
 			return CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_EQ,left, right, "", context.currentBlock());
+		case TOK_DBAR:
+			return BinaryOperator::Create(Instruction::Or,left,right,"",context.currentBlock());
+		case TOK_DAMP:
+			return BinaryOperator::Create(Instruction::And,left,right,"",context.currentBlock());
 		}
 	}
 
@@ -543,6 +551,7 @@ Value* CStateDeclaration::codeGen(CodeGenContext& context,Function* parent)
 	// We need to create a bunch of labels - one for each case.. we will need a finaliser for the blocks when we pop out of our current block.
 	entry = BasicBlock::Create(getGlobalContext(),id.name+"entry",parent);
 	exit = BasicBlock::Create(getGlobalContext(),id.name+"exit",parent);
+	stateCheck = BasicBlock::Create(getGlobalContext(),id.name+"check",parent);
 	stateAdjust = BasicBlock::Create(getGlobalContext(),id.name+"adjust",parent);
 
 	return NULL;
@@ -575,6 +584,11 @@ Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 	// Global Variable Definitions
 	global->setInitializer(const_int32_n);
 
+	// Initialise a local variable to indicate if a state change has occured (used for skipping the auto increment in the finaliser)
+		
+	stateChanged = new AllocaInst(Type::getIntNTy(getGlobalContext(),1), stateLabel + "modified", context.currentBlock());
+	Value* StorInst = new StoreInst(ConstantInt::get(getGlobalContext(),APInt(1,0,false)),stateChanged,false,context.currentBlock());
+
 	BasicBlock* bb = context.currentBlock();		// cache old basic block
 	std::map<std::string,BitVariable> tmp = context.locals();
 
@@ -601,6 +615,10 @@ Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 	int startOfAutoIncrementIdx=-1;
 	for (int a=0;a<states.size();a++)
 	{
+		LoadInst* load = new LoadInst(stateChanged,"",false,states[a]->stateCheck);
+		CmpInst* cmp = CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_EQ,load, ConstantInt::get(getGlobalContext(),APInt(1,1,false)), "", states[a]->stateCheck);
+		BranchInst::Create(states[a]->exit,states[a]->stateAdjust,cmp,states[a]->stateCheck);
+
 		if (states[a]->autoIncrement)
 		{
 			if (!lastStateAutoIncrement)
@@ -618,6 +636,7 @@ Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 				StoreInst* newState = new StoreInst(nextState,global,false,states[a]->stateAdjust);
 			}
 		}
+
 		BranchInst::Create(states[a]->exit,states[a]->stateAdjust);	// this terminates the final blocks from our states
 		BranchInst::Create(exitState,states[a]->exit);			// this terminates the final blocks from our states
 		lastStateAutoIncrement=states[a]->autoIncrement;
@@ -743,7 +762,7 @@ Value* CStateDefinition::codeGen(CodeGenContext& context)
 
 			context.pushBlock(pState->entry);
 			block.codeGen(context);
-			BranchInst::Create(pState->stateAdjust,context.currentBlock());
+			BranchInst::Create(pState->stateCheck,context.currentBlock());
 			context.popBlock();
 
 			context.stateLabelStack=oldStateLabelStack;
@@ -768,9 +787,9 @@ Value* CHandlerDeclaration::codeGen(CodeGenContext& context)
 	Function* function = Function::Create(ftype, GlobalValue::ExternalLinkage, id.name.c_str(), context.module);
 	BasicBlock *bblock = BasicBlock::Create(getGlobalContext(), "entry", function, 0);
 
-	if (id.name == "TEST")
+	if (id.name == "O1" || id.name == "O2")
 	{
-		context.handlerToTest = function;
+		context.handlersToTest.push_back(function);
 	}
 
 	context.pushBlock(bblock);
@@ -793,7 +812,62 @@ Value* CHandlerDeclaration::codeGen(CodeGenContext& context)
 	return function;
 }
 
+// Language decision : TEST.A.B@ should only return true if we are in STATE A SUBSTATE B - To do this we need to check each of the states, not just the last one
+
 Value* CStateTest::codeGen(CodeGenContext& context)
+{
+	unsigned int a,b;
+	unsigned int numStatesToCheck = stateIdents.size()-1;
+	Value *res=NULL;
+
+	// Locate the parent variable and value for the test
+	for (b=0;b<numStatesToCheck;b++)
+	{
+		std::string findString = "STATE";
+		for (a=0;a<b+1;a++)
+		{
+			findString+="." + stateIdents[a]->name;
+		}
+
+		if (context.states().find(findString) == context.states().end())
+		{
+			std::cout << "Unable to find HANDLER/SUBSTATE " << std::endl;
+			return NULL;
+		}
+	
+		StateVariable state = context.states()[findString];
+
+		int stateIndex = state.decl->getStateDeclarationIndex(stateIdents[b+1]->name);
+		if (stateIndex == -1)
+		{
+			std::cout << "Unable to find value for state " << std::endl;
+			return NULL;
+		}
+
+		Twine numStatesTwine(state.decl->states.size());
+		std::string numStates = numStatesTwine.str();
+		APInt overSized(4*numStates.length(),numStates,10);
+		unsigned bitsNeeded = overSized.getActiveBits();
+	
+		// Load value from state variable, test against being equal to found index, jump on result
+		Value* load = new LoadInst(state.value, "", false, context.currentBlock());
+	
+		CmpInst* cmp = CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_EQ,load, ConstantInt::get(getGlobalContext(), APInt(bitsNeeded,stateIndex)), "", context.currentBlock());
+
+		if (b!=0)
+		{
+			res = BinaryOperator::Create(Instruction::And,res,cmp,"Combining",context.currentBlock());
+		}
+		else
+		{
+			res = cmp;
+		}
+	}
+
+	return res;
+}
+
+Value* CStateJump::codeGen(CodeGenContext& context)
 {
 	unsigned int a;
 
@@ -819,17 +893,21 @@ Value* CStateTest::codeGen(CodeGenContext& context)
 		return NULL;
 	}
 
-	// Load value from state variable, test against being equal to found index, jump on result
 	Twine numStatesTwine(state.decl->states.size());
 	std::string numStates = numStatesTwine.str();
 	APInt overSized(4*numStates.length(),numStates,10);
 	unsigned bitsNeeded = overSized.getActiveBits();
-	
-	Value* load = new LoadInst(state.value, "", false, context.currentBlock());
-	
-	CmpInst* cmp = CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_EQ,load, ConstantInt::get(getGlobalContext(), APInt(bitsNeeded,stateIndex)), "", context.currentBlock());
 
-	return cmp;
+	// We need to store new state into global, but there is a bit of fixup required if we are within a state block (since we don't want to autoincrement our state in that case)
+	Value* stor = new StoreInst(ConstantInt::get(getGlobalContext(),APInt(bitsNeeded,stateIndex)),state.value,false,context.currentBlock());
+
+	if (context.currentState()==state.decl)
+	{
+		// We are within the state handler - set flag to indicate we have already dealt with the state change
+		stor = new StoreInst(ConstantInt::get(getGlobalContext(),APInt(1,1,false)),state.decl->stateChanged,false,context.currentBlock());
+	}
+
+	return stor;
 }
 
 Value* CIfStatement::codeGen(CodeGenContext& context)
