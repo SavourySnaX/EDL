@@ -361,6 +361,7 @@ HANDLER		O2
 	   O1.SPREAD.T1@ ||
 	   O1.PORTIN.T1@
 	{
+		DEBUG_TRACE "O2 in a T1";
 		PIN_D <- DATA_BUFF;
 		PIN_A <- ADDR_BUFF;
 		PIN_SYNC <- 1;
@@ -375,6 +376,7 @@ HANDLER		O2
 	   O1.SPREAD.T2@ ||
 	   O1.PORTIN.T2@
 	{
+		DEBUG_TRACE "O2 in a T2";
 		PIN_SYNC <-0;
 #		PIN_D <- FLOATING;
 		PIN_DBIN <- 1;
@@ -385,6 +387,7 @@ HANDLER		O2
 	   O1.SPREAD.T3@ ||
 	   O1.PORTIN.T3@
 	{
+		DEBUG_TRACE "O2 in a T3";
 		PIN_DBIN <- 0;
 	}
 
@@ -435,6 +438,7 @@ HANDLER		O2
 		PIN_WR <- 0;
 	}
 
+	DEBUG_TRACE "O2 CLOCK :: ";
 	DEBUG_TRACE BASE 16,PIN_A," ",PIN_D;
 }
 

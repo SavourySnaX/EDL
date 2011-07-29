@@ -40,7 +40,8 @@ public:
 class StateVariable
 {
 public:
-	Value* value;
+	Value* currentState;
+	Value* nextState;
 	CStatesDeclaration* decl;
 };
 

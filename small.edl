@@ -54,7 +54,7 @@ HANDLER O1
 
 HANDLER O2
 {
-	IF O1.a@ || O1.b@
+	IF O1.a@ 
 	{
 		DEBUG_TRACE "bingo";
 	}

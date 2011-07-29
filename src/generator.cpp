@@ -551,8 +551,6 @@ Value* CStateDeclaration::codeGen(CodeGenContext& context,Function* parent)
 	// We need to create a bunch of labels - one for each case.. we will need a finaliser for the blocks when we pop out of our current block.
 	entry = BasicBlock::Create(getGlobalContext(),id.name+"entry",parent);
 	exit = BasicBlock::Create(getGlobalContext(),id.name+"exit",parent);
-	stateCheck = BasicBlock::Create(getGlobalContext(),id.name+"check",parent);
-	stateAdjust = BasicBlock::Create(getGlobalContext(),id.name+"adjust",parent);
 
 	return NULL;
 }
@@ -563,17 +561,21 @@ Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 	std::string numStates = numStatesTwine.str();
 	APInt overSized(4*numStates.length(),numStates,10);
 	unsigned bitsNeeded = overSized.getActiveBits();
-	
+
 	std::cout << "Generating state machine entry " << endl;
 
 	std::cout << "Number of states : " << numStates << " " << bitsNeeded << endl;
-	
+
+	std::string curStateLbl = "CUR" + context.stateLabelStack;
+	std::string nxtStateLbl = "NEXT" + context.stateLabelStack;
 	std::string stateLabel = "STATE" + context.stateLabelStack;
 
-	GlobalVariable *global = new GlobalVariable(*context.module,Type::getIntNTy(getGlobalContext(),bitsNeeded), false, GlobalValue::InternalLinkage,NULL,stateLabel);
+	GlobalVariable *curState = new GlobalVariable(*context.module,Type::getIntNTy(getGlobalContext(),bitsNeeded), false, GlobalValue::InternalLinkage,NULL,curStateLbl);
+	GlobalVariable *nxtState = new GlobalVariable(*context.module,Type::getIntNTy(getGlobalContext(),bitsNeeded), false, GlobalValue::InternalLinkage,NULL,nxtStateLbl);
  
 	StateVariable newStateVar;
-	newStateVar.value = global;
+	newStateVar.currentState = curState;
+	newStateVar.nextState = nxtState;
 	newStateVar.decl = this;
 
 	context.states()[stateLabel]=newStateVar;
@@ -582,12 +584,8 @@ Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 	ConstantInt* const_int32_n = ConstantInt::get(getGlobalContext(), APInt(bitsNeeded, 0, false));
   
 	// Global Variable Definitions
-	global->setInitializer(const_int32_n);
-
-	// Initialise a local variable to indicate if a state change has occured (used for skipping the auto increment in the finaliser)
-		
-	stateChanged = new AllocaInst(Type::getIntNTy(getGlobalContext(),1), stateLabel + "modified", context.currentBlock());
-	Value* StorInst = new StoreInst(ConstantInt::get(getGlobalContext(),APInt(1,0,false)),stateChanged,false,context.currentBlock());
+	curState->setInitializer(const_int32_n);
+	nxtState->setInitializer(const_int32_n);
 
 	BasicBlock* bb = context.currentBlock();		// cache old basic block
 	std::map<std::string,BitVariable> tmp = context.locals();
@@ -595,30 +593,26 @@ Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 	exitState = BasicBlock::Create(getGlobalContext(),"switchTerm",bb->getParent());
 	context.setBlock(exitState);
 
-	// Need to generate switch statement too...
-	LoadInst* int32_5 = new LoadInst(global, "", false, bb);
+	// Step 1, load next state into current state
+	LoadInst* getNextState = new LoadInst(nxtState,"",false,bb);
+	StoreInst* storeState = new StoreInst(getNextState,curState,false,bb);
 
+	// Step 2, generate switch statement
+	LoadInst* int32_5 = new LoadInst(curState, "", false, bb);
 	SwitchInst* void_6 = SwitchInst::Create(int32_5, exitState,states.size(), bb);
 
-	for (int a=0;a<states.size();a++)
-	{
-		states[a]->codeGen(context,bb->getParent());
-		ConstantInt* tt = ConstantInt::get(getGlobalContext(),APInt(bitsNeeded,a,false));
-		void_6->addCase(tt,states[a]->entry);
-	}
-
-	context.pushState(this);
-	block.codeGen(context);
-	context.popState();
-
+	// Step 3, build labels and initialiser for next state on entry
 	bool lastStateAutoIncrement=false;
 	int startOfAutoIncrementIdx=-1;
 	for (int a=0;a<states.size();a++)
 	{
-		LoadInst* load = new LoadInst(stateChanged,"",false,states[a]->stateCheck);
-		CmpInst* cmp = CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_EQ,load, ConstantInt::get(getGlobalContext(),APInt(1,1,false)), "", states[a]->stateCheck);
-		BranchInst::Create(states[a]->exit,states[a]->stateAdjust,cmp,states[a]->stateCheck);
+		std::cout << "WEEE" << a << std::endl;
+		// Build Labels
+		states[a]->codeGen(context,bb->getParent());
+		ConstantInt* tt = ConstantInt::get(getGlobalContext(),APInt(bitsNeeded,a,false));
+		void_6->addCase(tt,states[a]->entry);
 
+		// Compute next state and store for future
 		if (states[a]->autoIncrement)
 		{
 			if (!lastStateAutoIncrement)
@@ -626,23 +620,32 @@ Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 				startOfAutoIncrementIdx=a;
 			}
 			ConstantInt* nextState = ConstantInt::get(getGlobalContext(),APInt(bitsNeeded, a==states.size()-1 ? 0 : a+1,false));
-			StoreInst* newState = new StoreInst(nextState,global,false,states[a]->stateAdjust);
+			StoreInst* newState = new StoreInst(nextState,nxtState,false,states[a]->entry);
 		}
 		else
 		{
 			if (lastStateAutoIncrement)
 			{
 				ConstantInt* nextState = ConstantInt::get(getGlobalContext(),APInt(bitsNeeded, startOfAutoIncrementIdx,false));
-				StoreInst* newState = new StoreInst(nextState,global,false,states[a]->stateAdjust);
+				StoreInst* newState = new StoreInst(nextState,nxtState,false,states[a]->entry);
 			}
 		}
 
-		BranchInst::Create(states[a]->exit,states[a]->stateAdjust);	// this terminates the final blocks from our states
-		BranchInst::Create(exitState,states[a]->exit);			// this terminates the final blocks from our states
 		lastStateAutoIncrement=states[a]->autoIncrement;
 	}
 
-	return void_6;
+	// Step 4, run code blocks to generate states
+	context.pushState(this);
+	block.codeGen(context);
+	context.popState();
+
+	// Finally we need to terminate the final blocks
+	for (int a=0;a<states.size();a++)
+	{
+		BranchInst::Create(exitState,states[a]->exit);			// this terminates the final blocks from our states
+	}
+
+	return NULL;
 }
 
 Value* CVariableDeclaration::codeGen(CodeGenContext& context)
@@ -762,7 +765,7 @@ Value* CStateDefinition::codeGen(CodeGenContext& context)
 
 			context.pushBlock(pState->entry);
 			block.codeGen(context);
-			BranchInst::Create(pState->stateCheck,context.currentBlock());
+			BranchInst::Create(pState->exit,context.currentBlock());
 			context.popBlock();
 
 			context.stateLabelStack=oldStateLabelStack;
@@ -850,8 +853,7 @@ Value* CStateTest::codeGen(CodeGenContext& context)
 		unsigned bitsNeeded = overSized.getActiveBits();
 	
 		// Load value from state variable, test against being equal to found index, jump on result
-		Value* load = new LoadInst(state.value, "", false, context.currentBlock());
-	
+		Value* load = new LoadInst(state.currentState, "", false, context.currentBlock());
 		CmpInst* cmp = CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_EQ,load, ConstantInt::get(getGlobalContext(), APInt(bitsNeeded,stateIndex)), "", context.currentBlock());
 
 		if (b!=0)
@@ -899,13 +901,7 @@ Value* CStateJump::codeGen(CodeGenContext& context)
 	unsigned bitsNeeded = overSized.getActiveBits();
 
 	// We need to store new state into global, but there is a bit of fixup required if we are within a state block (since we don't want to autoincrement our state in that case)
-	Value* stor = new StoreInst(ConstantInt::get(getGlobalContext(),APInt(bitsNeeded,stateIndex)),state.value,false,context.currentBlock());
-
-	if (context.currentState()==state.decl)
-	{
-		// We are within the state handler - set flag to indicate we have already dealt with the state change
-		stor = new StoreInst(ConstantInt::get(getGlobalContext(),APInt(1,1,false)),state.decl->stateChanged,false,context.currentBlock());
-	}
+	Value* stor = new StoreInst(ConstantInt::get(getGlobalContext(),APInt(bitsNeeded,stateIndex)),state.nextState,false,context.currentBlock());
 
 	return stor;
 }
