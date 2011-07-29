@@ -12,8 +12,8 @@ LLVM_CONFIG=llvm-config
 START_GROUP=--start-group
 END_GROUP=--end-group
 
-CPPFLAGS = -Isrc -Iout `$(LLVM_CONFIG) --cppflags $(LLVM_MODULES)`
-LDFLAGS = `$(LLVM_CONFIG) --ldflags $(LLVM_MODULES)`
+CPPFLAGS = -g -Isrc -Iout `$(LLVM_CONFIG) --cppflags $(LLVM_MODULES)`
+LDFLAGS = -g `$(LLVM_CONFIG) --ldflags $(LLVM_MODULES)`
 LIBS = `$(LLVM_CONFIG) --libs $(LLVM_MODULES)` -lpthread -lpsapi -limagehlp
 
 clean:
