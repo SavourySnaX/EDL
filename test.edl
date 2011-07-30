@@ -67,12 +67,12 @@ HANDLER		O1
 	{
 		STATE FETCH
 		{
-			STATES T1,T2,T3
+			STATES T1,T2,T3,T4,T5
 			{
 				STATE T1
 				{
 					DEBUG_TRACE "FETCH.T1";
-					_WR <- 1;
+					PIN__WR <- 1;
 					IF (INT_LATCH==1)
 					{
 						DATA_BUFF <- SYNC_INT_ACK;
@@ -94,7 +94,8 @@ HANDLER		O1
 					INT_LATCH <- 0;
 					IF (PIN_READY == 0)
 					{
-#						CALL TW;		#TODO think on me, we must still execute the T2 state machine of the overlay before we execute the transition.. 
+						DEBUG_TRACE "PUSHING STATE";
+						PUSH O1.TW;		#TODO think on me, we must still execute the T2 state machine of the overlay before we execute the transition.. 
 									# so I guess.. CALL is actually a signal for the end of the state (aka transition) and not part of the action phase
 					}
 				}
@@ -106,8 +107,6 @@ HANDLER		O1
 					PIN_D -> DATA_BUFF;	# Latch data at start of T3
 
 					DATA_BUFF -> IR;		# Transfer latched data into IR
-
-#					INSTRUCTION	IR;		# Execute remainder of states via this instruction - need to think on this...
 				}
 			}
 		}
@@ -118,7 +117,7 @@ HANDLER		O1
 			{
 				STATE T1
 				{
-					_WR <- 1;
+					PIN__WR <- 1;
 					DATA_BUFF <- SYNC_MEM_READ;
 				}
 
@@ -126,7 +125,7 @@ HANDLER		O1
 				{
 					IF (PIN_READY == 0)
 					{
-#					CALL TW;
+						PUSH O1.TW;
 					}
 				}
 
@@ -144,7 +143,7 @@ HANDLER		O1
 			{
 				STATE T1
 				{
-					_WR <- 1;
+					PIN__WR <- 1;
 					DATA_BUFF <- SYNC_MEM_WRITE;
 				}
 
@@ -152,13 +151,13 @@ HANDLER		O1
 				{
 					IF (PIN_READY == 0)
 					{
-#					CALL TW;
+						PUSH O1.TW;
 					}
 				}
 
 				STATE T3
 				{
-					_WR <- 0;
+					PIN__WR <- 0;
 					PIN_WAIT <- 0;
 				}
 			}
@@ -170,7 +169,7 @@ HANDLER		O1
 			{
 				STATE T1
 				{
-					_WR <- 1;
+					PIN__WR <- 1;
 					ADDR_BUFF <- WZ;
 					DATA_BUFF <- SYNC_INPUT;
 				}
@@ -179,7 +178,7 @@ HANDLER		O1
 				{
 					IF (PIN_READY == 0)
 					{
-#					CALL TW;
+						PUSH O1.TW;
 					}
 				}
 
@@ -197,7 +196,7 @@ HANDLER		O1
 			{
 				STATE T1
 				{
-					_WR <- 1;
+					PIN__WR <- 1;
 					ADDR_BUFF <- WZ;
 					DATA_BUFF <- SYNC_OUTPUT;
 				}
@@ -206,13 +205,13 @@ HANDLER		O1
 				{
 					IF (PIN_READY == 0)
 					{
-#					CALL TW;
+						PUSH O1.TW;
 					}
 				}
 
 				STATE T3
 				{
-					_WR <- 0;
+					PIN__WR <- 0;
 					PIN_WAIT <- 0;
 				}
 			}
@@ -224,7 +223,7 @@ HANDLER		O1
 			{
 				STATE T1
 				{
-					_WR <- 1;
+					PIN__WR <- 1;
 					ADDR_BUFF <- SP;
 					DATA_BUFF <- SYNC_STACK_READ;
 				}
@@ -233,7 +232,7 @@ HANDLER		O1
 				{
 					IF (PIN_READY == 0)
 					{
-#					CALL TW;
+						PUSH O1.TW;
 					}
 				}
 
@@ -251,7 +250,7 @@ HANDLER		O1
 			{
 				STATE T1
 				{
-					_WR <- 1;
+					PIN__WR <- 1;
 					ADDR_BUFF <- SP;
 					DATA_BUFF <- SYNC_STACK_WRITE;
 				}
@@ -260,13 +259,13 @@ HANDLER		O1
 				{
 					IF (PIN_READY == 0)
 					{
-#					CALL TW;
+						PUSH O1.TW;
 					}
 				}
 
 				STATE T3
 				{
-					_WR <- 0;
+					PIN__WR <- 0;
 					PIN_WAIT <- 0;
 				}
 			}
@@ -286,9 +285,9 @@ HANDLER		O1
 		STATE TW
 		{
 			PIN_WAIT <- 1;
-			IF (PIN_READY == 0)
+			IF (PIN_READY == 1)
 			{
-#			RETURN;
+				POP O1;
 			}
 		}
 
@@ -346,9 +345,12 @@ HANDLER		O1
 		}
 	}
 
+
+	EXECUTE	IR;		# Execute states via this instruction, during reset we should point IR to a SAFE value (NOP will do)
+
 	DEBUG_TRACE "O1 CLOCK :: ";
 	DEBUG_TRACE BASE 16,PC," ",ADDR_BUFF," ",DATA_BUFF;
-	DEBUG_TRACE PIN_READY;
+	DEBUG_TRACE PIN_READY," ",PIN__WR;
 
 }
 
@@ -391,13 +393,10 @@ HANDLER		O2
 		PIN_DBIN <- 0;
 	}
 
-#	IF O1.FETCH.T4@  ||
-#	   O1.MEMIN.T4@  ||
-#	   O1.SPREAD.T4@ ||
-#	   O1.PORTIN.T4@
-#	{
+	IF O1.FETCH.T4@
+	{
 #		PIN_A <- FLOATING;
-#	}
+	}
 
 	IF O1.MEMOUT.T1@  ||
 	   O1.SPWRITE.T1@ ||
@@ -435,44 +434,42 @@ HANDLER		O2
 #		PIN_A <- FLOATING;
 		PIN_SYNC <- 0;
 		PIN_DBIN <- 0;
-		PIN_WR <- 0;
+		PIN__WR <- 0;
 	}
 
 	DEBUG_TRACE "O2 CLOCK :: ";
 	DEBUG_TRACE BASE 16,PIN_A," ",PIN_D;
+
+	IF O1.TW@
+	{
+		DEBUG_TRACE "In holding state, wait for external memory!";
+	}
 }
 
-#HANDLER		RESET	TRANSITION(0,1)
-#{
-#	TRIGGERED@
-#	{
-#		JUMP O1.RESET;
-#	}
-#}
-#
-#HANDLER		RESET	TRANSITION(1,0)
-#{
-#	DETRIGGERED@
-#	{
-#		JUMP O1.FETCH;
-#	}
-#}
-#
-#HANDLER		INT	TRANSITION(0,1)		# Causes INT_LATCH to be set - is it the act of int being driven high, or just the fact it is high.. makes a difference due to INTE pin - assuming transition for now
-#{
-#	LATCH@
-#	{
-#		IF (PIN_INTE == 1)
-#		{
-#			INT_LATCH <- 1;
-#		}
-#		IF (PIN_INTE == 0)
-#		{
-#			INT_LATCH <- 0;
-#		}
-#	}
-#}
-#
+HANDLER		RESET
+{
+	IF PIN_RESET==0
+	{
+		NEXT O1.FETCH.T1;
+	}
+	IF PIN_RESET==1
+	{
+		NEXT O1.RESET;
+	}
+}
+
+HANDLER		INT
+{
+	IF PIN_INTE == 1
+	{
+		INT_LATCH <- 1;
+	}
+	IF PIN_INTE == 0
+	{
+		INT_LATCH <- 0;
+	}
+}
+
 #MAPPING	SSS[3]
 #{
 #	%000	"B"	B;
@@ -562,7 +559,6 @@ HANDLER		O2
 ##
 ##	Quick note on operators :
 ##
-##		a <-> b exchange a and b contents (short hand for a->TMP TMP->b)
 ##		a -> b  assign contents of a into b
 ##		a <- b  assign contents of b into a
 ##
@@ -636,23 +632,20 @@ HANDLER		O2
 #		}
 #	}
 #}
-#
-#INSTRUCTION	"SPHL"		1:1:1:1:1:0:0:1
-#{
-#	O1.FETCH@
-#	{
-#		T4@
-#		{
-#			L -> SPL;
-#		}
-#	
-#		T5@
-#		{
-#			H -> SPH;
-#		}
-#	}
-#}
-#
+
+INSTRUCTION	"SPHL"		%11111001
+{
+	IF O1.FETCH.T4@
+	{
+		L -> SPL;
+	}
+	
+	IF O1.FETCH.T5@
+	{
+		H -> SPH;
+	}
+}
+
 #INSTRUCTION	"MVI %M0,%$1"	0:0:DDD[3]:1:1:0,B2[8]
 #{
 #	O1.FETCH@
@@ -1063,18 +1056,18 @@ HANDLER		O2
 #		}
 #	}
 #}
-#
-#INSTRUCTION	"XCHG"		1:1:1:0:1:0:1:1
-#{
-#	O1.FETCH@
-#	{
-#		T4@
-#		{
-#			HL <-> DE;
-#		}
-#	}
-#}
-#
+
+INSTRUCTION	"XCHG"		%11101011
+{
+	IF O1.FETCH.T4@
+	{
+		TMP <- DE;
+		DE <- HL;
+		HL <- TMP;
+		NEXT O1.FETCH.T1;
+	}
+}
+
 #INSTRUCTION	"ADD %M0"	1:0:0:0:0:SSS[3]
 #{
 #	O1.FETCH@
@@ -2094,40 +2087,34 @@ HANDLER		O2
 #		}
 #	}
 #}
-#
-#INSTRUCTION	"CMA"		0:0:1:0:1:1:1:1
-#{
-#	O1.FETCH@
-#	{
-#		T4@
-#		{
-#			~A -> A;
-#		}
-#	}
-#}
-#
-#INSTRUCTION	"CMC"		0:0:1:1:1:1:1:1
-#{
-#	O1.FETCH@
-#	{
-#		T4@
-#		{
-#			~cy -> cy;
-#		}
-#	}
-#}
-#
-#INSTRUCTION	"STC"		0:0:1:1:0:1:1:1
-#{
-#	O1.FETCH@
-#	{
-#		T4@
-#		{
-#			1 -> cy;
-#		}
-#	}
-#}
-#
+
+INSTRUCTION	"CMA"		%00101111
+{
+	IF O1.FETCH.T4@
+	{
+		~A -> A;
+		NEXT O1.FETCH.T1;
+	}
+}
+
+INSTRUCTION	"CMC"		%00111111
+{
+	IF O1.FETCH.T4@
+	{
+		~cy -> cy;
+		NEXT O1.FETCH.T1;
+	}
+}
+
+INSTRUCTION	"STC"		%00110111
+{
+	IF O1.FETCH.T4@
+	{
+		1 -> cy;
+		NEXT O1.FETCH.T1;
+	}
+}
+
 #INSTRUCTION	"JMP %$1%$0"	1:1:0:0:0:0:1:1,B2[8],B3[8]
 #{
 #	O1.FETCH@
@@ -2560,23 +2547,20 @@ HANDLER		O2
 #		}
 #	}
 #}
-#
-#INSTRUCTION	"PCHL"		1:1:1:0:1:0:0:1
-#{
-#	O1.FETCH@
-#	{
-#		T4@
-#		{
-#			L -> PCL;
-#		}
-#
-#		T5@
-#		{
-#			H -> PCH;
-#		}
-#	}
-#}
-#
+
+INSTRUCTION	"PCHL"		%11101001
+{
+	IF O1.FETCH.T4@
+	{
+		L -> PCL;
+	}
+
+	IF O1.FETCH.T5@
+	{
+		H -> PCH;
+	}
+}
+
 #INSTRUCTION	"PUSH %M0"	1:1:PRP[2]:0:1:0:1
 #{
 #	O1.FETCH@
@@ -2847,57 +2831,40 @@ HANDLER		O2
 #	}
 #}
 #
-#INSTRUCTION	"EI"		1:1:1:1:1:0:1:1
-#{
-#	O1.FETCH@
-#	{
-#		T4@
-#		{
-#			PIN_INTE <- 1;
-#		}
-#	}
-#}
-#
-#INSTRUCTION	"DI"		1:1:1:1:0:0:1:1
-#{
-#	O1.FETCH@
-#	{
-#		T4@
-#		{
-#			PIN_INTE <- 0;
-#		}
-#	}
-#}
-#
-#INSTRUCTION	"HLT"		0:1:1:1:0:1:1:0
-#{
-#	O1.FETCH@
-#	{
-#		T4@
-#		{
-#			TMP -> TMP;	# No Operation
-#		}
-#	}
-#
-#	O1.TWH@
-#	{
-#		TWH@
-#		{
-#			TMP -> TMP;	# No Operation
-#		}
-#	}
-#}
-#
-#INSTRUCTION	"NOP"		0:0:0:0:0:0:0:0
-#{
-#	O1.FETCH@
-#	{
-#		T4@
-#		{
-#			TMP -> TMP;			# dummy operation
-#		}
-#	}
-#}
+
+INSTRUCTION	"EI"		%11111011
+{
+	IF O1.FETCH.T4@
+	{
+		PIN_INTE <- 1;
+		NEXT O1.FETCH.T1;
+	}
+}
+
+INSTRUCTION	"DI"		%11110011
+{
+	IF O1.FETCH.T4@
+	{
+		PIN_INTE <- 0;
+		NEXT O1.FETCH.T1;
+	}
+}
+
+INSTRUCTION	"HLT"		%01110110
+{
+	IF O1.FETCH.T4@
+	{
+		NEXT O1.TWH.T1;
+	}
+}
+
+INSTRUCTION	"NOP"		%00000000
+{
+	IF O1.FETCH.T4@
+	{
+		NEXT O1.FETCH.T1;
+	}
+}
 
 
 

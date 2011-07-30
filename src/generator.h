@@ -24,6 +24,7 @@ using namespace llvm;
 
 class CBlock;
 class CStatesDeclaration;
+class CHandlerDeclaration;
 
 class BitVariable
 {
@@ -42,6 +43,9 @@ class StateVariable
 public:
 	Value* currentState;
 	Value* nextState;
+	Value* stateStackPrev;
+	Value* stateStackNext;
+	Value* stateStackIndex;
 	CStatesDeclaration* decl;
 };
 
@@ -60,36 +64,45 @@ class CodeGenContext
 
 public:
     std::string stateLabelStack;
+
+    CHandlerDeclaration* parentHandler;
+
     Module *module;
     ExecutionEngine		*ee;
     CodeGenContext() { module = new Module("main", getGlobalContext()); }
     Function *debugTraceString;
     Function *debugTraceChar;
 
+    bool errorFlagged;
+
+    llvm::BasicBlock* blockEndForExecute;		/* TODO */
+    llvm::SwitchInst* switchForExecute;			/* These 2 need moving somewhere sensible, at present we can only have 1 EXECUTE in a module */
+
     std::vector<Function *> handlersToTest;		/* ONLY USED FOR TESTING PURPOSES */
 
     std::map<std::string, BitVariable> m_globals;
     std::map<std::string, StateVariable> m_states;
+    std::map<CStatesDeclaration*,StateVariable> m_statesAlt;
+    std::map<std::string, CHandlerDeclaration*> m_handlers;
 
     void generateCode(CBlock& root);
     GenericValue runCode();
     std::map<std::string, BitVariable>& locals() { return blocks.top()->locals; }
     std::map<std::string, BitVariable>& globals() { return m_globals; }
     std::map<std::string, StateVariable>& states() { return m_states; }
+    std::map<CStatesDeclaration*, StateVariable>& statesAlt() { return m_statesAlt; }
     BasicBlock *currentBlock() { if (blocks.size()>0) return blocks.top()->block; else return NULL; }
     void setBlock(BasicBlock *block) { blocks.top()->block = block; }
     void pushBlock(BasicBlock *block) 
     { 
-	    std::cout << "Pushing new Block " << std::endl;
 	    std::map<std::string,BitVariable> tLocals; 
 	    if (blocks.size()>0) 
 		    tLocals = blocks.top()->locals; 
 	    blocks.push(new CodeGenBlock()); 
 	    blocks.top()->block = block; 
 	    blocks.top()->locals = tLocals;
-	    std::cout << "Num Locals : " << tLocals.size() << std::endl;
     }
-    void popBlock() { std::cout << "Popping old Block" << std::endl; CodeGenBlock *top = blocks.top(); blocks.pop(); delete top; }
+    void popBlock() { CodeGenBlock *top = blocks.top(); blocks.pop(); delete top; }
     CStatesDeclaration* currentState() { if (statesStack.empty()) return NULL; else return statesStack.top(); }
     void pushState(CStatesDeclaration *state) { statesStack.push(state); }
     void popState() { statesStack.pop(); }

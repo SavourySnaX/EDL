@@ -37,11 +37,12 @@
 }
 
 %token <string> TOK_IDENTIFIER TOK_INTEGER TOK_STRING
-%token <token>	TOK_DECLARE TOK_HANDLER	TOK_STATES TOK_STATE TOK_ALIAS TOK_IF TOK_NEXT			/* Reserved words */
+%token <token>	TOK_DECLARE TOK_HANDLER	TOK_STATES TOK_STATE TOK_ALIAS TOK_IF TOK_NEXT TOK_PUSH TOK_POP	/* Reserved words */
+%token <token>	TOK_INSTRUCTION	TOK_EXECUTE								/* Reserved words */
 %token <token>	TOK_TRACE TOK_BASE									/* Debug reserved words */
 %token <token> TOK_LSQR TOK_RSQR TOK_LBRACE TOK_RBRACE TOK_COMMA TOK_COLON TOK_EOS 			/* Operators/Seperators */
 %token <token> TOK_ASSIGNLEFT TOK_ASSIGNRIGHT TOK_ADD TOK_SUB TOK_OBR TOK_CBR TOK_CMPEQ TOK_BAR		/* Operators/Seperators */
-%token <token> TOK_DOT TOK_AT TOK_DBAR TOK_DAMP								/* Operators/Seperators */
+%token <token> TOK_DOT TOK_AT TOK_DBAR TOK_DAMP TOK_TILDE						/* Operators/Seperators */
 
 %type <strng> quoted
 %type <ident> ident
@@ -54,10 +55,11 @@
 %type <staterefvec> state_ident_list
 /* %type <exprvec> call_args */
 %type <block> program block stmts
-%type <stmt> stmt var_decl handler_decl state_decl states_decl state_def alias_decl ifblock debug /*state_test*/
+%type <stmt> stmt var_decl handler_decl state_decl states_decl state_def alias_decl ifblock debug instruction_decl
 
 %right TOK_ASSIGNRIGHT
 %left TOK_ASSIGNLEFT
+%right TOK_TILDE
 %left TOK_DBAR TOK_DAMP
 %left TOK_CMPEQ
 %left TOK_ADD TOK_SUB
@@ -77,8 +79,12 @@ stmt : var_decl TOK_EOS
      | states_decl
      | state_def
      | handler_decl
+     | instruction_decl
      | ifblock
+     | TOK_EXECUTE ident TOK_EOS { $$ = new CExecute(*$2); }
      | TOK_NEXT state_ident_list TOK_EOS { $$ = new CStateJump(*$2); delete $2; }
+     | TOK_PUSH state_ident_list TOK_EOS { $$ = new CStatePush(*$2); delete $2; }
+     | TOK_POP ident TOK_EOS { $$ = new CStatePop(*$2); }
      | TOK_TRACE debuglist TOK_EOS { $$ = new CDebugLine(*$2); delete $2; }
      | expr TOK_EOS { $$ = new CExpressionStatement(*$1); }
      ;
@@ -129,6 +135,10 @@ aliases : aliases TOK_COLON alias_decl { $$->push_back($<alias_decl>3); }
 	| alias_decl { $$ = new AliasList(); $$->push_back($<alias_decl>1); }
 	;
 
+
+instruction_decl : TOK_INSTRUCTION quoted numeric block { $$ = new CInstruction(*$3,*$4); }
+		 ;
+
 var_decl : TOK_DECLARE ident TOK_LSQR numeric TOK_RSQR { $$ = new CVariableDeclaration(*$2, *$4); }
 	| TOK_DECLARE ident TOK_LSQR numeric TOK_RSQR TOK_ALIAS aliases { $$ = new CVariableDeclaration(*$2, *$4, *$7); delete $7; }
 	;
@@ -141,6 +151,7 @@ expr : ident TOK_ASSIGNLEFT expr { $$ = new CAssignment(*$<ident>1,*$3); }
      | expr TOK_DBAR expr { $$ = new CBinaryOperator(*$1,TOK_DBAR,*$3); }
      | expr TOK_DAMP expr { $$ = new CBinaryOperator(*$1,TOK_DAMP,*$3); }
      | state_ident_list TOK_AT { $$ = new CStateTest(*$1); }
+     | TOK_TILDE expr { $$ = new CBinaryOperator(*$2,TOK_TILDE,*$2); }
      | ident { $<ident>$ = $1; }
      | numeric { $$ = new CInteger(*$1); delete $1; }
      | TOK_OBR expr TOK_CBR { $$ = $2; }

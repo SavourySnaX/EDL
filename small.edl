@@ -2,61 +2,88 @@
 # Testing file for checking features
 #
 
-DECLARE foo[12] ALIAS bar[8]:%0101;
-DECLARE output[36];
+DECLARE IR[8];
+
+DECLARE test[5];
 
 HANDLER O1
 {
-	STATES a|b|c
+	STATES FIRST|FETCH|MEMIN|MEMOUT
 	{
-		STATE a
+		STATE FETCH
 		{
-			STATES fish,food
+			STATES T1,T2,T3
 			{
-				STATE fish
+				STATE T1
 				{
-					bar <- bar + foo;
-					DEBUG_TRACE "FISH",bar;
+					DEBUG_TRACE "FETCH.T1";
 				}
-				STATE food
+				STATE T2
 				{
-					foo <- bar + 1;
-					NEXT O1.a.food;
-					DEBUG_TRACE "FOOD",foo;
+					DEBUG_TRACE "FETCH.T2";
+				}
+				STATE T3
+				{
+					DEBUG_TRACE "FETCH.T3";
 				}
 			}
-			foo <- foo + 1;
-			DEBUG_TRACE BASE 16,foo;
 		}
-		STATE b
+		STATE MEMIN
 		{
-			bar <- bar - 1;
-			DEBUG_TRACE BASE 16,bar;
+			STATES T1,T2,T3
+			{
+				STATE T1
+				{
+					DEBUG_TRACE "MEMIN.T1";
+				}
+				STATE T3
+				{
+					DEBUG_TRACE "MEMIN.T3";
+				}
+			}
 		}
-		STATE c
+		STATE MEMOUT
 		{
-			output <- foo;
-			DEBUG_TRACE BASE 16,output;
+			STATES T1,T2,T3
+			{
+				STATE T1
+				{
+					DEBUG_TRACE "MEMOUT.T1";
+				}
+				STATE T3
+				{
+					DEBUG_TRACE "MEMOUT.T3";
+				}
+			}
+		}
+		STATE FIRST
+		{
+			IR <- 0;
+			test <- %11111;
+			test <- ~test;
+			NEXT O1.FETCH.T1;
 		}
 	}
 	
-	IF O1.b@
-	{
-		DEBUG_TRACE "Currently in state b";
-	}
-
-	IF O1.a.food@
-	{
-		DEBUG_TRACE "Currently in sub state food of state a of O1 handler";
-		NEXT O1.b;
-	}
+	EXECUTE IR;
 }
 
-HANDLER O2
+INSTRUCTION	"NOP"		%00000000
 {
-	IF O1.a@ 
+	IF O1.FETCH.T3@
 	{
-		DEBUG_TRACE "bingo";
+		PUSH O1.MEMIN.T1;
+		PUSH O1.MEMIN.T1;
 	}
-
+	IF O1.MEMIN.T1@
+	{
+		POP O1;
+	}
+	DEBUG_TRACE "NOP",test;
 }
+
+INSTRUCTION	"PONY"		%00000001
+{
+	DEBUG_TRACE "PONY";
+}
+

@@ -8,7 +8,7 @@ if exists("b:current_syntax")
   finish
 endif
 
-syn keyword	edlReserved		DECLARE ALIAS HANDLER STATES STATE IF NEXT PUSH POP
+syn keyword	edlReserved		DECLARE ALIAS HANDLER STATES STATE IF NEXT PUSH POP INSTRUCTION EXECUTE
 syn keyword	edlDebugReserved	DEBUG_TRACE BASE
 
 syntax match 	edlCurlyError	"}"

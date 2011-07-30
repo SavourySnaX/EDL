@@ -19,7 +19,10 @@ STATE					{ return TOKEN(TOK_STATE); }
 ALIAS					{ return TOKEN(TOK_ALIAS); }
 IF					{ return TOKEN(TOK_IF); }
 NEXT					{ return TOKEN(TOK_NEXT); }
-
+PUSH					{ return TOKEN(TOK_PUSH); }
+POP					{ return TOKEN(TOK_POP); }
+INSTRUCTION				{ return TOKEN(TOK_INSTRUCTION); }
+EXECUTE					{ return TOKEN(TOK_EXECUTE); }
 
 DEBUG_TRACE				{ return TOKEN(TOK_TRACE); }
 BASE					{ return TOKEN(TOK_BASE); }
@@ -49,6 +52,7 @@ BASE					{ return TOKEN(TOK_BASE); }
 "|"					{ return TOKEN(TOK_BAR); }
 "."					{ return TOKEN(TOK_DOT); }
 "@"					{ return TOKEN(TOK_AT); }
+"~"					{ return TOKEN(TOK_TILDE); }
 
 [ \t\r]					{ /* Consume white space */ }
 #.*					{ /* Ignore comments */ }

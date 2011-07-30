@@ -5,11 +5,16 @@
 #include <llvm/ADT/APInt.h>
 #include <llvm/BasicBlock.h>
 
+
+#define MAX_SUPPORTED_STACK_DEPTH	(16)
+#define MAX_SUPPORTED_STACK_BITS	(4)
+
 class CodeGenContext;
 class CStatement;
 class CExpression;
 class CVariableDeclaration;
 class CStateDeclaration;
+class CStatesDeclaration;
 class CAliasDeclaration;
 class CDebugTrace;
 class CStateIdent;
@@ -223,8 +228,9 @@ public:
 	bool autoIncrement;
 	llvm::BasicBlock* entry;
 	llvm::BasicBlock* exit;
+	CStatesDeclaration* child;
 	CStateDeclaration(CIdentifier& id) :
-		id(id),autoIncrement(false),entry(NULL),exit(NULL) { }
+		id(id),autoIncrement(false),entry(NULL),exit(NULL),child(NULL) { }
 	virtual llvm::Value* codeGen(CodeGenContext& context,llvm::Function* parent);
 };
 
@@ -261,6 +267,27 @@ public:
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
 
+class CStatePush : public CStatement {
+public:
+	StateIdentList stateIdents;
+	CStatePush(StateIdentList& stateIdents) :
+		stateIdents(stateIdents) { }
+
+	virtual llvm::Value* codeGen(CodeGenContext& context);
+};
+
+class CStatePop : public CStatement {
+public:
+	CIdentifier& ident;
+	CStatePop(CIdentifier& ident) :
+		ident(ident) { }
+
+	virtual llvm::Value* codeGen(CodeGenContext& context);
+
+	void StateWalker(CodeGenContext& context,CStatesDeclaration* begin,llvm::Value* numStates);
+};
+
+
 class CIfStatement : public CStatement
 {
 public:
@@ -284,7 +311,28 @@ class CHandlerDeclaration : public CStatement {
 public:
 	const CIdentifier& id;
 	CBlock& block;
+	llvm::GlobalVariable* depthTree;
+	llvm::GlobalVariable* depthTreeIdx;
+	CStatesDeclaration* child;
 	CHandlerDeclaration(const CIdentifier& id, CBlock& block) :
 		id(id), block(block) { }
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
+
+class CInstruction : public CStatement {
+public:
+	CInteger& opcode;
+	CBlock& block;
+	CInstruction(CInteger& opcode, CBlock& block) :
+		opcode(opcode), block(block) { }
+	virtual llvm::Value* codeGen(CodeGenContext& context);
+};
+
+class CExecute : public CStatement {
+public:
+	CIdentifier& opcode;
+	CExecute(CIdentifier& opcode) :
+		opcode(opcode) { }
+	virtual llvm::Value* codeGen(CodeGenContext& context);
+};
+
