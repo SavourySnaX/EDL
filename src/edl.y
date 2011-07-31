@@ -10,7 +10,7 @@
 	#define YYERROR_VERBOSE	/* Better error reporting */
 
 	extern int yylex();
-	void yyerror(const char *s) { std::printf("Error: %s (line %d)\n",s,g_CurLine);std::exit(-1); }
+	void yyerror(const char *s) { std::printf("Error: %s (line %d)\n",s,g_CurLine); }
 %}
 
 %union {

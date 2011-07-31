@@ -4,6 +4,8 @@
 
 using namespace std;
 
+extern bool JustCompiledOutput;
+
 #define USE_OPTIMISER	1
 
 /* Compile the AST into a module */
@@ -65,7 +67,10 @@ void CodeGenContext::generateCode(CBlock& root)
 	 */
 	PassManager pm;
 
-	pm.add(createPrintModulePass(&outs()));
+	if (!JustCompiledOutput)
+	{
+		pm.add(createPrintModulePass(&outs()));
+	}
 	pm.add(createVerifierPass());
 
 #if USE_OPTIMISER
@@ -138,7 +143,7 @@ GenericValue CodeGenContext::runCode()
 {
 	GenericValue v;
 
-	if (!errorFlagged)
+	if (!errorFlagged && !JustCompiledOutput)
 	{
 		std::cout << "Running code...\n";
 		vector<GenericValue> noargs;

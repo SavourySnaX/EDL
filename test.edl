@@ -45,6 +45,10 @@ DECLARE	ADDR_BUFF[16];
 DECLARE	DATA_BUFF[8];
 DECLARE	IFLAGS[3] 	ALIAS JMP[1]:INT_LATCH[1]:HLD_LATCH[1];						# JMP Indicates PC should be overridden in conditional instructions
 
+# I NEED A WAY TO DETERMINE WHICH CYCLE IS BEING DONE, SINCE I MIGHT WANT TO DO 2 MEMIN CYCLES ON AN INSTRUCTION AND I NEED TO BE ABLE TO
+#INDIVIDUALY IDENTIFY THEM. SINCE THE LANGUAGE DOES NOT OFFER ANY HELP AT THE MOMENT, THIS IS DONE USING THE BELOW REGISTER
+DECLARE STAGECHECK[4];
+
 # SOME CONSTANTS - MEMR:INP:M1:OUT:HLTA:STACK:_WO:INTA - MAY NEED TO DETECT AND FLAG APPRIOPRIATELY FOR OPTIMISER TO REALISE THEY ARE CONSTANT
 DECLARE	SYNC_FETCH[8]		ALIAS %10100010;
 DECLARE	SYNC_MEM_READ[8]	ALIAS %10000010;
@@ -71,7 +75,6 @@ HANDLER		O1
 			{
 				STATE T1
 				{
-					DEBUG_TRACE "FETCH.T1";
 					PIN__WR <- 1;
 					IF (INT_LATCH==1)
 					{
@@ -86,7 +89,6 @@ HANDLER		O1
 
 				STATE T2
 				{
-					DEBUG_TRACE "FETCH.T2";
 					IF (INT_LATCH==0)
 					{
 						PC <- PC+1;
@@ -94,15 +96,12 @@ HANDLER		O1
 					INT_LATCH <- 0;
 					IF (PIN_READY == 0)
 					{
-						DEBUG_TRACE "PUSHING STATE";
-						PUSH O1.TW;		#TODO think on me, we must still execute the T2 state machine of the overlay before we execute the transition.. 
-									# so I guess.. CALL is actually a signal for the end of the state (aka transition) and not part of the action phase
+						PUSH O1.TW;
 					}
 				}
 
 				STATE T3
 				{
-					DEBUG_TRACE "FETCH.T3";
 					PIN_WAIT <- 0;
 					PIN_D -> DATA_BUFF;	# Latch data at start of T3
 
@@ -347,11 +346,6 @@ HANDLER		O1
 
 
 	EXECUTE	IR;		# Execute states via this instruction, during reset we should point IR to a SAFE value (NOP will do)
-
-	DEBUG_TRACE "O1 CLOCK :: ";
-	DEBUG_TRACE BASE 16,PC," ",ADDR_BUFF," ",DATA_BUFF;
-	DEBUG_TRACE PIN_READY," ",PIN__WR;
-
 }
 
 HANDLER		O2
@@ -363,7 +357,6 @@ HANDLER		O2
 	   O1.SPREAD.T1@ ||
 	   O1.PORTIN.T1@
 	{
-		DEBUG_TRACE "O2 in a T1";
 		PIN_D <- DATA_BUFF;
 		PIN_A <- ADDR_BUFF;
 		PIN_SYNC <- 1;
@@ -378,7 +371,6 @@ HANDLER		O2
 	   O1.SPREAD.T2@ ||
 	   O1.PORTIN.T2@
 	{
-		DEBUG_TRACE "O2 in a T2";
 		PIN_SYNC <-0;
 #		PIN_D <- FLOATING;
 		PIN_DBIN <- 1;
@@ -389,7 +381,6 @@ HANDLER		O2
 	   O1.SPREAD.T3@ ||
 	   O1.PORTIN.T3@
 	{
-		DEBUG_TRACE "O2 in a T3";
 		PIN_DBIN <- 0;
 	}
 
@@ -435,14 +426,6 @@ HANDLER		O2
 		PIN_SYNC <- 0;
 		PIN_DBIN <- 0;
 		PIN__WR <- 0;
-	}
-
-	DEBUG_TRACE "O2 CLOCK :: ";
-	DEBUG_TRACE BASE 16,PIN_A," ",PIN_D;
-
-	IF O1.TW@
-	{
-		DEBUG_TRACE "In holding state, wait for external memory!";
 	}
 }
 
@@ -2397,52 +2380,47 @@ INSTRUCTION	"STC"		%00110111
 #		}
 #	}
 #}
-#
-#INSTRUCTION	"RET"		1:1:0:0:1:0:0:1
-#{
-#	O1.FETCH@
-#	{
-#		T1@
-#		{
-#			ADDR_BUFF <- WZ;
-#		}
-#
-#		T2@
-#		{
-#			WZ + 1 -> PC;
-#		}
-#
-#		T4@
-#		{
-#			TMP -> TMP;	# No Operation
-#		}
-#	}
-#
-#	O1.SPREAD@
-#	{
-#		T2@
-#		{
-#			SP <- SP+1;
-#		}
-#		T3@
-#		{
-#			DATA_BUFF -> Z;
-#		}
-#	}
-#
-#	O1.SPREAD@
-#	{
-#		T2@
-#		{
-#			SP <- SP+1;
-#		}
-#		T3@
-#		{
-#			DATA_BUFF -> W;
-#		}
-#	}
-#}
-#
+
+INSTRUCTION	"RET"		%11001001
+{
+	IF O1.FETCH.T1@
+	{
+		ADDR_BUFF <- WZ;
+	}
+
+	IF O1.FETCH.T2@
+	{
+		WZ + 1 -> PC;
+	}
+
+	IF O1.FETCH.T4@
+	{
+		STAGECHECK<-0;
+		NEXT O1.FETCH.T1;
+		PUSH O1.SPREAD.T1;
+		PUSH O1.SPREAD.T1;
+	}
+
+	IF O1.SPREAD.T2@
+	{
+		SP <- SP+1;
+	}
+
+	IF O1.SPREAD.T3@
+	{
+		IF STAGECHECK==1
+		{
+			DATA_BUFF -> W;
+		}
+		IF STAGECHECK==0
+		{
+			DATA_BUFF -> Z;
+			STAGECHECK<-1;
+		}
+		POP O1;
+	}
+}
+
 #INSTRUCTION	"R%M0"		1:1:CCC[3]:0:0:0
 #{
 #	O1.FETCH@
@@ -2595,42 +2573,41 @@ INSTRUCTION	"PCHL"		%11101001
 #		
 #	}
 #}
-#
-#INSTRUCTION	"PUSH PSW"	1:1:1:1:0:1:0:1
-#{
-#	O1.FETCH@
-#	{
-#		T4@
-#		{
-#			TMP -> TMP;	# No Operation
-#		}
-#
-#		T5@
-#		{
-#			SP <- SP-1;
-#		}
-#	}
-#
-#	O1.SPWRITE@
-#	{
-#		T2@
-#		{
-#			SP <- SP-1;
-#			A -> DATA_BUFF;
-#		}
-#		
-#	}
-#	
-#	O1.SPWRITE@
-#	{
-#		T2@
-#		{
-#			FLAGS -> DATA_BUFF;
-#		}
-#		
-#	}
-#}
-#
+
+INSTRUCTION	"PUSH PSW"	%11110101
+{
+	IF O1.FETCH.T4@
+	{
+		STAGECHECK<-0;
+	}
+
+	IF O1.FETCH.T5@
+	{
+		SP <- SP-1;
+		PUSH O1.SPWRITE.T1;
+		PUSH O1.SPWRITE.T1;
+	}
+
+	IF O1.SPWRITE.T2@
+	{
+		IF STAGECHECK==1
+		{
+			FLAGS -> DATA_BUFF;
+		}
+		IF STAGECHECK==0
+		{
+			SP <- SP-1;
+			A -> DATA_BUFF;
+		}
+		
+	}
+
+	IF O1.SPWRITE.T3@
+	{
+		POP O1;
+	}
+}
+
 #INSTRUCTION	"POP %M0"	1:1:PRP[2]:0:0:0:1
 #{
 #	O1.FETCH@
@@ -2665,100 +2642,109 @@ INSTRUCTION	"PCHL"		%11101001
 #		}
 #	}
 #}
-#
-#INSTRUCTION	"POP PSW"	1:1:1:1:0:0:0:1
-#{
-#	O1.FETCH@
-#	{
-#		T4@
-#		{
-#			TMP -> TMP;	# No Operation
-#		}
-#	}
-#
-#	O1.SPREAD@
-#	{
-#		T2@
-#		{
-#			SP <- SP+1;
-#		}
-#		T3@
-#		{
-#			DATA_BUFF -> FLAGS;
-#		}
-#	}
-#	
-#	O1.SPREAD@
-#	{
-#		T2@
-#		{
-#			SP <- SP+1;
-#		}
-#		T3@
-#		{
-#			DATA_BUFF -> A;
-#		}
-#	}
-#}
-#
-#INSTRUCTION	"XTHL"		1:1:1:0:0:0:1:1
-#{
-#	O1.FETCH@
-#	{
-#		T4@
-#		{
-#			TMP -> TMP;	# No Operation
-#		}
-#	}
-#
-#	O1.SPREAD@
-#	{
-#		T2@
-#		{
-#			SP <- SP+1;
-#		}
-#		T3@
-#		{
-#			DATA_BUFF -> Z;
-#		}
-#	}
-#	
-#	O1.SPREAD@
-#	{
-#		T3@
-#		{
-#			DATA_BUFF -> W;
-#		}
-#	}
-#
-#	O1.SPWRITE@
-#	{
-#		T2@
-#		{
-#			SP <- SP-1;
-#			H -> DATA_BUFF;
-#		}
-#		
-#	}
-#	
-#	O1.SPWRITE@
-#	{
-#		T2@
-#		{
-#			L -> DATA_BUFF;
-#		}
-#		
-#		T4@
-#		{
-#			W -> H;
-#		}
-#		T5@
-#		{
-#			Z -> L;
-#		}
-#	}
-#}
-#
+
+INSTRUCTION	"POP PSW"	%11110001
+{
+	IF O1.FETCH.T4@
+	{
+		STAGECHECK<-0;
+		NEXT O1.FETCH.T1;
+		PUSH O1.SPREAD.T1;
+		PUSH O1.SPREAD.T1;
+	}
+
+	IF O1.SPREAD.T2@
+	{
+		SP <- SP+1;
+	}
+
+	IF O1.SPREAD.T3@
+	{
+		IF STAGECHECK == 1
+		{
+			DATA_BUFF -> A;
+		}
+		IF STAGECHECK == 0
+		{
+			DATA_BUFF -> FLAGS;
+			STAGECHECK <- 1;
+		}
+		POP O1;
+	}
+}
+
+INSTRUCTION	"XTHL"		%11100011
+{
+	IF O1.FETCH.T3@
+	{
+		STAGECHECK<-0;
+	}
+
+	IF O1.FETCH.T4@
+	{
+		IF STAGECHECK == 2
+		{
+			W -> H;
+		}
+		IF STAGECHECK == 0
+		{
+			NEXT O1.FETCH.T4;
+			PUSH O1.SPWRITE.T1;
+			PUSH O1.SPWRITE.T1;
+			PUSH O1.SPREAD.T1;
+			PUSH O1.SPREAD.T1;
+		}
+	}
+
+	IF O1.FETCH.T5@
+	{
+		Z -> L;
+	}
+
+	IF O1.SPREAD.T2@
+	{
+		IF STAGECHECK == 0
+		{
+
+			SP <- SP+1;
+		}
+	}
+
+	IF O1.SPREAD.T3@
+	{
+		IF STAGECHECK == 1
+		{
+			DATA_BUFF -> W;
+		}
+		IF STAGECHECK == 0
+		{
+			DATA_BUFF -> Z;
+			STAGECHECK<-1;
+		}
+		POP O1;
+	}
+	
+	IF O1.SPWRITE.T2@
+	{
+		IF STAGECHECK == 2
+		{
+			L -> DATA_BUFF;
+		}
+		IF STAGECHECK == 1
+		{
+			SP <- SP-1;
+			H -> DATA_BUFF;
+			STAGECHECK<-2;
+		}
+	}
+
+	IF O1.SPWRITE.T3@
+	{
+		POP O1;
+	}
+	
+}
+
 #INSTRUCTION	"IN %$0"	1:1:0:1:1:0:1:1,B2[8]
 #{
 #	O1.FETCH@

@@ -37,4 +37,8 @@ out/%.o: src/%.cpp
 edl: $(OBJS)
 	g++ -o $@ $(LDFLAGS) $(START_GROUP) $(OBJS) $(LIBS) $(END_GROUP)
 
-
+test:	edl.exe test.edl testHarness.c
+	edl.exe test.edl lalala >test.lls
+	llc test.lls
+	gcc testHarness.c test.lls.s -o test.exe
+	test.exe
