@@ -1,0 +1,21 @@
+
+
+Language notes
+
+HANDLER.STATE.STATE...@
+
+	Will only return true if we are in all the states
+
+NEXT HANDLER.STATE.STATE...;
+
+	Will set all states from top to last mentioned.
+
+PUSH HANDLER.STATE.STATE...;
+
+	Will push all states from top to last mentioned, also stores a depth marker into the HANDLER (required by POP)
+
+POP HANDLER;
+
+	WIll pop off states down to the depth marker in the HANDLER. 
+	
+
