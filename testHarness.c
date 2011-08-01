@@ -40,6 +40,7 @@ extern unsigned char	SYNC_INT_ACK_HALTED;
 void EXECUTE_CYCLES(unsigned char instruction,int cnt)
 {
 	int a;
+	int readInstruction=0;
 	for (a=0;a<cnt;a++)
 	{
 		O1();
@@ -57,6 +58,12 @@ void EXECUTE_CYCLES(unsigned char instruction,int cnt)
 		{
 			if (PIN_D == SYNC_FETCH)
 			{
+				if (readInstruction)
+				{
+					printf("current instruction took wrong number of cycles!\n");
+					exit(1);
+				}
+				readInstruction=1;
 				printf("Reading next instruction - Address %04X <- %02X\n",PIN_A,instruction);
 				PIN_D=instruction;
 				PIN_READY=1;
