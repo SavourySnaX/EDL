@@ -19,6 +19,9 @@ LIBS = `$(LLVM_CONFIG) --libs $(LLVM_MODULES)` -lpthread -lpsapi -limagehlp
 clean:
 	$(RM) -rf out/*
 	rmdir out
+	$(RM) test.lls
+	$(RM) test.lls.s
+	$(RM) test.exe
 	$(RM) edl.exe
 
 out/parser.cpp: src/edl.y 
@@ -37,7 +40,7 @@ out/%.o: src/%.cpp
 edl: $(OBJS)
 	g++ -o $@ $(LDFLAGS) $(START_GROUP) $(OBJS) $(LIBS) $(END_GROUP)
 
-test:	edl.exe test.edl testHarness.c
+test:	edl test.edl testHarness.c
 	edl.exe test.edl lalala >test.lls
 	llc test.lls
 	gcc testHarness.c test.lls.s -o test.exe
