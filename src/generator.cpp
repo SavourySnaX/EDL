@@ -472,11 +472,101 @@ Value* CBinaryOperator::codeGen(CodeGenContext& context)
 		}
 	}
 
-	std::cout << "Illegal types in expression" << std::endl;
+	std::cerr << "Illegal types in expression" << std::endl;
 	
 	context.errorFlagged=true;
 
 	return NULL;
+}
+
+std::string stringZero("0");
+
+CInteger CCastOperator::begZero(stringZero);
+
+Value* CCastOperator::codeGen(CodeGenContext& context)
+{
+	std::cout << beg.integer.toString(10,false) << " .. " << end.integer.toString(10,false) << std::endl;
+
+	// Compute a mask between specified bits, shift result down by start bits
+	
+	// Step 1, get bit size of input operand
+	Value* left = lhs.codeGen(context);
+
+	if (left->getType()->isIntegerTy())
+	{
+		const IntegerType* leftType = cast<IntegerType>(left->getType());
+
+		APInt mask(leftType->getBitWidth(),"0",10);
+		APInt start=beg.integer;
+		start=start.zextOrTrunc(leftType->getBitWidth());
+
+		while (1==1)//for (;beg.integer.ule(end.integer);beg.integer++)
+		{
+			std::cout << beg.integer.toString(10,false) << " " << mask.toString(2,false) << std::endl;
+			mask.setBit(beg.integer.getLimitedValue());
+			std::cout << beg.integer.toString(10,false) << " " << mask.toString(2,false) << std::endl;
+			if (beg.integer.uge(end.integer))
+				break;
+			beg.integer++;
+		}
+
+		Value *masked=BinaryOperator::Create(Instruction::And,left,ConstantInt::get(getGlobalContext(),mask),"castMask",context.currentBlock());
+		Value *shifted=BinaryOperator::Create(Instruction::LShr,masked,ConstantInt::get(getGlobalContext(),start),"castShift",context.currentBlock());
+
+		// Final step cast it to correct size - not actually required, will be handled by expr lowering/raising anyway
+		return shifted;
+	}
+
+	std::cerr << "Illegal type in cast" << std::endl;
+	
+	context.errorFlagged=true;
+
+	return NULL;
+}
+
+Value* CRotationOperator::codeGen(CodeGenContext& context)
+{
+	return value.codeGen(context);
+
+#if 0
+	std::cout << beg.integer.toString(10,false) << " .. " << end.integer.toString(10,false) << std::endl;
+
+	// Compute a mask between specified bits, shift result down by start bits
+	
+	// Step 1, get bit size of input operand
+	Value* left = lhs.codeGen(context);
+
+	if (left->getType()->isIntegerTy())
+	{
+		const IntegerType* leftType = cast<IntegerType>(left->getType());
+
+		APInt mask(leftType->getBitWidth(),"0",10);
+		APInt start=beg.integer;
+		start=start.zextOrTrunc(leftType->getBitWidth());
+
+		while (1==1)//for (;beg.integer.ule(end.integer);beg.integer++)
+		{
+			std::cout << beg.integer.toString(10,false) << " " << mask.toString(2,false) << std::endl;
+			mask.setBit(beg.integer.getLimitedValue());
+			std::cout << beg.integer.toString(10,false) << " " << mask.toString(2,false) << std::endl;
+			if (beg.integer.uge(end.integer))
+				break;
+			beg.integer++;
+		}
+
+		Value *masked=BinaryOperator::Create(Instruction::And,left,ConstantInt::get(getGlobalContext(),mask),"castMask",context.currentBlock());
+		Value *shifted=BinaryOperator::Create(Instruction::LShr,masked,ConstantInt::get(getGlobalContext(),start),"castShift",context.currentBlock());
+
+		// Final step cast it to correct size - not actually required, will be handled by expr lowering/raising anyway
+		return shifted;
+	}
+
+	std::cerr << "Illegal type in cast" << std::endl;
+	
+	context.errorFlagged=true;
+
+	return NULL;
+#endif
 }
 
 Value* CAssignment::codeGen(CodeGenContext& context)
@@ -1160,24 +1250,6 @@ void CStatePop::StateWalker(CodeGenContext& context,CStatesDeclaration* iterate,
 
 		context.setBlock(exitState);
 	}
-
-
-/*
-	// at present because pop takes no params, it must be executed from within the correct state block
-
-	if (context.currentState()==NULL)
-	{
-		std::cerr << "unable to pop from outside of a STATE declaration!" << std::endl;
-		context.errorFlagged=true;
-		return NULL;
-	}
-
-	CStatesDeclaration* state = context.currentState();
-	StateVariable stateVar = context.statesAlt()[state];
-
-*/
-
-
 }
 
 Value* CStatePop::codeGen(CodeGenContext& context)

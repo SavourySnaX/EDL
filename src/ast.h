@@ -79,6 +79,12 @@ public:
 				integer = integer.trunc(1);
 		}
 	}
+
+	void Decrement()
+	{
+		integer--;
+	}
+
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
 
@@ -122,6 +128,31 @@ public:
 	CExpression& rhs;
 	CBinaryOperator(CExpression& lhs, int op, CExpression& rhs) :
 		lhs(lhs), rhs(rhs), op(op) { }
+	virtual llvm::Value* codeGen(CodeGenContext& context);
+};
+
+class CCastOperator : public CExpression {
+public:
+	CExpression& lhs;
+	CInteger& beg;
+	CInteger& end;
+	static CInteger begZero;
+	CCastOperator(CExpression& lhs, CInteger& end) :
+		lhs(lhs), beg(begZero),end(end) { }
+	CCastOperator(CExpression& lhs, CInteger& beg, CInteger& end) :
+		lhs(lhs), beg(beg), end(end) { }
+	virtual llvm::Value* codeGen(CodeGenContext& context);
+};
+
+class CRotationOperator : public CExpression {
+public:
+	CExpression& value;
+	CIdentifier& bitsOut;
+	CExpression& bitsIn;
+	CInteger& rotAmount;
+	int direction;
+	CRotationOperator(int direction,CExpression& value, CIdentifier& bitsOut, CExpression& bitsIn,CInteger& rotAmount) :
+		direction(direction), value(value), bitsOut(bitsOut), bitsIn(bitsIn), rotAmount(rotAmount) { }
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
 

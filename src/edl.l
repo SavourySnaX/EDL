@@ -23,6 +23,8 @@ PUSH					{ return TOKEN(TOK_PUSH); }
 POP					{ return TOKEN(TOK_POP); }
 INSTRUCTION				{ return TOKEN(TOK_INSTRUCTION); }
 EXECUTE					{ return TOKEN(TOK_EXECUTE); }
+ROL					{ return TOKEN(TOK_ROL); }
+ROR					{ return TOKEN(TOK_ROR); }
 
 DEBUG_TRACE				{ return TOKEN(TOK_TRACE); }
 BASE					{ return TOKEN(TOK_BASE); }
@@ -33,6 +35,7 @@ BASE					{ return TOKEN(TOK_BASE); }
 \$[0-9a-fA-F]+				{ SAVE_TOKEN; return TOK_INTEGER; /* hexadecimal */}
 \"(\\.|[^"])*\"				{ SAVE_TOKEN; return TOK_STRING; }
 
+".."					{ return TOKEN(TOK_DDOT); }
 "=="					{ return TOKEN(TOK_CMPEQ); }
 "||"					{ return TOKEN(TOK_DBAR); }
 "&&"					{ return TOKEN(TOK_DAMP); }

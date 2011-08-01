@@ -38,11 +38,11 @@
 
 %token <string> TOK_IDENTIFIER TOK_INTEGER TOK_STRING
 %token <token>	TOK_DECLARE TOK_HANDLER	TOK_STATES TOK_STATE TOK_ALIAS TOK_IF TOK_NEXT TOK_PUSH TOK_POP	/* Reserved words */
-%token <token>	TOK_INSTRUCTION	TOK_EXECUTE								/* Reserved words */
+%token <token>	TOK_INSTRUCTION	TOK_EXECUTE TOK_ROL TOK_ROR						/* Reserved words */
 %token <token>	TOK_TRACE TOK_BASE									/* Debug reserved words */
 %token <token> TOK_LSQR TOK_RSQR TOK_LBRACE TOK_RBRACE TOK_COMMA TOK_COLON TOK_EOS 			/* Operators/Seperators */
 %token <token> TOK_ASSIGNLEFT TOK_ASSIGNRIGHT TOK_ADD TOK_SUB TOK_OBR TOK_CBR TOK_CMPEQ TOK_BAR		/* Operators/Seperators */
-%token <token> TOK_DOT TOK_AT TOK_DBAR TOK_DAMP TOK_TILDE						/* Operators/Seperators */
+%token <token> TOK_DOT TOK_AT TOK_DBAR TOK_DAMP TOK_TILDE TOK_DDOT					/* Operators/Seperators */
 
 %type <strng> quoted
 %type <ident> ident
@@ -60,6 +60,7 @@
 %right TOK_ASSIGNRIGHT
 %left TOK_ASSIGNLEFT
 %right TOK_TILDE
+%left TOK_LSQR
 %left TOK_DBAR TOK_DAMP
 %left TOK_CMPEQ
 %left TOK_ADD TOK_SUB
@@ -152,6 +153,10 @@ expr : ident TOK_ASSIGNLEFT expr { $$ = new CAssignment(*$<ident>1,*$3); }
      | expr TOK_DAMP expr { $$ = new CBinaryOperator(*$1,TOK_DAMP,*$3); }
      | state_ident_list TOK_AT { $$ = new CStateTest(*$1); }
      | TOK_TILDE expr { $$ = new CBinaryOperator(*$2,TOK_TILDE,*$2); }
+     | TOK_ROL TOK_OBR expr TOK_COMMA ident TOK_COMMA expr TOK_COMMA numeric TOK_CBR { $$ = new CRotationOperator(TOK_ROL,*$3,*$5,*$7,*$9); }
+     | TOK_ROR TOK_OBR expr TOK_COMMA ident TOK_COMMA expr TOK_COMMA numeric TOK_CBR { $$ = new CRotationOperator(TOK_ROR,*$3,*$5,*$7,*$9); }
+     | expr TOK_LSQR numeric TOK_RSQR { $3->Decrement(); $$ = new CCastOperator(*$1,*$3); }
+     | expr TOK_LSQR numeric TOK_DDOT numeric TOK_RSQR { $$ = new CCastOperator(*$1,*$3,*$5); }
      | ident { $<ident>$ = $1; }
      | numeric { $$ = new CInteger(*$1); delete $1; }
      | TOK_OBR expr TOK_CBR { $$ = $2; }
