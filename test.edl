@@ -739,262 +739,233 @@ INSTRUCTION	"MVI M,%$1"	%00110110,B2[8]
 #		}
 #	}
 #}
-#
-#INSTRUCTION	"LDA %$1%$0"	0:0:1:1:1:0:1:0,B2[8],B3[8]
-#{
-#	O1.FETCH@
-#	{
-#		T4@
-#		{
-#			TMP -> TMP;	# No operation
-#		}
-#	}
-#	
-#	O1.MEMIN@
-#	{
-#		T1@
-#		{
-#			ADDR_BUFF <- PC;
-#		}
-#		T2@
-#		{
-#			PC <- PC+1;
-#		}
-#		T3@
-#		{
-#			DATA_BUFF -> Z;
-#		}
-#	}
-#
-#	O1.MEMIN@
-#	{
-#		T1@
-#		{
-#			ADDR_BUFF <- PC;
-#		}
-#		T2@
-#		{
-#			PC <- PC+1;
-#		}
-#		T3@
-#		{
-#			DATA_BUFF -> W;
-#		}
-#	}
-#
-#	O1.MEMIN@
-#	{
-#		T1@
-#		{
-#			ADDR_BUFF <- WZ;
-#		}
-#
-#		T3@
-#		{
-#			DATA_BUFF -> A;
-#		}
-#	}
-#}
-#
-#INSTRUCTION	"STA %$1%$0"	0:0:1:1:0:0:1:0,B2[8],B3[8]
-#{
-#	O1.FETCH@
-#	{
-#		T4@
-#		{
-#			TMP -> TMP;	# No operation
-#		}
-#	}
-#	
-#	O1.MEMIN@
-#	{
-#		T1@
-#		{
-#			ADDR_BUFF <- PC;
-#		}
-#		T2@
-#		{
-#			PC <- PC+1;
-#		}
-#		T3@
-#		{
-#			DATA_BUFF -> Z;
-#		}
-#	}
-#
-#	O1.MEMIN@
-#	{
-#		T1@
-#		{
-#			ADDR_BUFF <- PC;
-#		}
-#		T2@
-#		{
-#			PC <- PC+1;
-#		}
-#		T3@
-#		{
-#			DATA_BUFF -> W;
-#		}
-#	}
-#
-#	O1.MEMOUT@
-#	{
-#		T1@
-#		{
-#			ADDR_BUFF <- WZ;
-#		}
-#		T2@
-#		{
-#			A -> DATA_BUFF;
-#		}
-#	}
-#}
-#
-#INSTRUCTION	"LHLD %$1%$0"	0:0:1:0:1:0:1:0,B2[8],B3[8]
-#{
-#	O1.FETCH@
-#	{
-#		T4@
-#		{
-#			TMP -> TMP;	# No operation
-#		}
-#	}
-#	
-#	O1.MEMIN@
-#	{
-#		T1@
-#		{
-#			ADDR_BUFF <- PC;
-#		}
-#		T2@
-#		{
-#			PC <- PC+1;
-#		}
-#		T3@
-#		{
-#			DATA_BUFF -> Z;
-#		}
-#	}
-#
-#	O1.MEMIN@
-#	{
-#		T1@
-#		{
-#			ADDR_BUFF <- PC;
-#		}
-#		T2@
-#		{
-#			PC <- PC+1;
-#		}
-#		T3@
-#		{
-#			DATA_BUFF -> W;
-#		}
-#	}
-#
-#	O1.MEMIN@
-#	{
-#		T1@
-#		{
-#			ADDR_BUFF <- WZ;
-#		}
-#
-#		T2@
-#		{
-#			WZ <- WZ + 1;
-#		}
-#
-#		T3@
-#		{
-#			DATA_BUFF -> L;
-#		}
-#	}
-#	
-#	O1.MEMIN@
-#	{
-#		T1@
-#		{
-#			ADDR_BUFF <- WZ;
-#		}
-#
-#		T3@
-#		{
-#			DATA_BUFF -> H;
-#		}
-#	}
-#}
-#
-#INSTRUCTION	"SHLD %$1%$0"	0:0:1:0:0:0:1:0,B2[8],B3[8]
-#{
-#	O1.FETCH@
-#	{
-#		T4@
-#		{
-#			TMP -> TMP;	# No operation
-#		}
-#	}
-#	
-#	O1.MEMIN@
-#	{
-#		T1@
-#		{
-#			ADDR_BUFF <- PC;
-#		}
-#		T2@
-#		{
-#			PC <- PC+1;
-#		}
-#		T3@
-#		{
-#			DATA_BUFF -> Z;
-#		}
-#	}
-#
-#	O1.MEMIN@
-#	{
-#		T1@
-#		{
-#			ADDR_BUFF <- PC;
-#		}
-#		T2@
-#		{
-#			PC <- PC+1;
-#		}
-#		T3@
-#		{
-#			DATA_BUFF -> W;
-#		}
-#	}
-#
-#	O1.MEMOUT@
-#	{
-#		T1@
-#		{
-#			ADDR_BUFF <- WZ;
-#		}
-#
-#		T2@
-#		{
-#			WZ <- WZ + 1;
-#			L -> DATA_BUFF;
-#		}
-#	}
-#
-#	O1.MEMOUT@
-#	{
-#		T1@
-#		{
-#			ADDR_BUFF <- WZ;
-#		}
-#
-#		T2@
-#		{
-#			H -> DATA_BUFF;
-#		}
-#	}
-#}
-#
+
+INSTRUCTION	"LDA %$1%$0"	%00111010,B2[8],B3[8]
+{
+	IF O1.FETCH.T4@
+	{
+		STAGECHECK<-0;
+		NEXT O1.FETCH.T1;
+		PUSH O1.MEMIN.T1;
+		PUSH O1.MEMIN.T1;
+		PUSH O1.MEMIN.T1;
+	}
+	
+	IF O1.MEMIN.T1@
+	{
+		IF STAGECHECK == 2
+		{
+			ADDR_BUFF <- WZ;
+		}
+
+		IF STAGECHECK != 2
+		{
+			ADDR_BUFF <- PC;
+		}
+	}
+
+	IF O1.MEMIN.T2@
+	{
+		IF STAGECHECK != 2
+		{
+			PC <- PC + 1;
+		}
+	}
+
+	IF O1.MEMIN.T3@
+	{
+		IF STAGECHECK == 2
+		{
+			DATA_BUFF -> A;
+		}
+		IF STAGECHECK == 1
+		{
+			DATA_BUFF -> W;
+			STAGECHECK<-2;
+		}
+		IF STAGECHECK == 0
+		{
+			DATA_BUFF -> Z;
+			STAGECHECK<-1;
+		}
+		POP O1;
+	}
+}
+
+INSTRUCTION	"STA %$1%$0"	%00110010,B2[8],B3[8]
+{
+	IF O1.FETCH.T4@
+	{
+		STAGECHECK<-0;
+		NEXT O1.FETCH.T1;
+		PUSH O1.MEMOUT.T1;
+		PUSH O1.MEMIN.T1;
+		PUSH O1.MEMIN.T1;
+	}
+	
+	IF O1.MEMIN.T1@
+	{
+		ADDR_BUFF <- PC;
+	}
+	
+	IF O1.MEMIN.T2@
+	{
+		PC <- PC+1;
+	}
+
+	IF O1.MEMIN.T3@
+	{
+		IF STAGECHECK == 1
+		{
+			DATA_BUFF -> W;
+		}
+		IF STAGECHECK == 0
+		{
+			DATA_BUFF -> Z;
+			STAGECHECK<-1;
+		}
+		POP O1;
+	}
+
+	IF O1.MEMOUT.T1@
+	{
+		ADDR_BUFF <- WZ;
+	}
+
+	IF O1.MEMOUT.T2@
+	{
+		A -> DATA_BUFF;
+	}
+
+	IF O1.MEMOUT.T3@
+	{
+		POP O1;
+	}
+}
+
+INSTRUCTION	"LHLD %$1%$0"	%00101010,B2[8],B3[8]
+{
+	IF O1.FETCH.T4@
+	{
+		STAGECHECK<-0;
+		NEXT O1.FETCH.T1;
+		PUSH O1.MEMIN.T1;
+		PUSH O1.MEMIN.T1;
+		PUSH O1.MEMIN.T1;
+		PUSH O1.MEMIN.T1;
+	}
+	
+	IF O1.MEMIN.T1@
+	{
+		IF STAGECHECK == 2 || STAGECHECK == 3
+		{
+			ADDR_BUFF <- WZ;
+		}
+		IF STAGECHECK == 0 || STAGECHECK == 1
+		{
+			ADDR_BUFF <- PC;
+		}
+	}
+
+	IF O1.MEMIN.T2@
+	{
+		IF STAGECHECK == 2
+		{
+			WZ <- WZ + 1;
+		}
+		IF STAGECHECK == 0 || STAGECHECK == 1
+		{
+			PC <- PC+1;
+		}
+	}
+
+	IF O1.MEMIN.T3@
+	{
+		IF STAGECHECK == 3
+		{
+			DATA_BUFF -> H;
+		}
+		IF STAGECHECK == 2
+		{
+			DATA_BUFF -> L;
+			STAGECHECK<-3;
+		}
+		IF STAGECHECK == 1
+		{
+			DATA_BUFF -> W;
+			STAGECHECK<-2;
+		}
+		IF STAGECHECK == 0
+		{
+			DATA_BUFF -> Z;
+			STAGECHECK<-1;
+		}
+		POP O1;
+	}
+
+}
+
+INSTRUCTION	"SHLD %$1%$0"	%00100010,B2[8],B3[8]
+{
+	IF O1.FETCH.T4@
+	{
+		STAGECHECK<-0;
+		NEXT O1.FETCH.T1;
+		PUSH O1.MEMOUT.T1;
+		PUSH O1.MEMOUT.T1;
+		PUSH O1.MEMIN.T1;
+		PUSH O1.MEMIN.T1;
+	}
+	
+	IF O1.MEMIN.T1@
+	{
+		ADDR_BUFF <- PC;
+	}
+
+	IF O1.MEMIN.T2@
+	{
+		PC <- PC+1;
+	}
+
+	IF O1.MEMIN.T3@
+	{
+		IF STAGECHECK == 1
+		{
+			DATA_BUFF -> W;
+		}
+		IF STAGECHECK == 0
+		{
+			DATA_BUFF -> Z;
+			STAGECHECK<-1;
+		}
+		POP O1;
+	}
+
+	IF O1.MEMOUT.T1@
+	{
+		ADDR_BUFF <- WZ;
+	}
+
+	IF O1.MEMOUT.T2@
+	{
+		IF STAGECHECK == 2
+		{
+			H -> DATA_BUFF;
+		}
+		IF STAGECHECK == 1
+		{
+			WZ <- WZ + 1;
+			L -> DATA_BUFF;
+			STAGECHECK<-2;
+		}
+	}
+
+	IF O1.MEMOUT.T3@
+	{
+		POP O1;
+	}
+}
+
 #INSTRUCTION	"LDAX %M0"	0:0:BCDE[2]:1:0:1:0
 #{
 #	O1.FETCH@
@@ -2092,59 +2063,51 @@ INSTRUCTION	"STC"		%00110111
 	}
 }
 
-#INSTRUCTION	"JMP %$1%$0"	1:1:0:0:0:0:1:1,B2[8],B3[8]
-#{
-#	O1.FETCH@
-#	{
-#		T1@
-#		{
-#			ADDR_BUFF <- WZ;
-#		}
-#
-#		T2@
-#		{
-#			WZ + 1 -> PC;
-#		}
-#
-#		T4@
-#		{
-#			TMP->TMP;	# No Operation
-#		}
-#	}
-#
-#	O1.MEMIN@
-#	{
-#		T1@
-#		{
-#			ADDR_BUFF <- PC;
-#		}
-#		T2@
-#		{
-#			PC <- PC+1;
-#		}
-#		T3@
-#		{
-#			DATA_BUFF -> Z;
-#		}
-#	}
-#	
-#	O1.MEMIN@
-#	{
-#		T1@
-#		{
-#			ADDR_BUFF <- PC;
-#		}
-#		T2@
-#		{
-#			PC <- PC+1;
-#		}
-#		T3@
-#		{
-#			DATA_BUFF -> W;
-#		}
-#	}
-#}
-#
+INSTRUCTION	"JMP %$1%$0"	%11000011,B2[8],B3[8]
+{
+	IF O1.FETCH.T1@
+	{
+		ADDR_BUFF <- WZ;
+	}
+
+	IF O1.FETCH.T2@
+	{
+		WZ + 1 -> PC;
+	}
+
+	IF O1.FETCH.T4@
+	{
+		STAGECHECK<-0;
+		NEXT O1.FETCH.T1;
+		PUSH O1.MEMIN.T1;
+		PUSH O1.MEMIN.T1;
+	}
+
+	IF O1.MEMIN.T1@
+	{
+		ADDR_BUFF <- PC;
+	}
+	
+	IF O1.MEMIN.T2@
+	{
+		PC <- PC+1;
+	}
+
+	IF O1.MEMIN.T3@
+	{
+		IF STAGECHECK == 1
+		{
+			DATA_BUFF -> W;
+		}
+		IF STAGECHECK == 0
+		{
+			DATA_BUFF -> Z;
+			STAGECHECK<-1;
+		}
+		POP O1;
+	}
+}
+
 #INSTRUCTION	"J%M0 %$2%$1"		1:1:CCC[3]:0:1:0,B2[8],B3[8]
 #{
 #	O1.FETCH@
@@ -2208,83 +2171,73 @@ INSTRUCTION	"STC"		%00110111
 #		}
 #	}
 #}
-#
-#INSTRUCTION	"CALL %$1%$0"	1:1:0:0:1:1:0:1,B2[8],B3[8]
-#{
-#	O1.FETCH@
-#	{
-#		T1@
-#		{
-#			ADDR_BUFF <- WZ;
-#		}
-#
-#		T2@
-#		{
-#			WZ + 1 -> PC;
-#		}
-#
-#		T4@
-#		{
-#			TMP->TMP;	# No Operation
-#		}
-#
-#		T5@
-#		{
-#			SP <- SP + 1;
-#		}
-#	}
-#
-#	O1.MEMIN@
-#	{
-#		T1@
-#		{
-#			ADDR_BUFF <- PC;
-#		}
-#		T2@
-#		{
-#			PC <- PC+1;
-#		}
-#		T3@
-#		{
-#			DATA_BUFF -> Z;
-#		}
-#	}
-#	
-#	O1.MEMIN@
-#	{
-#		T1@
-#		{
-#			ADDR_BUFF <- PC;
-#		}
-#		T2@
-#		{
-#			PC <- PC+1;
-#		}
-#		T3@
-#		{
-#			DATA_BUFF -> W;
-#		}
-#	}
-#
-#	O1.SPWRITE@
-#	{
-#		T2@
-#		{
-#			SP <- SP-1;
-#			PCH -> DATA_BUFF;
-#		}
-#		
-#	}
-#	
-#	O1.SPWRITE@
-#	{
-#		T2@
-#		{
-#			PCL -> DATA_BUFF;
-#		}
-#	}
-#}
-#
+
+INSTRUCTION	"CALL %$1%$0"	%11001101,B2[8],B3[8]
+{
+	IF O1.FETCH.T1@
+	{
+		ADDR_BUFF <- WZ;
+	}
+
+	IF O1.FETCH.T2@
+	{
+		WZ + 1 -> PC;
+	}
+
+	IF O1.FETCH.T5@
+	{
+		SP <- SP + 1;
+		STAGECHECK<-0;
+		PUSH O1.SPWRITE.T1;
+		PUSH O1.SPWRITE.T1;
+		PUSH O1.MEMIN.T1;
+		PUSH O1.MEMIN.T1;
+	}
+
+	IF O1.MEMIN.T1@
+	{
+		ADDR_BUFF <- PC;
+	}
+	
+	IF O1.MEMIN.T2@
+	{
+		PC <- PC+1;
+	}
+
+	IF O1.MEMIN.T3@
+	{
+		IF STAGECHECK == 1
+		{
+			DATA_BUFF -> W;
+		}
+		IF STAGECHECK == 0
+		{
+			DATA_BUFF -> Z;
+			STAGECHECK<-1;
+		}
+		POP O1;
+	}
+	
+	IF O1.SPWRITE.T2@
+	{
+		IF STAGECHECK == 2
+		{
+			PCL -> DATA_BUFF;
+		}
+		IF STAGECHECK == 1
+		{
+			SP <- SP-1;
+			PCH -> DATA_BUFF;
+			STAGECHECK<-1;
+		}
+	}
+	
+	IF O1.SPWRITE.T3@
+	{
+		POP O1;
+	}
+}
+
 #INSTRUCTION	"C%M0 %$2%$1"	1:1:CCC[3]:1:0:0,B2[8],B3[8]
 #{
 #	O1.FETCH@
@@ -2739,78 +2692,76 @@ INSTRUCTION	"XTHL"		%11100011
 	
 }
 
-#INSTRUCTION	"IN %$0"	1:1:0:1:1:0:1:1,B2[8]
-#{
-#	O1.FETCH@
-#	{
-#		T4@
-#		{
-#			TMP -> TMP;	# No Operation
-#		}
-#	}
-#
-#	O1.MEMIN@
-#	{
-#		T1@
-#		{
-#			ADDR_BUFF <- PC;
-#		}
-#		T2@
-#		{
-#			PC <- PC+1;
-#		}
-#		T3@
-#		{
-#			DATA_BUFF -> W;
-#			DATA_BUFF -> Z;
-#		}
-#	}
-#	
-#	O1.PORTIN@
-#	{
-#		T3@
-#		{
-#			DATA_BUFF -> A;
-#		}
-#	}
-#}
-#
-#INSTRUCTION	"OUT %$0"	1:1:0:1:0:0:1:1,B2[8]
-#{
-#	O1.FETCH@
-#	{
-#		T4@
-#		{
-#			TMP -> TMP;	# No Operation
-#		}
-#	}
-#
-#	O1.MEMIN@
-#	{
-#		T1@
-#		{
-#			ADDR_BUFF <- PC;
-#		}
-#		T2@
-#		{
-#			PC <- PC+1;
-#		}
-#		T3@
-#		{
-#			DATA_BUFF -> W;
-#			DATA_BUFF -> Z;
-#		}
-#	}
-#	
-#	O1.PORTOUT@
-#	{
-#		T2@
-#		{
-#			A -> DATA_BUFF;
-#		}
-#	}
-#}
-#
+INSTRUCTION	"IN %$0"	%11011011,B2[8]
+{
+	IF O1.FETCH.T4@
+	{
+		NEXT O1.FETCH.T1;
+		PUSH O1.PORTIN.T1;
+		PUSH O1.MEMIN.T1;
+	}
+
+	IF O1.MEMIN.T1@
+	{
+		ADDR_BUFF <- PC;
+	}
+
+	IF O1.MEMIN.T2@
+	{
+		PC <- PC+1;
+	}
+	
+	IF O1.MEMIN.T3@
+	{
+		DATA_BUFF -> W;
+		DATA_BUFF -> Z;
+		POP O1;
+	}
+	
+	IF O1.PORTIN.T3@
+	{
+		DATA_BUFF -> A;
+		POP O1;
+	}
+}
+
+INSTRUCTION	"OUT %$0"	%11010011,B2[8]
+{
+	IF O1.FETCH.T4@
+	{
+		NEXT O1.FETCH.T1;
+		PUSH O1.PORTOUT.T1;
+		PUSH O1.MEMIN.T1;
+	}
+
+	IF O1.MEMIN.T1@
+	{
+		ADDR_BUFF <- PC;
+	}
+	
+	IF O1.MEMIN.T2@
+	{
+		PC <- PC+1;
+	}
+	
+	IF O1.MEMIN.T3@
+	{
+		DATA_BUFF -> W;
+		DATA_BUFF -> Z;
+		POP O1;
+	}
+	
+	IF O1.PORTOUT.T2@
+	{
+		A -> DATA_BUFF;
+	}
+
+	IF O1.PORTOUT.T3@
+	{
+		POP O1;
+	}
+}
+
 
 INSTRUCTION	"EI"		%11111011
 {
