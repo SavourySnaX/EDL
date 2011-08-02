@@ -107,6 +107,11 @@ HANDLER		O1
 
 					DATA_BUFF -> IR;		# Transfer latched data into IR
 				}
+
+				STATE T4
+				{
+					PIN__WR <- 1;		## TODO : CHECK DOCUMENTATION - WE NEED TO CLEAR THIS BACK DUE TO XTHL INSTRUCTION
+				}
 			}
 		}
 
