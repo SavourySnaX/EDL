@@ -1007,30 +1007,46 @@ Value* CHandlerDeclaration::codeGen(CodeGenContext& context)
 
 	return function;
 }
-
+	
 Value* CInstruction::codeGen(CodeGenContext& context)
 {
 	vector<const Type*> argTypes;
-	FunctionType *ftype = FunctionType::get(Type::getVoidTy(getGlobalContext()),argTypes, false);
-	Function* function = Function::Create(ftype, GlobalValue::InternalLinkage, "OPCODE"+opcode.integer.toString(16,false),context.module);
-	BasicBlock *bblock = BasicBlock::Create(getGlobalContext(), "entry", function, 0);
 
-	context.pushBlock(bblock);
+	// First up, get the first operand (this must be a computable constant!) - remaining operands are only used for asm/disasm generation
 
-	block.codeGen(context);
+	unsigned numOpcodes = operands[0]->GetNumComputableConstants();
+	if (numOpcodes==0)
+	{
+		std::cerr << "Opcode for instruction must be able to generate constants" << std::endl;
+		context.errorFlagged=true;
+		return NULL;
+	}
 
-	ReturnInst::Create(getGlobalContext(), context.currentBlock());			/* block may well have changed by time we reach here */
+	for (unsigned a=0;a<numOpcodes;a++)
+	{
+		APInt opcode = operands[0]->GetComputableConstant(a);
 
-	context.popBlock();
+		FunctionType *ftype = FunctionType::get(Type::getVoidTy(getGlobalContext()),argTypes, false);
+		Function* function = Function::Create(ftype, GlobalValue::InternalLinkage, "OPCODE_"+mnemonic.quoted + opcode.toString(16,false),context.module);
+		BasicBlock *bblock = BasicBlock::Create(getGlobalContext(), "entry", function, 0);
 
-	// Glue callee back into execute (assumes execute comes before instructions at all times for now)
-	BasicBlock* tempBlock = BasicBlock::Create(getGlobalContext(),"callOut" + opcode.integer.toString(16,false),context.blockEndForExecute->getParent(),0);
-	std::vector<Value*> args;
-	CallInst* fcall = CallInst::Create(function,args.begin(),args.end(),"",tempBlock);
-	BranchInst::Create(context.blockEndForExecute,tempBlock);
-	context.switchForExecute->addCase(ConstantInt::get(getGlobalContext(),opcode.integer),tempBlock);
+		context.pushBlock(bblock);
 
-	return function;
+		block.codeGen(context);
+
+		ReturnInst::Create(getGlobalContext(), context.currentBlock());			/* block may well have changed by time we reach here */
+
+		context.popBlock();
+
+		// Glue callee back into execute (assumes execute comes before instructions at all times for now)
+		BasicBlock* tempBlock = BasicBlock::Create(getGlobalContext(),"callOut" + opcode.toString(16,false),context.blockEndForExecute->getParent(),0);
+		std::vector<Value*> args;
+		CallInst* fcall = CallInst::Create(function,args.begin(),args.end(),"",tempBlock);
+		BranchInst::Create(context.blockEndForExecute,tempBlock);
+		context.switchForExecute->addCase(ConstantInt::get(getGlobalContext(),opcode),tempBlock);
+
+	}
+	return NULL;
 }
 
 Value* CExecute::codeGen(CodeGenContext& context)

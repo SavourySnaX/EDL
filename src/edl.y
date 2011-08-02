@@ -27,6 +27,8 @@
 	CAliasDeclaration *alias_decl;
 	CDebugTrace *debug;
 	CStateIdent *state_ident;
+	COperand *operand;
+	std::vector<COperand*> *opervec;
 	std::vector<CAliasDeclaration*> *aliasvec;
 	std::vector<CStateDeclaration*> *varvec;
 	std::vector<CExpression*> *exprvec;
@@ -44,6 +46,7 @@
 %token <token> TOK_ASSIGNLEFT TOK_ASSIGNRIGHT TOK_ADD TOK_SUB TOK_OBR TOK_CBR TOK_CMPEQ TOK_BAR		/* Operators/Seperators */
 %token <token> TOK_DOT TOK_AT TOK_DBAR TOK_DAMP TOK_TILDE TOK_DDOT					/* Operators/Seperators */
 
+%type <operand> operand
 %type <strng> quoted
 %type <ident> ident
 %type <state_ident> state_ident
@@ -52,6 +55,7 @@
 %type <varvec> states_list
 %type <aliasvec> aliases
 %type <debugvec> debuglist
+%type <opervec> operandList
 %type <staterefvec> state_ident_list
 /* %type <exprvec> call_args */
 %type <block> program block stmts
@@ -136,8 +140,15 @@ aliases : aliases TOK_COLON alias_decl { $$->push_back($<alias_decl>3); }
 	| alias_decl { $$ = new AliasList(); $$->push_back($<alias_decl>1); }
 	;
 
+operand : numeric { $$ = new COperandNumber(*$1); }
+	| ident TOK_LSQR numeric TOK_RSQR { $$ = new COperandIdent(*$1,*$3); }
+	;
 
-instruction_decl : TOK_INSTRUCTION quoted numeric block { $$ = new CInstruction(*$3,*$4); }
+operandList : operandList TOK_COMMA operand { $$->push_back($<operand>3); }
+	    | operand { $$ = new OperandList(); $$->push_back($<operand>1); }
+	;
+
+instruction_decl : TOK_INSTRUCTION quoted operandList block { $$ = new CInstruction(*$2,*$3,*$4); }
 		 ;
 
 var_decl : TOK_DECLARE ident TOK_LSQR numeric TOK_RSQR { $$ = new CVariableDeclaration(*$2, *$4); }

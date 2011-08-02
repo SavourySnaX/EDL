@@ -655,46 +655,48 @@ INSTRUCTION	"SPHL"		%11111001
 #		}
 #	}
 #}
-#
-#INSTRUCTION	"MVI M,%$1"	0:0:1:1:0:1:1:0,B2[8]
-#{
-#	O1.FETCH@
-#	{
-#		T4@
-#		{
-#			TMP -> TMP;	# No operation
-#		}
-#	}
-#
-#	O1.MEMIN@
-#	{
-#		T1@
-#		{
-#			ADDR_BUFF <- PC;
-#		}
-#		T2@
-#		{
-#			PC <- PC+1;
-#		}
-#		T3@
-#		{
-#			DATA_BUFF -> TMP;
-#		}
-#	}
-#
-#	O1.MEMOUT@
-#	{
-#		T1@
-#		{
-#			ADDR_BUFF <- HL;
-#		}
-#		T2@
-#		{
-#			TMP -> DATA_BUFF;
-#		}
-#	}
-#}
-#
+
+INSTRUCTION	"MVI M,%$1"	%00110110,B2[8]
+{
+	IF O1.FETCH.T4@
+	{
+		NEXT O1.FETCH.T1;
+		PUSH O1.MEMOUT.T1;
+		PUSH O1.MEMIN.T1;
+	}
+
+	IF O1.MEMIN.T1@
+	{
+		ADDR_BUFF <- PC;
+	}
+
+	IF O1.MEMIN.T2@
+	{
+		PC <- PC+1;
+	}
+	
+	IF O1.MEMIN.T3@
+	{
+		DATA_BUFF -> TMP;
+		POP O1;
+	}
+
+	IF O1.MEMOUT.T1@
+	{
+		ADDR_BUFF <- HL;
+	}
+	
+	IF O1.MEMOUT.T2@
+	{
+		TMP -> DATA_BUFF;
+	}
+
+	IF O1.MEMOUT.T3@
+	{
+		POP O1;
+	}
+}
+
 #INSTRUCTION	"LXI %M0,%$2%$1"	0:0:RP[2]:0:0:0:1,B2[8],B3[8]
 #{
 #	O1.FETCH@

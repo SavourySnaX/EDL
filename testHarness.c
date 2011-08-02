@@ -85,8 +85,25 @@ void EXECUTE_CYCLES(unsigned char instruction,int cnt)
 					}
 					else
 					{
-						printf("PIN_D = %02X\n",PIN_D);
-						exit(12);
+						if (PIN_D == SYNC_MEM_READ)
+						{
+							printf("Reading memory - Address %04X <- 0\n",PIN_A);
+							PIN_D=0;
+							PIN_READY=1;
+						}
+						else
+						{
+							if (PIN_D == SYNC_MEM_WRITE)
+							{
+								printf("Writing memory - Address %04X <- %02X\n",PIN_A,PIN_D);
+								PIN_READY=1;
+							}
+							else
+							{
+								printf("PIN_D = %02X\n",PIN_D);
+								exit(12);
+							}
+						}
 					}
 				}
 			}
@@ -148,6 +165,8 @@ int main(int argc,char**argv)
 	EXECUTE_CYCLES(0x17,4);		// RAL
 
 	EXECUTE_CYCLES(0x1F,4);		// RAR
+
+	EXECUTE_CYCLES(0x36,10);	// MVI M,$1
 	
 	EXECUTE_CYCLES(0,4);		// NOP
 

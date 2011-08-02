@@ -18,6 +18,7 @@ class CStatesDeclaration;
 class CAliasDeclaration;
 class CDebugTrace;
 class CStateIdent;
+class COperand;
 
 typedef std::vector<CStatement*> StatementList;
 typedef std::vector<CExpression*> ExpressionList;
@@ -26,6 +27,7 @@ typedef std::vector<CStateDeclaration*> StateList;
 typedef std::vector<CAliasDeclaration*> AliasList;
 typedef std::vector<CDebugTrace*> DebugList;
 typedef std::vector<CStateIdent*> StateIdentList;
+typedef std::vector<COperand*> OperandList;
 
 class CNode {
 public:
@@ -37,6 +39,12 @@ class CExpression : public CNode {
 };
 
 class CStatement : public CNode {
+};
+
+class COperand : public CNode {
+public:
+	virtual llvm::APInt GetComputableConstant(unsigned num)=0;
+	virtual unsigned GetNumComputableConstants()=0;
 };
 
 class CInteger : public CExpression {
@@ -110,6 +118,26 @@ public:
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
 
+class COperandNumber : public COperand {
+public:
+	CInteger& integer;
+	COperandNumber(CInteger& integer) :
+		integer(integer) { }
+	
+	virtual llvm::APInt GetComputableConstant(unsigned num) { return integer.integer; }
+	virtual unsigned GetNumComputableConstants() { return 1; }
+};
+
+class COperandIdent : public COperand {
+public:
+	CIdentifier& ident;
+	CInteger& size;
+	COperandIdent(CIdentifier& ident,CInteger& size) :
+		ident(ident), size(size) { }
+	
+	virtual llvm::APInt GetComputableConstant(unsigned num) { return llvm::APInt(0,0,false); }
+	virtual unsigned GetNumComputableConstants() { return 0; }
+};
 
 class CMethodCall : public CExpression {
 public:
@@ -356,10 +384,11 @@ public:
 
 class CInstruction : public CStatement {
 public:
-	CInteger& opcode;
+	CString& mnemonic;
+	OperandList operands;
 	CBlock& block;
-	CInstruction(CInteger& opcode, CBlock& block) :
-		opcode(opcode), block(block) { }
+	CInstruction(CString& mnemonic,OperandList& operands, CBlock& block) :
+		mnemonic(mnemonic),operands(operands), block(block) { }
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
 
