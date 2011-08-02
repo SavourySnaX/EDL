@@ -20,8 +20,13 @@ extern unsigned char PIN_READY;
 extern unsigned char PIN_RESET;
 extern unsigned char PIN_SYNC;
 extern unsigned char PIN__WR;
+extern unsigned short SP;
 extern unsigned short PC;
+extern unsigned short BC;
+extern unsigned short DE;
+extern unsigned short HL;
 extern unsigned char A;
+extern unsigned char FLAGS;
 extern unsigned char IR;
 
 void O1(void);
@@ -42,12 +47,26 @@ extern unsigned char	SYNC_INT_ACK_HALTED;
 void DUMP_REGISTERS()
 {
 	printf("--------\n");
+	printf("FLAGS = S  Z  0  AC 0  P  1  CY\n");
+	printf("        %s  %s  %s  %s  %s  %s  %s  %s\n",
+			FLAGS&0x80 ? "1" : "0",
+			FLAGS&0x40 ? "1" : "0",
+			FLAGS&0x20 ? "1" : "0",
+			FLAGS&0x10 ? "1" : "0",
+			FLAGS&0x08 ? "1" : "0",
+			FLAGS&0x04 ? "1" : "0",
+			FLAGS&0x02 ? "1" : "0",
+			FLAGS&0x01 ? "1" : "0");
 	printf("A = %02X\n",A);
+	printf("BC= %04X\n",BC);
+	printf("DE= %04X\n",DE);
+	printf("HL= %04X\n",HL);
+	printf("SP= %04X\n",SP);
 	printf("PC= %04X\n",PC);
 	printf("--------\n");
 }
 
-void EXECUTE_CYCLES(unsigned char instruction,int cnt)
+void EXECUTE_CYCLES(unsigned char instruction,int cnt,char *named)
 {
 	int a;
 	int readInstruction=0;
@@ -64,7 +83,7 @@ void EXECUTE_CYCLES(unsigned char instruction,int cnt)
 			exit(1);
 		}
 
-		// Watch for SYNC pulse and TYPE
+		// Watch for SYNC pulse and TYPE and latch them
 
 		if (PIN_SYNC)
 		{
@@ -83,7 +102,7 @@ void EXECUTE_CYCLES(unsigned char instruction,int cnt)
 					exit(1);
 				}
 				readInstruction=1;
-				printf("Reading next instruction - Address %04X <- %02X\n",PIN_A,instruction);
+				printf("Reading next instruction - Address %04X <- %02X (%s)\n",PIN_A,instruction,named);
 				PIN_D=instruction;
 				PIN_READY=1;
 			}
@@ -91,8 +110,8 @@ void EXECUTE_CYCLES(unsigned char instruction,int cnt)
 			{
 				if (SYNC_LATCH == SYNC_STACK_READ)
 				{
-					printf("Reading memory - Address %04X <- 00\n",PIN_A);
-					PIN_D=0;
+					printf("Reading memory(stack) - Address %04X <- $55\n",PIN_A);
+					PIN_D=0x55;
 					PIN_READY=1;
 				}
 				else
@@ -119,8 +138,8 @@ void EXECUTE_CYCLES(unsigned char instruction,int cnt)
 							{
 								if (SYNC_LATCH == SYNC_INPUT)
 								{
-									printf("Reading port %04X <- $55\n",PIN_A);
-									PIN_D=0x55;
+									printf("Reading port %04X <- $AA\n",PIN_A);
+									PIN_D=0xAA;
 									PIN_READY=1;
 								}
 								else
@@ -149,7 +168,7 @@ void EXECUTE_CYCLES(unsigned char instruction,int cnt)
 		{
 			if (SYNC_LATCH == SYNC_STACK_WRITE)
 			{
-				printf("Writing memory - Address %04X <- %02X\n",PIN_A,PIN_D);
+				printf("Writing memory(stack) - Address %04X <- %02X\n",PIN_A,PIN_D);
 			}
 			else
 			{
@@ -191,59 +210,59 @@ int main(int argc,char**argv)
 		exit(-1);
 	}
 
-	EXECUTE_CYCLES(0,4);		// NOP
+	EXECUTE_CYCLES(0,4,"NOP");
 
-	EXECUTE_CYCLES(0xFB,4);		// EI
+	EXECUTE_CYCLES(0x2F,4,"CMA");
 
-	EXECUTE_CYCLES(0xF3,4);		// DI
+	EXECUTE_CYCLES(0xFB,4,"EI");
 
-	EXECUTE_CYCLES(0xF5,11);	// PUSH PSW
+	EXECUTE_CYCLES(0xF3,4,"DI");
 
-	EXECUTE_CYCLES(0xE3,18);	// XTHL
+	EXECUTE_CYCLES(0xF5,11,"PUSH PSW");
 
-	EXECUTE_CYCLES(0xF1,10);	// POP PSW
+	EXECUTE_CYCLES(0xE3,18,"XTHL");
 
-	EXECUTE_CYCLES(0xF9,5);		// SPHL
+	EXECUTE_CYCLES(0xF1,10,"POP PSW");
 
-	EXECUTE_CYCLES(0xEB,4);		// XCHG
+	EXECUTE_CYCLES(0xF9,5,"SPHL");
 
-	EXECUTE_CYCLES(0x2F,4);		// CMA
+	EXECUTE_CYCLES(0xEB,4,"XCHG");
 
-	EXECUTE_CYCLES(0x3F,4);		// CMC
+	EXECUTE_CYCLES(0x3F,4,"CMC");
 
-	EXECUTE_CYCLES(0x37,4);		// STC
+	EXECUTE_CYCLES(0x37,4,"STC");
 
-	EXECUTE_CYCLES(0xE9,5);		// PCHL
+	EXECUTE_CYCLES(0xE9,5,"PCHL");
 
-	EXECUTE_CYCLES(0xC9,10);	// RET
+	EXECUTE_CYCLES(0xC9,10,"RET");
 
-	EXECUTE_CYCLES(0x07,4);		// RLC
+	EXECUTE_CYCLES(0x07,4,"RLC");
 
-	EXECUTE_CYCLES(0x0F,4);		// RRC
+	EXECUTE_CYCLES(0x0F,4,"RRC");
 
-	EXECUTE_CYCLES(0x17,4);		// RAL
+	EXECUTE_CYCLES(0x17,4,"RAL");
 
-	EXECUTE_CYCLES(0x1F,4);		// RAR
+	EXECUTE_CYCLES(0x1F,4,"RAR");
 
-	EXECUTE_CYCLES(0x36,10);	// MVI M,$1
+	EXECUTE_CYCLES(0x36,10,"MVI M");
 
-	EXECUTE_CYCLES(0x3A,13);	// LDA %$1%$0
+	EXECUTE_CYCLES(0x3A,13,"LDA");
 
-	EXECUTE_CYCLES(0x32,13);	// STA %$1%$0
+	EXECUTE_CYCLES(0x32,13,"STA");
 
-	EXECUTE_CYCLES(0x2A,16);	// LHLD %$1%$0
+	EXECUTE_CYCLES(0x2A,16,"LHLD");
 
-	EXECUTE_CYCLES(0x22,16);	// SHLD %$1%$0
+	EXECUTE_CYCLES(0x22,16,"SHLD");
 
-	EXECUTE_CYCLES(0xC3,10);	// JMP %$1%$0
+	EXECUTE_CYCLES(0xC3,10,"JMP");
 
-	EXECUTE_CYCLES(0xCD,17);	// CALL %$1%$0
+	EXECUTE_CYCLES(0xCD,17,"CALL");
 
-	EXECUTE_CYCLES(0xDB,10);	// IN %$0
+	EXECUTE_CYCLES(0xDB,10,"IN");
 
-	EXECUTE_CYCLES(0xD3,10);	// OUT %$0
+	EXECUTE_CYCLES(0xD3,10,"OUT");
 
-	EXECUTE_CYCLES(0,4);		// NOP
+	EXECUTE_CYCLES(0,4,"NOP");
 
 	return 0;
 
