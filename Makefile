@@ -22,6 +22,7 @@ clean:
 	$(RM) test.lls
 	$(RM) test.lls.s
 	$(RM) test.exe
+	$(RM) test.result
 	$(RM) edl.exe
 
 out/parser.cpp: src/edl.y 
@@ -44,4 +45,4 @@ test:	edl test.edl testHarness.c
 	edl.exe test.edl lalala >test.lls
 	llc test.lls
 	gcc testHarness.c test.lls.s -o test.exe
-	test.exe
+	test.exe | tee test.result
