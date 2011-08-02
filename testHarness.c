@@ -141,6 +141,14 @@ int main(int argc,char**argv)
 
 	EXECUTE_CYCLES(0xC9,10);	// RET
 
+	EXECUTE_CYCLES(0x07,4);		// RLC
+
+	EXECUTE_CYCLES(0x0F,4);		// RRC
+
+	EXECUTE_CYCLES(0x17,4);		// RAL
+
+	EXECUTE_CYCLES(0x1F,4);		// RAR
+	
 	EXECUTE_CYCLES(0,4);		// NOP
 
 	return 0;

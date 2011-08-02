@@ -485,8 +485,6 @@ CInteger CCastOperator::begZero(stringZero);
 
 Value* CCastOperator::codeGen(CodeGenContext& context)
 {
-	std::cout << beg.integer.toString(10,false) << " .. " << end.integer.toString(10,false) << std::endl;
-
 	// Compute a mask between specified bits, shift result down by start bits
 	
 	// Step 1, get bit size of input operand
@@ -500,11 +498,9 @@ Value* CCastOperator::codeGen(CodeGenContext& context)
 		APInt start=beg.integer;
 		start=start.zextOrTrunc(leftType->getBitWidth());
 
-		while (1==1)//for (;beg.integer.ule(end.integer);beg.integer++)
+		while (1==1)
 		{
-			std::cout << beg.integer.toString(10,false) << " " << mask.toString(2,false) << std::endl;
 			mask.setBit(beg.integer.getLimitedValue());
-			std::cout << beg.integer.toString(10,false) << " " << mask.toString(2,false) << std::endl;
 			if (beg.integer.uge(end.integer))
 				break;
 			beg.integer++;
@@ -526,53 +522,130 @@ Value* CCastOperator::codeGen(CodeGenContext& context)
 
 Value* CRotationOperator::codeGen(CodeGenContext& context)
 {
-	return value.codeGen(context);
-
-#if 0
-	std::cout << beg.integer.toString(10,false) << " .. " << end.integer.toString(10,false) << std::endl;
-
-	// Compute a mask between specified bits, shift result down by start bits
-	
-	// Step 1, get bit size of input operand
-	Value* left = lhs.codeGen(context);
-
-	if (left->getType()->isIntegerTy())
+	Value* toShift = value.codeGen(context);
+	Value* shiftIn = bitsIn.codeGen(context);
+	BitVariable var;
+	if (context.locals().find(bitsOut.name) == context.locals().end())
 	{
-		const IntegerType* leftType = cast<IntegerType>(left->getType());
-
-		APInt mask(leftType->getBitWidth(),"0",10);
-		APInt start=beg.integer;
-		start=start.zextOrTrunc(leftType->getBitWidth());
-
-		while (1==1)//for (;beg.integer.ule(end.integer);beg.integer++)
+		if (context.globals().find(bitsOut.name) == context.globals().end())
 		{
-			std::cout << beg.integer.toString(10,false) << " " << mask.toString(2,false) << std::endl;
-			mask.setBit(beg.integer.getLimitedValue());
-			std::cout << beg.integer.toString(10,false) << " " << mask.toString(2,false) << std::endl;
-			if (beg.integer.uge(end.integer))
-				break;
-			beg.integer++;
+			std::cerr << "undeclared variable " << bitsOut.name << std::endl;
+			context.errorFlagged=true;
+			return NULL;
 		}
-
-		Value *masked=BinaryOperator::Create(Instruction::And,left,ConstantInt::get(getGlobalContext(),mask),"castMask",context.currentBlock());
-		Value *shifted=BinaryOperator::Create(Instruction::LShr,masked,ConstantInt::get(getGlobalContext(),start),"castShift",context.currentBlock());
-
-		// Final step cast it to correct size - not actually required, will be handled by expr lowering/raising anyway
-		return shifted;
+		else
+		{
+			var=context.globals()[bitsOut.name];
+		}
+	}
+	else
+	{
+		var=context.locals()[bitsOut.name];
+	}
+	
+	if (!toShift->getType()->isIntegerTy())
+	{
+		std::cerr << "Unsupported operation" << std::endl;
+		context.errorFlagged=true;
+		return NULL;
 	}
 
-	std::cerr << "Illegal type in cast" << std::endl;
-	
-	context.errorFlagged=true;
+	const IntegerType* toShiftType = cast<IntegerType>(toShift->getType());
 
-	return NULL;
-#endif
+	if (direction == TOK_ROL)
+	{
+		APInt rotBy = rotAmount.integer;
+		rotBy = rotBy.zextOrTrunc(toShiftType->getBitWidth());
+		APInt amountToShift = APInt(toShiftType->getBitWidth(),toShiftType->getBitWidth()) - rotBy;
+
+		Value *shiftedDown = BinaryOperator::Create(Instruction::LShr,toShift,ConstantInt::get(getGlobalContext(),amountToShift),"carryOutShift",context.currentBlock());
+
+		CAssignment::generateAssignment(var,shiftedDown,context);
+
+		Value *shifted=BinaryOperator::Create(Instruction::Shl,toShift,ConstantInt::get(getGlobalContext(),rotBy),"rolShift",context.currentBlock());
+
+		Instruction::CastOps op = CastInst::getCastOpcode(shiftIn,false,toShiftType,false);
+
+		Value *upCast = CastInst::Create(op,shiftIn,toShiftType,"cast",context.currentBlock());
+
+		Value *rotResult = BinaryOperator::Create(Instruction::Or,upCast,shifted,"rolOr",context.currentBlock());
+
+		return rotResult;
+	}
+	else
+	{
+		APInt rotBy = rotAmount.integer;
+		rotBy = rotBy.zextOrTrunc(toShiftType->getBitWidth());
+		APInt amountToShift = APInt(toShiftType->getBitWidth(),toShiftType->getBitWidth()) - rotBy;
+		APInt downMask(toShiftType->getBitWidth(),0);
+		downMask=~downMask;
+		downMask = downMask.lshr(amountToShift);
+
+		Value *maskedDown = BinaryOperator::Create(Instruction::And,toShift,ConstantInt::get(getGlobalContext(),downMask),"carryOutMask",context.currentBlock());
+
+		CAssignment::generateAssignment(var,maskedDown,context);
+
+		Value *shifted=BinaryOperator::Create(Instruction::LShr,toShift,ConstantInt::get(getGlobalContext(),rotBy),"rorShift",context.currentBlock());
+			
+		Instruction::CastOps op = CastInst::getCastOpcode(shiftIn,false,toShiftType,false);
+
+		Value *upCast = CastInst::Create(op,shiftIn,toShiftType,"cast",context.currentBlock());
+
+		Value *shiftedUp = BinaryOperator::Create(Instruction::Shl,upCast,ConstantInt::get(getGlobalContext(),amountToShift),"rorOrShift",context.currentBlock());
+		
+		Value *rotResult = BinaryOperator::Create(Instruction::Or,shiftedUp,shifted,"rorOr",context.currentBlock());
+
+		return rotResult;
+		std::cerr << "Unsupported rotation" << std::endl;
+		context.errorFlagged=true;
+		return NULL;
+	}
+
+	return value.codeGen(context);
 }
+
+Value* CAssignment::generateAssignment(BitVariable& to, Value* from,CodeGenContext& context)
+{
+	Value* assignTo;
+
+	assignTo = to.value;
+
+	// Handle variable promotion
+	const Type* ty = Type::getIntNTy(getGlobalContext(),to.size.getLimitedValue());
+	Instruction::CastOps op = CastInst::getCastOpcode(from,false,ty,false);
+
+	Instruction* truncExt = CastInst::Create(op,from,ty,"cast",context.currentBlock());
+
+	// Handle masking and constants and shift
+	ConstantInt* const_intShift = ConstantInt::get(getGlobalContext(), to.shft);
+	BinaryOperator* shiftInst = BinaryOperator::Create(Instruction::Shl,truncExt,const_intShift, "Shifting", context.currentBlock());
+	ConstantInt* const_intMask = ConstantInt::get(getGlobalContext(), to.mask);	
+	BinaryOperator* andInst = BinaryOperator::Create(Instruction::And, shiftInst, const_intMask , "Masking", context.currentBlock());
+
+	// cnst initialiser only used when we are updating the primary register
+	BinaryOperator* final;
+	if (to.aliased == false)
+	{
+		ConstantInt* const_intCnst = ConstantInt::get(getGlobalContext(), to.cnst);
+		BinaryOperator* orInst = BinaryOperator::Create(Instruction::Or, andInst, const_intCnst, "Constants", context.currentBlock());
+		final=orInst;
+	}
+	else
+	{
+		// Now if the assignment is assigning to an aliased register part, we need to have loaded the original register, masked off the inverse of the section mask, and or'd in the result before we store
+		LoadInst* loadInst=new LoadInst(to.value, "", false, context.currentBlock());
+		ConstantInt* const_intInvMask = ConstantInt::get(getGlobalContext(), ~to.mask);
+		BinaryOperator* primaryAndInst = BinaryOperator::Create(Instruction::And, loadInst, const_intInvMask , "InvMasking", context.currentBlock());
+		final = BinaryOperator::Create(Instruction::Or,primaryAndInst,andInst,"Combining",context.currentBlock());
+	}
+
+	return new StoreInst(final, assignTo, false, context.currentBlock());
+}
+
 
 Value* CAssignment::codeGen(CodeGenContext& context)
 {
 	BitVariable var;
-	Value* assignTo;
 	Value* assignWith;
 	if (context.locals().find(lhs.name) == context.locals().end())
 	{
@@ -592,39 +665,9 @@ Value* CAssignment::codeGen(CodeGenContext& context)
 		var=context.locals()[lhs.name];
 	}
 
-	assignTo = var.value;
 	assignWith = rhs.codeGen(context);
 
-	// Handle variable promotion
-	const Type* ty = Type::getIntNTy(getGlobalContext(),var.size.getLimitedValue());
-	Instruction::CastOps op = CastInst::getCastOpcode(assignWith,false,ty,false);
-
-	Instruction* truncExt = CastInst::Create(op,assignWith,ty,"cast",context.currentBlock());
-
-	// Handle masking and constants and shift
-	ConstantInt* const_intShift = ConstantInt::get(getGlobalContext(), var.shft);
-	BinaryOperator* shiftInst = BinaryOperator::Create(Instruction::Shl,truncExt,const_intShift, "Shifting", context.currentBlock());
-	ConstantInt* const_intMask = ConstantInt::get(getGlobalContext(), var.mask);	
-	BinaryOperator* andInst = BinaryOperator::Create(Instruction::And, shiftInst, const_intMask , "Masking", context.currentBlock());
-
-	// cnst initialiser only used when we are updating the primary register
-	BinaryOperator* final;
-	if (var.aliased == false)
-	{
-		ConstantInt* const_intCnst = ConstantInt::get(getGlobalContext(), var.cnst);
-		BinaryOperator* orInst = BinaryOperator::Create(Instruction::Or, andInst, const_intCnst, "Constants", context.currentBlock());
-		final=orInst;
-	}
-	else
-	{
-		// Now if the assignment is assigning to an aliased register part, we need to have loaded the original register, masked off the inverse of the section mask, and or'd in the result before we store
-		LoadInst* loadInst=new LoadInst(var.value, "", false, context.currentBlock());
-		ConstantInt* const_intInvMask = ConstantInt::get(getGlobalContext(), ~var.mask);
-		BinaryOperator* primaryAndInst = BinaryOperator::Create(Instruction::And, loadInst, const_intInvMask , "InvMasking", context.currentBlock());
-		final = BinaryOperator::Create(Instruction::Or,primaryAndInst,andInst,"Combining",context.currentBlock());
-	}
-
-	return new StoreInst(final, assignTo, false, context.currentBlock());
+	return CAssignment::generateAssignment(var,assignWith,context);
 }
 
 Value* CBlock::codeGen(CodeGenContext& context)

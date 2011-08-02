@@ -156,6 +156,8 @@ public:
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
 
+class BitVariable;
+
 class CAssignment : public CExpression {
 public:
 	CIdentifier& lhs;
@@ -163,6 +165,8 @@ public:
 	CAssignment(CIdentifier& lhs, CExpression& rhs) : 
 		lhs(lhs), rhs(rhs) { }
 	virtual llvm::Value* codeGen(CodeGenContext& context);
+
+	static llvm::Value* generateAssignment(BitVariable& to, llvm::Value* from,CodeGenContext& context);
 };
 
 class CBlock : public CExpression {

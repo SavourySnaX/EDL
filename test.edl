@@ -2006,70 +2006,62 @@ INSTRUCTION	"XCHG"		%11101011
 #		}
 #	}
 #}
-#
-#INSTRUCTION	"RLC"		0:0:0:0:0:1:1:1
-#{
-#	O1.FETCH@
-#	{
-#		T2@
-#		{
-#			ROL(A_LATCH,cy,A_LATCH[7..7],1) -> A;	# ROL is ROL(value,bitsOut,bitsIn,amount) e.g. can handle shifts/rotates (may provide NULL in future)
-#		}
-#
-#		T4@
-#		{
-#			A -> A_LATCH;
-#		}
-#	}
-#}
-#
-#INSTRUCTION	"RRC"		0:0:0:0:1:1:1:1
-#{
-#	O1.FETCH@
-#	{
-#		T2@
-#		{
-#			ROR(A_LATCH,cy,A_LATCH[0..0],1) -> A;
-#		}
-#
-#		T4@
-#		{
-#			A -> A_LATCH;
-#		}
-#	}
-#}
-#
-#INSTRUCTION	"RAL"		0:0:0:1:0:1:1:1
-#{
-#	O1.FETCH@
-#	{
-#		T2@
-#		{
-#			ROL(A_LATCH,cy,cy,1) -> A;
-#		}
-#
-#		T4@
-#		{
-#			A -> A_LATCH;
-#		}
-#	}
-#}
-#
-#INSTRUCTION	"RAR"		0:0:0:1:1:1:1:1
-#{
-#	O1.FETCH@
-#	{
-#		T2@
-#		{
-#			ROR(A_LATCH,cy,cy,1) -> A;
-#		}
-#
-#		T4@
-#		{
-#			A -> A_LATCH;
-#		}
-#	}
-#}
+
+INSTRUCTION	"RLC"		%00000111
+{
+	IF O1.FETCH.T2@
+	{
+		ROL(A_LATCH,cy,A_LATCH[7..7],1) -> A;	# ROL is ROL(value,bitsOut,bitsIn,amount) e.g. can handle shifts/rotates (may provide NULL in future)
+	}
+
+	IF O1.FETCH.T4@
+	{
+		A -> A_LATCH;
+		NEXT O1.FETCH.T1;
+	}
+}
+
+INSTRUCTION	"RRC"		%00001111
+{
+	IF O1.FETCH.T2@
+	{
+		ROR(A_LATCH,cy,A_LATCH[0..0],1) -> A;
+	}
+
+	IF O1.FETCH.T4@
+	{
+		A -> A_LATCH;
+		NEXT O1.FETCH.T1;
+	}
+}
+
+INSTRUCTION	"RAL"		%00010111
+{
+	IF O1.FETCH.T2@
+	{
+		ROL(A_LATCH,cy,cy,1) -> A;
+	}
+
+	IF O1.FETCH.T4@
+	{
+		A -> A_LATCH;
+		NEXT O1.FETCH.T1;
+	}
+}
+
+INSTRUCTION	"RAR"		%00011111
+{
+	IF O1.FETCH.T2@
+	{
+		ROR(A_LATCH,cy,cy,1) -> A;
+	}
+
+	IF O1.FETCH.T4@
+	{
+		A -> A_LATCH;
+		NEXT O1.FETCH.T1;
+	}
+}
 
 INSTRUCTION	"CMA"		%00101111
 {
