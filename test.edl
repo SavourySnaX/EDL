@@ -2228,7 +2228,7 @@ INSTRUCTION	"CALL %$1%$0"	%11001101,B2[8],B3[8]
 		{
 			SP <- SP-1;
 			PCH -> DATA_BUFF;
-			STAGECHECK<-1;
+			STAGECHECK<-2;
 		}
 	}
 	
@@ -2545,6 +2545,7 @@ INSTRUCTION	"PUSH PSW"	%11110101
 		{
 			SP <- SP-1;
 			A -> DATA_BUFF;
+			STAGECHECK<-1;
 		}
 		
 	}
