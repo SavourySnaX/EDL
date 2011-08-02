@@ -463,6 +463,8 @@ Value* CBinaryOperator::codeGen(CodeGenContext& context)
 			return BinaryOperator::Create(Instruction::Sub,left,right,"",context.currentBlock());
 		case TOK_CMPEQ:
 			return CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_EQ,left, right, "", context.currentBlock());
+		case TOK_CMPNEQ:
+			return CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_NE,left, right, "", context.currentBlock());
 		case TOK_DBAR:
 			return BinaryOperator::Create(Instruction::Or,left,right,"",context.currentBlock());
 		case TOK_DAMP:

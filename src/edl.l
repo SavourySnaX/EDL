@@ -36,6 +36,7 @@ BASE					{ return TOKEN(TOK_BASE); }
 \"(\\.|[^"])*\"				{ SAVE_TOKEN; return TOK_STRING; }
 
 ".."					{ return TOKEN(TOK_DDOT); }
+"!="					{ return TOKEN(TOK_CMPNEQ); }
 "=="					{ return TOKEN(TOK_CMPEQ); }
 "||"					{ return TOKEN(TOK_DBAR); }
 "&&"					{ return TOKEN(TOK_DAMP); }
