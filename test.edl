@@ -2084,69 +2084,58 @@ INSTRUCTION	"JMP %$1%$0"	%11000011,B2[8],B3[8]
 	}
 }
 
-#INSTRUCTION	"J%M0 %$2%$1"		1:1:CCC[3]:0:1:0,B2[8],B3[8]
-#{
-#	O1.FETCH@
-#	{
-#		T1@
-#		{
-#			IF (JMP == 1)
-#			{
-#				ADDR_BUFF <- WZ;
-#			}
-#		}
-#
-#		T2@
-#		{
-#			IF (JMP == 1)
-#			{
-#				WZ + 1 -> PC;
-#			}
-#		}
-#
-#		T4@
-#		{
-#			TMP->TMP;	# No Operation
-#		}
-#
-#		T5@
-#		{
-#			JMP <- CCC;
-#		}
-#	}
-#
-#	O1.MEMIN@
-#	{
-#		T1@
-#		{
-#			ADDR_BUFF <- PC;
-#		}
-#		T2@
-#		{
-#			PC <- PC+1;
-#		}
-#		T3@
-#		{
-#			DATA_BUFF -> Z;
-#		}
-#	}
-#	
-#	O1.MEMIN@
-#	{
-#		T1@
-#		{
-#			ADDR_BUFF <- PC;
-#		}
-#		T2@
-#		{
-#			PC <- PC+1;
-#		}
-#		T3@
-#		{
-#			DATA_BUFF -> W;
-#		}
-#	}
-#}
+INSTRUCTION	"J%M0 %$2%$1"		%11:CCC:%010,B2[8],B3[8]
+{
+	IF O1.FETCH.T1@
+	{
+		IF (JMP == 1)
+		{
+			ADDR_BUFF <- WZ;
+		}
+	}
+
+	IF O1.FETCH.T2@
+	{
+		IF (JMP == 1)
+		{
+			WZ + 1 -> PC;
+		}
+	}
+
+	IF O1.FETCH.T4@
+	{
+		STAGECHECK<-0;
+		JMP <- CCC;
+		NEXT O1.FETCH.T1;
+		PUSH O1.MEMIN.T1;
+		PUSH O1.MEMIN.T1;
+	}
+	
+
+	IF O1.MEMIN.T1@
+	{
+		ADDR_BUFF <- PC;
+	}
+	
+	IF O1.MEMIN.T2@
+	{
+		PC <- PC+1;
+	}
+	
+	IF O1.MEMIN.T3@
+	{
+		IF STAGECHECK == 1
+		{
+			DATA_BUFF -> W;
+		}
+		IF STAGECHECK == 0
+		{
+			DATA_BUFF -> Z;
+			STAGECHECK<-1;
+		}
+		POP O1;
+	}
+}
 
 INSTRUCTION	"CALL %$1%$0"	%11001101,B2[8],B3[8]
 {
@@ -2214,95 +2203,82 @@ INSTRUCTION	"CALL %$1%$0"	%11001101,B2[8],B3[8]
 	}
 }
 
-#INSTRUCTION	"C%M0 %$2%$1"	1:1:CCC[3]:1:0:0,B2[8],B3[8]
-#{
-#	O1.FETCH@
-#	{
-#		T1@
-#		{
-#			IF (JMP == 1)
-#			{
-#				ADDR_BUFF <- WZ;
-#			}
-#		}
-#
-#		T2@
-#		{
-#			IF (JMP == 1)
-#			{
-#				WZ + 1 -> PC;
-#			}
-#		}
-#
-#		T4@
-#		{
-#			TMP->TMP;	# No Operation
-#		}
-#
-#		T5@
-#		{
-#			JMP <- CCC;
-#			IF (JMP == 1)
-#			{
-#				SP <- SP +1;
-#			}
-#		}
-#	}
-#
-#	O1.MEMIN@
-#	{
-#		T1@
-#		{
-#			ADDR_BUFF <- PC;
-#		}
-#		T2@
-#		{
-#			PC <- PC+1;
-#		}
-#		T3@
-#		{
-#			DATA_BUFF -> Z;
-#		}
-#	}
-#	
-#	O1.MEMIN@
-#	{
-#		T1@
-#		{
-#			ADDR_BUFF <- PC;
-#		}
-#		T2@
-#		{
-#			PC <- PC+1;
-#		}
-#		T3@
-#		{
-#			DATA_BUFF -> W;
-#			IF (JMP == 0)
-#			{
-#				JUMP O1.FETCH;
-#			}
-#		}
-#	}
-#
-#	O1.SPWRITE@
-#	{
-#		T2@
-#		{
-#			SP <- SP-1;
-#			PCH -> DATA_BUFF;
-#		}
-#		
-#	}
-#	
-#	O1.SPWRITE@
-#	{
-#		T2@
-#		{
-#			PCL -> DATA_BUFF;
-#		}
-#	}
-#}
+INSTRUCTION	"C%M0 %$2%$1"	%11:CCC:%100,B2[8],B3[8]
+{
+	IF O1.FETCH.T1@
+	{
+		IF (JMP == 1)
+		{
+			ADDR_BUFF <- WZ;
+		}
+	}
+
+	IF O1.FETCH.T2@
+	{
+		IF (JMP == 1)
+		{
+			WZ + 1 -> PC;
+		}
+	}
+
+	IF O1.FETCH.T5@
+	{
+		JMP <- CCC;
+		STAGECHECK<-0;
+		IF (JMP == 1)
+		{
+			SP <- SP -1;
+			PUSH O1.SPWRITE.T1;
+			PUSH O1.SPWRITE.T1;
+		}
+		PUSH O1.MEMIN.T1;
+		PUSH O1.MEMIN.T1;
+	}
+
+	IF O1.MEMIN.T1@
+	{
+		ADDR_BUFF <- PC;
+	}
+
+	IF O1.MEMIN.T2@
+	{
+		PC <- PC+1;
+	}
+	
+	IF O1.MEMIN.T3@
+	{
+		IF STAGECHECK == 1
+		{
+			DATA_BUFF -> W;
+		}
+		IF STAGECHECK == 0
+		{
+			DATA_BUFF -> Z;
+			STAGECHECK<-1;
+		}
+		POP O1;
+	}
+	
+	IF O1.SPWRITE.T2@
+	{
+		IF STAGECHECK == 2
+		{
+			PCL -> DATA_BUFF;
+		}
+		IF STAGECHECK == 1
+		{
+			SP <- SP-1;
+			PCH -> DATA_BUFF;
+			STAGECHECK<-2;
+		}
+		
+	}
+	
+	IF O1.SPWRITE.T3@
+	{
+		POP O1;
+	}
+}
 
 INSTRUCTION	"RET"		%11001001
 {
@@ -2344,64 +2320,59 @@ INSTRUCTION	"RET"		%11001001
 	}
 }
 
-#INSTRUCTION	"R%M0"		1:1:CCC[3]:0:0:0
-#{
-#	O1.FETCH@
-#	{
-#		T1@
-#		{
-#			IF (JMP == 1)
-#			{
-#				ADDR_BUFF <- WZ;
-#			}
-#		}
-#
-#		T2@
-#		{
-#			IF (JMP == 1)
-#			{
-#				WZ + 1 -> PC;
-#			}
-#		}
-#
-#		T4@
-#		{
-#			JMP <- CCC;
-#		}
-#
-#		T5@
-#		{
-#			IF (JMP == 0)
-#			{
-#				JUMP O1.FETCH;
-#			}
-#		}
-#	}
-#
-#	O1.SPREAD@
-#	{
-#		T2@
-#		{
-#			SP <- SP+1;
-#		}
-#		T3@
-#		{
-#			DATA_BUFF -> Z;
-#		}
-#	}
-#
-#	O1.SPREAD@
-#	{
-#		T2@
-#		{
-#			SP <- SP+1;
-#		}
-#		T3@
-#		{
-#			DATA_BUFF -> W;
-#		}
-#	}
-#}
+INSTRUCTION	"R%M0"		%11:CCC:%000
+{
+	IF O1.FETCH.T1@
+	{
+		IF (JMP == 1)
+		{
+			ADDR_BUFF <- WZ;
+		}
+	}
+
+	IF O1.FETCH.T2@
+	{
+		IF (JMP == 1)
+		{
+			WZ + 1 -> PC;
+		}
+	}
+
+	IF O1.FETCH.T4@
+	{
+		JMP <- CCC;
+	}
+
+	IF O1.FETCH.T5@
+	{
+		IF (JMP == 1)
+		{
+			STAGECHECK<-0;
+			PUSH O1.SPREAD.T1;
+			PUSH O1.SPREAD.T1;
+		}
+	}
+	
+
+	IF O1.SPREAD.T2@
+	{
+		SP <- SP+1;
+	}
+	
+	IF O1.SPREAD.T3@
+	{
+		IF STAGECHECK == 1
+		{
+			DATA_BUFF -> W;
+		}
+		IF STAGECHECK == 0
+		{
+			DATA_BUFF -> Z;
+			STAGECHECK<-1;
+		}
+		POP O1;
+	}
+}
 
 INSTRUCTION	"RST %M0"	%11:NNN:%111
 {
