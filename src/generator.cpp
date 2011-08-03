@@ -201,6 +201,13 @@ Value* CIdentifier::trueSize(Value* in,CodeGenContext& context)
 		var=context.locals()[name];
 	}
 	
+	if (var.mappingRef)
+	{
+		std::cerr << "Cannot perform operation on a mapping Ref!" << std::endl;
+		context.errorFlagged=true;
+		return NULL;
+	}
+
 	const Type* ty = Type::getIntNTy(getGlobalContext(),var.trueSize.getLimitedValue());
 	Instruction::CastOps op = CastInst::getCastOpcode(in,false,ty,false);
 
@@ -228,6 +235,11 @@ Value* CIdentifier::codeGen(CodeGenContext& context)
 	else
 	{
 		var=context.locals()[name];
+	}
+
+	if (var.mappingRef)
+	{
+		return var.value;
 	}
 
 	Value* final = new LoadInst(var.value, "", false, context.currentBlock());
@@ -498,14 +510,16 @@ Value* CCastOperator::codeGen(CodeGenContext& context)
 
 		APInt mask(leftType->getBitWidth(),"0",10);
 		APInt start=beg.integer;
+		APInt loop=beg.integer.zextOrTrunc(leftType->getBitWidth());
+		APInt endloop = end.integer.zextOrTrunc(leftType->getBitWidth());
 		start=start.zextOrTrunc(leftType->getBitWidth());
 
 		while (1==1)
 		{
-			mask.setBit(beg.integer.getLimitedValue());
-			if (beg.integer.uge(end.integer))
+			mask.setBit(loop.getLimitedValue());
+			if (loop.uge(endloop))
 				break;
-			beg.integer++;
+			loop++;
 		}
 
 		Value *masked=BinaryOperator::Create(Instruction::And,left,ConstantInt::get(getGlobalContext(),mask),"castMask",context.currentBlock());
@@ -548,6 +562,13 @@ Value* CRotationOperator::codeGen(CodeGenContext& context)
 	if (!toShift->getType()->isIntegerTy())
 	{
 		std::cerr << "Unsupported operation" << std::endl;
+		context.errorFlagged=true;
+		return NULL;
+	}
+
+	if (var.mappingRef)
+	{
+		std::cerr << "Cannot perform operation on a mappingRef" << std::endl;
 		context.errorFlagged=true;
 		return NULL;
 	}
@@ -665,6 +686,13 @@ Value* CAssignment::codeGen(CodeGenContext& context)
 	else
 	{
 		var=context.locals()[lhs.name];
+	}
+
+	if (var.mappingRef)
+	{
+		std::cerr << "Cannot perform operation on a mappingRef" << std::endl;
+		context.errorFlagged=true;
+		return NULL;
 	}
 
 	assignWith = rhs.codeGen(context);
@@ -838,6 +866,7 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 	temp.mask = ~temp.cnst;
 	temp.shft = APInt(size.integer.getLimitedValue(),0);
 	temp.aliased = false;
+	temp.mappingRef = false;
 
 	if (context.currentBlock())
 	{
@@ -886,6 +915,7 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 			alias.trueSize = aliases[a]->sizeOrValue.integer;
 			alias.value = temp.value;	// the value will always point at the stored local/global
 			alias.cnst = temp.cnst;		// ignored
+			alias.mappingRef=false;
 
 			APInt newMask = ~APInt(aliases[a]->sizeOrValue.integer.getLimitedValue(),0);
 	    		newMask=newMask.zext(size.integer.getLimitedValue());
@@ -1016,7 +1046,7 @@ Value* CInstruction::codeGen(CodeGenContext& context)
 
 	// First up, get the first operand (this must be a computable constant!) - remaining operands are only used for asm/disasm generation
 
-	unsigned numOpcodes = operands[0]->GetNumComputableConstants();
+	unsigned numOpcodes = operands[0]->GetNumComputableConstants(context);
 	if (numOpcodes==0)
 	{
 		std::cerr << "Opcode for instruction must be able to generate constants" << std::endl;
@@ -1026,13 +1056,15 @@ Value* CInstruction::codeGen(CodeGenContext& context)
 
 	for (unsigned a=0;a<numOpcodes;a++)
 	{
-		APInt opcode = operands[0]->GetComputableConstant(a);
+		APInt opcode = operands[0]->GetComputableConstant(context,a);
 
 		FunctionType *ftype = FunctionType::get(Type::getVoidTy(getGlobalContext()),argTypes, false);
-		Function* function = Function::Create(ftype, GlobalValue::InternalLinkage, "OPCODE_"+mnemonic.quoted + opcode.toString(16,false),context.module);
+		Function* function = Function::Create(ftype, GlobalValue::InternalLinkage, "OPCODE_"+mnemonic.quoted.substr(1,mnemonic.quoted.length()-2) + "_" + opcode.toString(16,false),context.module);
 		BasicBlock *bblock = BasicBlock::Create(getGlobalContext(), "entry", function, 0);
 
 		context.pushBlock(bblock);
+
+		operands[0]->DeclareLocal(context,a);
 
 		block.codeGen(context);
 
@@ -1369,6 +1401,158 @@ Value* CIfStatement::codeGen(CodeGenContext& context)
 	context.popBlock();
 
 	context.setBlock(endif);
+
+	return NULL;
+}
+
+void COperandIdent::DeclareLocal(CodeGenContext& context,unsigned num)
+{
+	BitVariable temp;
+
+	temp.size = size.integer;
+	temp.trueSize = size.integer;
+	temp.cnst = APInt(size.integer.getLimitedValue(),num);
+	temp.mask = APInt(size.integer.getLimitedValue(),0);
+	temp.shft = APInt(size.integer.getLimitedValue(),0);
+	temp.aliased = false;
+	temp.mappingRef=false;
+
+	AllocaInst *alloc = new AllocaInst(Type::getIntNTy(getGlobalContext(),size.integer.getLimitedValue()), ident.name.c_str(), context.currentBlock());
+	temp.value = alloc;
+
+	ConstantInt* const_intn_0 = ConstantInt::get(getGlobalContext(), temp.cnst);
+	StoreInst* stor = new StoreInst(const_intn_0,temp.value,false,context.currentBlock());		// NOT SURE HOW WELL THIS WILL WORK IN FUTURE
+		
+	context.locals()[ident.name] = temp;
+}
+	
+void COperandMapping::DeclareLocal(CodeGenContext& context,unsigned num)
+{
+	context.locals()[ident.name] = GetBitVariable(context,num);
+}
+
+BitVariable COperandMapping::GetBitVariable(CodeGenContext& context,unsigned num)
+{
+	BitVariable temp;
+
+	if (context.m_mappings.find(ident.name)==context.m_mappings.end())
+	{
+		std::cerr << "Undeclared mapping : " << ident.name << std::endl;
+		context.errorFlagged=true;
+		return temp;
+	}
+
+	CMapping* mapping = context.m_mappings[ident.name]->mappings[num];
+
+	if (mapping->expr.IsIdentifierExpression())
+	{
+		// If the expression in a mapping is a an identifer alone, then we can create a true local variable that maps directly to it, this allows
+		// assignments to work. (its done by copying the variable declaration resulting from looking up the identifier.
+
+		CIdentifier* identifier = cast<CIdentifier>(&mapping->expr);
+
+		if (context.locals().find(identifier->name) == context.locals().end())
+		{
+			if (context.globals().find(identifier->name) == context.globals().end())
+			{
+				std::cerr << "undeclared variable " << identifier->name << endl;
+				context.errorFlagged=true;
+				return temp;
+			}
+			else
+			{
+				temp=context.globals()[identifier->name];
+			}
+		}
+		else
+		{
+			temp=context.locals()[identifier->name];
+		}
+	}
+	else
+	{
+		// Not an identifier, so we must create an expression maps (this limits the mapping to only being useful for a limited set of things, (but is an accepted part of the language!)
+
+		temp.mappingRef=true;
+		temp.value = mapping->expr.codeGen(context);
+	}
+}
+
+llvm::APInt COperandMapping::GetComputableConstant(CodeGenContext& context,unsigned num)
+{
+	if (context.m_mappings.find(ident.name)==context.m_mappings.end())
+	{
+		std::cerr << "Undeclared mapping : " << ident.name << std::endl;
+		context.errorFlagged=true;
+		return APInt(0,0,false);
+	}
+
+	return context.m_mappings[ident.name]->mappings[num]->selector.integer;
+}
+
+unsigned COperandMapping::GetNumComputableConstants(CodeGenContext& context)
+{
+	if (context.m_mappings.find(ident.name)==context.m_mappings.end())
+	{
+		std::cerr << "Undeclared mapping : " << ident.name << std::endl;
+		context.errorFlagged=true;
+		return 0;
+	}
+
+	return context.m_mappings[ident.name]->mappings.size();
+}
+
+void COperandPartial::DeclareLocal(CodeGenContext& context,unsigned num)
+{
+	for (int a=operands.size()-1;a>=0;a--)
+	{
+		unsigned tNum=num % operands[a]->GetNumComputableConstants(context);
+		operands[a]->DeclareLocal(context,tNum);
+		num/=operands[a]->GetNumComputableConstants(context);
+	}
+}
+
+APInt COperandPartial::GetComputableConstant(CodeGenContext& context,unsigned num)
+{
+	APInt result(0,0,false);
+
+	for (int a=operands.size()-1;a>=0;a--)
+	{
+		unsigned tNum=num % operands[a]->GetNumComputableConstants(context);
+		APInt temp = operands[a]->GetComputableConstant(context,tNum);
+		num/=operands[a]->GetNumComputableConstants(context);
+		unsigned curBitWidth = result.getBitWidth();
+
+		result=result.zext(result.getBitWidth()+temp.getBitWidth());
+		temp=temp.zext(result.getBitWidth());
+		temp=temp.shl(curBitWidth);
+		result=result.Or(temp);
+	}
+
+	return result;
+}
+
+unsigned COperandPartial::GetNumComputableConstants(CodeGenContext& context)
+{
+	unsigned result=1;
+
+	for (int a=0;a<operands.size();a++)
+	{
+		result*=operands[a]->GetNumComputableConstants(context);
+	}
+
+	return result;
+}
+
+Value* CMappingDeclaration::codeGen(CodeGenContext& context)
+{
+	if (context.m_mappings.find(ident.name)!=context.m_mappings.end())
+	{
+		std::cerr << "Multiple declaration for mapping : " << ident.name << std::endl;
+		context.errorFlagged=true;
+		return NULL;
+	}
+	context.m_mappings[ident.name]=this;
 
 	return NULL;
 }

@@ -25,6 +25,7 @@ using namespace llvm;
 class CBlock;
 class CStatesDeclaration;
 class CHandlerDeclaration;
+class CMappingDeclaration;
 
 class BitVariable
 {
@@ -36,6 +37,7 @@ public:
 	APInt	cnst;
 	APInt	shft;
 	bool	aliased;
+	bool	mappingRef;
 };
 
 class StateVariable
@@ -84,6 +86,7 @@ public:
     std::map<std::string, StateVariable> m_states;
     std::map<CStatesDeclaration*,StateVariable> m_statesAlt;
     std::map<std::string, CHandlerDeclaration*> m_handlers;
+    std::map<std::string, CMappingDeclaration*> m_mappings;
 
     void generateCode(CBlock& root);
     GenericValue runCode();

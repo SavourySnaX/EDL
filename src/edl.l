@@ -25,6 +25,7 @@ INSTRUCTION				{ return TOKEN(TOK_INSTRUCTION); }
 EXECUTE					{ return TOKEN(TOK_EXECUTE); }
 ROL					{ return TOKEN(TOK_ROL); }
 ROR					{ return TOKEN(TOK_ROR); }
+MAPPING					{ return TOKEN(TOK_MAPPING); }
 
 DEBUG_TRACE				{ return TOKEN(TOK_TRACE); }
 BASE					{ return TOKEN(TOK_BASE); }

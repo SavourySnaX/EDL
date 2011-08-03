@@ -279,10 +279,6 @@ HANDLER		O1
 		{
 			STATES T1
 			{
-				STATE T1
-				{
-					TMP -> TMP;	# No Operation - probably needs to float D and A busses
-				}
 			}
 		}
 
@@ -302,11 +298,6 @@ HANDLER		O1
 				STATE T1
 				{
 					DATA_BUFF <- SYNC_HALT_ACK;
-				}
-
-				STATE T2
-				{
-					TMP -> TMP;	# No Operation
 				}
 
 				STATE TWH
@@ -458,168 +449,160 @@ HANDLER		INT
 	}
 }
 
-#MAPPING	SSS[3]
-#{
-#	%000	"B"	B;
-#	%001	"C"	C;
-#	%010	"D"	D;
-#	%011	"E"	E;
-#	%100	"H"	H;
-#	%101	"L"	L;
-##	%110			Not used
-#	%111	"A"	A;
-#}
+MAPPING	SSS[3]
+{
+	%000	"B"	B;
+	%001	"C"	C;
+	%010	"D"	D;
+	%011	"E"	E;
+	%100	"H"	H;
+	%101	"L"	L;
+#	%110			Not used
+	%111	"A"	A;
+}
+
+MAPPING DDD[3]
+{
+	%000	"B"	B;
+	%001	"C"	C;
+	%010	"D"	D;
+	%011	"E"	E;
+	%100	"H"	H;
+	%101	"L"	L;
+#	%110			Not used
+	%111	"A"	A;
+}
+
+MAPPING	RP[2]
+{
+	%00	"BC"	BC;
+	%01	"DE"	DE;
+	%10	"HL"	HL;
+	%11	"SP"	SP;
+}
+
+MAPPING	PRP[2]
+{
+	%00	"BC"	BC;
+	%01	"DE"	DE;
+	%10	"HL"	HL;
+#	%11	"SP"	SP;	Not valid for push/pop operation
+}
+
+MAPPING	BCDE[2]
+{
+	%00	"BC"	BC;
+	%01	"DE"	DE;
+}
+
+MAPPING CCC[3]
+{
+	%000	"NZ"	z == 0;
+	%001	"Z"	z == 1;
+	%010	"NC"	cy == 0;
+	%011	"C"	cy == 1;
+	%100	"PO"	p == 0;
+	%101	"PE"	p == 1;
+	%110	"P"	s == 0;
+	%111	"M"	s == 1;
+}
+
+MAPPING NNN[3]
+{
+	%000	"$00"	$00;
+	%001	"$08"	$08;
+	%010	"$10"	$10;
+	%011	"$18"	$18;
+	%100	"$20"	$20;
+	%101	"$28"	$28;
+	%110	"$30"	$30;
+	%111	"$38"	$38;
+}
+
 #
-#MAPPING DDD[3]
-#{
-#	%000	"B"	B;
-#	%001	"C"	C;
-#	%010	"D"	D;
-#	%011	"E"	E;
-#	%100	"H"	H;
-#	%101	"L"	L;
-##	%110			Not used
-#	%111	"A"	A;
-#}
+# define the instructions based on variable bit patterns
 #
-#MAPPING	RP[2]
-#{
-#	%00	"BC"	BC;
-#	%01	"DE"	DE;
-#	%10	"HL"	HL;
-#	%11	"SP"	SP;
-#}
+# INSTRUCTION dissasm bitPattern	- defines an instruction
 #
-#MAPPING	PRP[2]
-#{
-#	%00	"BC"	BC;
-#	%01	"DE"	DE;
-#	%10	"HL"	HL;
-##	%11	"SP"	SP;	Not valid for push/pop operation
-#}
+#		dissasm can use %xn to take values from the decode stream - for instance "MOV %M0,%M1" for 0:1:DDD[3]:SSS[3] - would give "MOV A,B" if opcode was %01111001
+#			where x can be :
+#						M - decode mapping value
+#						$ - display hexadecimal value
+#			where n can be :
+#						0 - 9 (representing which input value to take... it ignores constants as in example above.
 #
-#MAPPING	BCDE[2]
-#{
-#	%00	"BC"	BC;
-#	%01	"DE"	DE;
-#}
-#
-#MAPPING CCC[3]
-#{
-#	%000	"NZ"	z == 0;
-#	%001	"Z"	z == 1;
-#	%010	"NC"	cy == 0;
-#	%011	"C"	cy == 1;
-#	%100	"PO"	p == 0;
-#	%101	"PE"	p == 1;
-#	%110	"P"	s == 0;
-#	%111	"M"	s == 1;
-#}
-#
-#MAPPING NNN[3]
-#{
-#	%000	"$00"	$00;
-#	%001	"$08"	$08;
-#	%010	"$10"	$10;
-#	%011	"$18"	$18;
-#	%100	"$20"	$20;
-#	%101	"$28"	$28;
-#	%110	"$30"	$30;
-#	%111	"$38"	$38;
-#}
-#
-#
-##
-## define the instructions based on variable bit patterns
-##
-## INSTRUCTION dissasm bitPattern	- defines an instruction
-##
-##		dissasm can use %xn to take values from the decode stream - for instance "MOV %M0,%M1" for 0:1:DDD[3]:SSS[3] - would give "MOV A,B" if opcode was %01111001
-##			where x can be :
-##						M - decode mapping value
-##						$ - display hexadecimal value
-##			where n can be :
-##						0 - 9 (representing which input value to take... it ignores constants as in example above.
-##
-##		bitpattern can be specified with MAPPING helpers (these will be expanded correctly)
-##
-##
-##
-##	Quick note on operators :
-##
-##		a -> b  assign contents of a into b
-##		a <- b  assign contents of b into a
-##
-##	Note on status flag behaviour
-##
-##		AFFECT	allows the capturing of standard ALU style flags e.g. carry - but how
-##
-##	
+#		bitpattern can be specified with MAPPING helpers (these will be expanded correctly)
 #
 #
-#INSTRUCTION	"MOV %M0,%M1"	0:1:DDD[3]:SSS[3]
-#{
-#	O1.FETCH@
-#	{
-#		T4@
-#		{
-#			SSS -> TMP;
-#		}
 #
-#		T5@
-#		{
-#			TMP -> DDD;
-#		}
-#	}
+#	Quick note on operators :
 #
-#}
+#		a -> b  assign contents of a into b
+#		a <- b  assign contents of b into a
 #
-#INSTRUCTION	"MOV %M0,M"	0:1:DDD[3]:1:1:0
-#{
-#	O1.FETCH@
-#	{
-#		T4@
-#		{
-#			TMP -> TMP;	# No operation - not true.. need to force primary state machine into HL state - Though perhaps not, code could work out the HLIN is next state perhaps by looking at the order of references in the instruction itself?
-#		}
-#	}
+#	Note on status flag behaviour
 #
-#	O1.MEMIN@
-#	{
-#		T1@
-#		{
-#			ADDR_BUFF <- HL;
-#		}
+#		AFFECT	allows the capturing of standard ALU style flags e.g. carry - but how
 #
-#		T3@
-#		{
-#			DATA_BUFF -> DDD;
-#		}
-#	}
-#}
-#
-#INSTRUCTION	"MOV M,%M0"	0:1:1:1:0:SSS[3]
-#{
-#	O1.FETCH@
-#	{
-#		T4@
-#		{
-#			SSS -> TMP;
-#		}
-#	}
-#
-#	O1.MEMOUT@
-#	{
-#		T1@
-#		{
-#			ADDR_BUFF <- HL;
-#		}
-#		T2@
-#		{
-#			TMP -> DATA_BUFF;
-#		}
-#	}
-#}
+#	
+
+INSTRUCTION	"MOV %M0,%M1"	%01:DDD:SSS
+{
+	IF O1.FETCH.T4@
+	{
+		SSS -> TMP;
+	}
+
+	IF O1.FETCH.T5@
+	{
+		TMP -> DDD;
+	}
+}
+
+INSTRUCTION	"MOV %M0,M"	%01:DDD:%110
+{
+	IF O1.FETCH.T4@
+	{
+		NEXT O1.FETCH.T1;
+		PUSH O1.MEMIN.T1;
+	}
+
+	IF O1.MEMIN.T1@
+	{
+		ADDR_BUFF <- HL;
+	}
+
+	IF O1.MEMIN.T3@
+	{
+		DATA_BUFF -> DDD;
+		POP O1;
+	}
+}
+
+INSTRUCTION	"MOV M,%M0"	%01110:SSS
+{
+	IF O1.FETCH.T4@
+	{
+		SSS -> TMP;
+		NEXT O1.FETCH.T1;
+		PUSH O1.MEMOUT.T1;
+	}
+
+	IF O1.MEMOUT.T1@
+	{
+		ADDR_BUFF <- HL;
+	}
+		
+	IF O1.MEMOUT.T2@
+	{
+		TMP -> DATA_BUFF;
+	}
+	
+	IF O1.MEMOUT.T3@
+	{
+		POP O1;
+	}
+}
 
 INSTRUCTION	"SPHL"		%11111001
 {
@@ -634,32 +617,30 @@ INSTRUCTION	"SPHL"		%11111001
 	}
 }
 
-#INSTRUCTION	"MVI %M0,%$1"	0:0:DDD[3]:1:1:0,B2[8]
-#{
-#	O1.FETCH@
-#	{
-#		T4@
-#		{
-#			TMP -> TMP;	# No operation
-#		}
-#	}
-#
-#	O1.MEMIN@
-#	{
-#		T1@
-#		{
-#			ADDR_BUFF <- PC;
-#		}
-#		T2@
-#		{
-#			PC <- PC+1;
-#		}
-#		T3@
-#		{
-#			DATA_BUFF -> DDD;
-#		}
-#	}
-#}
+INSTRUCTION	"MVI %M0,%$1"	%00:DDD:%110,B2[8]
+{
+	IF O1.FETCH.T4@
+	{
+		NEXT O1.FETCH.T1;
+		PUSH O1.MEMIN.T1;
+	}
+
+	IF O1.MEMIN.T1@
+	{
+		ADDR_BUFF <- PC;
+	}
+	
+	IF O1.MEMIN.T2@
+	{
+		PC <- PC+1;
+	}
+
+	IF O1.MEMIN.T3@
+	{
+		DATA_BUFF -> DDD;
+		POP O1;
+	}
+}
 
 INSTRUCTION	"MVI M,%$1"	%00110110,B2[8]
 {
@@ -702,48 +683,41 @@ INSTRUCTION	"MVI M,%$1"	%00110110,B2[8]
 	}
 }
 
-#INSTRUCTION	"LXI %M0,%$2%$1"	0:0:RP[2]:0:0:0:1,B2[8],B3[8]
-#{
-#	O1.FETCH@
-#	{
-#		T4@
-#		{
-#			TMP -> TMP;	# No operation
-#		}
-#	}
-#
-#	O1.MEMIN@
-#	{
-#		T1@
-#		{
-#			ADDR_BUFF <- PC;
-#		}
-#		T2@
-#		{
-#			PC <- PC+1;
-#		}
-#		T3@
-#		{
-#			DATA_BUFF -> RP[0..7];
-#		}
-#	}
-#	
-#	O1.MEMIN@
-#	{
-#		T1@
-#		{
-#			ADDR_BUFF <- PC;
-#		}
-#		T2@
-#		{
-#			PC <- PC+1;
-#		}
-#		T3@
-#		{
-#			DATA_BUFF -> RP[8..15];
-#		}
-#	}
-#}
+INSTRUCTION	"LXI %M0,%$2%$1"	%00:RP:%0001,B2[8],B3[8]
+{
+	IF O1.FETCH.T4@
+	{
+		STAGECHECK<-0;
+		NEXT O1.FETCH.T1;
+		PUSH O1.MEMIN.T1;
+		PUSH O1.MEMIN.T1;
+	}
+
+	IF O1.MEMIN.T1@
+	{
+		ADDR_BUFF <- PC;
+	}
+	
+	IF O1.MEMIN.T2@
+	{
+		PC <- PC+1;
+	}
+
+	IF O1.MEMIN.T3@
+	{
+		IF STAGECHECK == 1
+		{
+			DATA_BUFF -> W; #RP[8..15];
+			WZ -> RP;
+		}
+		IF STAGECHECK == 0
+		{
+			DATA_BUFF -> Z; #RP[0..7];
+			STAGECHECK<-1;
+		}
+		POP O1;
+	}
+}
 
 INSTRUCTION	"LDA %$1%$0"	%00111010,B2[8],B3[8]
 {
@@ -971,52 +945,49 @@ INSTRUCTION	"SHLD %$1%$0"	%00100010,B2[8],B3[8]
 	}
 }
 
-#INSTRUCTION	"LDAX %M0"	0:0:BCDE[2]:1:0:1:0
-#{
-#	O1.FETCH@
-#	{
-#		T4@
-#		{
-#			TMP -> TMP;	# No operation 
-#		}
-#	}
-#
-#	O1.MEMIN@
-#	{
-#		T1@
-#		{
-#			ADDR_BUFF <- BCDE;
-#		}
-#
-#		T3@
-#		{
-#			DATA_BUFF -> A;
-#		}
-#	}
-#}
-#
-#INSTRUCTION	"STAX %M0"	0:0:BCDE[2]:0:0:1:0
-#{
-#	O1.FETCH@
-#	{
-#		T4@
-#		{
-#			TMP -> TMP;	# No operation
-#		}
-#	}
-#
-#	O1.MEMOUT@
-#	{
-#		T1@
-#		{
-#			ADDR_BUFF <- BCDE;
-#		}
-#		T2@
-#		{
-#			A -> DATA_BUFF;
-#		}
-#	}
-#}
+INSTRUCTION	"LDAX %M0"	%00:BCDE:%1010
+{
+	IF O1.FETCH.T4@
+	{
+		NEXT O1.FETCH.T1;
+		PUSH O1.MEMIN.T1;
+	}
+
+	IF O1.MEMIN.T1@
+	{
+		ADDR_BUFF <- BCDE;
+	}
+
+	IF O1.MEMIN.T3@
+	{
+		DATA_BUFF -> A;
+		POP O1;
+	}
+}
+
+INSTRUCTION	"STAX %M0"	%00:BCDE:%0010
+{
+	IF O1.FETCH.T4@
+	{
+		NEXT O1.FETCH.T1;
+		PUSH O1.MEMOUT.T1;
+	}
+
+	IF O1.MEMOUT.T1@
+	{
+		ADDR_BUFF <- BCDE;
+	}
+
+	IF O1.MEMOUT.T2@
+	{
+		A -> DATA_BUFF;
+	}
+	
+	IF O1.MEMOUT.T3@
+	{
+		POP O1;	
+	}
+}
 
 INSTRUCTION	"XCHG"		%11101011
 {
@@ -2431,52 +2402,54 @@ INSTRUCTION	"RET"		%11001001
 #		}
 #	}
 #}
-#
-#INSTRUCTION	"RST %M0"	1:1:NNN[3]:1:1:1
-#{
-#	O1.FETCH@
-#	{
-#		T1@
-#		{
-#			ADDR_BUFF <- WZ;
-#		}
-#
-#		T2@
-#		{
-#			WZ + 1 -> PC;
-#		}
-#
-#		T4@
-#		{
-#			0 -> W;
-#			IR->TMP;
-#		}
-#
-#		T5@
-#		{
-#			SP <- SP + 1;
-#		}
-#	}
-#
-#	O1.SPWRITE@
-#	{
-#		T2@
-#		{
-#			SP <- SP-1;
-#			PCH -> DATA_BUFF;
-#		}
-#		
-#	}
-#	
-#	O1.SPWRITE@
-#	{
-#		T2@
-#		{
-#			NNN -> Z;
-#			PCL -> DATA_BUFF;
-#		}
-#	}
-#}
+
+INSTRUCTION	"RST %M0"	%11:NNN:%111
+{
+	IF O1.FETCH.T1@
+	{
+		ADDR_BUFF <- WZ;
+	}
+
+	IF O1.FETCH.T2@
+	{
+		WZ + 1 -> PC;
+	}
+
+	IF O1.FETCH.T4@
+	{
+		0 -> W;
+	}
+
+	IF O1.FETCH.T5@
+	{
+		STAGECHECK<-0;
+		SP <- SP + 1;
+		PUSH O1.SPWRITE.T1;
+		PUSH O1.SPWRITE.T1;
+	}
+
+	IF O1.SPWRITE.T2@
+	{
+		IF STAGECHECK == 1
+		{
+			NNN -> Z;
+			PCL -> DATA_BUFF;
+		}
+
+		IF STAGECHECK == 0
+		{
+			SP <- SP-1;
+			PCH -> DATA_BUFF;
+			STAGECHECK<-1;
+		}
+		
+	}
+	
+	IF O1.SPWRITE.T3@
+	{
+		POP O1;
+	}
+}
 
 INSTRUCTION	"PCHL"		%11101001
 {
@@ -2491,40 +2464,35 @@ INSTRUCTION	"PCHL"		%11101001
 	}
 }
 
-#INSTRUCTION	"PUSH %M0"	1:1:PRP[2]:0:1:0:1
-#{
-#	O1.FETCH@
-#	{
-#		T4@
-#		{
-#			TMP -> TMP;	# No Operation
-#		}
-#
-#		T5@
-#		{
-#			SP <- SP-1;
-#		}
-#	}
-#
-#	O1.SPWRITE@
-#	{
-#		T2@
-#		{
-#			SP <- SP-1;
-#			RP[0..7] -> DATA_BUFF;
-#		}
-#		
-#	}
-#	
-#	O1.SPWRITE@
-#	{
-#		T2@
-#		{
-#			RP[8..15] -> DATA_BUFF;
-#		}
-#		
-#	}
-#}
+INSTRUCTION	"PUSH %M0"	%11:PRP:%0101
+{
+	IF O1.FETCH.T5@
+	{
+		STAGECHECK<-0;
+		SP <- SP-1;
+		PUSH O1.SPWRITE.T1;
+		PUSH O1.SPWRITE.T1;
+	}
+
+	IF O1.SPWRITE.T2@
+	{
+		IF STAGECHECK == 1
+		{
+			PRP[8..15]->DATA_BUFF;
+		}
+		IF STAGECHECK == 0
+		{
+			SP <- SP-1;
+			PRP[0..7] ->DATA_BUFF;
+			STAGECHECK<-1;
+		}
+	}
+	
+	IF O1.SPWRITE.T3@
+	{
+		POP O1;
+	}
+}
 
 INSTRUCTION	"PUSH PSW"	%11110101
 {
@@ -2561,40 +2529,36 @@ INSTRUCTION	"PUSH PSW"	%11110101
 	}
 }
 
-#INSTRUCTION	"POP %M0"	1:1:PRP[2]:0:0:0:1
-#{
-#	O1.FETCH@
-#	{
-#		T4@
-#		{
-#			TMP -> TMP;	# No Operation
-#		}
-#	}
-#
-#	O1.SPREAD@
-#	{
-#		T2@
-#		{
-#			SP <- SP+1;
-#		}
-#		T3@
-#		{
-#			DATA_BUFF -> RP[0..7];
-#		}
-#	}
-#	
-#	O1.SPREAD@
-#	{
-#		T2@
-#		{
-#			SP <- SP+1;
-#		}
-#		T3@
-#		{
-#			DATA_BUFF -> RP[8..15];
-#		}
-#	}
-#}
+INSTRUCTION	"POP %M0"	%11:PRP:%0001
+{
+	IF O1.FETCH.T4@
+	{
+		STAGECHECK<-0;
+		NEXT O1.FETCH.T1;
+		PUSH O1.SPREAD.T1;
+		PUSH O1.SPREAD.T1;
+	}
+
+	IF O1.SPREAD.T2@
+	{
+		SP <- SP+1;
+	}
+		
+	IF O1.SPREAD.T3@
+	{
+		IF STAGECHECK == 1
+		{
+			DATA_BUFF -> W;#PRP[8..15];
+			WZ-> PRP;
+		}
+		IF STAGECHECK == 0
+		{
+			DATA_BUFF -> Z;#PRP[0..7];
+			STAGECHECK<-1;
+		}
+		POP O1;
+	}
+}
 
 INSTRUCTION	"POP PSW"	%11110001
 {

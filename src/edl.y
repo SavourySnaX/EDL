@@ -28,25 +28,30 @@
 	CDebugTrace *debug;
 	CStateIdent *state_ident;
 	COperand *operand;
+	CMapping *mapping;
+	COperandPartial *opPartial;
 	std::vector<COperand*> *opervec;
 	std::vector<CAliasDeclaration*> *aliasvec;
 	std::vector<CStateDeclaration*> *varvec;
 	std::vector<CExpression*> *exprvec;
 	std::vector<CDebugTrace*> *debugvec;
 	std::vector<CStateIdent*> *staterefvec;
+	std::vector<CMapping*> *mappingvec;
 	std::string *string;
 	int token;
 }
 
 %token <string> TOK_IDENTIFIER TOK_INTEGER TOK_STRING
 %token <token>	TOK_DECLARE TOK_HANDLER	TOK_STATES TOK_STATE TOK_ALIAS TOK_IF TOK_NEXT TOK_PUSH TOK_POP	/* Reserved words */
-%token <token>	TOK_INSTRUCTION	TOK_EXECUTE TOK_ROL TOK_ROR						/* Reserved words */
+%token <token>	TOK_INSTRUCTION	TOK_EXECUTE TOK_ROL TOK_ROR TOK_MAPPING					/* Reserved words */
 %token <token>	TOK_TRACE TOK_BASE									/* Debug reserved words */
 %token <token> TOK_LSQR TOK_RSQR TOK_LBRACE TOK_RBRACE TOK_COMMA TOK_COLON TOK_EOS 			/* Operators/Seperators */
 %token <token> TOK_ASSIGNLEFT TOK_ASSIGNRIGHT TOK_ADD TOK_SUB TOK_OBR TOK_CBR TOK_CMPEQ TOK_BAR		/* Operators/Seperators */
 %token <token> TOK_DOT TOK_AT TOK_DBAR TOK_DAMP TOK_TILDE TOK_DDOT TOK_CMPNEQ				/* Operators/Seperators */
 
-%type <operand> operand
+%type <mapping> mapping
+%type <operand> operand 
+%type <opPartial> partialOperands
 %type <strng> quoted
 %type <ident> ident
 %type <state_ident> state_ident
@@ -56,10 +61,11 @@
 %type <aliasvec> aliases
 %type <debugvec> debuglist
 %type <opervec> operandList
+%type <mappingvec> mappingList
 %type <staterefvec> state_ident_list
 /* %type <exprvec> call_args */
-%type <block> program block stmts
-%type <stmt> stmt var_decl handler_decl state_decl states_decl state_def alias_decl ifblock debug instruction_decl
+%type <block> program block stmts 
+%type <stmt> stmt var_decl handler_decl state_decl states_decl state_def alias_decl ifblock debug instruction_decl mapping_decl
 
 %right TOK_ASSIGNRIGHT
 %left TOK_ASSIGNLEFT
@@ -85,6 +91,7 @@ stmt : var_decl TOK_EOS
      | state_def
      | handler_decl
      | instruction_decl
+     | mapping_decl
      | ifblock
      | TOK_EXECUTE ident TOK_EOS { $$ = new CExecute(*$2); }
      | TOK_NEXT state_ident_list TOK_EOS { $$ = new CStateJump(*$2); delete $2; }
@@ -142,14 +149,28 @@ aliases : aliases TOK_COLON alias_decl { $$->push_back($<alias_decl>3); }
 
 operand : numeric { $$ = new COperandNumber(*$1); }
 	| ident TOK_LSQR numeric TOK_RSQR { $$ = new COperandIdent(*$1,*$3); }
+	| ident { $$ = new COperandMapping(*$1); }
 	;
 
-operandList : operandList TOK_COMMA operand { $$->push_back($<operand>3); }
-	    | operand { $$ = new OperandList(); $$->push_back($<operand>1); }
+partialOperands : partialOperands TOK_COLON operand { $$->Add($<operand>3); }
+		| operand { $$ = new COperandPartial(); $$->Add($<operand>1); }
+
+operandList : operandList TOK_COMMA partialOperands { $$->push_back($<operand>3); }
+	    | partialOperands { $$ = new OperandList(); $$->push_back($<operand>1); }
 	;
 
 instruction_decl : TOK_INSTRUCTION quoted operandList block { $$ = new CInstruction(*$2,*$3,*$4); }
 		 ;
+
+mapping : numeric quoted expr TOK_EOS { $$ = new CMapping(*$1,*$2,*$3); }
+	;
+
+mappingList : mappingList mapping { $$->push_back($<mapping>2); }
+	 | mapping { $$ = new MappingList(); $$->push_back($<mapping>1); }
+	;
+
+mapping_decl : TOK_MAPPING ident TOK_LSQR numeric TOK_RSQR TOK_LBRACE mappingList TOK_RBRACE { $$ = new CMappingDeclaration(*$2,*$4,*$7); } 
+	     ;
 
 var_decl : TOK_DECLARE ident TOK_LSQR numeric TOK_RSQR { $$ = new CVariableDeclaration(*$2, *$4); }
 	| TOK_DECLARE ident TOK_LSQR numeric TOK_RSQR TOK_ALIAS aliases { $$ = new CVariableDeclaration(*$2, *$4, *$7); delete $7; }

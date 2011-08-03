@@ -9,6 +9,8 @@
 #define MAX_SUPPORTED_STACK_DEPTH	(16)
 #define MAX_SUPPORTED_STACK_BITS	(4)
 
+class BitVariable;
+
 class CodeGenContext;
 class CStatement;
 class CExpression;
@@ -19,6 +21,7 @@ class CAliasDeclaration;
 class CDebugTrace;
 class CStateIdent;
 class COperand;
+class CMapping;
 
 typedef std::vector<CStatement*> StatementList;
 typedef std::vector<CExpression*> ExpressionList;
@@ -28,6 +31,7 @@ typedef std::vector<CAliasDeclaration*> AliasList;
 typedef std::vector<CDebugTrace*> DebugList;
 typedef std::vector<CStateIdent*> StateIdentList;
 typedef std::vector<COperand*> OperandList;
+typedef std::vector<CMapping*> MappingList;
 
 class CNode {
 public:
@@ -36,6 +40,8 @@ public:
 };
 
 class CExpression : public CNode {
+public:
+	virtual bool IsIdentifierExpression() { return false; }
 };
 
 class CStatement : public CNode {
@@ -43,8 +49,9 @@ class CStatement : public CNode {
 
 class COperand : public CNode {
 public:
-	virtual llvm::APInt GetComputableConstant(unsigned num)=0;
-	virtual unsigned GetNumComputableConstants()=0;
+	virtual void DeclareLocal(CodeGenContext& context,unsigned num)=0;
+	virtual llvm::APInt GetComputableConstant(CodeGenContext& context,unsigned num)=0;
+	virtual unsigned GetNumComputableConstants(CodeGenContext& context)=0;
 };
 
 class CInteger : public CExpression {
@@ -102,6 +109,7 @@ public:
 	CIdentifier(const std::string& name) : name(name) { }
 	llvm::Value* trueSize(llvm::Value*,CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
+	virtual bool IsIdentifierExpression() { return true; }
 };
 
 class CStateIdent : public CExpression {
@@ -124,8 +132,9 @@ public:
 	COperandNumber(CInteger& integer) :
 		integer(integer) { }
 	
-	virtual llvm::APInt GetComputableConstant(unsigned num) { return integer.integer; }
-	virtual unsigned GetNumComputableConstants() { return 1; }
+	virtual void DeclareLocal(CodeGenContext& context,unsigned num) {}
+	virtual llvm::APInt GetComputableConstant(CodeGenContext& context,unsigned num) { return integer.integer; }
+	virtual unsigned GetNumComputableConstants(CodeGenContext& context) { return 1; }
 };
 
 class COperandIdent : public COperand {
@@ -135,8 +144,36 @@ public:
 	COperandIdent(CIdentifier& ident,CInteger& size) :
 		ident(ident), size(size) { }
 	
-	virtual llvm::APInt GetComputableConstant(unsigned num) { return llvm::APInt(0,0,false); }
-	virtual unsigned GetNumComputableConstants() { return 0; }
+	virtual void DeclareLocal(CodeGenContext& context,unsigned num);
+	virtual llvm::APInt GetComputableConstant(CodeGenContext& context,unsigned num) { return llvm::APInt((unsigned int)size.integer.getLimitedValue(),(uint64_t)num,false); }
+	virtual unsigned GetNumComputableConstants(CodeGenContext& context) { return 1<<size.integer.getLimitedValue(); }
+};
+
+class COperandMapping : public COperand {
+public:
+	CIdentifier& ident;
+	COperandMapping(CIdentifier& ident) :
+		ident(ident) { }
+
+	virtual void DeclareLocal(CodeGenContext& context,unsigned num);
+	virtual llvm::APInt GetComputableConstant(CodeGenContext& context,unsigned num);
+	virtual unsigned GetNumComputableConstants(CodeGenContext& context);
+	
+	BitVariable GetBitVariable(CodeGenContext& context,unsigned num);
+};
+
+class COperandPartial : public COperand {
+public:
+	OperandList operands;
+
+	COperandPartial() {}
+
+	void Add(COperand *operand) { operands.push_back(operand); }
+
+	virtual void DeclareLocal(CodeGenContext& context,unsigned num);
+
+	virtual llvm::APInt GetComputableConstant(CodeGenContext& context,unsigned num);
+	virtual unsigned GetNumComputableConstants(CodeGenContext& context);
 };
 
 class CMethodCall : public CExpression {
@@ -184,7 +221,15 @@ public:
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
 
-class BitVariable;
+class CMapping : public CExpression {
+public:
+	CExpression&	expr;
+	CInteger&	selector;
+	CString&	label;
+
+	CMapping(CInteger& selector,CString& label,CExpression& expr) :
+		expr(expr), selector(selector), label(label) { }
+};
 
 class CAssignment : public CExpression {
 public:
@@ -379,6 +424,18 @@ public:
 	CStatesDeclaration* child;
 	CHandlerDeclaration(const CIdentifier& id, CBlock& block) :
 		id(id), block(block) { }
+	virtual llvm::Value* codeGen(CodeGenContext& context);
+};
+
+class CMappingDeclaration : public CStatement {
+public:
+	MappingList mappings;
+	const CIdentifier& ident;
+	CInteger& size;
+
+	CMappingDeclaration(const CIdentifier& ident, CInteger& size, MappingList& mappings) :
+		mappings(mappings), ident(ident), size(size) { }
+	
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
 
