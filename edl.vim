@@ -17,7 +17,7 @@ syntax region	edlBlock	start="{" end="}" contains=ALLBUT,edlCurlyError fold
 syntax match	edlString	"\".\{-}\""
 syntax match	edlComment	"#.*"
 syntax match	edlHexNumber	"\$[0-9a-fA-F]\+"
-syntax match	edlDecNumber	"[0-9]\+"
+syntax match	edlDecNumber	"^[a-zA-Z_][0-9]\+"
 syntax match	edlBinNumber	"%[0-1]\+"
 
 hi def link edlReserved 	Statement
