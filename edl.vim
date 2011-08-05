@@ -8,17 +8,20 @@ if exists("b:current_syntax")
   finish
 endif
 
-syn keyword	edlReserved		DECLARE ALIAS HANDLER STATES STATE IF NEXT PUSH POP INSTRUCTION EXECUTE ROR ROL MAPPING
+syntax match	edlComment	"#.*"
+
+syn keyword	edlReserved		DECLARE ALIAS HANDLER STATES STATE IF NEXT PUSH POP INSTRUCTION EXECUTE ROR ROL MAPPING AFFECT AS ZERO SIGN PARITYODD PARITYEVEN CARRY BIT
 syn keyword	edlDebugReserved	DEBUG_TRACE BASE
 
 syntax match 	edlCurlyError	"}"
 syntax region	edlBlock	start="{" end="}" contains=ALLBUT,edlCurlyError fold
 
+syntax match	edlIdentifier	"[a-zA-Z_][a-zA-Z_0-9]*"
+
 syntax match	edlString	"\".\{-}\""
-syntax match	edlComment	"#.*"
 syntax match	edlHexNumber	"\$[0-9a-fA-F]\+"
-syntax match	edlDecNumber	"^[a-zA-Z_][0-9]\+"
 syntax match	edlBinNumber	"%[0-1]\+"
+syntax match	edlDecNumber	"\d\+"
 
 hi def link edlReserved 	Statement
 hi def link edlDebugReserved 	Statement
