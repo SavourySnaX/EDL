@@ -2,88 +2,13 @@
 # Testing file for checking features
 #
 
-DECLARE IR[8];
-
-DECLARE test[5];
-
 HANDLER O1
 {
-	STATES FIRST|FETCH|MEMIN|MEMOUT
-	{
-		STATE FETCH
-		{
-			STATES T1,T2,T3
-			{
-				STATE T1
-				{
-					DEBUG_TRACE "FETCH.T1";
-				}
-				STATE T2
-				{
-					DEBUG_TRACE "FETCH.T2";
-				}
-				STATE T3
-				{
-					DEBUG_TRACE "FETCH.T3";
-				}
-			}
-		}
-		STATE MEMIN
-		{
-			STATES T1,T2,T3
-			{
-				STATE T1
-				{
-					DEBUG_TRACE "MEMIN.T1";
-				}
-				STATE T3
-				{
-					DEBUG_TRACE "MEMIN.T3";
-				}
-			}
-		}
-		STATE MEMOUT
-		{
-			STATES T1,T2,T3
-			{
-				STATE T1
-				{
-					DEBUG_TRACE "MEMOUT.T1";
-				}
-				STATE T3
-				{
-					DEBUG_TRACE "MEMOUT.T3";
-				}
-			}
-		}
-		STATE FIRST
-		{
-			IR <- 0;
-			test <- %11111;
-			test <- ~test;
-			NEXT O1.FETCH.T1;
-		}
-	}
-	
-	EXECUTE IR;
-}
+	DECLARE pea[8] ALIAS %01000101;
+	DECLARE pod[8] ALIAS %10101010;
+	DECLARE res[8];
 
-INSTRUCTION	"NOP"		%00000000
-{
-	IF O1.FETCH.T3@
-	{
-		PUSH O1.MEMIN.T1;
-		PUSH O1.MEMIN.T1;
-	}
-	IF O1.MEMIN.T1@
-	{
-		POP O1;
-	}
-	DEBUG_TRACE "NOP",test;
-}
+	res <- pea ^ pod;
 
-INSTRUCTION	"PONY"		%00000001
-{
-	DEBUG_TRACE "PONY";
+	DEBUG_TRACE res;
 }
-
