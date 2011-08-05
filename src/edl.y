@@ -30,6 +30,7 @@
 	COperand *operand;
 	CMapping *mapping;
 	COperandPartial *opPartial;
+	CAffect *affect;
 	std::vector<COperand*> *opervec;
 	std::vector<CAliasDeclaration*> *aliasvec;
 	std::vector<CStateDeclaration*> *varvec;
@@ -37,18 +38,22 @@
 	std::vector<CDebugTrace*> *debugvec;
 	std::vector<CStateIdent*> *staterefvec;
 	std::vector<CMapping*> *mappingvec;
+	std::vector<CAffect*> *affectvec;
 	std::string *string;
 	int token;
 }
 
 %token <string> TOK_IDENTIFIER TOK_INTEGER TOK_STRING
 %token <token>	TOK_DECLARE TOK_HANDLER	TOK_STATES TOK_STATE TOK_ALIAS TOK_IF TOK_NEXT TOK_PUSH TOK_POP	/* Reserved words */
-%token <token>	TOK_INSTRUCTION	TOK_EXECUTE TOK_ROL TOK_ROR TOK_MAPPING					/* Reserved words */
+%token <token>	TOK_INSTRUCTION	TOK_EXECUTE TOK_ROL TOK_ROR TOK_MAPPING TOK_AFFECT TOK_AS		/* Reserved words */
+%token <token>	TOK_ZERO TOK_SIGN TOK_PARITYEVEN TOK_PARITYODD TOK_CARRY TOK_BIT			/* Reserved words AFFECTORS */
 %token <token>	TOK_TRACE TOK_BASE									/* Debug reserved words */
 %token <token> TOK_LSQR TOK_RSQR TOK_LBRACE TOK_RBRACE TOK_COMMA TOK_COLON TOK_EOS 			/* Operators/Seperators */
 %token <token> TOK_ASSIGNLEFT TOK_ASSIGNRIGHT TOK_ADD TOK_SUB TOK_OBR TOK_CBR TOK_CMPEQ TOK_BAR		/* Operators/Seperators */
-%token <token> TOK_DOT TOK_AT TOK_DBAR TOK_DAMP TOK_TILDE TOK_DDOT TOK_CMPNEQ				/* Operators/Seperators */
+%token <token> TOK_DOT TOK_AT TOK_AMP TOK_TILDE TOK_DDOT TOK_CMPNEQ TOK_HAT				/* Operators/Seperators */
+%token <token> TOK_CMPLESSEQ TOK_CMPLESS TOK_CMPGREATEREQ TOK_CMPGREATER				/* Operators/Seperators */
 
+%type <affect> affector
 %type <mapping> mapping
 %type <operand> operand 
 %type <opPartial> partialOperands
@@ -62,6 +67,7 @@
 %type <debugvec> debuglist
 %type <opervec> operandList
 %type <mappingvec> mappingList
+%type <affectvec> affectors
 %type <staterefvec> state_ident_list
 /* %type <exprvec> call_args */
 %type <block> program block stmts 
@@ -71,8 +77,8 @@
 %left TOK_ASSIGNLEFT
 %right TOK_TILDE
 %left TOK_LSQR
-%left TOK_DBAR TOK_DAMP
-%left TOK_CMPEQ TOK_CMPNEQ
+%left TOK_BAR TOK_AMP TOK_HAT
+%left TOK_CMPEQ TOK_CMPNEQ TOK_CMPLESS TOK_CMPLESSEQ TOK_CMPGREATER TOK_CMPGREATEREQ
 %left TOK_ADD TOK_SUB
 
 %start program
@@ -176,20 +182,38 @@ var_decl : TOK_DECLARE ident TOK_LSQR numeric TOK_RSQR { $$ = new CVariableDecla
 	| TOK_DECLARE ident TOK_LSQR numeric TOK_RSQR TOK_ALIAS aliases { $$ = new CVariableDeclaration(*$2, *$4, *$7); delete $7; }
 	;
 
+affector : ident TOK_AS TOK_ZERO { $$ = new CAffect(*$1,TOK_ZERO); }
+	 | ident TOK_AS TOK_SIGN { $$ = new CAffect(*$1,TOK_SIGN); }
+	 | ident TOK_AS TOK_PARITYEVEN { $$ = new CAffect(*$1,TOK_PARITYEVEN); }
+	 | ident TOK_AS TOK_PARITYODD { $$ = new CAffect(*$1,TOK_PARITYODD); }
+	 | ident TOK_AS TOK_BIT TOK_OBR numeric TOK_CBR { $$ = new CAffect(*$1,TOK_BIT,*$5); }
+	 | ident TOK_AS TOK_CARRY TOK_OBR numeric TOK_CBR { $$ = new CAffect(*$1,TOK_CARRY,*$5); }
+	 ;
+
+affectors : affectors TOK_COMMA affector { $$->push_back($<affect>3); }
+	  | affector { $$ = new AffectorList(); $$->push_back($<affect>1); }
+	;
+
 expr : ident TOK_ASSIGNLEFT expr { $$ = new CAssignment(*$<ident>1,*$3); }
      | expr TOK_ASSIGNRIGHT ident { $$ = new CAssignment(*$<ident>3,*$1); }
      | expr TOK_ADD expr { $$ = new CBinaryOperator(*$1,TOK_ADD,*$3); }
      | expr TOK_SUB expr { $$ = new CBinaryOperator(*$1,TOK_SUB,*$3); }
      | expr TOK_CMPEQ expr { $$ = new CBinaryOperator(*$1,TOK_CMPEQ,*$3); }
      | expr TOK_CMPNEQ expr { $$ = new CBinaryOperator(*$1,TOK_CMPNEQ,*$3); }
-     | expr TOK_DBAR expr { $$ = new CBinaryOperator(*$1,TOK_DBAR,*$3); }
-     | expr TOK_DAMP expr { $$ = new CBinaryOperator(*$1,TOK_DAMP,*$3); }
+     | expr TOK_CMPLESSEQ expr { $$ = new CBinaryOperator(*$1,TOK_CMPLESSEQ,*$3); }
+     | expr TOK_CMPLESS expr { $$ = new CBinaryOperator(*$1,TOK_CMPLESS,*$3); }
+     | expr TOK_CMPGREATEREQ expr { $$ = new CBinaryOperator(*$1,TOK_CMPGREATEREQ,*$3); }
+     | expr TOK_CMPGREATER expr { $$ = new CBinaryOperator(*$1,TOK_CMPGREATER,*$3); }
+     | expr TOK_BAR expr { $$ = new CBinaryOperator(*$1,TOK_BAR,*$3); }
+     | expr TOK_AMP expr { $$ = new CBinaryOperator(*$1,TOK_AMP,*$3); }
+     | expr TOK_HAT expr { $$ = new CBinaryOperator(*$1,TOK_HAT,*$3); }
      | state_ident_list TOK_AT { $$ = new CStateTest(*$1); }
      | TOK_TILDE expr { $$ = new CBinaryOperator(*$2,TOK_TILDE,*$2); }
      | TOK_ROL TOK_OBR expr TOK_COMMA ident TOK_COMMA expr TOK_COMMA numeric TOK_CBR { $$ = new CRotationOperator(TOK_ROL,*$3,*$5,*$7,*$9); }
      | TOK_ROR TOK_OBR expr TOK_COMMA ident TOK_COMMA expr TOK_COMMA numeric TOK_CBR { $$ = new CRotationOperator(TOK_ROR,*$3,*$5,*$7,*$9); }
      | expr TOK_LSQR numeric TOK_RSQR { $3->Decrement(); $$ = new CCastOperator(*$1,*$3); }
      | expr TOK_LSQR numeric TOK_DDOT numeric TOK_RSQR { $$ = new CCastOperator(*$1,*$3,*$5); }
+     | TOK_AFFECT affectors TOK_LBRACE expr TOK_RBRACE { $$ = new CAffector(*$2,*$4); }
      | ident { $<ident>$ = $1; }
      | numeric { $$ = new CInteger(*$1); delete $1; }
      | TOK_OBR expr TOK_CBR { $$ = $2; }

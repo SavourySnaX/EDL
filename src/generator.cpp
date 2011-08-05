@@ -36,25 +36,28 @@ void CodeGenContext::generateCode(CBlock& root)
 	
 	root.codeGen(*this);	/* Generate complete code - starting at no block (global space) */
 
-	/* Finally create an entry point - which does nothing for now */
-	vector<const Type*> argTypes;
-	FunctionType *ftype = FunctionType::get(Type::getVoidTy(getGlobalContext())/* Type::getInt64Ty(getGlobalContext())*/, argTypes, false);
-	mainFunction = Function::Create(ftype, GlobalValue::ExternalLinkage, "moduleTester", module);
-	BasicBlock *bblock = BasicBlock::Create(getGlobalContext(), "entry", mainFunction, 0);
-	
-	/* Push a new variable/block context */
-	pushBlock(bblock);
-
-	for (int a=0;a<9;a++)
+	if (!JustCompiledOutput)
 	{
-		for (int b=0;b<handlersToTest.size();b++)
-		{
-			CallInst::Create(handlersToTest[b],"",bblock);
-		}
-	}
+		/* Finally create an entry point - which does nothing for now */
+		vector<const Type*> argTypes;
+		FunctionType *ftype = FunctionType::get(Type::getVoidTy(getGlobalContext())/* Type::getInt64Ty(getGlobalContext())*/, argTypes, false);
+		mainFunction = Function::Create(ftype, GlobalValue::ExternalLinkage, "moduleTester", module);
+		BasicBlock *bblock = BasicBlock::Create(getGlobalContext(), "entry", mainFunction, 0);
 
-	ReturnInst::Create(getGlobalContext(), bblock);
-	popBlock();
+		/* Push a new variable/block context */
+		pushBlock(bblock);
+
+		for (int a=0;a<9;a++)
+		{
+			for (int b=0;b<handlersToTest.size();b++)
+			{
+				CallInst::Create(handlersToTest[b],"",bblock);
+			}
+		}
+
+		ReturnInst::Create(getGlobalContext(), bblock);
+		popBlock();
+	}
 
 	if (errorFlagged)
 	{
@@ -440,6 +443,10 @@ Value* CDebugLine::codeGen(CodeGenContext& context)		// Refactored away onto its
 
 	return NULL;
 }
+bool CBinaryOperator::IsCarryExpression()
+{
+	return (op==TOK_ADD || op==TOK_SUB); 
+}
 
 Value* CBinaryOperator::codeGen(CodeGenContext& context)
 {
@@ -449,6 +456,11 @@ Value* CBinaryOperator::codeGen(CodeGenContext& context)
 	left = lhs.codeGen(context);
 	right = rhs.codeGen(context);
 
+	return codeGen(context,left,right);
+}
+
+Value* CBinaryOperator::codeGen(CodeGenContext& context,Value* left,Value* right)
+{
 	if (left->getType()->isIntegerTy() && right->getType()->isIntegerTy())
 	{
 		const IntegerType* leftType = cast<IntegerType>(left->getType());
@@ -477,10 +489,20 @@ Value* CBinaryOperator::codeGen(CodeGenContext& context)
 			return CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_EQ,left, right, "", context.currentBlock());
 		case TOK_CMPNEQ:
 			return CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_NE,left, right, "", context.currentBlock());
-		case TOK_DBAR:
+		case TOK_CMPLESS:
+			return CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_ULT,left, right, "", context.currentBlock());
+		case TOK_CMPLESSEQ:
+			return CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_ULE,left, right, "", context.currentBlock());
+		case TOK_CMPGREATER:
+			return CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_UGT,left, right, "", context.currentBlock());
+		case TOK_CMPGREATEREQ:
+			return CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_UGE,left, right, "", context.currentBlock());
+		case TOK_BAR:
 			return BinaryOperator::Create(Instruction::Or,left,right,"",context.currentBlock());
-		case TOK_DAMP:
+		case TOK_AMP:
 			return BinaryOperator::Create(Instruction::And,left,right,"",context.currentBlock());
+		case TOK_HAT:
+			return BinaryOperator::Create(Instruction::Xor,left,right,"",context.currentBlock());
 		case TOK_TILDE:
 			return BinaryOperator::Create(Instruction::Xor,left,ConstantInt::get(getGlobalContext(),~APInt(leftType->getBitWidth(),0)),"",context.currentBlock());
 		}
@@ -1556,3 +1578,221 @@ Value* CMappingDeclaration::codeGen(CodeGenContext& context)
 
 	return NULL;
 }
+
+CInteger CAffect::emptyParam(stringZero);
+
+Value* CAffect::codeGen(CodeGenContext& context,Value* exprResult,Value* lhs,Value* rhs,int optype)
+{
+	BitVariable var;
+	if (context.locals().find(ident.name) == context.locals().end())
+	{
+		if (context.globals().find(ident.name) == context.globals().end())
+		{
+			std::cerr << "undeclared variable " << ident.name << std::endl;
+			context.errorFlagged=true;
+			return NULL;
+		}
+		else
+		{
+			var=context.globals()[ident.name];
+		}
+	}
+	else
+	{
+		var=context.locals()[ident.name];
+	}
+	
+	if (var.mappingRef)
+	{
+		std::cerr << "Cannot perform operation on a mappingRef" << std::endl;
+		context.errorFlagged=true;
+		return NULL;
+	}
+
+	const IntegerType* resultType = cast<IntegerType>(exprResult->getType());
+	Value *answer;
+	switch (type)
+	{
+		case TOK_ZERO:
+			answer=CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_EQ,exprResult, ConstantInt::get(getGlobalContext(),APInt(resultType->getBitWidth(),0,false)), "", context.currentBlock());
+			break;
+		case TOK_SIGN:
+			{
+				APInt signBit(resultType->getBitWidth(),0,false);
+				signBit.setBit(resultType->getBitWidth()-1);
+				answer=BinaryOperator::Create(Instruction::And,exprResult,ConstantInt::get(getGlobalContext(),signBit),"",context.currentBlock());
+				answer=BinaryOperator::Create(Instruction::LShr,answer,ConstantInt::get(getGlobalContext(),APInt(resultType->getBitWidth(),(uint64_t)(resultType->getBitWidth()-1),false)),"",context.currentBlock());
+			}
+			break;
+		case TOK_PARITYODD:
+		case TOK_PARITYEVEN:
+			
+			// To generate the parity of a number, we use the parallel method. minimum width is 4 bits then for each ^2 bit size we add an extra shift operation
+			{
+				APInt computeClosestPower2Size(3,"100",2);
+				unsigned count=0;
+				while (true)
+				{
+					if (resultType->getBitWidth() <= computeClosestPower2Size.getLimitedValue())
+					{
+						// Output a casting operator to up the size of type
+						const Type* ty = Type::getIntNTy(getGlobalContext(),computeClosestPower2Size.getLimitedValue());
+						Instruction::CastOps op = CastInst::getCastOpcode(exprResult,false,ty,false);
+						answer = CastInst::Create(op,exprResult,ty,"",context.currentBlock());
+						break;
+					}
+
+					count++;
+					computeClosestPower2Size=computeClosestPower2Size.zext(3+count);
+					computeClosestPower2Size=computeClosestPower2Size.shl(1);			//TODO fix infinite loop if we ever create more bits than APInt can handle! 
+				}
+
+				// answer is now appropriate size, next step for each count shrink the bits so we can test a nibble
+
+				computeClosestPower2Size=computeClosestPower2Size.zext(computeClosestPower2Size.getLimitedValue());
+				computeClosestPower2Size=computeClosestPower2Size.lshr(1);
+				for (int a=0;a<count;a++)
+				{
+					Value *shifted = BinaryOperator::Create(Instruction::LShr,answer,ConstantInt::get(getGlobalContext(),computeClosestPower2Size),"",context.currentBlock());
+					answer=BinaryOperator::Create(Instruction::Xor,shifted,answer,"",context.currentBlock());
+					computeClosestPower2Size=computeClosestPower2Size.lshr(1);
+				}
+
+				// final part, mask to nibble size and use this to lookup into magic constant 0x6996 (which is simply a table look up for the parities of a nibble)
+				answer=BinaryOperator::Create(Instruction::And,answer,ConstantInt::get(getGlobalContext(),APInt(computeClosestPower2Size.getBitWidth(),0xF,false)),"",context.currentBlock());
+				const Type* ty = Type::getIntNTy(getGlobalContext(),16);
+				Instruction::CastOps op = CastInst::getCastOpcode(answer,false,ty,false);
+				answer = CastInst::Create(op,answer,ty,"",context.currentBlock());
+				if (type == TOK_PARITYEVEN)
+				{
+					answer=BinaryOperator::Create(Instruction::LShr,ConstantInt::get(getGlobalContext(),~APInt(16,0x6996,false)),answer,"",context.currentBlock());
+				}
+				else
+				{
+					answer=BinaryOperator::Create(Instruction::LShr,ConstantInt::get(getGlobalContext(),APInt(16,0x6996,false)),answer,"",context.currentBlock());
+				}
+			}
+			break;
+		case TOK_BIT:
+			{
+				APInt bit(resultType->getBitWidth(),0,false);
+				APInt shift = param.integer.zextOrTrunc(resultType->getBitWidth());
+				bit.setBit(param.integer.getLimitedValue());
+				answer=BinaryOperator::Create(Instruction::And,exprResult,ConstantInt::get(getGlobalContext(),bit),"",context.currentBlock());
+				answer=BinaryOperator::Create(Instruction::LShr,answer,ConstantInt::get(getGlobalContext(),shift),"",context.currentBlock());
+			}
+			break;
+
+		case TOK_CARRY:
+			{
+				if (lhs==NULL || rhs==NULL)
+				{
+					std::cerr << "CARRY is not supported for non carry expressions" << std::endl;
+					context.errorFlagged=true;
+					return NULL;
+				}
+				if (param.integer.getLimitedValue() >= resultType->getBitWidth())
+				{
+					std::cerr << "Bit to carry is outside of range for result" << std::endl;
+					context.errorFlagged=true;
+					return NULL;
+				}
+				
+				const IntegerType* lhsType = cast<IntegerType>(lhs->getType());
+				const IntegerType* rhsType = cast<IntegerType>(rhs->getType());
+		       		
+				Instruction::CastOps lhsOp = CastInst::getCastOpcode(lhs,false,resultType,false);
+				lhs = CastInst::Create(lhsOp,lhs,resultType,"cast",context.currentBlock());
+				Instruction::CastOps rhsOp = CastInst::getCastOpcode(rhs,false,resultType,false);
+				rhs = CastInst::Create(rhsOp,rhs,resultType,"cast",context.currentBlock());
+
+				if (optype==TOK_ADD)
+				{
+					//((lh & rh) | ((~Result) & rh) | (lh & (~Result)))
+
+					// ~Result
+					Value* cmpResult = BinaryOperator::Create(Instruction::Xor,exprResult,ConstantInt::get(getGlobalContext(),~APInt(resultType->getBitWidth(),0,false)),"",context.currentBlock());
+
+					// lh&rh
+					Value* expr1 = BinaryOperator::Create(Instruction::And,rhs,lhs,"",context.currentBlock());
+					// ~Result & rh
+					Value* expr2 = BinaryOperator::Create(Instruction::And,cmpResult,lhs,"",context.currentBlock());
+					// lh & ~Result
+					Value* expr3 = BinaryOperator::Create(Instruction::And,rhs,cmpResult,"",context.currentBlock());
+
+					// lh&rh | ~Result&rh
+					Value* combine = BinaryOperator::Create(Instruction::Or,expr1,expr2,"",context.currentBlock());
+					// (lh&rh | ~Result&rh) | lh&~Result
+					answer = BinaryOperator::Create(Instruction::Or,combine,expr3,"",context.currentBlock());
+				}
+				else
+				{
+					//((~lh&Result) | (~lh&rh) | (rh&Result)
+					
+					// ~lh
+					Value* cmpLhs = BinaryOperator::Create(Instruction::Xor,lhs,ConstantInt::get(getGlobalContext(),~APInt(resultType->getBitWidth(),0,false)),"",context.currentBlock());
+
+					// ~lh&Result
+					Value* expr1 = BinaryOperator::Create(Instruction::And,cmpLhs,exprResult,"",context.currentBlock());
+					// ~lh & rh
+					Value* expr2 = BinaryOperator::Create(Instruction::And,cmpLhs,rhs,"",context.currentBlock());
+					// rh & Result
+					Value* expr3 = BinaryOperator::Create(Instruction::And,rhs,exprResult,"",context.currentBlock());
+
+					// ~lh&Result | ~lh&rh
+					Value* combine = BinaryOperator::Create(Instruction::Or,expr1,expr2,"",context.currentBlock());
+					// (~lh&Result | ~lh&rh) | rh&Result
+					answer = BinaryOperator::Create(Instruction::Or,combine,expr3,"",context.currentBlock());
+				}
+
+				APInt bit(resultType->getBitWidth(),0,false);
+				APInt shift = param.integer.zextOrTrunc(resultType->getBitWidth());
+				bit.setBit(param.integer.getLimitedValue());
+				ConstantInt* bitC=ConstantInt::get(getGlobalContext(),bit);
+				ConstantInt* shiftC=ConstantInt::get(getGlobalContext(),shift);
+
+				answer=BinaryOperator::Create(Instruction::And,answer,bitC,"",context.currentBlock());
+				answer=BinaryOperator::Create(Instruction::LShr,answer,shiftC,"",context.currentBlock());
+			}
+			break;
+
+		default:
+			std::cerr << "Unknown affector" << std::endl;
+			context.errorFlagged=true;
+			return NULL;
+	}
+
+	CAssignment::generateAssignment(var,answer,context);
+
+	return NULL;
+}
+
+Value* CAffector::codeGen(CodeGenContext& context)
+{
+	Value* left=NULL;
+	Value* right=NULL;
+	Value* exprResult=NULL;
+	int type=0;
+
+	if (expr.IsCarryExpression())
+	{
+		CBinaryOperator* oper = cast<CBinaryOperator>(&expr);
+		left=oper->lhs.codeGen(context);
+		right=oper->rhs.codeGen(context);
+
+		type=oper->op;
+		exprResult = oper->codeGen(context,left,right);
+	}
+	else
+	{
+		exprResult = expr.codeGen(context);
+	}
+
+	for (int a=0;a<affectors.size();a++)
+	{
+		affectors[a]->codeGen(context,exprResult,left,right,type);
+	}
+
+	return exprResult;
+}
+

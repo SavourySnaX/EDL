@@ -22,6 +22,7 @@ class CDebugTrace;
 class CStateIdent;
 class COperand;
 class CMapping;
+class CAffect;
 
 typedef std::vector<CStatement*> StatementList;
 typedef std::vector<CExpression*> ExpressionList;
@@ -32,6 +33,7 @@ typedef std::vector<CDebugTrace*> DebugList;
 typedef std::vector<CStateIdent*> StateIdentList;
 typedef std::vector<COperand*> OperandList;
 typedef std::vector<CMapping*> MappingList;
+typedef std::vector<CAffect*> AffectorList;
 
 class CNode {
 public:
@@ -42,6 +44,7 @@ public:
 class CExpression : public CNode {
 public:
 	virtual bool IsIdentifierExpression() { return false; }
+	virtual bool IsCarryExpression() { return false; }
 };
 
 class CStatement : public CNode {
@@ -193,7 +196,11 @@ public:
 	CExpression& rhs;
 	CBinaryOperator(CExpression& lhs, int op, CExpression& rhs) :
 		lhs(lhs), rhs(rhs), op(op) { }
+
 	virtual llvm::Value* codeGen(CodeGenContext& context);
+	llvm::Value* codeGen(CodeGenContext& context,llvm::Value* left,llvm::Value* right);
+
+	virtual bool IsCarryExpression();
 };
 
 class CCastOperator : public CExpression {
@@ -454,6 +461,32 @@ public:
 	CIdentifier& opcode;
 	CExecute(CIdentifier& opcode) :
 		opcode(opcode) { }
+	virtual llvm::Value* codeGen(CodeGenContext& context);
+};
+
+class CAffect : public CExpression {
+public:
+	const CIdentifier& ident;
+	int type;
+	CInteger& param;
+	static CInteger emptyParam;
+
+	CAffect(CIdentifier& ident,int type) :
+		ident(ident),type(type),param(emptyParam) { }
+	CAffect(CIdentifier& ident,int type,CInteger& param) :
+		ident(ident),type(type),param(param) { }
+
+	llvm::Value* codeGen(CodeGenContext& context,llvm::Value* exprResult,llvm::Value* lhs,llvm::Value* rhs,int type);
+};
+
+class CAffector : public CExpression {
+public:
+	AffectorList affectors;
+	CExpression& expr;
+	
+	CAffector(AffectorList& affectors,CExpression& expr) :
+		affectors(affectors),expr(expr) { }
+
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
 

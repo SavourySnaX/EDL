@@ -26,6 +26,15 @@ EXECUTE					{ return TOKEN(TOK_EXECUTE); }
 ROL					{ return TOKEN(TOK_ROL); }
 ROR					{ return TOKEN(TOK_ROR); }
 MAPPING					{ return TOKEN(TOK_MAPPING); }
+AFFECT					{ return TOKEN(TOK_AFFECT); }
+AS					{ return TOKEN(TOK_AS); }
+
+ZERO					{ return TOKEN(TOK_ZERO); }
+SIGN					{ return TOKEN(TOK_SIGN); }
+PARITYEVEN				{ return TOKEN(TOK_PARITYEVEN); }
+PARITYODD				{ return TOKEN(TOK_PARITYODD); }
+CARRY					{ return TOKEN(TOK_CARRY); }
+BIT					{ return TOKEN(TOK_BIT); }
 
 DEBUG_TRACE				{ return TOKEN(TOK_TRACE); }
 BASE					{ return TOKEN(TOK_BASE); }
@@ -39,8 +48,6 @@ BASE					{ return TOKEN(TOK_BASE); }
 ".."					{ return TOKEN(TOK_DDOT); }
 "!="					{ return TOKEN(TOK_CMPNEQ); }
 "=="					{ return TOKEN(TOK_CMPEQ); }
-"||"					{ return TOKEN(TOK_DBAR); }
-"&&"					{ return TOKEN(TOK_DAMP); }
 "{"					{ return TOKEN(TOK_LBRACE); }
 "}"					{ return TOKEN(TOK_RBRACE); }
 "["					{ return TOKEN(TOK_LSQR); }
@@ -55,9 +62,15 @@ BASE					{ return TOKEN(TOK_BASE); }
 "("					{ return TOKEN(TOK_OBR); }
 ")"					{ return TOKEN(TOK_CBR); }
 "|"					{ return TOKEN(TOK_BAR); }
+"&"					{ return TOKEN(TOK_AMP); }
+"^"					{ return TOKEN(TOK_HAT); }
 "."					{ return TOKEN(TOK_DOT); }
 "@"					{ return TOKEN(TOK_AT); }
 "~"					{ return TOKEN(TOK_TILDE); }
+"<="					{ return TOKEN(TOK_CMPLESSEQ); }
+"<"					{ return TOKEN(TOK_CMPLESS); }
+">="					{ return TOKEN(TOK_CMPGREATEREQ); }
+">"					{ return TOKEN(TOK_CMPGREATER); }
 
 [ \t\r]					{ /* Consume white space */ }
 #.*					{ /* Ignore comments */ }
