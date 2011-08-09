@@ -525,10 +525,10 @@ MAPPING NNN[3]
 #
 # INSTRUCTION dissasm bitPattern	- defines an instruction
 #
-#		dissasm can use %xn to take values from the decode stream - for instance "MOV %M0,%M1" for 0:1:DDD[3]:SSS[3] - would give "MOV A,B" if opcode was %01111001
+#		dissasm can use %xn to take values from the decode stream - for instance "MOV %M0,%M1" for 0:1:DDD[3]:SSS[3] - would give "MOV A,B" if opcode was %01111000
 #			where x can be :
-#						M - decode mapping value
-#						$ - display hexadecimal value
+#						M - decode mapping value (from opcode - never from additional operands)
+#						$ - memory reference, e.g. %$1 means opcode + 1 - at present it ignores the size of types following opcode!
 #			where n can be :
 #						0 - 9 (representing which input value to take... it ignores constants as in example above.
 #
@@ -547,7 +547,7 @@ MAPPING NNN[3]
 #
 #	
 
-INSTRUCTION	"MOV %M0,%M1"	%01:DDD:SSS
+INSTRUCTION	"MOV %M1,%M0"	%01:DDD:SSS
 {
 	IF O1.FETCH.T4@
 	{
@@ -720,7 +720,7 @@ INSTRUCTION	"LXI %M0,%$2%$1"	%00:RP:%0001,B2[8],B3[8]
 	}
 }
 
-INSTRUCTION	"LDA %$1%$0"	%00111010,B2[8],B3[8]
+INSTRUCTION	"LDA %$2%$1"	%00111010,B2[8],B3[8]
 {
 	IF O1.FETCH.T4@
 	{
@@ -772,7 +772,7 @@ INSTRUCTION	"LDA %$1%$0"	%00111010,B2[8],B3[8]
 	}
 }
 
-INSTRUCTION	"STA %$1%$0"	%00110010,B2[8],B3[8]
+INSTRUCTION	"STA %$2%$1"	%00110010,B2[8],B3[8]
 {
 	IF O1.FETCH.T4@
 	{
@@ -823,7 +823,7 @@ INSTRUCTION	"STA %$1%$0"	%00110010,B2[8],B3[8]
 	}
 }
 
-INSTRUCTION	"LHLD %$1%$0"	%00101010,B2[8],B3[8]
+INSTRUCTION	"LHLD %$2%$1"	%00101010,B2[8],B3[8]
 {
 	IF O1.FETCH.T4@
 	{
@@ -885,7 +885,7 @@ INSTRUCTION	"LHLD %$1%$0"	%00101010,B2[8],B3[8]
 
 }
 
-INSTRUCTION	"SHLD %$1%$0"	%00100010,B2[8],B3[8]
+INSTRUCTION	"SHLD %$2%$1"	%00100010,B2[8],B3[8]
 {
 	IF O1.FETCH.T4@
 	{
@@ -1048,7 +1048,7 @@ INSTRUCTION	"ADD M"		%10000110
 	}
 }
 
-INSTRUCTION	"ADI %$0"		%11000110,B2[8]
+INSTRUCTION	"ADI %$1"		%11000110,B2[8]
 {
 	IF O1.FETCH.T2@
 	{
@@ -1129,7 +1129,7 @@ INSTRUCTION	"ADC M"		%10001110
 	}
 }
 
-INSTRUCTION	"ACI %$0"	%11001110,B2[8]
+INSTRUCTION	"ACI %$1"	%11001110,B2[8]
 {
 	IF O1.FETCH.T2@
 	{
@@ -1210,7 +1210,7 @@ INSTRUCTION	"SUB M"		%10010110
 	}
 }
 
-INSTRUCTION	"SUI %$0"	%11010110,B2[8]
+INSTRUCTION	"SUI %$1"	%11010110,B2[8]
 {
 	IF O1.FETCH.T2@
 	{
@@ -1291,7 +1291,7 @@ INSTRUCTION	"SBB M"		%10011110
 	}
 }
 
-INSTRUCTION	"SBI %$0"	%11011110,B2[8]
+INSTRUCTION	"SBI %$1"	%11011110,B2[8]
 {
 	IF O1.FETCH.T2@
 	{
@@ -1612,7 +1612,7 @@ INSTRUCTION	"ANA M"		%10100110
 	}
 }
 
-INSTRUCTION	"ANI %$0"		%11100110,B2[8]
+INSTRUCTION	"ANI %$1"		%11100110,B2[8]
 {
 	IF O1.FETCH.T2@
 	{
@@ -1699,7 +1699,7 @@ INSTRUCTION	"XRA M"		%10101110
 	}
 }
 
-INSTRUCTION	"XRI %$0"	%11101110,B2[8]
+INSTRUCTION	"XRI %$1"	%11101110,B2[8]
 {
 	IF O1.FETCH.T2@
 	{
@@ -1786,7 +1786,7 @@ INSTRUCTION	"ORA M"		%10110110
 	}
 }
 
-INSTRUCTION	"ORI %$0"	%11110110,B2[8]
+INSTRUCTION	"ORI %$1"	%11110110,B2[8]
 {
 	IF O1.FETCH.T2@
 	{
@@ -1869,7 +1869,7 @@ INSTRUCTION	"CMP M"		%10111110
 	}
 }
 
-INSTRUCTION	"CPI %$0"	%11111110,B2[8]
+INSTRUCTION	"CPI %$1"	%11111110,B2[8]
 {
 	IF O1.FETCH.T2@
 	{
@@ -1986,7 +1986,7 @@ INSTRUCTION	"STC"		%00110111
 	}
 }
 
-INSTRUCTION	"JMP %$1%$0"	%1100:UNOFFICIAL[1]:%011,B2[8],B3[8]	# %11000011 is the official opcode for JMP, this also generates unofficial permutations
+INSTRUCTION	"JMP %$2%$1"	%1100:UNOFFICIAL[1]:%011,B2[8],B3[8]	# %11000011 is the official opcode for JMP, this also generates unofficial permutations
 {
 	IF O1.FETCH.T1@
 	{
@@ -2084,7 +2084,7 @@ INSTRUCTION	"J%M0 %$2%$1"		%11:CCC:%010,B2[8],B3[8]
 	}
 }
 
-INSTRUCTION	"CALL %$1%$0"	%11:UNOFFICIAL[2]:%1101,B2[8],B3[8]	# %11001101 is official opcode for CALL, this also generates unofficial permutations
+INSTRUCTION	"CALL %$2%$1"	%11:UNOFFICIAL[2]:%1101,B2[8],B3[8]	# %11001101 is official opcode for CALL, this also generates unofficial permutations
 {
 	IF O1.FETCH.T1@
 	{
@@ -2580,7 +2580,7 @@ INSTRUCTION	"XTHL"		%11100011
 	
 }
 
-INSTRUCTION	"IN %$0"	%11011011,B2[8]
+INSTRUCTION	"IN %$1"	%11011011,B2[8]
 {
 	IF O1.FETCH.T4@
 	{
@@ -2613,7 +2613,7 @@ INSTRUCTION	"IN %$0"	%11011011,B2[8]
 	}
 }
 
-INSTRUCTION	"OUT %$0"	%11010011,B2[8]
+INSTRUCTION	"OUT %$1"	%11010011,B2[8]
 {
 	IF O1.FETCH.T4@
 	{
