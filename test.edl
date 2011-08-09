@@ -994,9 +994,9 @@ INSTRUCTION	"XCHG"		%11101011
 {
 	IF O1.FETCH.T4@
 	{
-		TMP <- DE;
+		WZ <- DE;
 		DE <- HL;
-		HL <- TMP;
+		HL <- WZ;
 		NEXT O1.FETCH.T1;
 	}
 }
@@ -1514,14 +1514,10 @@ INSTRUCTION	"DAD %M0"	%00:RP:%1001
 		}
 		IF STAGECHECK == 0
 		{
-			DEBUG_TRACE A_LATCH,TMP;
-
 			AFFECT cy AS CARRY(7)
 			{
 				A_LATCH + TMP 
 			} -> L;
-
-			DEBUG_TRACE L,cy;
 
 			STAGECHECK<-1;
 		}
@@ -2396,12 +2392,12 @@ INSTRUCTION	"PUSH %M0"	%11:PRP:%0101
 	{
 		IF STAGECHECK == 1
 		{
-			PRP[8..15]->DATA_BUFF;
+			PRP[0..7]->DATA_BUFF;
 		}
 		IF STAGECHECK == 0
 		{
 			SP <- SP-1;
-			PRP[0..7] ->DATA_BUFF;
+			PRP[8..15] ->DATA_BUFF;
 			STAGECHECK<-1;
 		}
 	}
