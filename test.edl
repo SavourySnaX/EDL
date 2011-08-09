@@ -44,7 +44,7 @@ DECLARE	IR[8];
 DECLARE	WZ[16] 		ALIAS W[8]:Z[8];
 DECLARE	ADDR_BUFF[16];
 DECLARE	DATA_BUFF[8];
-DECLARE	IFLAGS[3] 	ALIAS JMP[1]:INT_LATCH[1]:HLD_LATCH[1];						# JMP Indicates PC should be overridden in conditional instructions
+DECLARE	IFLAGS[4] 	ALIAS INT_REQ[1]:JMP[1]:INT_LATCH[1]:HLD_LATCH[1];	# JMP Indicates PC should be overridden in conditional instructions
 
 # I NEED A WAY TO DETERMINE WHICH CYCLE IS BEING DONE, SINCE I MIGHT WANT TO DO 2 MEMIN CYCLES ON AN INSTRUCTION AND I NEED TO BE ABLE TO
 #INDIVIDUALY IDENTIFY THEM. SINCE THE LANGUAGE DOES NOT OFFER ANY HELP AT THE MOMENT, THIS IS DONE USING THE BELOW REGISTER
@@ -94,7 +94,6 @@ HANDLER		O1
 					{
 						PC <- PC+1;
 					}
-					INT_LATCH <- 0;
 					IF (PIN_READY == 0)
 					{
 						PUSH O1.TW;
@@ -103,6 +102,12 @@ HANDLER		O1
 
 				STATE T3
 				{
+					INT_LATCH <- 0;
+					IF (INT_REQ==1)
+					{
+						INT_LATCH<-1;
+						INT_REQ<-0;
+					}
 					PIN_WAIT <- 0;
 					PIN_D -> DATA_BUFF;	# Latch data at start of T3
 
@@ -323,6 +328,7 @@ HANDLER		O1
 			{
 				STATE T1
 				{
+					0 -> INT_REQ;
 					0 -> INT_LATCH;
 				}
 				STATE T2
@@ -434,7 +440,7 @@ HANDLER		RESET
 	}
 	IF PIN_RESET==1
 	{
-		NEXT O1.RESET;
+		NEXT O1.RESET.T1;
 	}
 }
 
@@ -442,11 +448,7 @@ HANDLER		INT
 {
 	IF PIN_INTE == 1
 	{
-		INT_LATCH <- 1;
-	}
-	IF PIN_INTE == 0
-	{
-		INT_LATCH <- 0;
+		INT_REQ <- 1;
 	}
 }
 
@@ -1991,7 +1993,8 @@ INSTRUCTION	"JMP %$2%$1"	%1100:UNOFFICIAL[1]:%011,B2[8],B3[8]	# %11000011 is the
 
 	IF O1.FETCH.T2@
 	{
-		WZ + 1 -> PC;
+		TMP<- ~INT_LATCH;
+		WZ + TMP -> PC;
 	}
 
 	IF O1.FETCH.T4@
@@ -2041,7 +2044,8 @@ INSTRUCTION	"J%M0 %$2%$1"		%11:CCC:%010,B2[8],B3[8]
 	{
 		IF (JMP == 1)
 		{
-			WZ + 1 -> PC;
+			TMP<- ~INT_LATCH;
+			WZ + TMP -> PC;
 		}
 	}
 
@@ -2089,7 +2093,8 @@ INSTRUCTION	"CALL %$2%$1"	%11:UNOFFICIAL[2]:%1101,B2[8],B3[8]	# %11001101 is off
 
 	IF O1.FETCH.T2@
 	{
-		WZ + 1 -> PC;
+		TMP<- ~INT_LATCH;
+		WZ + TMP -> PC;
 	}
 
 	IF O1.FETCH.T5@
@@ -2160,7 +2165,8 @@ INSTRUCTION	"C%M0 %$2%$1"	%11:CCC:%100,B2[8],B3[8]
 	{
 		IF (JMP == 1)
 		{
-			WZ + 1 -> PC;
+			TMP<- ~INT_LATCH;
+			WZ + TMP -> PC;
 		}
 	}
 
@@ -2232,7 +2238,8 @@ INSTRUCTION	"RET"		%110:UNOFFICIAL[1]:%1001	# %11001001 is the official opcode f
 
 	IF O1.FETCH.T2@
 	{
-		WZ + 1 -> PC;
+		TMP<- ~INT_LATCH;
+		WZ + TMP -> PC;
 	}
 
 	IF O1.FETCH.T4@
@@ -2277,7 +2284,8 @@ INSTRUCTION	"R%M0"		%11:CCC:%000
 	{
 		IF (JMP == 1)
 		{
-			WZ + 1 -> PC;
+			TMP<- ~INT_LATCH;
+			WZ + TMP -> PC;
 		}
 	}
 
@@ -2326,7 +2334,8 @@ INSTRUCTION	"RST %M0"	%11:NNN:%111
 
 	IF O1.FETCH.T2@
 	{
-		WZ + 1 -> PC;
+		TMP<- ~INT_LATCH;
+		WZ + TMP -> PC;
 	}
 
 	IF O1.FETCH.T4@
@@ -2669,6 +2678,7 @@ INSTRUCTION	"HLT"		%01110110
 {
 	IF O1.FETCH.T4@
 	{
+		DEBUG_TRACE "HALTED";
 		NEXT O1.TWH.T1;
 	}
 }
