@@ -253,8 +253,8 @@ Value* CIdentifier::codeGen(CodeGenContext& context)
 		ConstantInt* const_intMask = ConstantInt::get(getGlobalContext(), var.mask);	
 		BinaryOperator* andInst = BinaryOperator::Create(Instruction::And, final, const_intMask , "Masking", context.currentBlock());
 		ConstantInt* const_intShift = ConstantInt::get(getGlobalContext(), var.shft);
-		BinaryOperator* shiftInst = BinaryOperator::Create(Instruction::LShr,andInst ,const_intShift, "Shifting", context.currentBlock());		// Need to shrink aliased type to correct size! at present this is done by calling trueSize - since it generates less code under normal circumstances, and i only need true size when displaying via DEBUG_TRACE
-		final = shiftInst;
+		BinaryOperator* shiftInst = BinaryOperator::Create(Instruction::LShr,andInst ,const_intShift, "Shifting", context.currentBlock());
+		final = trueSize(shiftInst,context);
 	}
 
 	return final;
@@ -348,7 +348,7 @@ Value* CDebugTraceIdentifier::codeGen(CodeGenContext& context)
 
 	identName.codeGen(context);
 
-	Value* loadedValue = ident.trueSize(ident.codeGen(context),context);
+	Value* loadedValue = ident.codeGen(context);
 	const IntegerType* valueType = cast<IntegerType>(loadedValue->getType());
 	unsigned bitWidth = valueType->getBitWidth();
 
