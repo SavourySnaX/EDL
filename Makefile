@@ -16,6 +16,8 @@ CPPFLAGS = -g -Isrc -Iout `$(LLVM_CONFIG) --cppflags $(LLVM_MODULES)`
 LDFLAGS = -g `$(LLVM_CONFIG) --ldflags $(LLVM_MODULES)`
 LIBS = `$(LLVM_CONFIG) --libs $(LLVM_MODULES)` -lpthread -lpsapi -limagehlp
 
+GLLIBS= -I../glfw-2.7.1/include ../glfw-2.7.1/lib/win32/libglfw.a -lglu32 -lopengl32
+
 clean:
 	$(RM) -rf out/*
 	rmdir out
@@ -41,8 +43,16 @@ out/%.o: src/%.cpp
 edl: $(OBJS)
 	g++ -o $@ $(LDFLAGS) $(START_GROUP) $(OBJS) $(LIBS) $(END_GROUP)
 
-test:	edl test.edl testHarness.c
+test.lls: edl test.edl
 	edl.exe test.edl lalala >test.lls
+
+test.lls.s: test.lls
 	llc test.lls
+
+test: testHarness.c test.lls.s
 	gcc testHarness.c test.lls.s -o test.exe
 	test.exe | tee test.result
+
+invaders: test.lls.s invaders.c invadersDebug.c
+	gcc invaders.c invadersDebug.c test.lls.s $(GLLIBS) -o invaders.exe
+
