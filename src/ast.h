@@ -6,8 +6,8 @@
 #include <llvm/BasicBlock.h>
 
 
-#define MAX_SUPPORTED_STACK_DEPTH	(16)
-#define MAX_SUPPORTED_STACK_BITS	(4)
+#define MAX_SUPPORTED_STACK_DEPTH	(256)
+#define MAX_SUPPORTED_STACK_BITS	(8)
 
 class BitVariable;
 
@@ -23,6 +23,7 @@ class CStateIdent;
 class COperand;
 class CMapping;
 class CAffect;
+class CString;
 
 typedef std::vector<CStatement*> StatementList;
 typedef std::vector<CExpression*> ExpressionList;
@@ -55,6 +56,7 @@ public:
 	virtual void DeclareLocal(CodeGenContext& context,unsigned num)=0;
 	virtual llvm::APInt GetComputableConstant(CodeGenContext& context,unsigned num)=0;
 	virtual unsigned GetNumComputableConstants(CodeGenContext& context)=0;
+	virtual const CString* GetString(CodeGenContext& context,unsigned num,unsigned slot)=0;
 };
 
 class CInteger : public CExpression {
@@ -138,6 +140,7 @@ public:
 	virtual void DeclareLocal(CodeGenContext& context,unsigned num) {}
 	virtual llvm::APInt GetComputableConstant(CodeGenContext& context,unsigned num) { return integer.integer; }
 	virtual unsigned GetNumComputableConstants(CodeGenContext& context) { return 1; }
+	virtual const CString* GetString(CodeGenContext& context,unsigned num,unsigned slot) { return NULL; };
 };
 
 class COperandIdent : public COperand {
@@ -150,6 +153,7 @@ public:
 	virtual void DeclareLocal(CodeGenContext& context,unsigned num);
 	virtual llvm::APInt GetComputableConstant(CodeGenContext& context,unsigned num) { return llvm::APInt((unsigned int)size.integer.getLimitedValue(),(uint64_t)num,false); }
 	virtual unsigned GetNumComputableConstants(CodeGenContext& context) { return 1<<size.integer.getLimitedValue(); }
+	virtual const CString* GetString(CodeGenContext& context,unsigned num,unsigned slot) { return NULL; };
 };
 
 class COperandMapping : public COperand {
@@ -163,6 +167,7 @@ public:
 	virtual unsigned GetNumComputableConstants(CodeGenContext& context);
 	
 	BitVariable GetBitVariable(CodeGenContext& context,unsigned num);
+	virtual const CString* GetString(CodeGenContext& context,unsigned num,unsigned slot);
 };
 
 class COperandPartial : public COperand {
@@ -177,6 +182,7 @@ public:
 
 	virtual llvm::APInt GetComputableConstant(CodeGenContext& context,unsigned num);
 	virtual unsigned GetNumComputableConstants(CodeGenContext& context);
+	virtual const CString* GetString(CodeGenContext& context,unsigned num,unsigned slot);
 };
 
 class CMethodCall : public CExpression {
@@ -454,6 +460,8 @@ public:
 	CInstruction(CString& mnemonic,OperandList& operands, CBlock& block) :
 		mnemonic(mnemonic),operands(operands), block(block) { }
 	virtual llvm::Value* codeGen(CodeGenContext& context);
+
+	CString& processMnemonic(CodeGenContext& context,CString& in,llvm::APInt& opcode,unsigned num);
 };
 
 class CExecute : public CStatement {

@@ -1062,6 +1062,69 @@ Value* CHandlerDeclaration::codeGen(CodeGenContext& context)
 	return function;
 }
 	
+CString& CInstruction::processMnemonic(CodeGenContext& context,CString& in,llvm::APInt& opcode,unsigned num)
+{
+	static CString temp("");
+
+	temp.quoted="";
+
+	const char* ptr = in.quoted.c_str();
+
+	int state=0;
+	while (*ptr)
+	{
+		switch (state)
+		{
+		case 0:
+			if (*ptr == '%')
+			{
+				state=1;
+			}
+			else
+			{
+				temp.quoted+=*ptr;
+			}
+			break;
+		case 1:
+			if (*ptr == 'M')
+			{
+				state=2;
+				break;
+			}
+			if (*ptr == '$')
+			{
+				state=3;
+				break;
+			}
+
+			state=0;
+			break;
+		case 2:
+			{
+				unsigned offset=*ptr-'0';
+				const CString* res=operands[0]->GetString(context,num,offset);
+				if (res)
+				{
+					temp.quoted+=res->quoted.substr(1,res->quoted.length()-2);
+				}
+				state=0;
+			}
+			break;
+		case 3:
+			// for now simply output the reference as %ref (debug harness will have to deal with these references (which should be pc + refnum)
+			{
+				temp.quoted+='%';
+				temp.quoted+=*ptr;
+				state=0;
+			}
+			break;
+		}
+		ptr++;
+	}
+
+	return temp;
+}
+	
 Value* CInstruction::codeGen(CodeGenContext& context)
 {
 	vector<const Type*> argTypes;
@@ -1080,8 +1143,27 @@ Value* CInstruction::codeGen(CodeGenContext& context)
 	{
 		APInt opcode = operands[0]->GetComputableConstant(context,a);
 
+// Generate quick disasm function for this opcode (this is currently crude and only does the Opcode)
+
+		PointerType* PointerTy_2 = PointerType::get(IntegerType::get(getGlobalContext(), 8), 0);
+  
+  		FunctionType* ftypeDeb = FunctionType::get(/*Result=*/PointerTy_2,/*Params=*/argTypes,/*isVarArg=*/false);
+		Function* functionDeb = Function::Create(ftypeDeb, GlobalValue::ExternalLinkage, "DIS_"+opcode.toString(16,false),context.module);
+		BasicBlock *bblockDeb = BasicBlock::Create(getGlobalContext(), "entry", functionDeb, 0);
+
+		context.pushBlock(bblockDeb);
+
+		///do quick trace
+		CDebugTraceString opcodeString(processMnemonic(context,mnemonic,opcode,a));
+
+		ReturnInst::Create(getGlobalContext(),opcodeString.string.codeGen(context),context.currentBlock());
+
+		context.popBlock();
+
+// End disasm function
+
 		FunctionType *ftype = FunctionType::get(Type::getVoidTy(getGlobalContext()),argTypes, false);
-		Function* function = Function::Create(ftype, GlobalValue::InternalLinkage, "OPCODE_"+mnemonic.quoted.substr(1,mnemonic.quoted.length()-2) + "_" + opcode.toString(16,false),context.module);
+		Function* function = Function::Create(ftype, GlobalValue::InternalLinkage, "OPCODE_"+opcodeString.string.quoted.substr(1,mnemonic.quoted.length()-2) + "_" + opcode.toString(16,false),context.module);
 		BasicBlock *bblock = BasicBlock::Create(getGlobalContext(), "entry", function, 0);
 
 		context.pushBlock(bblock);
@@ -1522,6 +1604,36 @@ unsigned COperandMapping::GetNumComputableConstants(CodeGenContext& context)
 	}
 
 	return context.m_mappings[ident.name]->mappings.size();
+}
+	
+const CString* COperandMapping::GetString(CodeGenContext& context,unsigned num,unsigned slot)
+{
+	if (context.m_mappings.find(ident.name)==context.m_mappings.end())
+	{
+		std::cerr << "Undeclared mapping : " << ident.name << std::endl;
+		context.errorFlagged=true;
+		return NULL;
+	}
+
+	return &context.m_mappings[ident.name]->mappings[num]->label;
+}
+
+const CString* COperandPartial::GetString(CodeGenContext& context,unsigned num,unsigned slot)
+{
+	for (int a=operands.size()-1;a>=0;a--)
+	{
+		unsigned tNum=num % operands[a]->GetNumComputableConstants(context);
+		const CString* temp= operands[a]->GetString(context,tNum,slot);
+		if (temp!=NULL)
+		{
+			if (slot==0)
+				return temp;
+			slot--;
+		}
+		num/=operands[a]->GetNumComputableConstants(context);
+	}
+
+	return NULL;
 }
 
 void COperandPartial::DeclareLocal(CodeGenContext& context,unsigned num)
