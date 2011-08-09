@@ -25,6 +25,7 @@ clean:
 	$(RM) test.lls.s
 	$(RM) test.exe
 	$(RM) test.result
+	$(RM) invaders.exe
 	$(RM) edl.exe
 
 out/parser.cpp: src/edl.y 
