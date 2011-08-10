@@ -16,7 +16,7 @@ CPPFLAGS = -g -Isrc -Iout `$(LLVM_CONFIG) --cppflags $(LLVM_MODULES)`
 LDFLAGS = -g `$(LLVM_CONFIG) --ldflags $(LLVM_MODULES)`
 LIBS = `$(LLVM_CONFIG) --libs $(LLVM_MODULES)` -lpthread -lpsapi -limagehlp
 
-GLLIBS= -I../glfw-2.7.1/include ../glfw-2.7.1/lib/win32/libglfw.a -lglu32 -lopengl32
+GLLIBS= -I../glfw-3/include -L../glfw-3/lib -lglfw -lglu32 -lopengl32
 
 clean:
 	$(RM) -rf out/*
@@ -54,6 +54,6 @@ test: testHarness.c test.lls.s
 	gcc testHarness.c test.lls.s -o test.exe
 	test.exe | tee test.result
 
-invaders: test.lls.s invaders.c invadersDebug.c
-	gcc invaders.c invadersDebug.c test.lls.s $(GLLIBS) -o invaders.exe
+invaders: test.lls.s inv_src/invaders.c inv_src/invadersDebug.c inv_src/gui/font.h inv_src/gui/debugger.h inv_src/gui/debugger.c
+	gcc -g -O0 inv_src/invaders.c inv_src/invadersDebug.c inv_src/gui/debugger.c test.lls.s $(GLLIBS) -o invaders.exe
 

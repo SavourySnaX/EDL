@@ -12,24 +12,34 @@
  *
  */
 
+#include <GL/glfw3.h>
+#include <GL/glext.h>
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 
-#include <GL/glfw.h>
-#include <GL/glext.h>
+void DrawTiming(unsigned char* buffer,unsigned int width);
 
 extern unsigned short PIN_A;
 extern unsigned char PIN_D;
+extern unsigned char PIN_WAIT;
 extern unsigned char PIN_READY;
-extern unsigned char PIN_RESET;
+extern unsigned char PIN_O1;
+extern unsigned char PIN_HLDA;
 extern unsigned char PIN_SYNC;
 extern unsigned char PIN__WR;
+extern unsigned char PIN_DBIN;
+extern unsigned char PIN_INTE;
+extern unsigned char PIN_O2;
+extern unsigned char PIN_INT;
+extern unsigned char PIN_HOLD;
+extern unsigned char PIN_RESET;
 
 void O1(void);
 void O2(void);
 void RESET(void);
-void INT(void);
+void INT_PIN(void);
 
 extern unsigned char	SYNC_FETCH;
 extern unsigned char	SYNC_MEM_READ;
@@ -316,95 +326,149 @@ void MEM_Handler()
 	}
 }
 
+#define TIMING_WIDTH	680
+#define TIMING_HEIGHT	400
+
 #define HEIGHT	256
 #define	WIDTH	256
 
-unsigned char videoMemory[WIDTH*HEIGHT*sizeof(unsigned int)];
+#define MAX_WINDOWS		(8)
 
-void ShowScreen() 
+#define MAIN_WINDOW		0
+#define TIMING_WINDOW		1
+
+GLFWwindow windows[MAX_WINDOWS];
+unsigned char *videoMemory[MAX_WINDOWS];
+GLint videoTexture[MAX_WINDOWS];
+
+void ShowScreen(int windowNum,int w,int h)
 {
-	int x,y,b;
-	for (y=32;y<256;y++)
+	if (windowNum==MAIN_WINDOW)
 	{
-		for (x=0;x<32;x++)
+		int x,y,b;
+		unsigned char* outputTexture = videoMemory[windowNum];
+		for (y=32;y<256;y++)
 		{
-			unsigned char mask=0x01;
-			for (b=0;b<8;b++)
+			for (x=0;x<32;x++)
 			{
-				if (Ram[y*32 + x]&mask)
+				unsigned char mask=0x01;
+				for (b=0;b<8;b++)
 				{
-					videoMemory[(x*8+b+y*256)*4+0]=0xFF;
-					videoMemory[(x*8+b+y*256)*4+1]=0xFF;
-					videoMemory[(x*8+b+y*256)*4+2]=0xFF;
+					if (Ram[y*32 + x]&mask)
+					{
+						outputTexture[(x*8+b+y*256)*4+0]=0xFF;
+						outputTexture[(x*8+b+y*256)*4+1]=0xFF;
+						outputTexture[(x*8+b+y*256)*4+2]=0xFF;
+					}
+					else
+					{
+						outputTexture[(x*8+b+y*256)*4+0]=0x0;
+						outputTexture[(x*8+b+y*256)*4+1]=0x0;
+						outputTexture[(x*8+b+y*256)*4+2]=0x0;
+					}
+					mask<<=1;
 				}
-				else
-				{
-					videoMemory[(x*8+b+y*256)*4+0]=0x0;
-					videoMemory[(x*8+b+y*256)*4+1]=0x0;
-					videoMemory[(x*8+b+y*256)*4+2]=0x0;
-				}
-				mask<<=1;
 			}
 		}
 	}
-	glBindTexture(GL_TEXTURE_RECTANGLE_NV, 1);
+	glBindTexture(GL_TEXTURE_RECTANGLE_NV, videoTexture[windowNum]);
 	
 	// glTexSubImage2D is faster when not using a texture range
-	glTexSubImage2D(GL_TEXTURE_RECTANGLE_NV, 0, 0, 0, WIDTH, HEIGHT, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, videoMemory);
+	glTexSubImage2D(GL_TEXTURE_RECTANGLE_NV, 0, 0, 0, w, h, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, videoMemory[windowNum]);
 	glBegin(GL_QUADS);
 
-	glTexCoord2f(0.0f, 0.0f);
-	glVertex2f((-1.0f * 0) - (1.0f*1.f), (1.0f*0) + (-1.f*1.0f));
+	if (windowNum==MAIN_WINDOW)		// Invaders needs rotating
+	{
+		glTexCoord2f(0.0f, 0.0f);
+		glVertex2f((-1.0f * 0) - (1.0f*1.f), (1.0f*0) + (-1.f*1.0f));
 
-	glTexCoord2f(0.0f, HEIGHT);
-	glVertex2f((-1.0f * 0) - (-1.0f*1.f), (-1.0f*0) + (-1.f*1.0f));
+		glTexCoord2f(0.0f, h);
+		glVertex2f((-1.0f * 0) - (-1.0f*1.f), (-1.0f*0) + (-1.f*1.0f));
 
-	glTexCoord2f(WIDTH, HEIGHT);
-	glVertex2f((1.0f * 0) - (-1.0f*1.f), (-1.0f*0) + (1.f*1.0f));
+		glTexCoord2f(w, h);
+		glVertex2f((1.0f * 0) - (-1.0f*1.f), (-1.0f*0) + (1.f*1.0f));
 
-	glTexCoord2f(WIDTH, 0.0f);
-	glVertex2f((1.0f * 0) - (1.0f*1.f), (1.0f*0) + (1.f*1.0f));
-	
+		glTexCoord2f(w, 0.0f);
+		glVertex2f((1.0f * 0) - (1.0f*1.f), (1.0f*0) + (1.f*1.0f));
+	}
+	else
+	{
+		glTexCoord2f(0.0f, 0.0f);
+		glVertex2f(-1.0f,1.0f);
+
+		glTexCoord2f(0.0f, h);
+		glVertex2f(-1.0f, -1.0f);
+
+		glTexCoord2f(w, h);
+		glVertex2f(1.0f, -1.0f);
+
+		glTexCoord2f(w, 0.0f);
+		glVertex2f(1.0f, 1.0f);
+	}
 	glEnd();
 	
 	glFlush();
 }
 
-void setupGL(int w, int h) 
+void setupGL(int windowNum,int w, int h) 
 {
-    //Tell OpenGL how to convert from coordinates to pixel values
-    glViewport(0, 0, w, h);
-	
+	videoTexture[windowNum] = windowNum+1;
+	videoMemory[windowNum] = (unsigned char*)malloc(w*h*sizeof(unsigned int));
+	//Tell OpenGL how to convert from coordinates to pixel values
+	glViewport(0, 0, w, h);
+
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 	glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
 	glClearColor(1.0f, 0.f, 1.0f, 1.0f);
 	glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
-	
+
 	glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-	
+	glLoadIdentity();
+
 	glMatrixMode(GL_MODELVIEW);
-    glLoadIdentity(); 
-	
+	glLoadIdentity(); 
+
 	glDisable(GL_TEXTURE_2D);
 	glEnable(GL_TEXTURE_RECTANGLE_NV);
-	glBindTexture(GL_TEXTURE_RECTANGLE_NV, 1);
-	
-//	glTextureRangeAPPLE(GL_TEXTURE_RECTANGLE_EXT, 0, NULL);
-	
-//	glTexParameteri(GL_TEXTURE_RECTANGLE_EXT, GL_TEXTURE_STORAGE_HINT_APPLE , GL_STORAGE_CACHED_APPLE);
-//	glPixelStorei(GL_UNPACK_CLIENT_STORAGE_APPLE, GL_TRUE);
+	glBindTexture(GL_TEXTURE_RECTANGLE_NV, videoTexture[windowNum]);
+
+	//	glTextureRangeAPPLE(GL_TEXTURE_RECTANGLE_EXT, 0, NULL);
+
+	//	glTexParameteri(GL_TEXTURE_RECTANGLE_EXT, GL_TEXTURE_STORAGE_HINT_APPLE , GL_STORAGE_CACHED_APPLE);
+	//	glPixelStorei(GL_UNPACK_CLIENT_STORAGE_APPLE, GL_TRUE);
 	glTexParameteri(GL_TEXTURE_RECTANGLE_NV, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_RECTANGLE_NV, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_RECTANGLE_NV, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_RECTANGLE_NV, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-	
-	glTexImage2D(GL_TEXTURE_RECTANGLE_NV, 0, GL_RGBA, WIDTH,
-				 HEIGHT, 0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, videoMemory);
-	
+
+	glTexImage2D(GL_TEXTURE_RECTANGLE_NV, 0, GL_RGBA, w,
+			h, 0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, videoMemory[windowNum]);
+
 	glDisable(GL_DEPTH_TEST);
 }
+
+void restoreGL(int windowNum,int w, int h) 
+{
+	//Tell OpenGL how to convert from coordinates to pixel values
+	glViewport(0, 0, w, h);
+
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+	glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
+	glClearColor(1.0f, 0.f, 1.0f, 1.0f);
+	glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT);
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+
+	glMatrixMode(GL_MODELVIEW);
+	glLoadIdentity(); 
+
+	glDisable(GL_TEXTURE_2D);
+	glEnable(GL_TEXTURE_RECTANGLE_NV);
+	glDisable(GL_DEPTH_TEST);
+}
+
 unsigned char keyArray[512*3];
 
 int KeyDown(int key)
@@ -422,7 +486,7 @@ void ClearKey(int key)
 	keyArray[key*3+2]=0;
 }
 
-void GLFWCALL kbHandler( int key, int action )
+void kbHandler( GLFWwindow window, int key, int action )		/* At present ignores which window, will add per window keys later */
 {
 	keyArray[key*3 + 0]=keyArray[key*3+1];
 	keyArray[key*3 + 1]=action;
@@ -435,17 +499,30 @@ int main(int argc,char**argv)
 
 	/// Initialize GLFW 
 	glfwInit(); 
-	// Open an OpenGL window 
-	if( !glfwOpenWindow( WIDTH, HEIGHT, 0,0,0,0,0,0, GLFW_WINDOW ) ) 
+
+	// Open timing OpenGL window 
+	if( !(windows[TIMING_WINDOW]=glfwOpenWindow( TIMING_WIDTH, TIMING_HEIGHT, GLFW_WINDOWED,"invaders",NULL)) ) 
 	{ 
 		glfwTerminate(); 
 		return 1; 
 	} 
 
-	glfwSetWindowTitle("Invaders");
-	glfwSetWindowPos(300,300);
+	glfwSetWindowPos(windows[TIMING_WINDOW],500,300);
+
+	glfwMakeContextCurrent(windows[TIMING_WINDOW]);
+	setupGL(TIMING_WINDOW,TIMING_WIDTH,TIMING_HEIGHT);
+
+	// Open invaders OpenGL window 
+	if( !(windows[MAIN_WINDOW]=glfwOpenWindow( WIDTH, HEIGHT, GLFW_WINDOWED,"invaders",NULL)) ) 
+	{ 
+		glfwTerminate(); 
+		return 1; 
+	} 
+
+	glfwSetWindowPos(windows[MAIN_WINDOW],300,300);
 	
-	setupGL(WIDTH,HEIGHT);	
+	glfwMakeContextCurrent(windows[MAIN_WINDOW]);
+	setupGL(MAIN_WINDOW,WIDTH,HEIGHT);
 
 	glfwSwapInterval(0);			// Disable VSYNC
 
@@ -470,7 +547,7 @@ int main(int argc,char**argv)
 
 	//dumpInstruction=100000;
 
-	while (!glfwGetKey(GLFW_KEY_ESC))
+	while (!glfwGetKey(windows[MAIN_WINDOW],GLFW_KEY_ESC))
 	{
 		masterClock++;
 		if ((masterClock%4)==0)
@@ -478,8 +555,14 @@ int main(int argc,char**argv)
 
 		if ((masterClock%10)==0)
 		{
+			RecordPins();
+			PIN_O1=1;
+			PIN_O2=1;
 			O1();			// Execute a cpu step
 			O2();
+			RecordPins();
+			PIN_O1=0;		// fake the low pulse
+			PIN_O2=0;
 
 			MEM_Handler();		// 
 
@@ -488,19 +571,29 @@ int main(int argc,char**argv)
 		if (pixelClock==30432)		// Based on 19968000 Mhz master clock + mame notes
 		{
 			NEXTINT=0xCF;
-			INT();
+			INT_PIN();
 		}
 		if (pixelClock==71008)
 		{
 			NEXTINT=0xD7;
-			INT();
+			INT_PIN();
 		}
 		if (pixelClock>=83200)
 		{
 			pixelClock=0;
-			ShowScreen();
 
+            		glfwMakeContextCurrent(windows[MAIN_WINDOW]);
+//			restoreGL(MAIN_WINDOW,WIDTH,HEIGHT);
+			ShowScreen(MAIN_WINDOW,WIDTH,HEIGHT);
 			glfwSwapBuffers();
+  
+			glfwMakeContextCurrent(windows[TIMING_WINDOW]);
+//			restoreGL(TIMING_WINDOW,TIMING_WIDTH,TIMING_HEIGHT);
+			DrawTiming(videoMemory[TIMING_WINDOW],TIMING_WIDTH);
+			ShowScreen(TIMING_WINDOW,TIMING_WIDTH,TIMING_HEIGHT);
+			glfwSwapBuffers();
+        
+			glfwPollEvents();
 			
 			now=glfwGetTime();
 
