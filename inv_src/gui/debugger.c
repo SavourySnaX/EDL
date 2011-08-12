@@ -2,8 +2,23 @@
 
 #include <stdlib.h>
 #include <stdarg.h>
+#include <string.h>
 
 #include "font.h"
+
+unsigned short breakpoints[20]={0x0067};
+unsigned int numBreakpoints=0;
+
+int isBreakpoint(unsigned int address)
+{
+	int a;
+	for (a=0;a<numBreakpoints;a++)
+	{
+		if (address==breakpoints[a])
+			return 1;
+	}
+	return 0;
+}
 
 void DrawChar(unsigned char* buffer,unsigned int width,unsigned int x,unsigned int y, char c,unsigned char r,unsigned char g,unsigned char b)
 {
@@ -17,9 +32,9 @@ void DrawChar(unsigned char* buffer,unsigned int width,unsigned int x,unsigned i
 	{
 		for (xx=0;xx<6;xx++)
 		{
-			buffer[(x+xx+1 + (y+yy)*width)*4+0]=(*fontChar)*r;
+			buffer[(x+xx+1 + (y+yy)*width)*4+0]=(*fontChar)*b;
 			buffer[(x+xx+1 + (y+yy)*width)*4+1]=(*fontChar)*g;
-			buffer[(x+xx+1 + (y+yy)*width)*4+2]=(*fontChar)*b;
+			buffer[(x+xx+1 + (y+yy)*width)*4+2]=(*fontChar)*r;
 			fontChar++;
 		}
 	}
@@ -58,7 +73,15 @@ extern unsigned char PIN_INT;
 extern unsigned char PIN_HOLD;
 extern unsigned char PIN_RESET;
 
-#define MAX_CAPTURE		(600)
+extern unsigned short SP;
+extern unsigned short PC;
+extern unsigned short BC;
+extern unsigned short DE;
+extern unsigned short HL;
+extern unsigned char A;
+extern unsigned char FLAGS;
+
+#define MAX_CAPTURE		(512*1024)				// 1 Mb of data
 
 unsigned char lohi[36][MAX_CAPTURE];
 int bufferPosition=0;
@@ -106,9 +129,76 @@ void RecordPins()
 		bufferPosition=0;
 }
 
+unsigned int timeStretch=0x10000;
+
+void UpdateTiming(int scrollPos)
+{
+	timeStretch+=0x0200*scrollPos;
+}
+
+const char* decodeDisasm(unsigned int address,int *count);
+
+unsigned char AddressLookup(unsigned int address);
+
+void DrawRegister(unsigned char* buffer,unsigned int width)
+{
+	unsigned int address=PC-1,b;
+	int numBytes=3;
+
+	PrintAt(buffer,width,255,255,255,0,0,"FLAGS = S  Z  0  AC 0  P  1  CY");
+
+	PrintAt(buffer,width,255,255,255,0,1,"        %s  %s  %s  %s  %s  %s  %s  %s\n",
+			FLAGS&0x80 ? "1" : "0",
+			FLAGS&0x40 ? "1" : "0",
+			FLAGS&0x20 ? "1" : "0",
+			FLAGS&0x10 ? "1" : "0",
+			FLAGS&0x08 ? "1" : "0",
+			FLAGS&0x04 ? "1" : "0",
+			FLAGS&0x02 ? "1" : "0",
+			FLAGS&0x01 ? "1" : "0");
+
+	PrintAt(buffer,width,255,255,255,0,2,"A   %02X\n",A);
+	PrintAt(buffer,width,255,255,255,0,3,"BC  %04X\n",BC);
+	PrintAt(buffer,width,255,255,255,0,4,"DE  %04X\n",DE);
+	PrintAt(buffer,width,255,255,255,0,5,"HL  %04X\n",HL);
+	PrintAt(buffer,width,255,255,255,0,6,"SP  %04X\n",SP);
+	PrintAt(buffer,width,255,255,255,0,7,"PC  %04X\n",PC);
+
+	for (b=0;b<16;b++)
+	{
+		int a;
+		const char* retVal = decodeDisasm(address,&numBytes);
+		int opcodeLength=numBytes+1;
+		unsigned char colR=255,colG=255,colB=255;
+
+		for (a=0;a<numBreakpoints;a++)
+		{
+			if (address==breakpoints[a])
+			{
+				colG=0;
+				colB=0;
+			}
+		}
+
+		PrintAt(buffer,width,colR,colG,colB,0,10+b,"%04X  ",address);
+
+		PrintAt(buffer,width,255,255,255,8,10+b,"            ");
+		for (a=0;a<opcodeLength;a++)
+		{
+			PrintAt(buffer,width,colR,colG,colB,8+a*3,10+b,"%02X ",AddressLookup(address+a));
+		}
+		PrintAt(buffer,width,255,255,255,8+4*3,10+b,"            ");
+		PrintAt(buffer,width,colR,colG,colB,8+4*3,10+b,"%s",retVal);
+
+		address+=opcodeLength;
+	}
+}
+
 void DrawTiming(unsigned char* buffer,unsigned int width)
 {
 	int a,b;
+	unsigned int pulsepos;
+	unsigned int prevpulsepos;
 
 	PrintAt(buffer,width,255,255,255,0,0,"PIN_A");
 	PrintAt(buffer,width,255,255,255,0,16,"PIN_D");
@@ -125,12 +215,14 @@ void DrawTiming(unsigned char* buffer,unsigned int width)
 	PrintAt(buffer,width,255,255,255,0,34,"PIN_HOLD");
 	PrintAt(buffer,width,255,255,255,0,35,"PIN_RESET");
 
+	pulsepos=bufferPosition<<16;
+	prevpulsepos=bufferPosition<<16;
 
 	for (a=0;a<36;a++)
 	{
 		for (b=0;b<600;b++)
 		{
-			if (lohi[a][b])
+			if (lohi[a][pulsepos>>16])
 			{
 				buffer[(80+b+(a*8+1)*width)*4+0]=0xFF;
 				buffer[(80+b+(a*8+1)*width)*4+1]=0xFF;
@@ -149,7 +241,7 @@ void DrawTiming(unsigned char* buffer,unsigned int width)
 				buffer[(80+b+(a*8+6)*width)*4+2]=0xFF;
 			}
 
-			if (b>0 && lohi[a][b-1]!=lohi[a][b])
+			if (lohi[a][prevpulsepos>>16]!=lohi[a][pulsepos>>16])
 			{
 				int c;
 				for (c=2;c<6;c++)
@@ -168,6 +260,13 @@ void DrawTiming(unsigned char* buffer,unsigned int width)
 					buffer[(80+b+(a*8+c)*width)*4+1]=0x00;
 					buffer[(80+b+(a*8+c)*width)*4+2]=0x00;
 				}
+			}
+
+			prevpulsepos=pulsepos;
+			pulsepos+=timeStretch;
+			if ((pulsepos>>16)>=MAX_CAPTURE)
+			{
+				pulsepos=0;
 			}
 		}
 	}

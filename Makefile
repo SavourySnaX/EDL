@@ -55,5 +55,5 @@ test: testHarness.c test.lls.s
 	test.exe | tee test.result
 
 invaders: test.lls.s inv_src/invaders.c inv_src/invadersDebug.c inv_src/gui/font.h inv_src/gui/debugger.h inv_src/gui/debugger.c
-	gcc -g -O0 inv_src/invaders.c inv_src/invadersDebug.c inv_src/gui/debugger.c test.lls.s $(GLLIBS) -o invaders.exe
+	gcc -g -O3 inv_src/invaders.c inv_src/invadersDebug.c inv_src/gui/debugger.c test.lls.s $(GLLIBS) -o invaders.exe
 

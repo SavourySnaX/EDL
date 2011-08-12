@@ -80,14 +80,15 @@ int LoadRom(unsigned int address,unsigned int size,const char* fname)
 
 int InitialiseMemory()
 {
-	if (LoadRom(0x0000,0x0800,"invaders/invaders.h"))
+	if (LoadRom(0x0000,0x0800,"roms/invaders/invaders.h"))
 		return 1;
-	if (LoadRom(0x0800,0x0800,"invaders/invaders.g"))
+	if (LoadRom(0x0800,0x0800,"roms/invaders/invaders.g"))
 		return 1;
-	if (LoadRom(0x1000,0x0800,"invaders/invaders.f"))
+	if (LoadRom(0x1000,0x0800,"roms/invaders/invaders.f"))
 		return 1;
-	if (LoadRom(0x1800,0x0800,"invaders/invaders.e"))
+	if (LoadRom(0x1800,0x0800,"roms/invaders/invaders.e"))
 		return 1;
+
 	// Blank video and ram for now - real hardware probably doesn't do this though!
 	memset(&Ram[0],0,256*32);
 	memset(&RamCmp[0],0,256*32);
@@ -164,16 +165,13 @@ unsigned char HandleIOPortRead(unsigned char port)
 	switch (port)
 	{
 	case 1:		// -|Player1Right|Player1Left|Player1Fire|-|1PlayerButton|2PlayerButton|Coin
-		res=0;
-		if (CheckKey('0'))
+		if (KeyDown('0'))
 		{
 			res|=0x01;
-			ClearKey('0');
 		}
-		if (CheckKey('1'))
+		if (KeyDown('1'))
 		{
 			res|=0x04;
-			ClearKey('1');
 		}
 		if (KeyDown(' '))
 		{
@@ -227,12 +225,16 @@ void HandleIOPortWrite(unsigned char port,unsigned char data)
 
 int dumpInstruction=0;
 
-void MEM_Handler()
+int g_instructionStep=0;
+int g_traceStep=0;
+
+int MEM_Handler()
 {
+	int keepGoing=g_traceStep^1;
 	static unsigned char SYNC_LATCH;
 	static int SYNC_A_LATCH;
 	static int outOfRange=0;
-	static int disassemblein=-1;
+	static int NewInstructionBegun=-1;
 
 	// Watch for SYNC pulse and TYPE and latch them
 
@@ -242,7 +244,7 @@ void MEM_Handler()
 		if (SYNC_LATCH==SYNC_FETCH)
 		{
 			SYNC_A_LATCH=PIN_A;
-			disassemblein=2;
+			NewInstructionBegun=2;
 			if (dumpInstruction>0)
 			{
 				dumpInstruction--;
@@ -255,14 +257,18 @@ void MEM_Handler()
 		}
 	}
 
-	if (disassemblein>-1)
+	if (NewInstructionBegun>-1)
 	{
-		if (disassemblein==0)
+		if (NewInstructionBegun==0)
 		{
 			if (outOfRange)
-			Disassemble(SYNC_A_LATCH);
+				Disassemble(SYNC_A_LATCH);
+			if (isBreakpoint(SYNC_A_LATCH))
+				g_instructionStep=1;
+			if (g_instructionStep)
+				keepGoing=0;
 		}
-		disassemblein--;
+		NewInstructionBegun--;
 	}
 
 	// CPU INPUT expects data to be available on T2 state so we can do that work on the PIN_SYNC itself
@@ -324,7 +330,12 @@ void MEM_Handler()
 			HandleIOPortWrite(PIN_A&0xFF,PIN_D);
 		}
 	}
+
+	return keepGoing;
 }
+
+#define REGISTER_WIDTH	256
+#define	REGISTER_HEIGHT	256
 
 #define TIMING_WIDTH	680
 #define TIMING_HEIGHT	400
@@ -336,6 +347,7 @@ void MEM_Handler()
 
 #define MAIN_WINDOW		0
 #define TIMING_WINDOW		1
+#define REGISTER_WINDOW		2
 
 GLFWwindow windows[MAX_WINDOWS];
 unsigned char *videoMemory[MAX_WINDOWS];
@@ -414,6 +426,7 @@ void setupGL(int windowNum,int w, int h)
 {
 	videoTexture[windowNum] = windowNum+1;
 	videoMemory[windowNum] = (unsigned char*)malloc(w*h*sizeof(unsigned int));
+	memset(videoMemory[windowNum],0,w*h*sizeof(unsigned int));
 	//Tell OpenGL how to convert from coordinates to pixel values
 	glViewport(0, 0, w, h);
 
@@ -493,6 +506,30 @@ void kbHandler( GLFWwindow window, int key, int action )		/* At present ignores 
 	keyArray[key*3 + 2]|=(keyArray[key*3+0]==GLFW_RELEASE)&&(keyArray[key*3+1]==GLFW_PRESS);
 }
 
+int mouseWheelDelta=0;
+
+void mwHandler( GLFWwindow window,int posx,int posy)
+{
+	mouseWheelDelta=posy;
+	UpdateTiming(mouseWheelDelta);
+}
+
+int bTimingEnabled=1;
+int bRegisterEnabled=1;
+
+int wcHandler( GLFWwindow window )
+{
+	if (window == windows[TIMING_WINDOW])
+	{
+		bTimingEnabled=0;
+	}
+	if (window == windows[REGISTER_WINDOW])
+	{
+		bRegisterEnabled=0;
+	}
+	return 1;
+}
+
 int main(int argc,char**argv)
 {
 	double	atStart,now,remain;
@@ -500,14 +537,26 @@ int main(int argc,char**argv)
 	/// Initialize GLFW 
 	glfwInit(); 
 
-	// Open timing OpenGL window 
-	if( !(windows[TIMING_WINDOW]=glfwOpenWindow( TIMING_WIDTH, TIMING_HEIGHT, GLFW_WINDOWED,"invaders",NULL)) ) 
+	// Open registers OpenGL window 
+	if( !(windows[REGISTER_WINDOW]=glfwOpenWindow( REGISTER_WIDTH, REGISTER_HEIGHT, GLFW_WINDOWED,"cpu",NULL)) ) 
 	{ 
 		glfwTerminate(); 
 		return 1; 
 	} 
 
-	glfwSetWindowPos(windows[TIMING_WINDOW],500,300);
+	glfwSetWindowPos(windows[REGISTER_WINDOW],600,740);
+
+	glfwMakeContextCurrent(windows[REGISTER_WINDOW]);
+	setupGL(REGISTER_WINDOW,REGISTER_WIDTH,REGISTER_HEIGHT);
+
+	// Open timing OpenGL window 
+	if( !(windows[TIMING_WINDOW]=glfwOpenWindow( TIMING_WIDTH, TIMING_HEIGHT, GLFW_WINDOWED,"timing",NULL)) ) 
+	{ 
+		glfwTerminate(); 
+		return 1; 
+	} 
+
+	glfwSetWindowPos(windows[TIMING_WINDOW],600,300);
 
 	glfwMakeContextCurrent(windows[TIMING_WINDOW]);
 	setupGL(TIMING_WINDOW,TIMING_WIDTH,TIMING_HEIGHT);
@@ -527,6 +576,8 @@ int main(int argc,char**argv)
 	glfwSwapInterval(0);			// Disable VSYNC
 
 	glfwSetKeyCallback(kbHandler);
+	glfwSetScrollCallback(mwHandler);
+	glfwSetWindowCloseCallback(wcHandler);
 
 	atStart=glfwGetTime();
 	//////////////////
@@ -547,54 +598,100 @@ int main(int argc,char**argv)
 
 	//dumpInstruction=100000;
 
+	int stopTheClock=0;
 	while (!glfwGetKey(windows[MAIN_WINDOW],GLFW_KEY_ESC))
 	{
-		masterClock++;
-		if ((masterClock%4)==0)
-			pixelClock++;
+		if (!stopTheClock)
+		{
+			masterClock++;
+			if ((masterClock%4)==0)
+				pixelClock++;
 
-		if ((masterClock%10)==0)
-		{
-			RecordPins();
-			PIN_O1=1;
-			PIN_O2=1;
-			O1();			// Execute a cpu step
-			O2();
-			RecordPins();
-			PIN_O1=0;		// fake the low pulse
-			PIN_O2=0;
+			if ((masterClock%10)==0)
+			{
+				PIN_O2=0;
+				PIN_O1=1;
+				O1();			// Execute a cpu step
+				if (bTimingEnabled)
+					RecordPins();
+				PIN_O1=0;
+				if (bTimingEnabled)
+					RecordPins();
+				PIN_O2=1;
+				O2();
+				if (bTimingEnabled)
+					RecordPins();
+				PIN_O2=0;		// fake the low pulse
 
-			MEM_Handler();		// 
+				if (!MEM_Handler())
+				{
+					stopTheClock=1;
+				}
+				if (bTimingEnabled)
+					RecordPins();
 
-			cpuClock++;
+				PIN_INT=0;		// clear interrupt state
+				cpuClock++;
+			}
+			if (pixelClock==30432+10161)		// Based on 19968000 Mhz master clock + mame notes
+			{
+				NEXTINT=0xCF;
+				PIN_INT=1;
+				INT_PIN();
+			}
+			if (pixelClock==71008+10161)
+			{
+				NEXTINT=0xD7;
+				PIN_INT=1;
+				INT_PIN();
+			}
 		}
-		if (pixelClock==30432)		// Based on 19968000 Mhz master clock + mame notes
+		if (pixelClock>=83200 || stopTheClock)
 		{
-			NEXTINT=0xCF;
-			INT_PIN();
-		}
-		if (pixelClock==71008)
-		{
-			NEXTINT=0xD7;
-			INT_PIN();
-		}
-		if (pixelClock>=83200)
-		{
-			pixelClock=0;
+			if (pixelClock>=83200)
+				pixelClock=0;
 
             		glfwMakeContextCurrent(windows[MAIN_WINDOW]);
-//			restoreGL(MAIN_WINDOW,WIDTH,HEIGHT);
 			ShowScreen(MAIN_WINDOW,WIDTH,HEIGHT);
 			glfwSwapBuffers();
-  
-			glfwMakeContextCurrent(windows[TIMING_WINDOW]);
-//			restoreGL(TIMING_WINDOW,TIMING_WIDTH,TIMING_HEIGHT);
-			DrawTiming(videoMemory[TIMING_WINDOW],TIMING_WIDTH);
-			ShowScreen(TIMING_WINDOW,TIMING_WIDTH,TIMING_HEIGHT);
-			glfwSwapBuffers();
+				
+			if (bTimingEnabled)
+			{
+				glfwMakeContextCurrent(windows[TIMING_WINDOW]);
+				DrawTiming(videoMemory[TIMING_WINDOW],TIMING_WIDTH);
+				ShowScreen(TIMING_WINDOW,TIMING_WIDTH,TIMING_HEIGHT);
+				glfwSwapBuffers();
+			}
+			if (bRegisterEnabled)
+			{
+				glfwMakeContextCurrent(windows[REGISTER_WINDOW]);
+				DrawRegister(videoMemory[REGISTER_WINDOW],REGISTER_WIDTH);
+				ShowScreen(REGISTER_WINDOW,REGISTER_WIDTH,REGISTER_HEIGHT);
+				glfwSwapBuffers();
+			}
         
 			glfwPollEvents();
 			
+			g_traceStep=0;
+			if (CheckKey(GLFW_KEY_PAUSE))
+			{
+				g_instructionStep^=1;
+				if (stopTheClock && !g_instructionStep)
+					stopTheClock=0;
+				ClearKey(GLFW_KEY_PAUSE);
+			}
+			if (stopTheClock && CheckKey('S'))
+			{
+				stopTheClock=0;
+				ClearKey('S');
+			}
+			if (stopTheClock && CheckKey('T'))
+			{
+				stopTheClock=0;
+				g_traceStep=1;
+				ClearKey('T');
+			}
+
 			now=glfwGetTime();
 
 			remain = now-atStart;
