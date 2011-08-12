@@ -577,9 +577,9 @@ const char* decodeDisasm(unsigned int address,int *count)
        	const char* mnemonic=List[AddressLookup(address)]();
 	const char* sPtr=mnemonic;
 	char* dPtr=temporaryBuffer;
-
-	*count=0;
+	int counting = 0;
 	int doingDecode=0;
+
 	while (*sPtr)
 	{
 		if (!doingDecode)
@@ -603,12 +603,13 @@ const char* decodeDisasm(unsigned int address,int *count)
 				*dPtr++=*tPtr++;
 			}
 			doingDecode=0;
-			*count++;
+			counting++;
 		}
 		sPtr++;
 	}
 	*dPtr=0;
 
+	*count=counting;
 	return temporaryBuffer;
 }
 
