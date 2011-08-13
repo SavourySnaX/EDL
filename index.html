@@ -1,0 +1,46 @@
+---
+layout: default
+title: Emulation Description Language - News
+---
+
+  <div class="title">
+    <a >News</a> 
+    <a class="extra" href="/EDL/about.html">About</a>
+    <a class="extra" href="http://github.com/SavourySnaX/EDL/tree/master">Src</a>
+    <a class="project">Emulation Description Language</a>
+  </div>
+
+
+{% for post in paginator.posts %}
+  <div class="right_column"><small>({{ post.author }})  </small>{{ post.date | date_to_string }}</div>
+    <h2><a href="/EDL{{post.url }}" title="[Permalink] {{ post.title }} style="border: none">{{post.title}}</a></h2>
+
+    {{ post.content }}
+
+    {% if post != paginator.posts.last %}
+	<hr class="post" />
+    {% endif %}
+{% endfor %}
+
+<div class="paginator">
+<hr/>
+<div class="left_column">
+    {% if paginator.next_page %}
+	<a href="/EDL/page{{ paginator.next_page }}/">&larr; Older</a>
+    {% endif %}
+</div>
+
+<div class="right_column">
+    {% if paginator.previous_page %}
+	<a href="
+		{% if paginator.previous_page == 1 %}
+			/EDL/
+		{% else %}
+			/EDL/page{{ paginator.previous_page }}
+		{% endif %}">Newer &rarr;
+	</a>
+    {% endif %}
+</div>
+<hr/>
+</div>
+
