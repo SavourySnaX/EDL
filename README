@@ -1,0 +1,26 @@
+
+Emulation Description Language
+------------------------------
+
+Requires Bison/Yacc,lex/flex,llvm (2.9) to build the compiler.
+
+Invaders needs the above compiler plus opengl and glfw (3.0). glfw 3.0 is currently only available as source - but i needed the multiple window support available in that version.
+
+Only tested under mingw32 so far. It should build under linux, but the makefile will need tweaking to include the correct libraries.
+
+make
+
+will build the compiler.
+
+make test
+
+will build a test harness, then run a few tests on the 8080 core (including running a test binary image.
+
+make invaders
+
+will build the Space Invaders emulation, you will need the original Midway Space Invaders roms. the should be placed in a folder roms/invaders/ :
+
+roms/invaders/invaders.e
+roms/invaders/invaders.f
+roms/invaders/invaders.g
+roms/invaders/invaders.h
