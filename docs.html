@@ -15,12 +15,12 @@ title: Emulation Description Language - Docs
 
 <h2><u>Comments</u></h2>
 
-<p>Comments in edl are begun with <b>#</b> and end at the end of the current line</p>
+<p>Comments in EDL begin with <b>#</b> and end at the end of the current line</p>
 
 <pre style="background-color:#CCCCCC">
 <b>#</b> This is a comment
 </pre>
-
+<p></p>
 <h2><u>Integers</u></h2>
 
 <p>At present EDL supports binary (% prefix),decimal and hexadecimal ($ prefix) representations for any numeric constants</p>
@@ -96,6 +96,7 @@ $AA <b>-&gt</b> foo;
 foo<b>&lt-</b>%1;	# foo will be given the value %01 (%1 expanded to 2 bits)
 foo<b>&lt-</b>$A;	# foo will be given the value %10 (%1010 clamped to 2 bits)
 </pre>
+<p></p>
 
 <h2><u>Input / Output</u></h2>
 
@@ -111,6 +112,7 @@ foo<b>&lt-</b>$A;	# foo will be given the value %10 (%1010 clamped to 2 bits)
 <pre style="color:white; background-color:#000000">
 A string
 </pre>
+<p></p>
 
 <pre style="background-color:#CCCCCC">
 <b>DEBUG_TRACE</b> foo;
@@ -133,6 +135,7 @@ By default variables are displayed in binary notation, this can be modified by u
 <pre style="color:white; background-color:#000000">
 foo(AA)
 </pre>
+<p></p>
 
 <pre style="background-color:#CCCCCC">
 <b>DEBUG_TRACE</b> "10 in base 2 : ",10," and in base 16 : ",<b>BASE</b> 16,10;
@@ -143,6 +146,7 @@ foo(AA)
 <pre style="color:white; background-color:#000000">
 10 in base 2 : 101 and in base 16 : A
 </pre>
+<p></p>
 
 <h2><u>Handlers</u></h2>
 
@@ -171,6 +175,7 @@ int main(int argc,char** argv)
 <pre style="color:white; background-color:#000000">
 Hello World!
 </pre>
+<p></p>
 
 <h2><u>States</u></h2>
 
@@ -326,8 +331,8 @@ State b2
 <b>DECLARE</b> foo[8];
 
 foo <b>&lt-</b> %01 + %1011;	# %01 is a smaller bit size than %1011
-				#therefor %01 is expanded to %0001 before the
-				#addition.
+			#therefor %01 is expanded to %0001 before the
+			#addition.
 
 <b>DEBUG_TRACE</b> foo;
 </pre>
@@ -335,6 +340,7 @@ foo <b>&lt-</b> %01 + %1011;	# %01 is a smaller bit size than %1011
 <pre style="color:white; background-color:#000000">
 foo(00001100)
 </pre>
+<p></p>
 
 <h2><u>Casting</u></h2>
 
@@ -486,6 +492,7 @@ result(1011) shiftedOut(0001)
 <td>Performs an arithmetic shift right of number by 1 bit, (signed divide by 2)</td>
 </tr>
 </table>
+<p></p>
 
 <h2><u>Instructions</u></h2>
 
@@ -565,6 +572,7 @@ result(1011) shiftedOut(0001)
 	A <b>&lt-</b> E;
 }
 </pre>
+<p></p>
 
 <h2><u>Instructions with immediate data</u></h2>
 
@@ -577,5 +585,6 @@ result(1011) shiftedOut(0001)
 </pre>
 
 <p>For disassembler purposes the %$n components are used to specify the offset from the address being disassembled that the subsequent operands can be found.</p>
+<p></p>
 
 
