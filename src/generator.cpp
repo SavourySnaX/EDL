@@ -320,6 +320,10 @@ Value* CDebugTraceInteger::codeGen(CodeGenContext& context)
 	}
 
 	baseDivisor=oldBaseDivisor.trunc(bitWidth);
+	if (baseDivisor.getLimitedValue()==0)
+	{
+		baseDivisor = APInt(bitWidth,1);
+	}
 
 	for (unsigned a=0;a<cnt;a++)
 	{
@@ -331,7 +335,10 @@ Value* CDebugTraceInteger::codeGen(CodeGenContext& context)
 		CallInst *call = CallInst::Create(context.debugTraceChar,args.begin(),args.end(),"DEBUGTRACE",context.currentBlock());
 
 		integer.integer-=tmp*baseDivisor;
-		baseDivisor=baseDivisor.udiv(APInt(bitWidth,currentBase));
+		if (cnt!=1)
+		{
+			baseDivisor=baseDivisor.udiv(APInt(bitWidth,currentBase));
+		}
 	}
 	return fcall;
 }
