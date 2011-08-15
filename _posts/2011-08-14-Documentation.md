@@ -4,7 +4,7 @@ author: Savoury SnaX
 title: Documentation
 ---
 
- First up, I've now posted a first draft documentation for the language. Its rough around the edges, and incomplete (as is the language), however should server as a starting point for interested parties. The documentation describes how some of the high level components of the 8080 are emulated.
+ First up, I've now posted a first draft documentation for the language. Its rough around the edges, and incomplete (as is the language), however should serve as a starting point for interested parties. The documentation describes how some of the high level components of the 8080 are emulated.
 
  At present the space invaders emulator is 66% EDL and 34% C. The C code is used to handle memory access, fire interrupts and process the screen updates. The screen update code is stupidly simple so I won't bother describing it here, suffice to say that when it is moved into EDL it will be slightly more interesting (and I do mean slightly!).
 
