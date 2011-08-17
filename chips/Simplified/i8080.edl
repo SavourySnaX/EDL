@@ -1,13 +1,32 @@
-# Intel 8080 - Single Instruction Step (IE Classic Emulation)
+# Intel 8080 - This version of the core works like traditional cpu
+#             emulators. Call STEP to advance 1 instruction. Interfaces
+#             to memory via external C functions, so the 7 calls below
+#             need to be created for the emulation to compile.
 #
 
 C_FUNC_EXTERN	GetByte			[8],[16];
+# unsigned char GetByte(unsigned short);
+#  Called when the cpu wants to read from memory
 C_FUNC_EXTERN	SetByte			[0],[16],[8];
+# void SetByte(unsigned short,unsigned char);
+#  Called when the cpu wants to write to memory
 C_FUNC_EXTERN	GetStackByte		[8],[16];
+# unsigned char GetStackByte(unsigned short);
+#  Called when the cpu wants to read from stack memory
+#  On most systems this can just call GetByte
 C_FUNC_EXTERN	SetStackByte		[0],[16],[8];
+# void SetStackByte(unsigned short,unsigend char);
+#  Called when the cpu wants to write to stack memory
+#  On most systems this can just call SetByte
 C_FUNC_EXTERN	GetPort			[8],[16];
+# unsigned char GetPort(unsigned short);
+#  Called when the cpu wants the value from a given port
 C_FUNC_EXTERN	SetPort			[0],[16],[8];
+# void SetPort(unsigned short,unsiged char);
+#  Called when the cpu wants to write a byte to an output port
 C_FUNC_EXTERN	GetInterruptVector	[8];
+# unsigned char GetInterruptVector();
+#  Should return the opcode to execute (e.g. RST $10)
 
 # CYCLE COUNTER
 DECLARE CYCLES[8];

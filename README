@@ -12,15 +12,7 @@ make
 
 will build the compiler.
 
-make test
+tests/ folder includes a simple test harness for validating the 8080 example cores work.
 
-will build a test harness, then run a few tests on the 8080 core (including running a test binary image.
+examples/ folder includes a language hello world example, plus 2 space invaders emulators. SimpleInvaders uses the simplified 8080 core. Invaders uses the pin accurate core.
 
-make invaders
-
-will build the Space Invaders emulation, you will need the original Midway Space Invaders roms. the should be placed in a folder roms/invaders/ :
-
-roms/invaders/invaders.e
-roms/invaders/invaders.f
-roms/invaders/invaders.g
-roms/invaders/invaders.h

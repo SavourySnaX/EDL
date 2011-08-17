@@ -1,4 +1,7 @@
-# EDL CPU Specification
+# Intel 8080 CPU Core - Accurate Version 
+#
+# This should be used like the real CPU, ie interact with the PIN_'s
+#
 #
 
 #
