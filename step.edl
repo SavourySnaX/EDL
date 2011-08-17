@@ -1,0 +1,820 @@
+# Intel 8080 - Single Instruction Step (IE Classic Emulation)
+#
+
+C_FUNC_EXTERN	GetByte			[8],[16];
+C_FUNC_EXTERN	SetByte			[0],[16],[8];
+C_FUNC_EXTERN	GetStackByte		[8],[16];
+C_FUNC_EXTERN	SetStackByte		[0],[16],[8];
+C_FUNC_EXTERN	GetPort			[8],[16];
+C_FUNC_EXTERN	SetPort			[0],[16],[8];
+C_FUNC_EXTERN	GetInterruptVector	[8];
+
+# CYCLE COUNTER
+DECLARE CYCLES[8];
+
+# REAL REGISTERS FROM HARDWARE
+DECLARE	A[8];
+DECLARE	PC[16] 		ALIAS PCH[8]:PCL[8];
+DECLARE	SP[16] 		ALIAS SPH[8]:SPL[8];
+DECLARE	HL[16] 		ALIAS H[8]:L[8];
+DECLARE	DE[16] 		ALIAS D[8]:E[8];
+DECLARE	BC[16] 		ALIAS B[8]:C[8];
+DECLARE	FLAGS[8]	ALIAS s[1]:z[1]:%0:ac[1]:%0:p[1]:%1:cy[1];	# Defined flags as lower case to avoid clash with WZ variable
+									# s sign bit : z zero bit : ac half carry (bit 3-4) : p parity : cy full carry (bit 7-8)
+# INTERNAL REGISTERS
+DECLARE I[1];
+
+HANDLER		STEP
+{
+	DECLARE	IR[8];
+	IR<-C_FUNC GetByte(PC);
+	PC<-PC+1;
+
+	EXECUTE	IR;
+}
+
+HANDLER		RESET
+{
+	PC<-0;
+}
+
+HANDLER		INTERRUPT
+{
+	IF I
+	{
+		DECLARE	IR[8];
+		
+		IR<-C_FUNC GetInterruptVector();
+
+		EXECUTE IR;
+	}
+}
+
+MAPPING	SSS[3]
+{
+	%000	"B"	B;
+	%001	"C"	C;
+	%010	"D"	D;
+	%011	"E"	E;
+	%100	"H"	H;
+	%101	"L"	L;
+#	%110			Not used
+	%111	"A"	A;
+}
+
+MAPPING DDD[3]
+{
+	%000	"B"	B;
+	%001	"C"	C;
+	%010	"D"	D;
+	%011	"E"	E;
+	%100	"H"	H;
+	%101	"L"	L;
+#	%110			Not used
+	%111	"A"	A;
+}
+
+MAPPING	RP[2]
+{
+	%00	"BC"	BC;
+	%01	"DE"	DE;
+	%10	"HL"	HL;
+	%11	"SP"	SP;
+}
+
+MAPPING	PRP[2]
+{
+	%00	"BC"	BC;
+	%01	"DE"	DE;
+	%10	"HL"	HL;
+#	%11	"SP"	SP;	Not valid for push/pop operation
+}
+
+MAPPING	BCDE[2]
+{
+	%00	"BC"	BC;
+	%01	"DE"	DE;
+}
+
+MAPPING CCC[3]
+{
+	%000	"NZ"	z == 0;
+	%001	"Z"	z == 1;
+	%010	"NC"	cy == 0;
+	%011	"C"	cy == 1;
+	%100	"PO"	p == 0;
+	%101	"PE"	p == 1;
+	%110	"P"	s == 0;
+	%111	"M"	s == 1;
+}
+
+MAPPING NNN[3]
+{
+	%000	"$00"	$00;
+	%001	"$08"	$08;
+	%010	"$10"	$10;
+	%011	"$18"	$18;
+	%100	"$20"	$20;
+	%101	"$28"	$28;
+	%110	"$30"	$30;
+	%111	"$38"	$38;
+}
+
+INSTRUCTION	"MOV %M1,%M0"	%01:DDD:SSS
+{
+	SSS -> DDD;
+	5->CYCLES;
+}
+
+INSTRUCTION	"MOV %M0,M"	%01:DDD:%110
+{
+	DDD <- C_FUNC GetByte(HL);
+	7->CYCLES;
+}
+
+INSTRUCTION	"MOV M,%M0"	%01110:SSS
+{
+	C_FUNC SetByte(HL,SSS);
+	7->CYCLES;
+}
+
+INSTRUCTION	"SPHL"		%11111001
+{
+	SP <- HL;
+	5->CYCLES;
+}
+
+INSTRUCTION	"MVI %M0,%$1"	%00:DDD:%110,B2[8]
+{
+	C_FUNC GetByte(PC)->DDD;
+	PC<-PC+1;
+	7->CYCLES;
+}
+
+INSTRUCTION	"MVI M,%$1"	%00110110,B2[8]
+{
+	C_FUNC SetByte(HL,C_FUNC GetByte(PC));
+	PC<-PC+1;
+	10->CYCLES;
+}
+
+INSTRUCTION	"LXI %M0,%$2%$1"	%00:RP:%0001,B2[8],B3[8]
+{
+	DECLARE	WZ[16] 		ALIAS W[8]:Z[8];
+	Z <- C_FUNC GetByte(PC);
+	PC<-PC+1;
+	W <- C_FUNC GetByte(PC);
+	PC<-PC+1;
+	RP <- WZ;
+	10->CYCLES;
+}
+
+INSTRUCTION	"LDA %$2%$1"	%00111010,B2[8],B3[8]
+{
+	DECLARE	WZ[16] 		ALIAS W[8]:Z[8];
+	Z <- C_FUNC GetByte(PC);
+	PC<-PC+1;
+	W <- C_FUNC GetByte(PC);
+	PC<-PC+1;
+	A <- C_FUNC GetByte(WZ);
+	13->CYCLES;
+}
+
+INSTRUCTION	"STA %$2%$1"	%00110010,B2[8],B3[8]
+{
+	DECLARE	WZ[16] 		ALIAS W[8]:Z[8];
+	Z <- C_FUNC GetByte(PC);
+	PC<-PC+1;
+	W <- C_FUNC GetByte(PC);
+	PC<-PC+1;
+	C_FUNC SetByte(WZ,A);
+	13->CYCLES;
+}
+
+INSTRUCTION	"LHLD %$2%$1"	%00101010,B2[8],B3[8]
+{
+	DECLARE	WZ[16] 		ALIAS W[8]:Z[8];
+	Z <- C_FUNC GetByte(PC);
+	PC<-PC+1;
+	W <- C_FUNC GetByte(PC);
+	PC<-PC+1;
+	L <- C_FUNC GetByte(WZ);
+	WZ<-WZ+1;
+	H <- C_FUNC GetByte(WZ);
+	16->CYCLES;
+}
+
+INSTRUCTION	"SHLD %$2%$1"	%00100010,B2[8],B3[8]
+{
+	DECLARE	WZ[16] 		ALIAS W[8]:Z[8];
+	Z <- C_FUNC GetByte(PC);
+	PC<-PC+1;
+	W <- C_FUNC GetByte(PC);
+	PC<-PC+1;
+	C_FUNC SetByte(WZ,L);
+	WZ<-WZ+1;
+	C_FUNC SetByte(WZ,H);
+	16->CYCLES;
+}
+
+INSTRUCTION	"LDAX %M0"	%00:BCDE:%1010
+{
+	A <- C_FUNC GetByte(BCDE);
+	7->CYCLES;
+}
+
+INSTRUCTION	"STAX %M0"	%00:BCDE:%0010
+{
+	C_FUNC SetByte(BCDE,A);
+	7->CYCLES;
+}
+
+INSTRUCTION	"XCHG"		%11101011
+{
+	DECLARE	WZ[16];
+	WZ <- DE;
+	DE <- HL;
+	HL <- WZ;
+	4->CYCLES;
+}
+
+INSTRUCTION	"ADD %M0"	%10000:SSS
+{
+	AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3),cy AS CARRY(7)
+	{
+		A + SSS 
+	} -> A;
+	4->CYCLES;
+}
+
+INSTRUCTION	"ADD M"		%10000110
+{
+	AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3),cy AS CARRY(7)
+	{
+		A + C_FUNC GetByte(HL)
+	} -> A;
+	7->CYCLES;
+}
+
+INSTRUCTION	"ADI %$1"		%11000110,B2[8]
+{
+	AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3),cy AS CARRY(7)
+	{
+		A + C_FUNC GetByte(PC)
+	} -> A;
+	PC<-PC+1;
+	7->CYCLES;
+}
+
+INSTRUCTION	"ADC %M0"	%10001:SSS
+{
+	AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3),cy AS CARRY(7)
+	{
+		A + (SSS + cy)
+	} -> A;
+	4->CYCLES;
+}
+
+INSTRUCTION	"ADC M"		%10001110
+{
+	AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3),cy AS CARRY(7)
+	{
+		A + (C_FUNC GetByte(HL) + cy)
+	} -> A;
+	7->CYCLES;
+}
+
+INSTRUCTION	"ACI %$1"	%11001110,B2[8]
+{
+	AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3),cy AS CARRY(7)
+	{
+		A + (C_FUNC GetByte(PC) + cy)
+	} -> A;
+	PC<-PC+1;
+	7->CYCLES;
+}
+
+INSTRUCTION	"SUB %M0"	%10010:SSS
+{
+	AFFECT z AS ZERO, s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3),cy AS CARRY(7)
+	{
+		A - SSS
+	} -> A;
+	4->CYCLES;
+}
+
+INSTRUCTION	"SUB M"		%10010110
+{
+	AFFECT z AS ZERO, s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3),cy AS CARRY(7)
+	{
+		A - C_FUNC GetByte(HL)
+	} -> A;
+	7->CYCLES;
+}
+
+INSTRUCTION	"SUI %$1"	%11010110,B2[8]
+{
+	AFFECT z AS ZERO, s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3),cy AS CARRY(7)
+	{
+		A - C_FUNC GetByte(PC)
+	} -> A;
+	PC<-PC+1;
+	7->CYCLES;
+}
+
+INSTRUCTION	"SBB %M0"	%10011:SSS
+{
+	AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3),cy AS CARRY(7)
+	{
+		A - (SSS + cy)
+	} -> A;
+	4->CYCLES;
+}
+
+INSTRUCTION	"SBB M"		%10011110
+{
+	AFFECT z AS ZERO, s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3),cy AS CARRY(7)
+	{
+		A - (C_FUNC GetByte(HL) + cy)
+	} -> A;
+	7->CYCLES;
+}
+
+INSTRUCTION	"SBI %$1"	%11011110,B2[8]
+{
+	AFFECT z AS ZERO, s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3),cy AS CARRY(7)
+	{
+		A - (C_FUNC GetByte(PC) + cy)
+	} -> A;
+	PC<-PC+1;
+	7->CYCLES;
+}
+
+INSTRUCTION	"INR %M0"	%00:DDD:%100
+{
+	AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3)
+	{
+		DDD + 1 
+	} -> DDD;
+	5->CYCLES;
+}
+
+INSTRUCTION	"INR M"		%00110100
+{
+	DECLARE	TMP[8];
+	AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3)
+	{
+		C_FUNC GetByte(HL) + 1 
+	} -> TMP;
+	C_FUNC SetByte(HL,TMP);
+	10->CYCLES;
+}
+
+INSTRUCTION	"DCR %M0"	%00:DDD:%101
+{
+	AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3)
+	{
+		DDD - 1 
+	} -> DDD;
+	5->CYCLES;
+}
+
+INSTRUCTION	"DCR M"		%00110101
+{
+	DECLARE	TMP[8];
+	AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3)
+	{
+		C_FUNC GetByte(HL) - 1 
+	} -> TMP;
+	C_FUNC SetByte(HL,TMP);
+	10->CYCLES;
+}
+
+INSTRUCTION	"INX %M0"	%00:RP:%0011
+{
+	RP<-RP+1;
+	5->CYCLES;
+}
+
+INSTRUCTION	"DCX %M0"	%00:RP:%1011
+{
+	RP<-RP-1;
+	5->CYCLES;
+}
+
+INSTRUCTION	"DAD %M0"	%00:RP:%1001
+{
+	AFFECT cy AS CARRY(15)
+	{
+		HL + RP
+	} -> HL;
+	10->CYCLES;
+}
+
+INSTRUCTION	"DAA"		%00100111
+{
+	IF ( (A[0..3] > 9) | (ac == 1) )
+	{
+		AFFECT ac AS CARRY(3)
+		{
+			A + 6
+		} -> A;
+	}
+	IF ( (A[4..7] > 9) | (cy == 1) )
+	{
+		AFFECT cy AS CARRY(7)
+		{
+			A + $60
+		} -> A;
+	}
+	AFFECT p AS PARITYEVEN,z AS ZERO,s AS SIGN
+	{
+		A
+	};
+	4->CYCLES;
+}
+
+INSTRUCTION	"ANA %M0"	%10100:SSS
+{
+	DECLARE	A_LATCH[8];
+	DECLARE	TMP[8];
+	A->A_LATCH;
+	SSS->TMP;
+	AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN
+	{
+		A_LATCH & TMP
+	} -> A;
+	cy <- 0;
+	ac <- 0;
+#	AFFECT ac AS BIT(3)
+#	{
+#		A_LATCH | TMP
+#	};
+	4->CYCLES;
+}
+
+INSTRUCTION	"ANA M"		%10100110
+{
+	DECLARE	A_LATCH[8];
+	DECLARE	TMP[8];
+	A->A_LATCH;
+	C_FUNC GetByte(HL)->TMP;
+	AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN
+	{
+		A_LATCH & TMP
+	} -> A;
+	cy <- 0;
+	ac <- 0;
+#	AFFECT ac AS BIT(3)
+#	{
+#		A_LATCH | TMP
+#	};
+	7->CYCLES;
+}
+
+INSTRUCTION	"ANI %$1"		%11100110,B2[8]
+{
+	AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN
+	{
+		A & C_FUNC GetByte(PC)
+	} -> A;
+	PC<-PC+1;
+	cy <- 0;
+	ac <- 0;
+	7->CYCLES;
+}
+
+INSTRUCTION	"XRA %M0"	%10101:SSS
+{
+	AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN
+	{
+		A ^ SSS
+	} -> A;
+	cy <- 0;
+	ac <- 0;
+	4->CYCLES;
+}
+
+INSTRUCTION	"XRA M"		%10101110
+{
+	AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN
+	{
+		A ^ C_FUNC GetByte(HL)
+	} -> A;
+	cy <- 0;
+	ac <- 0;
+	7->CYCLES;
+}
+
+INSTRUCTION	"XRI %$1"	%11101110,B2[8]
+{
+	AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN
+	{
+		A ^ C_FUNC GetByte(PC)
+	} -> A;
+	PC<-PC+1;
+	cy <- 0;
+	ac <- 0;
+	7->CYCLES;
+}
+
+INSTRUCTION	"ORA %M0"	%10110:SSS
+{
+	AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN
+	{
+		A | SSS
+	} -> A;
+	cy <- 0;
+	ac <- 0;
+	4->CYCLES;
+}
+
+INSTRUCTION	"ORA M"		%10110110
+{
+	AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN
+	{
+		A | C_FUNC GetByte(HL)
+	} -> A;
+	cy <- 0;
+	ac <- 0;
+	7->CYCLES;
+}
+
+INSTRUCTION	"ORI %$1"	%11110110,B2[8]
+{
+	AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN
+	{
+		A | C_FUNC GetByte(PC)
+	} -> A;
+	PC<-PC+1;
+	cy <- 0;
+	ac <- 0;
+	7->CYCLES;
+}
+
+INSTRUCTION	"CMP %M0"	%10111:SSS
+{
+	AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3),cy AS CARRY(7)
+	{
+		A - SSS
+	};
+	4->CYCLES;
+}
+
+INSTRUCTION	"CMP M"		%10111110
+{
+	AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3),cy AS CARRY(7)
+	{
+		A - C_FUNC GetByte(HL)
+	};
+	7->CYCLES;
+}
+
+INSTRUCTION	"CPI %$1"	%11111110,B2[8]
+{
+	AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3),cy AS CARRY(7)
+	{
+		A - C_FUNC GetByte(PC)
+	};
+	PC<-PC+1;
+	7->CYCLES;
+}
+
+INSTRUCTION	"RLC"		%00000111
+{
+	ROL(A,cy,A[7..7],1) -> A;	# ROL is ROL(value,bitsOut,bitsIn,amount) e.g. can handle shifts/rotates (may provide NULL in future)
+	4->CYCLES;
+}
+
+INSTRUCTION	"RRC"		%00001111
+{
+	ROR(A,cy,A[0..0],1) -> A;
+	4->CYCLES;
+}
+
+INSTRUCTION	"RAL"		%00010111
+{
+	ROL(A,cy,cy,1) -> A;
+	4->CYCLES;
+}
+
+INSTRUCTION	"RAR"		%00011111
+{
+	ROR(A,cy,cy,1) -> A;
+	4->CYCLES;
+}
+
+INSTRUCTION	"CMA"		%00101111
+{
+	~A -> A;
+	4->CYCLES;
+}
+
+INSTRUCTION	"CMC"		%00111111
+{
+	~cy -> cy;
+	4->CYCLES;
+}
+
+INSTRUCTION	"STC"		%00110111
+{
+	1 -> cy;
+	4->CYCLES;
+}
+
+INSTRUCTION	"JMP %$2%$1"	%1100:UNOFFICIAL[1]:%011,B2[8],B3[8]	# %11000011 is the official opcode for JMP, this also generates unofficial permutations
+{
+	DECLARE	WZ[16] 		ALIAS W[8]:Z[8];
+	C_FUNC GetByte(PC)->Z;
+	PC<-PC+1;
+	C_FUNC GetByte(PC)->W;
+	PC<-WZ;
+	10->CYCLES;
+}
+
+INSTRUCTION	"J%M0 %$2%$1"		%11:CCC:%010,B2[8],B3[8]
+{
+	DECLARE	WZ[16] 		ALIAS W[8]:Z[8];
+	C_FUNC GetByte(PC)->Z;
+	PC<-PC+1;
+	C_FUNC GetByte(PC)->W;
+	PC<-PC+1;
+	IF CCC
+	{
+		PC<-WZ;
+	}
+	10->CYCLES;
+}
+
+INSTRUCTION	"CALL %$2%$1"	%11:UNOFFICIAL[2]:%1101,B2[8],B3[8]	# %11001101 is official opcode for CALL, this also generates unofficial permutations
+{
+	DECLARE	WZ[16] 		ALIAS W[8]:Z[8];
+	C_FUNC GetByte(PC)->Z;
+	PC<-PC+1;
+	C_FUNC GetByte(PC)->W;
+	PC<-PC+1;
+	SP<-SP-1;
+	C_FUNC SetStackByte(SP,PCH);
+	SP<-SP-1;
+	C_FUNC SetStackByte(SP,PCL);
+	PC<-WZ;
+	17->CYCLES;
+}
+
+INSTRUCTION	"C%M0 %$2%$1"	%11:CCC:%100,B2[8],B3[8]
+{
+	DECLARE	WZ[16] 		ALIAS W[8]:Z[8];
+	C_FUNC GetByte(PC)->Z;
+	PC<-PC+1;
+	C_FUNC GetByte(PC)->W;
+	PC<-PC+1;
+	11->CYCLES;
+	IF CCC
+	{
+		SP<-SP-1;
+		C_FUNC SetStackByte(SP,PCH);
+		SP<-SP-1;
+		C_FUNC SetStackByte(SP,PCL);
+		PC<-WZ;
+		17->CYCLES;
+	}
+}
+
+INSTRUCTION	"RET"		%110:UNOFFICIAL[1]:%1001	# %11001001 is the official opcode for RET, this also generates unofficial permutations
+{
+	DECLARE	WZ[16] 		ALIAS W[8]:Z[8];
+	Z<-C_FUNC GetStackByte(SP);
+	SP<-SP+1;
+	W<-C_FUNC GetStackByte(SP);
+	SP<-SP+1;
+	PC<-WZ;
+	10->CYCLES;
+}
+
+INSTRUCTION	"R%M0"		%11:CCC:%000
+{
+	5->CYCLES;
+	IF CCC
+	{
+		DECLARE	WZ[16] 		ALIAS W[8]:Z[8];
+		Z<-C_FUNC GetStackByte(SP);
+		SP<-SP+1;
+		W<-C_FUNC GetStackByte(SP);
+		SP<-SP+1;
+		PC<-WZ;
+		11->CYCLES;
+	}
+}
+
+INSTRUCTION	"RST %M0"	%11:NNN:%111
+{
+	SP<-SP-1;
+	C_FUNC SetStackByte(SP,PCH);
+	SP<-SP-1;
+	C_FUNC SetStackByte(SP,PCL);
+	0->PCH;
+	NNN->PCL;
+	11->CYCLES;
+}
+
+INSTRUCTION	"PCHL"		%11101001
+{
+	HL -> PC;
+	5->CYCLES;
+}
+
+INSTRUCTION	"PUSH %M0"	%11:PRP:%0101
+{
+	SP<-SP-1;
+	C_FUNC SetStackByte(SP,PRP[8..15]);
+	SP<-SP-1;
+	C_FUNC SetStackByte(SP,PRP[0..7]);
+	11->CYCLES;
+}
+
+INSTRUCTION	"PUSH PSW"	%11110101
+{
+	SP<-SP-1;
+	C_FUNC SetStackByte(SP,A);
+	SP<-SP-1;
+	C_FUNC SetStackByte(SP,FLAGS);
+	11->CYCLES;
+}
+
+INSTRUCTION	"POP %M0"	%11:PRP:%0001
+{
+	DECLARE	WZ[16] 		ALIAS W[8]:Z[8];
+	Z<-C_FUNC GetStackByte(SP);
+	SP<-SP+1;
+	W<-C_FUNC GetStackByte(SP);
+	SP<-SP+1;
+	PRP<-WZ;
+	10->CYCLES;
+}
+
+INSTRUCTION	"POP PSW"	%11110001
+{
+	FLAGS<-C_FUNC GetStackByte(SP);
+	SP<-SP+1;
+	A<-C_FUNC GetStackByte(SP);
+	SP<-SP+1;
+	10->CYCLES;
+}
+
+INSTRUCTION	"XTHL"		%11100011
+{
+	DECLARE	WZ[16] 		ALIAS W[8]:Z[8];
+	Z<-C_FUNC GetStackByte(SP);
+	SP<-SP+1;
+	W<-C_FUNC GetStackByte(SP);
+	C_FUNC SetStackByte(SP,H);
+	SP<-SP-1;
+	C_FUNC SetStackByte(SP,L);
+	HL<-WZ;
+	18->CYCLES;
+}
+
+INSTRUCTION	"IN %$1"	%11011011,B2[8]
+{
+	DECLARE	WZ[16] 		ALIAS W[8]:Z[8];
+	Z<-C_FUNC GetByte(PC);
+	PC<-PC+1;
+	W<-Z;
+	A<-C_FUNC GetPort(WZ);
+	10->CYCLES;
+}
+
+INSTRUCTION	"OUT %$1"	%11010011,B2[8]
+{
+	DECLARE	WZ[16] 		ALIAS W[8]:Z[8];
+	Z<-C_FUNC GetByte(PC);
+	PC<-PC+1;
+	W<-Z;
+	C_FUNC SetPort(WZ,A);
+	10->CYCLES;
+}
+
+
+INSTRUCTION	"EI"		%11111011
+{
+	I<-1;
+	4->CYCLES;
+}
+
+INSTRUCTION	"DI"		%11110011
+{
+	I<-0;
+	4->CYCLES;
+}
+
+INSTRUCTION	"HLT"		%01110110
+{
+	PC<-PC-1;
+	4->CYCLES;
+}
+
+INSTRUCTION	"NOP"		%00:UNOFFICIAL[3]:%000		# %00000000 is the official opcode for NOP, this also generates unofficial permutations
+{
+	4->CYCLES;
+}
+
