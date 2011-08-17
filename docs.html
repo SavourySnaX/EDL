@@ -518,7 +518,7 @@ result(1011) shiftedOut(0001)
 
 <h2><u>Instructions continued</u></h2>
 
-<p>At present due to limitations in the compiler, only 1 <b>EXECUTE</b> can occur in a given file, and it <em>MUST</em> occur before the definition of <b>INSTRUCTION</b>s. This will again be repaired in a future version of the compiler. </p>
+<p>At present due to limitations in the compiler <b>EXECUTE</b> <em>MUST</em> occur before the definition of <b>INSTRUCTION</b>s. This will again be repaired in a future version of the compiler. </p>
 
 <p>If <b>INSTRUCTION</b>s were limited to only a simple constant expression, declaring an emulation for a processor would be tedious at best. For this reason there are a few helpful features of <b>INSTRUCTION</b> definition. The next example shows one possible way to define the NOP instruction for the Intel 8080 which also takes care of the fact that the NOP instruction has multiple ocpodes (though only 1 is official).</p>
 
@@ -587,4 +587,38 @@ result(1011) shiftedOut(0001)
 <p>For disassembler purposes the %$n components are used to specify the offset from the address being disassembled that the subsequent operands can be found.</p>
 <p></p>
 
+<h2><u>Interfacing to C</u></h2>
 
+<p>It is possible to call EDL <b>HANDLER</b>s from a C code, just extern it like you would any function, a <b>HANDLER</b> signature is <em>ALWAYS</em> void handlerName(void). Similarly any globally declared variables are also accessable, however only the non aliased names are available, and care must be taken to match the bit size to the C Variable size. Its best to only access 8,16 or 32 bit values as they have direct representation in C.</p>
+
+<p>It is also possible to call C functions from within an EDL file, however the C function must only use unsigned params and return values (void return value is allowed). The compiler will currently only allow 0,8,16 or 32 bit return values and 8,16 or 32 bit parameters.</p>
+
+<pre style="background-color:#CCCCCC">
+<b>C_FUNC_EXTERN</b> Multiply [16],[8],[8];
+
+<b>HANDLER</b> test
+{
+	<b>DECLARE</b> result[16];
+
+	result <b>&lt-</b> <b>C_FUNC</b> Multiply(5,8);
+
+	<b>DEBUG_TRACE</b> result;
+}
+</pre>
+<p></p>
+<pre style="background-color:#CCCCCC">
+
+unsigned short Multiply(unsigned char a,unsigned char b)
+{
+	return a*b;
+}
+</pre>
+
+<p>Would hopefully return :</p>
+
+<pre style="color:white; background-color:#000000">
+result(0000000000101000)
+</pre>
+
+<p>Automatic promotion/truncation of values is performed for parameters into the function, no warnings are currently generated. One other warning, at present EDL is perfectly happen to use the return value of a C function that is declared void, EDL will use 0 instead.</p>
+<p></p>
