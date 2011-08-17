@@ -217,7 +217,7 @@ void MEM_Handler(unsigned char* memory)
 		}
 		else if (PIN_D==SYNC_HALT_ACK)
 		{
-			if (A=0x55)
+			if (A==0x55)
 			{
 				printf("Execution of ROM completed - Success\n");
 				exit(0);
