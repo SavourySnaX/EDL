@@ -185,16 +185,6 @@ public:
 	virtual const CString* GetString(CodeGenContext& context,unsigned num,unsigned slot);
 };
 
-class CMethodCall : public CExpression {
-public:
-	const CIdentifier& id;
-	ExpressionList arguments;
-	CMethodCall(const CIdentifier& id, ExpressionList& arguments) :
-		id(id), arguments(arguments) { }
-	CMethodCall(const CIdentifier& id) : id(id) { }
-	virtual llvm::Value* codeGen(CodeGenContext& context);
-};
-
 class CBinaryOperator : public CExpression {
 public:
 	int op;

@@ -267,24 +267,6 @@ Value* CAliasDeclaration::codeGen(CodeGenContext& context)
 	return NULL;
 }
 
-Value* CMethodCall::codeGen(CodeGenContext& context)
-{
-	Function *function = context.module->getFunction(id.name.c_str());
-	if (function == NULL) 
-	{
-		std::cerr << "no such function " << id.name << endl;
-		context.errorFlagged=true;
-		return NULL;
-	}
-	std::vector<Value*> args;
-	ExpressionList::const_iterator it;
-	for (it = arguments.begin(); it != arguments.end(); it++) {
-		args.push_back((**it).codeGen(context));
-	}
-	CallInst *call = CallInst::Create(function, args.begin(), args.end(), "", context.currentBlock());
-	return call;
-}
-
 Value* CDebugTraceString::codeGen(CodeGenContext& context)
 {
 /*	std::vector<Value*> args;
@@ -1184,11 +1166,14 @@ Value* CInstruction::codeGen(CodeGenContext& context)
 		context.popBlock();
 
 		// Glue callee back into execute (assumes execute comes before instructions at all times for now)
-		BasicBlock* tempBlock = BasicBlock::Create(getGlobalContext(),"callOut" + opcode.toString(16,false),context.blockEndForExecute->getParent(),0);
-		std::vector<Value*> args;
-		CallInst* fcall = CallInst::Create(function,args.begin(),args.end(),"",tempBlock);
-		BranchInst::Create(context.blockEndForExecute,tempBlock);
-		context.switchForExecute->addCase(ConstantInt::get(getGlobalContext(),opcode),tempBlock);
+		for (int b=0;b<context.executeLocations.size();b++)
+		{
+			BasicBlock* tempBlock = BasicBlock::Create(getGlobalContext(),"callOut" + opcode.toString(16,false),context.executeLocations[b].blockEndForExecute->getParent(),0);
+			std::vector<Value*> args;
+			CallInst* fcall = CallInst::Create(function,args.begin(),args.end(),"",tempBlock);
+			BranchInst::Create(context.executeLocations[b].blockEndForExecute,tempBlock);
+			context.executeLocations[b].switchForExecute->addCase(ConstantInt::get(getGlobalContext(),opcode),tempBlock);
+		}
 
 	}
 	return NULL;
@@ -1203,11 +1188,15 @@ Value* CExecute::codeGen(CodeGenContext& context)
 	{
 		const IntegerType* typeForExecute = cast<IntegerType>(load->getType());
 
-		context.blockEndForExecute = BasicBlock::Create(getGlobalContext(), "execReturn", context.currentBlock()->getParent(), 0);		// Need to cache this block away somewhere
-	
-		context.switchForExecute = SwitchInst::Create(load,context.blockEndForExecute,2<<typeForExecute->getBitWidth(),context.currentBlock());
+		ExecuteInformation temp;
 
-		context.setBlock(context.blockEndForExecute);
+		temp.blockEndForExecute = BasicBlock::Create(getGlobalContext(), "execReturn", context.currentBlock()->getParent(), 0);		// Need to cache this block away somewhere
+	
+		temp.switchForExecute = SwitchInst::Create(load,temp.blockEndForExecute,2<<typeForExecute->getBitWidth(),context.currentBlock());
+
+		context.setBlock(temp.blockEndForExecute);
+
+		context.executeLocations.push_back(temp);
 	}
 	return NULL;
 }

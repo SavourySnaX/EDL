@@ -51,6 +51,13 @@ public:
 	CStatesDeclaration* decl;
 };
 
+class ExecuteInformation
+{
+public:
+    llvm::BasicBlock* blockEndForExecute;
+    llvm::SwitchInst* switchForExecute;	
+};
+
 class CodeGenBlock 
 {
 public:
@@ -77,8 +84,7 @@ public:
 
     bool errorFlagged;
 
-    llvm::BasicBlock* blockEndForExecute;		/* TODO */
-    llvm::SwitchInst* switchForExecute;			/* These 2 need moving somewhere sensible, at present we can only have 1 EXECUTE in a module */
+    std::vector<ExecuteInformation> executeLocations;
 
     std::vector<Function *> handlersToTest;		/* ONLY USED FOR TESTING PURPOSES */
 
