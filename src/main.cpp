@@ -10,7 +10,7 @@ extern CBlock* g_ProgramBlock;
 extern FILE *yyin;
 CodeGenContext* globalContext;
 
-bool JustCompiledOutput=false;
+bool JustCompiledOutput=true;
 
 int main(int argc, char **argv)
 {
@@ -22,7 +22,7 @@ int main(int argc, char **argv)
 	if (argc == 3)
 	{
 		yyin = fopen(argv[1],"r");
-		JustCompiledOutput=true;
+		JustCompiledOutput=false;
 	}
 
 	yyparse();

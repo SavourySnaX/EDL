@@ -3,13 +3,6 @@
  *
  *  Uses 8080 step core built in EDL
  *  Rest is C for now
- *
- *
- *
- *
- *
- *
- *
  */
 
 #include <GL/glfw3.h>
@@ -23,17 +16,8 @@ void STEP(void);
 void RESET(void);
 void INTERRUPT(void);
 
-// Step 1. Memory
-
-//0000 - 07FF	- invaders.h
-//0800 - 0FFF	- invaders.g
-//1000 - 17FF	- invaders.f
-//1800 - 1FFF	- invaders.e
-
-unsigned char Rom[0x2000];	// rom
+unsigned char Rom[0x2000];
 unsigned char Ram[0x2000];
-
-unsigned char RamCmp[0x2000];
 
 int LoadRom(unsigned int address,unsigned int size,const char* fname)
 {
@@ -60,64 +44,11 @@ int InitialiseMemory()
 	if (LoadRom(0x1800,0x0800,"roms/invaders/invaders.e"))
 		return 1;
 
-	// Blank video and ram for now - real hardware probably doesn't do this though!
-	memset(&Ram[0],0,256*32);
-	memset(&RamCmp[0],0,256*32);
 	return 0;
 }
 
-void SaveScreen()
-{
-	int x,y,go=0;
-	unsigned char zero=0;
-	unsigned char all=255;
-	FILE* screen=NULL;
-	char filename[256];
-	static int magic=0;
-	
-	for (y=32;y<256;y++)
-	{
-		for (x=0;x<32;x++)
-		{
-			if (Ram[y*32+x]!=RamCmp[y*32+x])
-			{
-				go=1;
-			}
-			RamCmp[y*32+x]=Ram[y*32+x];
-		}
-	}
-
-	if (!go)
-		return;
-
-	sprintf(filename,"screens/out%05d.raw",magic++);
-	screen = fopen(filename,"wb");
-	for (y=32;y<256;y++)
-	{
-		for (x=0;x<32;x++)
-		{
-			unsigned char mask=0x01;
-			while (mask)
-			{
-				if (Ram[y*32 + x]&mask)
-				{
-					fwrite(&all,1,1,screen);
-				}
-				else
-				{
-					fwrite(&zero,1,1,screen);
-				}
-				mask<<=1;
-			}
-		}
-	}
-
-	fclose(screen);
-}
-	
 int masterClock=0;
 int pixelClock=0;
-int cpuClock=0;
 
 int KeyDown(int key);
 int CheckKey(int key);
@@ -204,8 +135,6 @@ void HandleIOPortWrite(unsigned char port,unsigned char data)
 #define MAX_WINDOWS		(8)
 
 #define MAIN_WINDOW		0
-#define TIMING_WINDOW		1
-#define REGISTER_WINDOW		2
 
 GLFWwindow windows[MAX_WINDOWS];
 unsigned char *videoMemory[MAX_WINDOWS];
@@ -213,31 +142,28 @@ GLint videoTexture[MAX_WINDOWS];
 
 void ShowScreen(int windowNum,int w,int h)
 {
-	if (windowNum==MAIN_WINDOW)
+	int x,y,b;
+	unsigned char* outputTexture = videoMemory[windowNum];
+	for (y=32;y<256;y++)
 	{
-		int x,y,b;
-		unsigned char* outputTexture = videoMemory[windowNum];
-		for (y=32;y<256;y++)
+		for (x=0;x<32;x++)
 		{
-			for (x=0;x<32;x++)
+			unsigned char mask=0x01;
+			for (b=0;b<8;b++)
 			{
-				unsigned char mask=0x01;
-				for (b=0;b<8;b++)
+				if (Ram[y*32 + x]&mask)
 				{
-					if (Ram[y*32 + x]&mask)
-					{
-						outputTexture[(x*8+b+y*256)*4+0]=0xFF;
-						outputTexture[(x*8+b+y*256)*4+1]=0xFF;
-						outputTexture[(x*8+b+y*256)*4+2]=0xFF;
-					}
-					else
-					{
-						outputTexture[(x*8+b+y*256)*4+0]=0x0;
-						outputTexture[(x*8+b+y*256)*4+1]=0x0;
-						outputTexture[(x*8+b+y*256)*4+2]=0x0;
-					}
-					mask<<=1;
+					outputTexture[(x*8+b+y*256)*4+0]=0xFF;
+					outputTexture[(x*8+b+y*256)*4+1]=0xFF;
+					outputTexture[(x*8+b+y*256)*4+2]=0xFF;
 				}
+				else
+				{
+					outputTexture[(x*8+b+y*256)*4+0]=0x0;
+					outputTexture[(x*8+b+y*256)*4+1]=0x0;
+					outputTexture[(x*8+b+y*256)*4+2]=0x0;
+				}
+				mask<<=1;
 			}
 		}
 	}
@@ -247,34 +173,17 @@ void ShowScreen(int windowNum,int w,int h)
 	glTexSubImage2D(GL_TEXTURE_RECTANGLE_NV, 0, 0, 0, w, h, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, videoMemory[windowNum]);
 	glBegin(GL_QUADS);
 
-	if (windowNum==MAIN_WINDOW)		// Invaders needs rotating
-	{
-		glTexCoord2f(0.0f, 0.0f);
-		glVertex2f((-1.0f * 0) - (1.0f*1.f), (1.0f*0) + (-1.f*1.0f));
+	glTexCoord2f(0.0f, 0.0f);
+	glVertex2f((-1.0f * 0) - (1.0f*1.f), (1.0f*0) + (-1.f*1.0f));
 
-		glTexCoord2f(0.0f, h);
-		glVertex2f((-1.0f * 0) - (-1.0f*1.f), (-1.0f*0) + (-1.f*1.0f));
+	glTexCoord2f(0.0f, h);
+	glVertex2f((-1.0f * 0) - (-1.0f*1.f), (-1.0f*0) + (-1.f*1.0f));
 
-		glTexCoord2f(w, h);
-		glVertex2f((1.0f * 0) - (-1.0f*1.f), (-1.0f*0) + (1.f*1.0f));
+	glTexCoord2f(w, h);
+	glVertex2f((1.0f * 0) - (-1.0f*1.f), (-1.0f*0) + (1.f*1.0f));
 
-		glTexCoord2f(w, 0.0f);
-		glVertex2f((1.0f * 0) - (1.0f*1.f), (1.0f*0) + (1.f*1.0f));
-	}
-	else
-	{
-		glTexCoord2f(0.0f, 0.0f);
-		glVertex2f(-1.0f,1.0f);
-
-		glTexCoord2f(0.0f, h);
-		glVertex2f(-1.0f, -1.0f);
-
-		glTexCoord2f(w, h);
-		glVertex2f(1.0f, -1.0f);
-
-		glTexCoord2f(w, 0.0f);
-		glVertex2f(1.0f, 1.0f);
-	}
+	glTexCoord2f(w, 0.0f);
+	glVertex2f((1.0f * 0) - (1.0f*1.f), (1.0f*0) + (1.f*1.0f));
 	glEnd();
 	
 	glFlush();
@@ -364,20 +273,6 @@ void kbHandler( GLFWwindow window, int key, int action )		/* At present ignores 
 	keyArray[key*3 + 2]|=(keyArray[key*3+0]==GLFW_RELEASE)&&(keyArray[key*3+1]==GLFW_PRESS);
 }
 
-int mouseWheelDelta=0;
-
-void mwHandler( GLFWwindow window,int posx,int posy)
-{
-	mouseWheelDelta=posy;
-}
-
-int wcHandler( GLFWwindow window )
-{
-	return 1;
-}
-
-void Disassemble(unsigned int address);
-
 extern unsigned short PC;
 extern unsigned char CYCLES;
 
@@ -403,8 +298,6 @@ int main(int argc,char**argv)
 	glfwSwapInterval(0);			// Disable VSYNC
 
 	glfwSetKeyCallback(kbHandler);
-	glfwSetScrollCallback(mwHandler);
-	glfwSetWindowCloseCallback(wcHandler);
 
 	atStart=glfwGetTime();
 	//////////////////
@@ -416,8 +309,6 @@ int main(int argc,char**argv)
 
 	while (!glfwGetKey(windows[MAIN_WINDOW],GLFW_KEY_ESC))
 	{
-//		Disassemble(PC);
-
 		STEP();
 
 		masterClock+=CYCLES;

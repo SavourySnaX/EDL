@@ -36,29 +36,6 @@ void CodeGenContext::generateCode(CBlock& root)
 	
 	root.codeGen(*this);	/* Generate complete code - starting at no block (global space) */
 
-	if (!JustCompiledOutput)
-	{
-		/* Finally create an entry point - which does nothing for now */
-		vector<const Type*> argTypes;
-		FunctionType *ftype = FunctionType::get(Type::getVoidTy(getGlobalContext())/* Type::getInt64Ty(getGlobalContext())*/, argTypes, false);
-		mainFunction = Function::Create(ftype, GlobalValue::ExternalLinkage, "moduleTester", module);
-		BasicBlock *bblock = BasicBlock::Create(getGlobalContext(), "entry", mainFunction, 0);
-
-		/* Push a new variable/block context */
-		pushBlock(bblock);
-
-		for (int a=0;a<9;a++)
-		{
-			for (int b=0;b<handlersToTest.size();b++)
-			{
-				CallInst::Create(handlersToTest[b],"",bblock);
-			}
-		}
-
-		ReturnInst::Create(getGlobalContext(), bblock);
-		popBlock();
-	}
-
 	if (errorFlagged)
 	{
 		std::cerr << "Compilation Failed" << std::endl;
@@ -146,12 +123,6 @@ GenericValue CodeGenContext::runCode()
 {
 	GenericValue v;
 
-	if (!errorFlagged && !JustCompiledOutput)
-	{
-		std::cout << "Running code...\n";
-		vector<GenericValue> noargs;
-		v = ee->runFunction(mainFunction, noargs);
-	}
 	return v;
 }
 

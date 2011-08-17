@@ -1,0 +1,1 @@
+This folder contains simplified versions of chips described in EDL, they generally require some external functionality for interfacing to memory (since they don't emulate the pins). 

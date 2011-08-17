@@ -1,0 +1,6 @@
+
+HANDLER edlMain
+{
+	DEBUG_TRACE "Hello World!";
+}
+

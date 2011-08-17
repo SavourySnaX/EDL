@@ -1,0 +1,8 @@
+This folder contains an example of using EDL to create a cycle accurate Space Invaders Emulator.
+
+At present it uses the accurate i8080 definition for emulating the cpu and the rest of the hardware is handled in the C code. 
+
+This version also includes a timing window and a cpu debugger window.
+
+You will need to place the space invaders roms into roms/invaders/
+

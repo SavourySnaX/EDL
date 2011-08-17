@@ -1,0 +1,6 @@
+This folder contains an example of using EDL to create a traditional (simplified) Space Invaders Emulator.
+
+At present it uses the simplified i8080 definition for emulating the cpu and the rest of the hardware is handled in the C code. 
+
+You will need to place the space invaders roms into roms/invaders/
+
