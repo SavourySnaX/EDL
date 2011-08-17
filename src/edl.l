@@ -39,6 +39,9 @@ BIT					{ return TOKEN(TOK_BIT); }
 DEBUG_TRACE				{ return TOKEN(TOK_TRACE); }
 BASE					{ return TOKEN(TOK_BASE); }
 
+C_FUNC					{ return TOKEN(TOK_C_FUNC); }
+C_FUNC_EXTERN				{ return TOKEN(TOK_C_FUNC_EXTERN); }
+
 [a-zA-Z_][a-zA-Z0-9_]*			{ SAVE_TOKEN; return TOK_IDENTIFIER; }
 [0-9]+					{ SAVE_TOKEN; return TOK_INTEGER; /* decimal */}
 \%[01]+					{ SAVE_TOKEN; return TOK_INTEGER; /* binary */}

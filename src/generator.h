@@ -90,6 +90,7 @@ public:
 
     std::map<std::string, BitVariable> m_globals;
     std::map<std::string, StateVariable> m_states;
+    std::map<std::string, Function*> m_externFunctions;
     std::map<CStatesDeclaration*,StateVariable> m_statesAlt;
     std::map<std::string, CHandlerDeclaration*> m_handlers;
     std::map<std::string, CMappingDeclaration*> m_mappings;

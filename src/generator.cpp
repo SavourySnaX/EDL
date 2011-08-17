@@ -1904,3 +1904,96 @@ Value* CAffector::codeGen(CodeGenContext& context)
 	return exprResult;
 }
 
+Value* CExternDecl::codeGen(CodeGenContext& context)
+{
+	// Build up the function type parameters. At present the only allowed sizes are : 
+	// 	0 -> void	(only allowed for return!!)
+	// 	8 -> unsigned char  (technically u_int8_t)
+	// 	16-> unsigned short (technically u_int16_t)
+	// 	32-> unsigned int   (technically u_int32_t)
+
+  	std::vector<const Type*> FuncTy_8_args;
+	for (int a=1;a<params.size();a++)			// skip the return type
+	{
+		unsigned size = params[a]->integer.getLimitedValue();
+		if (size!=8 && size!=16 && size!=32)
+		{
+			std::cerr << "External C functions must use C size parameters (8,16 or 32 bits!) " << std::endl;
+			context.errorFlagged=true;
+			return NULL;
+		}
+		FuncTy_8_args.push_back(IntegerType::get(getGlobalContext(), size));
+	}
+	FunctionType* FuncTy_8;
+	if (params[0]->integer.getLimitedValue()==0)
+	{
+		FuncTy_8 = FunctionType::get(Type::getVoidTy(getGlobalContext()),FuncTy_8_args,false);
+	}
+	else
+	{
+		unsigned size = params[0]->integer.getLimitedValue();
+		if (size!=8 && size!=16 && size!=32)
+		{
+			std::cerr << "External C functions must use C size parameters (8,16 or 32 bits!) " << std::endl;
+			context.errorFlagged=true;
+			return NULL;
+		}
+		FuncTy_8 = FunctionType::get(IntegerType::get(getGlobalContext(), size),FuncTy_8_args,false);
+	}
+
+	Function* func = Function::Create(FuncTy_8,GlobalValue::ExternalLinkage,name.name,context.module);
+	func->setCallingConv(CallingConv::C);
+	AttrListPtr func_attrs;
+	func->setAttributes(func_attrs);
+
+	context.m_externFunctions[name.name] = func;
+
+	return NULL;
+}
+
+Value* CFuncCall::codeGen(CodeGenContext& context)
+{
+	if (context.m_externFunctions.find(name.name)==context.m_externFunctions.end())
+	{
+		std::cerr << "External Function Declaration Required to use a C Function : " << name.name << std::endl;
+		context.errorFlagged=true;
+		return NULL;
+	}
+	Function* func = context.m_externFunctions[name.name];
+
+	std::vector<Value*> args;
+	const FunctionType* funcType = func->getFunctionType();
+
+	for (int a=0,b=0;a<params.size();a++,b++)
+	{
+		if (b==funcType->getNumParams())
+		{
+			std::cerr << "Wrong Number Of Arguments To C Function : " << name.name << std::endl;
+			context.errorFlagged=true;
+			return NULL;
+		}
+
+		Value* exprResult = params[a]->codeGen(context);
+
+		// We need to promote the return type to the same as the function parameters (Auto promote rules)
+		Instruction::CastOps op = CastInst::getCastOpcode(exprResult,false,funcType->getParamType(b),false);
+		exprResult = CastInst::Create(op,exprResult,funcType->getParamType(b),"",context.currentBlock());
+
+		args.push_back(exprResult);
+	}
+	Value* call;
+	if (funcType->getReturnType()->isVoidTy())
+	{
+		call = CallInst::Create(func, args.begin(), args.end(), "", context.currentBlock());
+
+		call = ConstantInt::get(getGlobalContext(),APInt(1,0));		// Forces void returns to actually return 0
+	}
+	else
+	{
+		call = CallInst::Create(func, args.begin(), args.end(), "CallingCFunc"+name.name, context.currentBlock());
+	}
+
+	return call;
+}
+
+

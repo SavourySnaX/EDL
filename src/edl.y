@@ -31,6 +31,7 @@
 	CMapping *mapping;
 	COperandPartial *opPartial;
 	CAffect *affect;
+	CExternDecl *extern_c_decl;
 	std::vector<COperand*> *opervec;
 	std::vector<CAliasDeclaration*> *aliasvec;
 	std::vector<CStateDeclaration*> *varvec;
@@ -39,6 +40,8 @@
 	std::vector<CStateIdent*> *staterefvec;
 	std::vector<CMapping*> *mappingvec;
 	std::vector<CAffect*> *affectvec;
+	std::vector<CInteger*> *externparams;
+	std::vector<CExpression*> *params;
 	std::string *string;
 	int token;
 }
@@ -48,11 +51,14 @@
 %token <token>	TOK_INSTRUCTION	TOK_EXECUTE TOK_ROL TOK_ROR TOK_MAPPING TOK_AFFECT TOK_AS		/* Reserved words */
 %token <token>	TOK_ZERO TOK_SIGN TOK_PARITYEVEN TOK_PARITYODD TOK_CARRY TOK_BIT			/* Reserved words AFFECTORS */
 %token <token>	TOK_TRACE TOK_BASE									/* Debug reserved words */
+%token <token>	TOK_C_FUNC TOK_C_FUNC_EXTERN								/* C Calling Interface */
 %token <token> TOK_LSQR TOK_RSQR TOK_LBRACE TOK_RBRACE TOK_COMMA TOK_COLON TOK_EOS 			/* Operators/Seperators */
 %token <token> TOK_ASSIGNLEFT TOK_ASSIGNRIGHT TOK_ADD TOK_SUB TOK_OBR TOK_CBR TOK_CMPEQ TOK_BAR		/* Operators/Seperators */
 %token <token> TOK_DOT TOK_AT TOK_AMP TOK_TILDE TOK_DDOT TOK_CMPNEQ TOK_HAT				/* Operators/Seperators */
 %token <token> TOK_CMPLESSEQ TOK_CMPLESS TOK_CMPGREATEREQ TOK_CMPGREATER				/* Operators/Seperators */
 
+%type <params> params
+%type <externparams> params_list
 %type <affect> affector
 %type <mapping> mapping
 %type <operand> operand 
@@ -71,7 +77,7 @@
 %type <staterefvec> state_ident_list
 /* %type <exprvec> call_args */
 %type <block> program block stmts 
-%type <stmt> stmt var_decl handler_decl state_decl states_decl state_def alias_decl ifblock debug instruction_decl mapping_decl
+%type <stmt> stmt var_decl handler_decl state_decl states_decl state_def alias_decl ifblock debug instruction_decl mapping_decl extern_c_decl
 
 %right TOK_ASSIGNRIGHT
 %left TOK_ASSIGNLEFT
@@ -96,6 +102,7 @@ stmt : var_decl TOK_EOS
      | states_decl
      | state_def
      | handler_decl
+     | extern_c_decl
      | instruction_decl
      | mapping_decl
      | ifblock
@@ -106,6 +113,13 @@ stmt : var_decl TOK_EOS
      | TOK_TRACE debuglist TOK_EOS { $$ = new CDebugLine(*$2); delete $2; }
      | expr TOK_EOS { $$ = new CExpressionStatement(*$1); }
      ;
+
+params_list : params_list TOK_COMMA TOK_LSQR numeric TOK_RSQR { $$->push_back($<intgr>4); }
+	    | TOK_LSQR numeric TOK_RSQR { $$ = new ExternParamsList(); $$->push_back($<intgr>2); }
+	;
+
+extern_c_decl : TOK_C_FUNC_EXTERN ident params_list TOK_EOS	{ $$ = new CExternDecl(*$2,*$3); delete $3; }
+	      ;
 
 debug : quoted { $$ = new CDebugTraceString(*$1); }
       | numeric { $$ = new CDebugTraceInteger(*$1); }
@@ -194,6 +208,11 @@ affectors : affectors TOK_COMMA affector { $$->push_back($<affect>3); }
 	  | affector { $$ = new AffectorList(); $$->push_back($<affect>1); }
 	;
 
+params : params TOK_COMMA expr	{ $$->push_back($3); }
+       | expr			{ $$ = new ParamsList(); $$->push_back($1); }
+	|			{ $$ = new ParamsList(); }
+	;
+
 expr : ident TOK_ASSIGNLEFT expr { $$ = new CAssignment(*$<ident>1,*$3); }
      | expr TOK_ASSIGNRIGHT ident { $$ = new CAssignment(*$<ident>3,*$1); }
      | expr TOK_ADD expr { $$ = new CBinaryOperator(*$1,TOK_ADD,*$3); }
@@ -213,6 +232,7 @@ expr : ident TOK_ASSIGNLEFT expr { $$ = new CAssignment(*$<ident>1,*$3); }
      | TOK_ROR TOK_OBR expr TOK_COMMA ident TOK_COMMA expr TOK_COMMA numeric TOK_CBR { $$ = new CRotationOperator(TOK_ROR,*$3,*$5,*$7,*$9); }
      | expr TOK_LSQR numeric TOK_RSQR { $3->Decrement(); $$ = new CCastOperator(*$1,*$3); }
      | expr TOK_LSQR numeric TOK_DDOT numeric TOK_RSQR { $$ = new CCastOperator(*$1,*$3,*$5); }
+     | TOK_C_FUNC ident TOK_OBR params TOK_CBR { $$ = new CFuncCall(*$2,*$4); }
      | TOK_AFFECT affectors TOK_LBRACE expr TOK_RBRACE { $$ = new CAffector(*$2,*$4); }
      | ident { $<ident>$ = $1; }
      | numeric { $$ = new CInteger(*$1); delete $1; }

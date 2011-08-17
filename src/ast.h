@@ -24,6 +24,7 @@ class COperand;
 class CMapping;
 class CAffect;
 class CString;
+class CInteger;
 
 typedef std::vector<CStatement*> StatementList;
 typedef std::vector<CExpression*> ExpressionList;
@@ -35,6 +36,8 @@ typedef std::vector<CStateIdent*> StateIdentList;
 typedef std::vector<COperand*> OperandList;
 typedef std::vector<CMapping*> MappingList;
 typedef std::vector<CAffect*> AffectorList;
+typedef std::vector<CInteger*> ExternParamsList;
+typedef std::vector<CExpression*> ParamsList;
 
 class CNode {
 public:
@@ -488,3 +491,24 @@ public:
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
 
+class CExternDecl : public CStatement {
+public:
+	CIdentifier& name;
+	ExternParamsList params;
+
+	CExternDecl(CIdentifier& name,ExternParamsList& params) :
+		name(name), params(params) { }
+
+	virtual llvm::Value* codeGen(CodeGenContext& context);
+};
+
+class CFuncCall : public CExpression {
+public:
+	CIdentifier& name;
+	ParamsList& params;
+
+	CFuncCall(CIdentifier& name,ParamsList& params) :
+		name(name), params(params) { }
+	
+	virtual llvm::Value* codeGen(CodeGenContext& context);
+};
