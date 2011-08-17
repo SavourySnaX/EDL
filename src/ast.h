@@ -39,7 +39,7 @@ typedef std::vector<CAffect*> AffectorList;
 class CNode {
 public:
 	virtual ~CNode() {}
-	virtual llvm::Value* codeGen(CodeGenContext& context) { }
+	virtual llvm::Value* codeGen(CodeGenContext& context) { return NULL; }
 };
 
 class CExpression : public CNode {
