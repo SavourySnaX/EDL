@@ -609,7 +609,7 @@ result(1011) shiftedOut(0001)
 
 <h2><u>Interfacing to C</u></h2>
 
-<p>It is possible to call EDL <b>HANDLER</b>s from a C code, just extern it like you would any function, a <b>HANDLER</b> signature is <em>ALWAYS</em> void handlerName(void). Similarly any globally declared variables are also accessable, however only the non aliased names are available, and care must be taken to match the bit size to the C Variable size. Its best to only access 8,16 or 32 bit values as they have direct representation in C.</p>
+<p>To call a <b>HANDLER</b> from C, you must set a value to the <b>PIN</b>s accessor function - see <b>Pins</b> above. Similarly any globally declared variables are also accessable, however only the non aliased names are available, and care must be taken to match the bit size to the C Variable size. Its best to only access 8,16 or 32 bit values as they have direct representation in C.</p>
 
 <p>It is also possible to call C functions from within an EDL file, however the C function must only use unsigned params and return values (void return value is allowed). The compiler will currently only allow 0,8,16 or 32 bit return values and 8,16 or 32 bit parameters.</p>
 
@@ -628,7 +628,7 @@ result(1011) shiftedOut(0001)
 <p></p>
 <pre style="background-color:#CCCCCC">
 
-unsigned short Multiply(unsigned char a,unsigned char b)
+uint16_t Multiply(uint8_t a,uint8_t b)
 {
 	return a*b;
 }
