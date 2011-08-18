@@ -166,14 +166,30 @@ foo(AA)
 <td>Both Input and Output. Creates both <b>IN</b> and <b>OUT</b> accessors (see above)</td>
 </tr>
 </table>
+<p></p>
 
 <h2><u>Handlers</u></h2>
 
-<p><b>HANDLER</b>s are functions that are automatically called when even a <b>PIN</b> changes value.</p>
+<p><b>HANDLER</b>s are functions that are automatically called when even a <b>PIN</b> changes value, they can only be tied to <b>PIN</b>s that recieve data from the outside world. <b>HANDLER</b>s must be given a rule that governs when they execute, see table below : </p>
 
+<table border="1" cellpadding="2" cellspacing="1" width="100%">
+<tr>
+<td><b>ALWAYS</b></td>
+<td>Will be called whenever the pin recieves a value.</td>
+</tr>
+<tr>
+<td><b>CHANGED</b></td>
+<td>Will be called whenever the pin recieves a value other than its current.</td>
+</tr>
+<tr>
+<td><b>TRANSITION(<EM>old</EM>,<EM>new</EM>)</b></td>
+<td>Will be called when the stated transition occurs. Useful for pins that are edge triggered.</td>
+</tr>
+</table>
+<p></p>
 <pre style="background-color:#CCCCCC">
 <b>PIN</b> Hello[1];
-<b>HANDLER</b> Hello
+<b>HANDLER</b> Hello <b>ALWAYS</b>
 {
 	<b>DEBUG_TRACE</b> "Hello World!";
 }
@@ -609,7 +625,7 @@ result(1011) shiftedOut(0001)
 
 <h2><u>Interfacing to C</u></h2>
 
-<p>To call a <b>HANDLER</b> from C, you must set a value to the <b>PIN</b>s accessor function - see <b>Pins</b> above. Similarly any globally declared variables are also accessable, however only the non aliased names are available, and care must be taken to match the bit size to the C Variable size. Its best to only access 8,16 or 32 bit values as they have direct representation in C.</p>
+<p>To call a <b>HANDLER</b> from C, you must set a value to the <b>PIN</b>s accessor function - see <b>Pins</b> above. Currently any globally declared variables are also accessable, however only the non aliased names are available, and care must be taken to match the bit size to the C Variable size. Its best to only access 8,16 or 32 bit values as they have direct representation in C.</p>
 
 <p>It is also possible to call C functions from within an EDL file, however the C function must only use unsigned params and return values (void return value is allowed). The compiler will currently only allow 0,8,16 or 32 bit return values and 8,16 or 32 bit parameters.</p>
 
