@@ -1,7 +1,12 @@
 # Intel 8080 - This version of the core works like traditional cpu
-#             emulators. Call STEP to advance 1 instruction. Interfaces
+#             emulators. Call PinSetSTEP(1) to advance 1 instruction. Interfaces
 #             to memory via external C functions, so the 7 calls below
 #             need to be created for the emulation to compile.
+#
+#
+# Because this version of the emulation is not designed as Pin Accurate package, STEP,RESET,INTERRUPT have fake pins
+# the pins must be written to for the HANDLER to be called, STEP & RESET don't care what value, INTERRUPT expects to be given the
+# opcode to execute (e.g. RST $10)
 #
 
 C_FUNC_EXTERN	GetByte			[8],[16];
@@ -24,9 +29,12 @@ C_FUNC_EXTERN	GetPort			[8],[16];
 C_FUNC_EXTERN	SetPort			[0],[16],[8];
 # void SetPort(unsigned short,unsiged char);
 #  Called when the cpu wants to write a byte to an output port
-C_FUNC_EXTERN	GetInterruptVector	[8];
-# unsigned char GetInterruptVector();
-#  Should return the opcode to execute (e.g. RST $10)
+
+# Since functions are still not implemented, but handlers now work only pins, the following fake pins are created
+
+PIN IN	STEP[1];
+PIN IN	RESET[1];
+PIN IN	INTERRUPT[8];
 
 # CYCLE COUNTER
 DECLARE CYCLES[8];
@@ -63,7 +71,7 @@ HANDLER		INTERRUPT
 	{
 		DECLARE	IR[8];
 		
-		IR<-C_FUNC GetInterruptVector();
+		IR<-INTERRUPT;
 
 		EXECUTE IR;
 	}

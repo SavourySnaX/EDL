@@ -1,5 +1,7 @@
 
-HANDLER edlMain
+PIN IN Main[1];
+
+HANDLER Main
 {
 	DEBUG_TRACE "Hello World!";
 }

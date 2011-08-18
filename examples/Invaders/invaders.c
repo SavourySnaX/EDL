@@ -18,39 +18,39 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdint.h>
 
 void DrawTiming(unsigned char* buffer,unsigned int width);
 
-extern unsigned short PIN_A;
-extern unsigned char PIN_D;
-extern unsigned char PIN_WAIT;
-extern unsigned char PIN_READY;
-extern unsigned char PIN_O1;
-extern unsigned char PIN_HLDA;
-extern unsigned char PIN_SYNC;
-extern unsigned char PIN__WR;
-extern unsigned char PIN_DBIN;
-extern unsigned char PIN_INTE;
-extern unsigned char PIN_O2;
-extern unsigned char PIN_INT;
-extern unsigned char PIN_HOLD;
-extern unsigned char PIN_RESET;
+uint16_t PinGetPIN_A();
+uint8_t PinGetPIN_D();
+void PinSetPIN_D(uint8_t);
+void PinSetPIN_READY(uint8_t);
+void PinSetO1(uint8_t);
+void PinSetO2(uint8_t);
+uint8_t PinGetPIN_SYNC();
+uint8_t PinGetPIN__WR();
+void PinSetINT(uint8_t);
+void PinSetRESET(uint8_t);
 
-void O1(void);
-void O2(void);
-void RESET(void);
-void INT_PIN(void);
+// Because certain pin's on the cpu are no longer readable external, the following buffers are used so that the timing capture will still work
+uint8_t PIN_BUFFER_READY=0;
+uint8_t PIN_BUFFER_RESET=0;
+uint8_t PIN_BUFFER_O1=0;
+uint8_t PIN_BUFFER_O2=0;
+uint8_t PIN_BUFFER_INT=0;
+uint8_t PIN_BUFFER_HOLD=0;
 
-extern unsigned char	SYNC_FETCH;
-extern unsigned char	SYNC_MEM_READ;
-extern unsigned char	SYNC_MEM_WRITE;
-extern unsigned char	SYNC_STACK_READ;
-extern unsigned char	SYNC_STACK_WRITE;
-extern unsigned char	SYNC_INPUT;
-extern unsigned char	SYNC_OUTPUT;
-extern unsigned char	SYNC_INT_ACK;
-extern unsigned char	SYNC_HALT_ACK;
-extern unsigned char	SYNC_INT_ACK_HALTED;
+extern uint8_t	SYNC_FETCH;
+extern uint8_t	SYNC_MEM_READ;
+extern uint8_t	SYNC_MEM_WRITE;
+extern uint8_t	SYNC_STACK_READ;
+extern uint8_t	SYNC_STACK_WRITE;
+extern uint8_t	SYNC_INPUT;
+extern uint8_t	SYNC_OUTPUT;
+extern uint8_t	SYNC_INT_ACK;
+extern uint8_t	SYNC_HALT_ACK;
+extern uint8_t	SYNC_INT_ACK_HALTED;
 
 // Step 1. Memory
 
@@ -238,12 +238,12 @@ int MEM_Handler()
 
 	// Watch for SYNC pulse and TYPE and latch them
 
-	if (PIN_SYNC)
+	if (PinGetPIN_SYNC())
 	{
-		SYNC_LATCH=PIN_D;
+		SYNC_LATCH=PinGetPIN_D();
 		if (SYNC_LATCH==SYNC_FETCH)
 		{
-			SYNC_A_LATCH=PIN_A;
+			SYNC_A_LATCH=PinGetPIN_A();
 			NewInstructionBegun=2;
 			if (dumpInstruction>0)
 			{
@@ -273,61 +273,64 @@ int MEM_Handler()
 
 	// CPU INPUT expects data to be available on T2 state so we can do that work on the PIN_SYNC itself
 	// Assume memory has no latency
-	if (PIN_SYNC)
+	if (PinGetPIN_SYNC())
 	{
 		if (SYNC_LATCH==SYNC_FETCH || SYNC_LATCH==SYNC_STACK_READ || SYNC_LATCH==SYNC_MEM_READ)
 		{
-			if (PIN_A>0x3FFF)
+			if (PinGetPIN_A()>0x3FFF)
 			{
-				printf("Out of bounds read : %04X | masterClock : %d\n",PIN_A,masterClock);
+				printf("Out of bounds read : %04X | masterClock : %d\n",PinGetPIN_A(),masterClock);
 			}
-			if ((PIN_A&0x2000) == 0x2000)
+			if ((PinGetPIN_A()&0x2000) == 0x2000)
 			{
-				PIN_D=Ram[PIN_A&0x1FFF];
+				PinSetPIN_D(Ram[PinGetPIN_A()&0x1FFF]);
 			}
 			else
 			{
-				PIN_D=Rom[PIN_A&0x1FFF];
+				PinSetPIN_D(Rom[PinGetPIN_A()&0x1FFF]);
 			}
 			if (dumpInstruction>0)
 			{
-				printf("Reading : %04X - %02X\n",PIN_A,PIN_D);
+				printf("Reading : %04X - %02X\n",PinGetPIN_A(),PinGetPIN_D());
 			}
-			PIN_READY=1;
+			PinSetPIN_READY(1);
+			PIN_BUFFER_READY=1;
 		}
 		else if (SYNC_LATCH==SYNC_STACK_WRITE || SYNC_LATCH==SYNC_MEM_WRITE || SYNC_LATCH==SYNC_OUTPUT)
 		{
-			PIN_READY=1;
+			PinSetPIN_READY(1);
+			PIN_BUFFER_READY=1;
 		}
 		else if (SYNC_LATCH==SYNC_INPUT)
 		{
-			PIN_D=HandleIOPortRead(PIN_A&0xFF);
-			PIN_READY=1;
+			PinSetPIN_D(HandleIOPortRead(PinGetPIN_A()&0xFF));
+			PinSetPIN_READY(1);
+			PIN_BUFFER_READY=1;
 		}
 		else if (SYNC_LATCH==SYNC_INT_ACK)
 		{
-			PIN_D=NEXTINT;
+			PinSetPIN_D(NEXTINT);
 		}
 		else
 		{
-			printf("Error unknown sync state!!! PIN_D = %02X\n",PIN_D);
+			printf("Error unknown sync state!!! PIN_D = %02X\n",PinGetPIN_D());
 			exit(12);
 		}
 	}
 	
 	// CPU OUTPUT expects device to have signalled readyness to capture at state T2, but capture occurs at T3 (when _WR is low)
-	if (PIN__WR == 0)
+	if (PinGetPIN__WR() == 0)
 	{
 		if (SYNC_LATCH==SYNC_STACK_WRITE || SYNC_LATCH==SYNC_MEM_WRITE)
 		{
-			if ((PIN_A&0x2000)==0x2000)
+			if ((PinGetPIN_A()&0x2000)==0x2000)
 			{
-				Ram[PIN_A&0x1FFF]=PIN_D;
+				Ram[PinGetPIN_A()&0x1FFF]=PinGetPIN_D();
 			}
 		}
 		else if (SYNC_LATCH==SYNC_OUTPUT)
 		{
-			HandleIOPortWrite(PIN_A&0xFF,PIN_D);
+			HandleIOPortWrite(PinGetPIN_A()&0xFF,PinGetPIN_D());
 		}
 	}
 
@@ -585,16 +588,16 @@ int main(int argc,char**argv)
 	if (InitialiseMemory())
 		return -1;
 	
-	PIN_RESET=1;
-	RESET();
-	O1();
-	O2();
-	O1();
-	O2();
-	O1();
-	O2();
-	PIN_RESET=0;
-	RESET();			// RESET CPU
+	PinSetRESET(1);
+	PIN_BUFFER_RESET=1;
+	PinSetO1(1);
+	PinSetO2(1);
+	PinSetO1(1);
+	PinSetO2(1);
+	PinSetO1(1);
+	PinSetO2(1);
+	PinSetRESET(0);			// RESET CPU
+	PIN_BUFFER_RESET=0;
 
 	//dumpInstruction=100000;
 
@@ -609,19 +612,19 @@ int main(int argc,char**argv)
 
 			if ((masterClock%10)==0)
 			{
-				PIN_O2=0;
-				PIN_O1=1;
-				O1();			// Execute a cpu step
+				PIN_BUFFER_O2=0;
+				PIN_BUFFER_O1=1;
+				PinSetO1(1);		// Execute a cpu step
 				if (bTimingEnabled)
 					RecordPins();
-				PIN_O1=0;
+				PIN_BUFFER_O1=1;
 				if (bTimingEnabled)
 					RecordPins();
-				PIN_O2=1;
-				O2();
+				PIN_BUFFER_O2=1;
+				PinSetO2(1);
 				if (bTimingEnabled)
 					RecordPins();
-				PIN_O2=0;		// fake the low pulse
+				PIN_BUFFER_O2=0;
 
 				if (!MEM_Handler())
 				{
@@ -630,20 +633,21 @@ int main(int argc,char**argv)
 				if (bTimingEnabled)
 					RecordPins();
 
-				PIN_INT=0;		// clear interrupt state
+				PinSetINT(0);		// clear interrupt state
+				PIN_BUFFER_INT=0;
 				cpuClock++;
 			}
 			if (pixelClock==30432+10161)		// Based on 19968000 Mhz master clock + mame notes
 			{
 				NEXTINT=0xCF;
-				PIN_INT=1;
-				INT_PIN();
+				PinSetINT(1);
+				PIN_BUFFER_INT=1;
 			}
 			if (pixelClock==71008+10161)
 			{
 				NEXTINT=0xD7;
-				PIN_INT=1;
-				INT_PIN();
+				PinSetINT(1);
+				PIN_BUFFER_INT=1;
 			}
 		}
 		if (pixelClock>=83200 || stopTheClock)

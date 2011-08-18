@@ -13,22 +13,22 @@
 # D9					- RET
 #
 
-# PINS - TODO PUT BACK PIN DEFINITIONS
+# PINS - Most are labelled with PIN_ to avoid clashes, only the pins tied to handlers have had the PIN_ removed at present 
 
-DECLARE	PIN_A[16];			# OUTput		Address BUS
-DECLARE PIN_D[8];			# BIdirectional 	Data BUS
-DECLARE PIN_WAIT[1];			# OUTput		Processor in a wait state
-DECLARE	PIN_READY[1];			# INput			Data BUS is ready
-DECLARE PIN_O1[1];			# INput			O1 Clock signal
-DECLARE PIN_HLDA[1];			# OUTput		HOLD Acknowledge
-DECLARE	PIN_SYNC[1];			# OUTput		SYNC indicates 1st cycle of an M-cycle (cycle type available on D bus)
-DECLARE PIN__WR[1];			# OUTput		INVERTED - 0 means cpu has presented data onto the data bus
-DECLARE PIN_DBIN[1];			# OUTput		DBIN[1];
-DECLARE PIN_INTE[1];			# OUTput		Indicates interrupts are enabled
-DECLARE PIN_O2[1];			# INput			O2 Clock signal
-DECLARE PIN_INT[1];			# INput			Interrupt request
-DECLARE	PIN_HOLD[1];			# INput			HOLD request
-DECLARE	PIN_RESET[1];			# INput			RESET trigger
+PIN OUT			PIN_A[16];			# OUTput		Address BUS
+PIN BIDIRECTIONAL 	PIN_D[8];			# BIdirectional 	Data BUS
+PIN OUT			PIN_WAIT[1];			# OUTput		Processor in a wait state
+PIN IN			PIN_READY[1];			# INput			Data BUS is ready
+PIN IN			O1[1];				# INput			O1 Clock signal
+PIN OUT			PIN_HLDA[1];			# OUTput		HOLD Acknowledge
+PIN OUT			PIN_SYNC[1];			# OUTput		SYNC indicates 1st cycle of an M-cycle (cycle type available on D bus)
+PIN OUT			PIN__WR[1];			# OUTput		INVERTED - 0 means cpu has presented data onto the data bus
+PIN OUT			PIN_DBIN[1];			# OUTput		DBIN[1];
+PIN OUT			PIN_INTE[1];			# OUTput		Indicates interrupts are enabled
+PIN IN			O2[1];				# INput			O2 Clock signal
+PIN IN			INT[1];				# INput			Interrupt request
+PIN IN			PIN_HOLD[1];			# INput			HOLD request
+PIN IN			RESET[1];			# INput			RESET trigger
 
 # REAL REGISTERS FROM HARDWARE
 DECLARE	A[8];
@@ -437,21 +437,21 @@ HANDLER		O2
 
 HANDLER		RESET
 {
-	IF PIN_RESET==0
+	IF RESET==0
 	{
 		NEXT O1.FETCH.T1;
 	}
-	IF PIN_RESET==1
+	IF RESET==1
 	{
 		NEXT O1.RESET.T1;
 	}
 }
 
-HANDLER		INT_PIN
+HANDLER		INT
 {
 	IF PIN_INTE == 1
 	{
-		INT_REQ <- 1;
+		INT_REQ <- INT;
 	}
 }
 

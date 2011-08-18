@@ -838,6 +838,36 @@ Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 	return NULL;
 }
 
+void CVariableDeclaration::CreateWriteAccessor(CodeGenContext& context,BitVariable& var)
+{
+	vector<const Type*> argTypes;
+	argTypes.push_back(IntegerType::get(getGlobalContext(), var.size.getLimitedValue()));
+	FunctionType *ftype = FunctionType::get(Type::getVoidTy(getGlobalContext()),argTypes, false);
+	Function* function = Function::Create(ftype, GlobalValue::ExternalLinkage, "PinSet"+id.name, context.module);
+	BasicBlock *bblock = BasicBlock::Create(getGlobalContext(), "entry", function, 0);
+
+	Function::arg_iterator args = function->arg_begin();
+	Value* setVal=args;
+	setVal->setName("InputVal");
+
+	StoreInst* stor = new StoreInst(setVal,var.value,false,bblock);
+
+	var.writeAccessor=ReturnInst::Create(getGlobalContext(),bblock);
+}
+
+void CVariableDeclaration::CreateReadAccessor(CodeGenContext& context,BitVariable& var)
+{
+	vector<const Type*> argTypes;
+	FunctionType *ftype = FunctionType::get(IntegerType::get(getGlobalContext(), var.size.getLimitedValue()),argTypes, false);
+	Function* function = Function::Create(ftype, GlobalValue::ExternalLinkage, "PinGet"+id.name, context.module);
+	BasicBlock *bblock = BasicBlock::Create(getGlobalContext(), "entry", function, 0);
+	function->setOnlyReadsMemory(true);
+
+	LoadInst* load = new LoadInst(var.value,"",false,bblock);
+
+	ReturnInst::Create(getGlobalContext(),load,bblock);
+}
+
 Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 {
 	BitVariable temp;
@@ -849,9 +879,17 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 	temp.shft = APInt(size.integer.getLimitedValue(),0);
 	temp.aliased = false;
 	temp.mappingRef = false;
+	temp.pinType=pinType;
+	temp.writeAccessor=NULL;
 
 	if (context.currentBlock())
 	{
+		if (pinType!=0)
+		{
+			std::cerr << "Cannot declare pins anywhere but global scope" << std::endl;
+			context.errorFlagged=true;
+			return NULL;
+		}
 		// Within a basic block - so must be a stack variable
 		AllocaInst *alloc = new AllocaInst(Type::getIntNTy(getGlobalContext(),size.integer.getLimitedValue()), id.name.c_str(), context.currentBlock());
 		temp.value = alloc;
@@ -859,8 +897,33 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 	else
 	{
 		// GLobal variable
-		GlobalVariable *global = new GlobalVariable(*context.module,Type::getIntNTy(getGlobalContext(),size.integer.getLimitedValue()), false, GlobalValue::ExternalLinkage,NULL,id.name.c_str());
-		temp.value = global;
+		// Rules for globals have changed. If we are definining a PIN then the variable should be private to this module, and accessors should be created instead. 
+		if (pinType==0)
+		{
+			temp.value = new GlobalVariable(*context.module,Type::getIntNTy(getGlobalContext(),size.integer.getLimitedValue()), false, GlobalValue::ExternalLinkage,NULL,id.name.c_str());
+		}
+		else
+		{
+			temp.value = new GlobalVariable(*context.module,Type::getIntNTy(getGlobalContext(),size.integer.getLimitedValue()), false, GlobalValue::PrivateLinkage,NULL,id.name.c_str());
+			switch (pinType)
+			{
+				case TOK_IN:
+					CreateWriteAccessor(context,temp);
+					break;
+				case TOK_OUT:
+					CreateReadAccessor(context,temp);
+					break;
+				case TOK_BIDIRECTIONAL:
+					CreateWriteAccessor(context,temp);
+					CreateReadAccessor(context,temp);
+					break;
+				default:
+					std::cerr << "Unhandled pin type" << std::endl;
+					context.errorFlagged=true;
+					return NULL;
+			}
+		}
+
 	}
 
 	APInt bitPos = size.integer -1;
@@ -898,6 +961,8 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 			alias.value = temp.value;	// the value will always point at the stored local/global
 			alias.cnst = temp.cnst;		// ignored
 			alias.mappingRef=false;
+			alias.pinType=temp.pinType;
+			alias.writeAccessor=temp.writeAccessor;
 
 			APInt newMask = ~APInt(aliases[a]->sizeOrValue.integer.getLimitedValue(),0);
 	    		newMask=newMask.zext(size.integer.getLimitedValue());
@@ -976,15 +1041,29 @@ Value* CStateDefinition::codeGen(CodeGenContext& context)
 Value* CHandlerDeclaration::codeGen(CodeGenContext& context)
 {
 	vector<const Type*> argTypes;
-	FunctionType *ftype = FunctionType::get(Type::getVoidTy(getGlobalContext()),argTypes, false);
-	Function* function = Function::Create(ftype, GlobalValue::ExternalLinkage, id.name.c_str(), context.module);
-	BasicBlock *bblock = BasicBlock::Create(getGlobalContext(), "entry", function, 0);
+	BitVariable pinVariable;
 
-	if (id.name == "O1" || id.name == "O2")
+	if (context.globals().find(id.name) == context.globals().end())
 	{
-		context.handlersToTest.push_back(function);
+		std::cerr << "undeclared pin " << id.name << " - Handlers MUST be tied to pin definitions!" << std::endl;
+		context.errorFlagged=true;
+		return NULL;
 	}
+
+	pinVariable=context.globals()[id.name];
+
+	if (pinVariable.writeAccessor==NULL)
+	{
+		std::cerr << "Handlers must be tied to Input / Bidirectional pins ONLY! - " << id.name << std::endl;
+	}
+
+	FunctionType *ftype = FunctionType::get(Type::getVoidTy(getGlobalContext()),argTypes, false);
+	Function* function = Function::Create(ftype, GlobalValue::PrivateLinkage, "HANDLER."+id.name, context.module);
+	BasicBlock *bblock = BasicBlock::Create(getGlobalContext(), "entry", function, 0);
 	
+	// insert call to function in write handler for pin
+	CallInst* fcall = CallInst::Create(function,"",pinVariable.writeAccessor);
+
 	std::string depth = id.name + "DEPTH";
 	std::string depthIdx = id.name + "DEPTHIDX";
 
@@ -1487,6 +1566,8 @@ void COperandIdent::DeclareLocal(CodeGenContext& context,unsigned num)
 	temp.shft = APInt(size.integer.getLimitedValue(),0);
 	temp.aliased = false;
 	temp.mappingRef=false;
+	temp.pinType=0;
+	temp.writeAccessor=NULL;
 
 	AllocaInst *alloc = new AllocaInst(Type::getIntNTy(getGlobalContext(),size.integer.getLimitedValue()), ident.name.c_str(), context.currentBlock());
 	temp.value = alloc;

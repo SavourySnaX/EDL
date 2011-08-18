@@ -4,9 +4,11 @@
 
 */
 
-void edlMain();
+#include <stdint.h>
+
+void PinSetMain(uint8_t);
 
 int main(int argc,char** argv)
 {
-	edlMain();
+	PinSetMain(1);
 }

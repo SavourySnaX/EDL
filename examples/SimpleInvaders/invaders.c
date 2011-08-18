@@ -11,10 +11,11 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdint.h>
 
-void STEP(void);
-void RESET(void);
-void INTERRUPT(void);
+void PinSetSTEP(uint8_t);
+void PinSetRESET(uint8_t);
+void PinSetINTERRUPT(uint8_t);
 
 unsigned char Rom[0x2000];
 unsigned char Ram[0x2000];
@@ -305,11 +306,11 @@ int main(int argc,char**argv)
 	if (InitialiseMemory())
 		return -1;
 	
-	RESET();
+	PinSetRESET(1);			// Any value at all will cause the cpu to reset
 
 	while (!glfwGetKey(windows[MAIN_WINDOW],GLFW_KEY_ESC))
 	{
-		STEP();
+		PinSetSTEP(1);		// Any value at all will cause the cpu to step
 
 		masterClock+=CYCLES;
 		while (masterClock>=4)
@@ -318,13 +319,11 @@ int main(int argc,char**argv)
 
 			if (pixelClock==30432+10161)		// Based on 19968000 Mhz master clock + mame notes
 			{
-				NEXTINT=0xCF;
-				INTERRUPT();
+				PinSetINTERRUPT(0xCF);
 			}
 			if (pixelClock==71008+10161)
 			{
-				NEXTINT=0xD7;
-				INTERRUPT();
+				PinSetINTERRUPT(0xD7);
 			}
 			masterClock-=4;
 		}
@@ -342,7 +341,7 @@ int main(int argc,char**argv)
 
 			remain = now-atStart;
 
-			while ((remain<0.02f))
+		//	while ((remain<0.02f))
 			{
 				now=glfwGetTime();
 

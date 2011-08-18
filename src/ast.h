@@ -317,11 +317,19 @@ public:
 	CIdentifier& id;
 	CInteger& size;
 	AliasList aliases;
+	int pinType;
 	CVariableDeclaration(CIdentifier& id, CInteger& size) :
-		id(id), size(size) { }
+		id(id), size(size),pinType(0) { }
 	CVariableDeclaration(CIdentifier& id, CInteger& size,AliasList& aliases) :
-		id(id), size(size),aliases(aliases) { }
+		id(id), size(size),aliases(aliases),pinType(0) { }
+	CVariableDeclaration(int pinType,CIdentifier& id, CInteger& size) :
+		id(id), size(size),pinType(pinType) { }
+	CVariableDeclaration(int pinType,CIdentifier& id, CInteger& size,AliasList& aliases) :
+		id(id), size(size),aliases(aliases),pinType(pinType) { }
 	virtual llvm::Value* codeGen(CodeGenContext& context);
+
+	void CreateWriteAccessor(CodeGenContext& context,BitVariable& var);
+	void CreateReadAccessor(CodeGenContext& context,BitVariable& var);
 };
 
 class CAliasDeclaration : public CStatement {

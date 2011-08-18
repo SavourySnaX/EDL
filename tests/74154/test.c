@@ -1,11 +1,9 @@
-
 #include <stdio.h>
+#include <stdint.h>
 
-extern unsigned char PIN_INPUTS;
-extern unsigned char PIN_STROBE;
-extern unsigned short PIN_OUTPUTS;
-
-void INPUTS();
+void PinSetINPUTS(uint8_t);
+void PinSetSTROBE(uint8_t);
+uint16_t PinGetOUTPUTS(); 
 
 unsigned short Results[4*16] =
 {
@@ -32,21 +30,19 @@ int main(int argc,char** argv)
 	int a,b,c;
 	for (c=0;c<4;c++)
 	{
+		PinSetSTROBE(c);
 		for (a=0;a<16;a++)
 		{
-			PIN_STROBE=c;
-			PIN_INPUTS=a;
-	
-			INPUTS();
+			PinSetINPUTS(a);
 
-			if (PIN_OUTPUTS != Results[c*16+a])
+			if (PinGetOUTPUTS() != Results[c*16+a])
 			{
 				printf("Test failed on Strobe %d Inputs %d\n",c,a);
 				return -1;
 			}
 			for (b=0;b<16;b++)
 			{
-				printf("%s ",((1<<b) & PIN_OUTPUTS) ? "H" : "L");
+				printf("%s ",((1<<b) & PinGetOUTPUTS()) ? "H" : "L");
 			}
 			printf("\n");
 		}

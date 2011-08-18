@@ -49,6 +49,7 @@
 %token <string> TOK_IDENTIFIER TOK_INTEGER TOK_STRING
 %token <token>	TOK_DECLARE TOK_HANDLER	TOK_STATES TOK_STATE TOK_ALIAS TOK_IF TOK_NEXT TOK_PUSH TOK_POP	/* Reserved words */
 %token <token>	TOK_INSTRUCTION	TOK_EXECUTE TOK_ROL TOK_ROR TOK_MAPPING TOK_AFFECT TOK_AS		/* Reserved words */
+%token <token>	TOK_PIN TOK_IN TOK_OUT TOK_BIDIRECTIONAL						/* Reserved words */
 %token <token>	TOK_ZERO TOK_SIGN TOK_PARITYEVEN TOK_PARITYODD TOK_CARRY TOK_BIT			/* Reserved words AFFECTORS */
 %token <token>	TOK_TRACE TOK_BASE									/* Debug reserved words */
 %token <token>	TOK_C_FUNC TOK_C_FUNC_EXTERN								/* C Calling Interface */
@@ -57,6 +58,7 @@
 %token <token> TOK_DOT TOK_AT TOK_AMP TOK_TILDE TOK_DDOT TOK_CMPNEQ TOK_HAT				/* Operators/Seperators */
 %token <token> TOK_CMPLESSEQ TOK_CMPLESS TOK_CMPGREATEREQ TOK_CMPGREATER				/* Operators/Seperators */
 
+%type <token> pin_type
 %type <params> params
 %type <externparams> params_list
 %type <affect> affector
@@ -192,8 +194,15 @@ mappingList : mappingList mapping { $$->push_back($<mapping>2); }
 mapping_decl : TOK_MAPPING ident TOK_LSQR numeric TOK_RSQR TOK_LBRACE mappingList TOK_RBRACE { $$ = new CMappingDeclaration(*$2,*$4,*$7); } 
 	     ;
 
+pin_type: TOK_IN
+	| TOK_OUT
+	| TOK_BIDIRECTIONAL
+	;
+
 var_decl : TOK_DECLARE ident TOK_LSQR numeric TOK_RSQR { $$ = new CVariableDeclaration(*$2, *$4); }
 	| TOK_DECLARE ident TOK_LSQR numeric TOK_RSQR TOK_ALIAS aliases { $$ = new CVariableDeclaration(*$2, *$4, *$7); delete $7; }
+	| TOK_PIN pin_type ident TOK_LSQR numeric TOK_RSQR { $$ = new CVariableDeclaration($2,*$3,*$5); }
+	| TOK_PIN pin_type ident TOK_LSQR numeric TOK_RSQR TOK_ALIAS aliases { $$ = new CVariableDeclaration($2,*$3,*$5,*$8); delete $8; }
 	;
 
 affector : ident TOK_AS TOK_ZERO { $$ = new CAffect(*$1,TOK_ZERO); }

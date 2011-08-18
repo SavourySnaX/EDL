@@ -38,6 +38,8 @@ public:
 	APInt	shft;
 	bool	aliased;
 	bool	mappingRef;
+	int	pinType;
+	Instruction	*writeAccessor;
 };
 
 class StateVariable
@@ -85,8 +87,6 @@ public:
     bool errorFlagged;
 
     std::vector<ExecuteInformation> executeLocations;
-
-    std::vector<Function *> handlersToTest;		/* ONLY USED FOR TESTING PURPOSES */
 
     std::map<std::string, BitVariable> m_globals;
     std::map<std::string, StateVariable> m_states;

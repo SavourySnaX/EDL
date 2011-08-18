@@ -1,7 +1,7 @@
 " Vim syntax file
 " Language:	EDL
 " Maintainer:	Lee Hammerton (Savoury SnaX) savoury.snax@googlemail.com
-" Last Change:	2011 July 21
+" Last Change:	2011 August 17
 
 " Quit when a (custom) syntax file was already loaded
 if exists("b:current_syntax")
@@ -10,7 +10,8 @@ endif
 
 syntax match	edlComment	"#.*"
 
-syn keyword	edlReserved		DECLARE ALIAS HANDLER STATES STATE IF NEXT PUSH POP INSTRUCTION EXECUTE ROR ROL MAPPING AFFECT AS ZERO SIGN PARITYODD PARITYEVEN CARRY BIT C_FUNC C_FUNC_EXTERN
+syn keyword	edlReserved		DECLARE ALIAS HANDLER STATES STATE IF NEXT PUSH POP INSTRUCTION EXECUTE ROR ROL MAPPING AFFECT AS 
+syn keyword	edlReserved2		ZERO SIGN PARITYODD PARITYEVEN CARRY BIT C_FUNC C_FUNC_EXTERN PIN IN OUT BIDIRECTIONAL
 syn keyword	edlDebugReserved	DEBUG_TRACE BASE
 
 syntax match 	edlCurlyError	"}"
@@ -24,6 +25,7 @@ syntax match	edlBinNumber	"%[0-1]\+"
 syntax match	edlDecNumber	"\d\+"
 
 hi def link edlReserved 	Statement
+hi def link edlReserved2 	Statement
 hi def link edlDebugReserved 	Statement
 hi def link edlCurlyError	Error
 hi def link edlComment		Comment

@@ -1,4 +1,16 @@
 
+#include <stdint.h>
+#include <stdio.h>
+
+extern uint16_t SP;
+extern uint16_t PC;
+extern uint16_t BC;
+extern uint16_t DE;
+extern uint16_t HL;
+extern uint8_t A;
+extern uint8_t FLAGS;
+
+
 extern unsigned char Ram[0x2000];
 extern unsigned char Rom[0x2000];
 
@@ -516,16 +528,6 @@ DIS_FC,
 DIS_FD,
 DIS_FE,
 DIS_FF};
-
-#include <stdio.h>
-
-extern unsigned short SP;
-extern unsigned short PC;
-extern unsigned short BC;
-extern unsigned short DE;
-extern unsigned short HL;
-extern unsigned char A;
-extern unsigned char FLAGS;
 
 void DUMP_REGISTERS()
 {

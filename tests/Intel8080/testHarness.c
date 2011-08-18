@@ -13,36 +13,35 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdint.h>
 
-extern unsigned short PIN_A;
-extern unsigned char PIN_D;
-extern unsigned char PIN_READY;
-extern unsigned char PIN_RESET;
-extern unsigned char PIN_SYNC;
-extern unsigned char PIN__WR;
-extern unsigned short SP;
-extern unsigned short PC;
-extern unsigned short BC;
-extern unsigned short DE;
-extern unsigned short HL;
-extern unsigned char A;
-extern unsigned char FLAGS;
-extern unsigned char IR;
+uint16_t PinGetPIN_A();
+uint8_t PinGetPIN_D();
+void PinSetPIN_D(uint8_t);
+void PinSetPIN_READY(uint8_t);
+void PinSetPIN_RESET(uint8_t);
+uint8_t PinGetPIN_SYNC();
+uint8_t PinGetPIN__WR();
 
-void O1(void);
-void O2(void);
-void RESET(void);
+extern uint16_t SP;
+extern uint16_t PC;
+extern uint16_t BC;
+extern uint16_t DE;
+extern uint16_t HL;
+extern uint8_t A;
+extern uint8_t FLAGS;
+extern uint8_t IR;
 
-extern unsigned char	SYNC_FETCH;
-extern unsigned char	SYNC_MEM_READ;
-extern unsigned char	SYNC_MEM_WRITE;
-extern unsigned char	SYNC_STACK_READ;
-extern unsigned char	SYNC_STACK_WRITE;
-extern unsigned char	SYNC_INPUT;
-extern unsigned char	SYNC_OUTPUT;
-extern unsigned char	SYNC_INT_ACK;
-extern unsigned char	SYNC_HALT_ACK;
-extern unsigned char	SYNC_INT_ACK_HALTED;
+extern uint8_t	SYNC_FETCH;
+extern uint8_t	SYNC_MEM_READ;
+extern uint8_t	SYNC_MEM_WRITE;
+extern uint8_t	SYNC_STACK_READ;
+extern uint8_t	SYNC_STACK_WRITE;
+extern uint8_t	SYNC_INPUT;
+extern uint8_t	SYNC_OUTPUT;
+extern uint8_t	SYNC_INT_ACK;
+extern uint8_t	SYNC_HALT_ACK;
+extern uint8_t	SYNC_INT_ACK_HALTED;
 
 void DUMP_REGISTERS()
 {
@@ -74,10 +73,10 @@ void EXECUTE_CYCLES(unsigned char instruction,int cnt,char *named)
 
 	for (a=0;a<cnt;a++)
 	{
-		O1();
-		O2();
+		PinSetO1(1);
+		PinSetO2(1);
 
-		if (a==0 && (PIN_SYNC!=1 || PIN_D!=SYNC_FETCH))
+		if (a==0 && (PinGetPIN_SYNC()!=1 || PinGetPIN_D()!=SYNC_FETCH))
 		{
 			printf("Previous instruction took wrong number of cycles!\n");
 			exit(1);
@@ -85,14 +84,14 @@ void EXECUTE_CYCLES(unsigned char instruction,int cnt,char *named)
 
 		// Watch for SYNC pulse and TYPE and latch them
 
-		if (PIN_SYNC)
+		if (PinGetPIN_SYNC())
 		{
-			SYNC_LATCH=PIN_D;
+			SYNC_LATCH=PinGetPIN_D();
 		}
 
 		// CPU INPUT expects data to be available on T2 state so we can do that work on the PIN_SYNC itself
 
-		if (PIN_SYNC)
+		if (PinGetPIN_SYNC())
 		{
 			if (SYNC_LATCH == SYNC_FETCH)
 			{
@@ -102,55 +101,55 @@ void EXECUTE_CYCLES(unsigned char instruction,int cnt,char *named)
 					exit(1);
 				}
 				readInstruction=1;
-				printf("Reading next instruction - Address %04X <- %02X (%s)\n",PIN_A,instruction,named);
-				PIN_D=instruction;
-				PIN_READY=1;
+				printf("Reading next instruction - Address %04X <- %02X (%s)\n",PinGetPIN_A(),instruction,named);
+				PinSetPIN_D(instruction);
+				PinSetPIN_READY(1);
 			}
 			else
 			{
 				if (SYNC_LATCH == SYNC_STACK_READ)
 				{
-					printf("Reading memory(stack) - Address %04X <- $55\n",PIN_A);
-					PIN_D=0x55;
-					PIN_READY=1;
+					printf("Reading memory(stack) - Address %04X <- $55\n",PinGetPIN_A());
+					PinSetPIN_D(0x55);
+					PinSetPIN_READY(1);
 				}
 				else
 				{
 					if (SYNC_LATCH == SYNC_STACK_WRITE)
 					{
-						PIN_READY=1;
+						PinSetPIN_READY(1);
 					}
 					else
 					{
 						if (SYNC_LATCH == SYNC_MEM_READ)
 						{
-							printf("Reading memory - Address %04X <- 0\n",PIN_A);
-							PIN_D=0;
-							PIN_READY=1;
+							printf("Reading memory - Address %04X <- 0\n",PinGetPIN_A());
+							PinSetPIN_D(0x0);
+							PinSetPIN_READY(1);
 						}
 						else
 						{
 							if (SYNC_LATCH == SYNC_MEM_WRITE)
 							{
-								PIN_READY=1;
+								PinSetPIN_READY(1);
 							}
 							else
 							{
 								if (SYNC_LATCH == SYNC_INPUT)
 								{
-									printf("Reading port %04X <- $AA\n",PIN_A);
-									PIN_D=0xAA;
-									PIN_READY=1;
+									printf("Reading port %04X <- $AA\n",PinGetPIN_A());
+									PinSetPIN_D(0xAA);
+									PinSetPIN_READY(1);
 								}
 								else
 								{
 									if (SYNC_LATCH == SYNC_OUTPUT)
 									{
-										PIN_READY=1;
+										PinSetPIN_READY(1);
 									}
 									else
 									{
-										printf("PIN_D = %02X\n",PIN_D);
+										printf("PIN_D = %02X\n",PinGetPIN_D());
 										exit(12);
 									}
 								}
@@ -164,23 +163,23 @@ void EXECUTE_CYCLES(unsigned char instruction,int cnt,char *named)
 
 		// CPU OUTPUT expects device to have signalled readyness to capture at state T2, but capture occurs at T3 (when _WR is low)
 
-		if (PIN__WR == 0)
+		if (PinGetPIN__WR() == 0)
 		{
 			if (SYNC_LATCH == SYNC_STACK_WRITE)
 			{
-				printf("Writing memory(stack) - Address %04X <- %02X\n",PIN_A,PIN_D);
+				printf("Writing memory(stack) - Address %04X <- %02X\n",PinGetPIN_A(),PinGetPIN_D());
 			}
 			else
 			{
 				if (SYNC_LATCH == SYNC_MEM_WRITE)
 				{
-					printf("Writing memory - Address %04X <- %02X\n",PIN_A,PIN_D);
+					printf("Writing memory - Address %04X <- %02X\n",PinGetPIN_A(),PinGetPIN_D());
 				}
 				else
 				{
 					if (SYNC_LATCH == SYNC_OUTPUT)
 					{
-						printf("Writing port %04X <- %02X\n",PIN_A,PIN_D);
+						printf("Writing port %04X <- %02X\n",PinGetPIN_A(),PinGetPIN_D());
 					}
 				}
 			}
@@ -197,25 +196,25 @@ void MEM_Handler(unsigned char* memory)
 
 	// Watch for SYNC pulse and TYPE and latch them
 
-	if (PIN_SYNC)
+	if (PinGetPIN_SYNC())
 	{
-		SYNC_LATCH=PIN_D;
+		SYNC_LATCH=PinGetPIN_D();
 	}
 
 	// CPU INPUT expects data to be available on T2 state so we can do that work on the PIN_SYNC itself
 	// Assume memory has no latency
-	if (PIN_SYNC)
+	if (PinGetPIN_SYNC())
 	{
 		if (SYNC_LATCH==SYNC_FETCH || SYNC_LATCH==SYNC_STACK_READ || SYNC_LATCH==SYNC_MEM_READ)
 		{
-			PIN_D=memory[PIN_A];
-			PIN_READY=1;
+			PinSetPIN_D(memory[PinGetPIN_A()]);
+			PinSetPIN_READY(1);
 		}
 		else if (SYNC_LATCH==SYNC_STACK_WRITE || SYNC_LATCH==SYNC_MEM_WRITE)
 		{
-			PIN_READY=1;
+			PinSetPIN_READY(1);
 		}
-		else if (PIN_D==SYNC_HALT_ACK)
+		else if (PinGetPIN_D()==SYNC_HALT_ACK)
 		{
 			if (A==0x55)
 			{
@@ -230,22 +229,22 @@ void MEM_Handler(unsigned char* memory)
 		}
 		else
 		{
-			printf("Error unknown sync state!!! PIN_D = %02X\n",PIN_D);
+			printf("Error unknown sync state!!! PIN_D = %02X\n",PinGetPIN_D());
 			exit(12);
 		}
 	}
 	
 	// CPU OUTPUT expects device to have signalled readyness to capture at state T2, but capture occurs at T3 (when _WR is low)
-	if (PIN__WR == 0)
+	if (PinGetPIN__WR() == 0)
 	{
 		if (SYNC_LATCH==SYNC_STACK_WRITE || SYNC_LATCH==SYNC_MEM_WRITE)
 		{
-			if (PIN_A<0x4E4)
+			if (PinGetPIN_A()<0x4E4)
 			{
 				printf("Attempting to write to program area\n");
 				exit(-1);
 			}
-			memory[PIN_A]=PIN_D;
+			memory[PinGetPIN_A()]=PinGetPIN_D();
 		}
 	}
 }
@@ -264,16 +263,14 @@ void TEST_VIA_BINARY(const char *filename)
 
 	fclose(infile);
 
-	PIN_RESET=1;
-	RESET();
-	O1();
-	O2();
-	O1();
-	O2();
-	O1();
-	O2();
-	PIN_RESET=0;
-	RESET();
+	PinSetRESET(1);
+	PinSetO1(1);
+	PinSetO2(1);
+	PinSetO1(1);
+	PinSetO2(1);
+	PinSetO1(1);
+	PinSetO2(1);
+	PinSetRESET(0);
 
 	printf("\n\n\n\n\n\n PERFORMING EXECUTION OF 8080TEST ROM \n\n\n\n\n\n\n");
 
@@ -282,11 +279,11 @@ void TEST_VIA_BINARY(const char *filename)
 	int PIN_A_LATCH=0;
 	while (1==1)
 	{
-		O1();
-		O2();
-		if (PIN_SYNC && PIN_D==SYNC_FETCH)
+		PinSetO1(1);
+		PinSetO2(1);
+		if (PinGetPIN_SYNC() && PinGetPIN_D()==SYNC_FETCH)
 		{
-			PIN_A_LATCH=PIN_A;
+			PIN_A_LATCH=PinGetPIN_A();
 			safeRegDump=2;
 		}
 		if (safeRegDump>-1)
@@ -306,16 +303,14 @@ void TEST_VIA_BINARY(const char *filename)
 int main(int argc,char**argv)
 {
 // First test, after 3 cycles and a reset pc should be ready to fetch from address 0
-	PIN_RESET=1;
-	RESET();
-	O1();
-	O2();
-	O1();
-	O2();
-	O1();
-	O2();
-	PIN_RESET=0;
-	RESET();
+	PinSetRESET(1);
+	PinSetO1(1);
+	PinSetO2(1);
+	PinSetO1(1);
+	PinSetO2(1);
+	PinSetO1(1);
+	PinSetO2(1);
+	PinSetRESET(0);
 
 	if (PC!=0)
 	{
