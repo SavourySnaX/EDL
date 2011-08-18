@@ -31,7 +31,7 @@ $A
 10
 </pre>
 
-<p> The above are all equivalent. 
+<p> The above are all equivalent. </p> 
 
 <h2><u>Variables</u></h2>
 
@@ -148,12 +148,32 @@ foo(AA)
 </pre>
 <p></p>
 
+<h2><u>Pins</u></h2>
+
+<p><b>PIN</b>s are similar to normal <b>DECLARE</b> variables. However they are designed to be the external interface to the current file, effectively you should think of a file as being a black box with <b>PIN</b>s connecting it to the outside world. <b>PIN</B>s cannot be directly accessed outside of the current file, however depending on the type of <b>PIN</b> they will have accessors automatically created : </p>
+
+<table border="1" cellpadding="2" cellspacing="1" width="100%">
+<tr>
+<td><b>IN</b></td>
+<td>Input only. Accessor SetPin<EM>PIN NAME</EM>.</td>
+</tr>
+<tr>
+<td><b>OUT</b></td>
+<td>Output only. Accessor GetPin<EM>PIN NAME</EM>.</td>
+</tr>
+<tr>
+<td><b>BIDIRECTIONAL</b></td>
+<td>Both Input and Output. Creates both <b>IN</b> and <b>OUT</b> accessors (see above)</td>
+</tr>
+</table>
+
 <h2><u>Handlers</u></h2>
 
-<p>Handlers are supposed to be functions that are run when a pin changes value. At present however they are simply functions. This will be updated in a future version when the feature is implemented. In C a special function main defines the start of execution for a program. EDL has no such facility at present, again a c program should be used as the driver.</p>
+<p><b>HANDLER</b>s are functions that are automatically called when even a <b>PIN</b> changes value.</p>
 
 <pre style="background-color:#CCCCCC">
-<b>HANDLER</b> hello
+<b>PIN</b> Hello[1];
+<b>HANDLER</b> Hello
 {
 	<b>DEBUG_TRACE</b> "Hello World!";
 }
@@ -162,11 +182,11 @@ foo(AA)
 <p>and the c driver : </p>
 
 <pre style="background-color:#CCCCCC">
-extern void hello();
+extern void SetPinHello(uint8_t);
 
 int main(int argc,char** argv)
 {
-	hello();
+	SetPinHello(1);
 }
 </pre>
 
