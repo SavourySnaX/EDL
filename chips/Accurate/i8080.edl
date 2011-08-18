@@ -108,7 +108,10 @@ HANDLER		O1
 					INT_LATCH <- 0;
 					IF (INT_REQ==1)
 					{
-						INT_LATCH<-1;
+						IF (PIN_INTE)
+						{
+							INT_LATCH<-1;
+						}
 						INT_REQ<-0;
 					}
 					PIN_WAIT <- 0;
