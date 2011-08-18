@@ -31,6 +31,7 @@
 	CMapping *mapping;
 	COperandPartial *opPartial;
 	CAffect *affect;
+	CTrigger *trigger;
 	CExternDecl *extern_c_decl;
 	std::vector<COperand*> *opervec;
 	std::vector<CAliasDeclaration*> *aliasvec;
@@ -50,6 +51,7 @@
 %token <token>	TOK_DECLARE TOK_HANDLER	TOK_STATES TOK_STATE TOK_ALIAS TOK_IF TOK_NEXT TOK_PUSH TOK_POP	/* Reserved words */
 %token <token>	TOK_INSTRUCTION	TOK_EXECUTE TOK_ROL TOK_ROR TOK_MAPPING TOK_AFFECT TOK_AS		/* Reserved words */
 %token <token>	TOK_PIN TOK_IN TOK_OUT TOK_BIDIRECTIONAL						/* Reserved words */
+%token <token>	TOK_ALWAYS TOK_CHANGED TOK_TRANSITION							/* Reserved words */
 %token <token>	TOK_ZERO TOK_SIGN TOK_PARITYEVEN TOK_PARITYODD TOK_CARRY TOK_BIT			/* Reserved words AFFECTORS */
 %token <token>	TOK_TRACE TOK_BASE									/* Debug reserved words */
 %token <token>	TOK_C_FUNC TOK_C_FUNC_EXTERN								/* C Calling Interface */
@@ -58,6 +60,7 @@
 %token <token> TOK_DOT TOK_AT TOK_AMP TOK_TILDE TOK_DDOT TOK_CMPNEQ TOK_HAT				/* Operators/Seperators */
 %token <token> TOK_CMPLESSEQ TOK_CMPLESS TOK_CMPGREATEREQ TOK_CMPGREATER				/* Operators/Seperators */
 
+%type <trigger> trigger
 %type <token> pin_type
 %type <params> params
 %type <externparams> params_list
@@ -146,7 +149,12 @@ state_ident_list : state_ident_list TOK_DOT state_ident { $$->push_back($<state_
 block : TOK_LBRACE stmts TOK_RBRACE {$$ = $2; }
       | TOK_LBRACE TOK_RBRACE { $$ = new CBlock(); }
 
-handler_decl : TOK_HANDLER ident block	{ $$ = new CHandlerDeclaration(*$2,*$3); }
+trigger: TOK_ALWAYS 							{ $$ = new CTrigger(TOK_ALWAYS); }
+       | TOK_CHANGED							{ $$ = new CTrigger(TOK_CHANGED); }
+       | TOK_TRANSITION TOK_OBR numeric TOK_COMMA numeric TOK_CBR	{ $$ = new CTrigger(TOK_TRANSITION,*$3,*$5); }
+       ;
+
+handler_decl : TOK_HANDLER ident trigger block	{ $$ = new CHandlerDeclaration(*$2,*$3,*$4); }
 
 state_decl : ident { $$ = new CStateDeclaration(*$1); }
 

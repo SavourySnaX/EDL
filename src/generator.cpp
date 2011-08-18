@@ -154,27 +154,8 @@ Value* CString::codeGen(CodeGenContext& context)
 	return const_ptr_12;
 }
 
-Value* CIdentifier::trueSize(Value* in,CodeGenContext& context)
+Value* CIdentifier::trueSize(Value* in,CodeGenContext& context,BitVariable& var)
 {
-	BitVariable var;
-	if (context.locals().find(name) == context.locals().end())
-	{
-		if (context.globals().find(name) == context.globals().end())
-		{
-			std::cerr << "undeclared variable " << name << endl;
-			context.errorFlagged=true;
-			return NULL;
-		}
-		else
-		{
-			var=context.globals()[name];
-		}
-	}
-	else
-	{
-		var=context.locals()[name];
-	}
-	
 	if (var.mappingRef)
 	{
 		std::cerr << "Cannot perform operation on a mapping Ref!" << std::endl;
@@ -188,6 +169,21 @@ Value* CIdentifier::trueSize(Value* in,CodeGenContext& context)
 	Instruction* truncExt = CastInst::Create(op,in,ty,"cast",context.currentBlock());
 
 	return truncExt;
+}
+
+Value* CIdentifier::GetAliasedData(CodeGenContext& context,Value* in,BitVariable& var)
+{
+	if (var.aliased == true)
+	{
+		// We are loading from a partial value - we need to load, mask off correct result and shift result down to correct range
+		ConstantInt* const_intMask = ConstantInt::get(getGlobalContext(), var.mask);	
+		BinaryOperator* andInst = BinaryOperator::Create(Instruction::And, in, const_intMask , "Masking", context.currentBlock());
+		ConstantInt* const_intShift = ConstantInt::get(getGlobalContext(), var.shft);
+		BinaryOperator* shiftInst = BinaryOperator::Create(Instruction::LShr,andInst ,const_intShift, "Shifting", context.currentBlock());
+		return trueSize(shiftInst,context,var);
+	}
+
+	return in;
 }
 
 Value* CIdentifier::codeGen(CodeGenContext& context)
@@ -218,17 +214,7 @@ Value* CIdentifier::codeGen(CodeGenContext& context)
 
 	Value* final = new LoadInst(var.value, "", false, context.currentBlock());
 
-	if (var.aliased == true)
-	{
-		// We are loading from a partial value - we need to load, mask off correct result and shift result down to correct range
-		ConstantInt* const_intMask = ConstantInt::get(getGlobalContext(), var.mask);	
-		BinaryOperator* andInst = BinaryOperator::Create(Instruction::And, final, const_intMask , "Masking", context.currentBlock());
-		ConstantInt* const_intShift = ConstantInt::get(getGlobalContext(), var.shft);
-		BinaryOperator* shiftInst = BinaryOperator::Create(Instruction::LShr,andInst ,const_intShift, "Shifting", context.currentBlock());
-		final = trueSize(shiftInst,context);
-	}
-
-	return final;
+	return GetAliasedData(context,final,var);
 }
 
 CIdentifier CAliasDeclaration::empty("");
@@ -846,13 +832,21 @@ void CVariableDeclaration::CreateWriteAccessor(CodeGenContext& context,BitVariab
 	Function* function = Function::Create(ftype, GlobalValue::ExternalLinkage, "PinSet"+id.name, context.module);
 	BasicBlock *bblock = BasicBlock::Create(getGlobalContext(), "entry", function, 0);
 
+	context.pushBlock(bblock);
+
 	Function::arg_iterator args = function->arg_begin();
 	Value* setVal=args;
 	setVal->setName("InputVal");
 
-	StoreInst* stor = new StoreInst(setVal,var.value,false,bblock);
+	LoadInst* load=new LoadInst(var.value,"",false,bblock);
+	Value* stor=CAssignment::generateAssignment(var,setVal,context);
 
-	var.writeAccessor=ReturnInst::Create(getGlobalContext(),bblock);
+	var.priorValue=load;
+	var.writeInput=setVal;
+	var.writeAccessor=&writeAccessor;
+	writeAccessor=ReturnInst::Create(getGlobalContext(),bblock);
+
+	context.popBlock();
 }
 
 void CVariableDeclaration::CreateReadAccessor(CodeGenContext& context,BitVariable& var)
@@ -881,6 +875,8 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 	temp.mappingRef = false;
 	temp.pinType=pinType;
 	temp.writeAccessor=NULL;
+	temp.writeInput=NULL;
+	temp.priorValue=NULL;
 
 	if (context.currentBlock())
 	{
@@ -963,6 +959,8 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 			alias.mappingRef=false;
 			alias.pinType=temp.pinType;
 			alias.writeAccessor=temp.writeAccessor;
+			alias.writeInput=temp.writeInput;
+			alias.priorValue=temp.priorValue;
 
 			APInt newMask = ~APInt(aliases[a]->sizeOrValue.integer.getLimitedValue(),0);
 	    		newMask=newMask.zext(size.integer.getLimitedValue());
@@ -1061,9 +1059,6 @@ Value* CHandlerDeclaration::codeGen(CodeGenContext& context)
 	Function* function = Function::Create(ftype, GlobalValue::PrivateLinkage, "HANDLER."+id.name, context.module);
 	BasicBlock *bblock = BasicBlock::Create(getGlobalContext(), "entry", function, 0);
 	
-	// insert call to function in write handler for pin
-	CallInst* fcall = CallInst::Create(function,"",pinVariable.writeAccessor);
-
 	std::string depth = id.name + "DEPTH";
 	std::string depthIdx = id.name + "DEPTHIDX";
 
@@ -1087,6 +1082,8 @@ Value* CHandlerDeclaration::codeGen(CodeGenContext& context)
 	context.stateLabelStack+="." + id.name;
 
 	context.parentHandler=this;
+
+	trigger.codeGen(context,pinVariable,function);
 
 	block.codeGen(context);
 
@@ -1232,7 +1229,6 @@ Value* CInstruction::codeGen(CodeGenContext& context)
 Value* CExecute::codeGen(CodeGenContext& context)
 {
 	Value* load = opcode.codeGen(context);
-	load = opcode.trueSize(load,context);
 	
 	if (load->getType()->isIntegerTy())
 	{
@@ -1568,6 +1564,8 @@ void COperandIdent::DeclareLocal(CodeGenContext& context,unsigned num)
 	temp.mappingRef=false;
 	temp.pinType=0;
 	temp.writeAccessor=NULL;
+	temp.writeInput=NULL;
+	temp.priorValue=NULL;
 
 	AllocaInst *alloc = new AllocaInst(Type::getIntNTy(getGlobalContext(),size.integer.getLimitedValue()), ident.name.c_str(), context.currentBlock());
 	temp.value = alloc;
@@ -2046,6 +2044,85 @@ Value* CFuncCall::codeGen(CodeGenContext& context)
 	}
 
 	return call;
+}
+
+CInteger CTrigger::zero(stringZero);
+
+Value* CTrigger::codeGen(CodeGenContext& context,BitVariable& pin,Value* function)
+{
+	switch (type)
+	{
+		case TOK_ALWAYS:
+			{
+				CallInst* fcall = CallInst::Create(function,"",*pin.writeAccessor);
+			}
+			return NULL;
+		case TOK_CHANGED:
+			// Compare input value to old value, if different then call function 
+			{
+				BasicBlock *oldBlock = (*pin.writeAccessor)->getParent();
+				Function* parentFunction = oldBlock->getParent();
+
+				context.pushBlock(oldBlock);
+				Value* prior = CIdentifier::GetAliasedData(context,pin.priorValue,pin);
+				Value* writeInput = CIdentifier::GetAliasedData(context,pin.writeInput,pin);
+				Value* answer=CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_EQ,prior,writeInput, "", context.currentBlock());
+				
+				BasicBlock *ifcall = BasicBlock::Create(getGlobalContext(),"ifcall",parentFunction);
+				BasicBlock *nocall = BasicBlock::Create(getGlobalContext(),"nocall",parentFunction);
+
+				BranchInst::Create(nocall,ifcall,answer,context.currentBlock());
+				context.popBlock();
+				
+				CallInst* fcall = CallInst::Create(function,"",ifcall);
+				BranchInst::Create(nocall,ifcall);
+
+				// Remove return instruction (since we need to create a new basic block set
+				(*pin.writeAccessor)->removeFromParent();
+
+				*pin.writeAccessor=ReturnInst::Create(getGlobalContext(),nocall);
+
+			}
+			return NULL;
+		case TOK_TRANSITION:
+			// Compare input value to param2 and old value to param1 , if same call function 
+			{
+				BasicBlock *oldBlock = (*pin.writeAccessor)->getParent();
+				Function* parentFunction = oldBlock->getParent();
+
+				context.pushBlock(oldBlock);
+				Value* prior = CIdentifier::GetAliasedData(context,pin.priorValue,pin);
+				Value* writeInput = CIdentifier::GetAliasedData(context,pin.writeInput,pin);
+
+				Value* checkParam2=CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_EQ,ConstantInt::get(getGlobalContext(),param2.integer.zextOrTrunc(pin.trueSize.getLimitedValue())),writeInput, "", context.currentBlock());
+				Value* checkParam1=CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_EQ,ConstantInt::get(getGlobalContext(),param1.integer.zextOrTrunc(pin.trueSize.getLimitedValue())),prior, "", context.currentBlock());
+		
+				Value *answer=BinaryOperator::Create(Instruction::And,checkParam1,checkParam2,"",context.currentBlock());
+				
+				BasicBlock *ifcall = BasicBlock::Create(getGlobalContext(),"ifcall",parentFunction);
+				BasicBlock *nocall = BasicBlock::Create(getGlobalContext(),"nocall",parentFunction);
+
+				BranchInst::Create(ifcall,nocall,answer,context.currentBlock());
+				context.popBlock();
+				
+				CallInst* fcall = CallInst::Create(function,"",ifcall);
+				BranchInst::Create(nocall,ifcall);
+
+				// Remove return instruction (since we need to create a new basic block set
+				(*pin.writeAccessor)->removeFromParent();
+
+				*pin.writeAccessor=ReturnInst::Create(getGlobalContext(),nocall);
+
+			}
+			return NULL;
+
+		default:
+			std::cerr<< "Unhandled trigger type" << std::endl;
+			context.errorFlagged=true;
+			return NULL;
+	}
+
+	return NULL;
 }
 
 

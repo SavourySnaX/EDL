@@ -16,5 +16,5 @@ out/74154.lls.s: out/74154.lls
 	llc out/74154.lls
 
 test: test.c out/74154.lls.s
-	gcc test.c out/74154.lls.s -o test.exe
+	gcc -g test.c out/74154.lls.s -o test.exe
 	test.exe | tee test.result

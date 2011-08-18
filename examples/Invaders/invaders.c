@@ -590,12 +590,18 @@ int main(int argc,char**argv)
 	
 	PinSetRESET(1);
 	PIN_BUFFER_RESET=1;
-	PinSetO1(1);
+	PinSetO1(1);			// Run with reset high for a few cycles to perform a full cpu reset
+	PinSetO1(0);
 	PinSetO2(1);
+	PinSetO2(0);
 	PinSetO1(1);
+	PinSetO1(0);
 	PinSetO2(1);
+	PinSetO2(0);
 	PinSetO1(1);
+	PinSetO1(0);
 	PinSetO2(1);
+	PinSetO2(0);
 	PinSetRESET(0);			// RESET CPU
 	PIN_BUFFER_RESET=0;
 
@@ -612,12 +618,15 @@ int main(int argc,char**argv)
 
 			if ((masterClock%10)==0)
 			{
+								// I8080 emulation works off positive edge trigger. So we need to supply the same sort of
+								// clock.
 				PIN_BUFFER_O2=0;
 				PIN_BUFFER_O1=1;
 				PinSetO1(1);		// Execute a cpu step
 				if (bTimingEnabled)
 					RecordPins();
-				PIN_BUFFER_O1=1;
+				PIN_BUFFER_O1=0;
+				PinSetO1(0);
 				if (bTimingEnabled)
 					RecordPins();
 				PIN_BUFFER_O2=1;
@@ -625,6 +634,7 @@ int main(int argc,char**argv)
 				if (bTimingEnabled)
 					RecordPins();
 				PIN_BUFFER_O2=0;
+				PinSetO2(0);
 
 				if (!MEM_Handler())
 				{

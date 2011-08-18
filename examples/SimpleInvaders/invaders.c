@@ -341,7 +341,7 @@ int main(int argc,char**argv)
 
 			remain = now-atStart;
 
-		//	while ((remain<0.02f))
+			while ((remain<0.02f))
 			{
 				now=glfwGetTime();
 

@@ -39,7 +39,9 @@ public:
 	bool	aliased;
 	bool	mappingRef;
 	int	pinType;
-	Instruction	*writeAccessor;
+	Instruction**	writeAccessor;
+	Value*		writeInput;
+	Value*		priorValue;
 };
 
 class StateVariable

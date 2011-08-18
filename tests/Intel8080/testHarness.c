@@ -74,7 +74,9 @@ void EXECUTE_CYCLES(unsigned char instruction,int cnt,char *named)
 	for (a=0;a<cnt;a++)
 	{
 		PinSetO1(1);
+		PinSetO1(0);
 		PinSetO2(1);
+		PinSetO2(0);
 
 		if (a==0 && (PinGetPIN_SYNC()!=1 || PinGetPIN_D()!=SYNC_FETCH))
 		{
@@ -265,11 +267,13 @@ void TEST_VIA_BINARY(const char *filename)
 
 	PinSetRESET(1);
 	PinSetO1(1);
+	PinSetO1(0);
 	PinSetO2(1);
+	PinSetO2(0);
 	PinSetO1(1);
+	PinSetO1(0);
 	PinSetO2(1);
-	PinSetO1(1);
-	PinSetO2(1);
+	PinSetO2(0);
 	PinSetRESET(0);
 
 	printf("\n\n\n\n\n\n PERFORMING EXECUTION OF 8080TEST ROM \n\n\n\n\n\n\n");
@@ -280,7 +284,9 @@ void TEST_VIA_BINARY(const char *filename)
 	while (1==1)
 	{
 		PinSetO1(1);
+		PinSetO1(0);
 		PinSetO2(1);
+		PinSetO2(0);
 		if (PinGetPIN_SYNC() && PinGetPIN_D()==SYNC_FETCH)
 		{
 			PIN_A_LATCH=PinGetPIN_A();
@@ -305,11 +311,13 @@ int main(int argc,char**argv)
 // First test, after 3 cycles and a reset pc should be ready to fetch from address 0
 	PinSetRESET(1);
 	PinSetO1(1);
+	PinSetO1(0);
 	PinSetO2(1);
+	PinSetO2(0);
 	PinSetO1(1);
+	PinSetO1(0);
 	PinSetO2(1);
-	PinSetO1(1);
-	PinSetO2(1);
+	PinSetO2(0);
 	PinSetRESET(0);
 
 	if (PC!=0)

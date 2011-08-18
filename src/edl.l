@@ -29,9 +29,14 @@ MAPPING					{ return TOKEN(TOK_MAPPING); }
 AFFECT					{ return TOKEN(TOK_AFFECT); }
 AS					{ return TOKEN(TOK_AS); }
 PIN					{ return TOKEN(TOK_PIN); }
+
 IN					{ return TOKEN(TOK_IN); }
 OUT					{ return TOKEN(TOK_OUT); }
 BIDIRECTIONAL				{ return TOKEN(TOK_BIDIRECTIONAL); }
+
+ALWAYS					{ return TOKEN(TOK_ALWAYS); }
+CHANGED					{ return TOKEN(TOK_CHANGED); }
+TRANSITION				{ return TOKEN(TOK_TRANSITION); }
 
 ZERO					{ return TOKEN(TOK_ZERO); }
 SIGN					{ return TOKEN(TOK_SIGN); }

@@ -1,7 +1,7 @@
 
 PIN IN Main[1];
 
-HANDLER Main
+HANDLER Main	TRANSITION(0,1)
 {
 	DEBUG_TRACE "Hello World!";
 }

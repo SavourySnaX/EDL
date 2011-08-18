@@ -66,7 +66,7 @@ DECLARE	SYNC_HALT_ACK[8]	ALIAS %10001010;
 DECLARE	SYNC_INT_ACK_HALTED[8]	ALIAS %00101011;
 
 
-HANDLER		O1
+HANDLER		O1	TRANSITION(0,1)
 {
 # Each clock in here is one state in the cpu machine. The first 3 states for all instructions are identical, and these are the instruction fetch / decode part
 # Still need to do HOLD/INT proessing
@@ -357,7 +357,7 @@ HANDLER		O1
 	EXECUTE	IR;		# Execute states via this instruction, during reset we should point IR to a SAFE value (NOP will do)
 }
 
-HANDLER		O2
+HANDLER		O2	TRANSITION(0,1)
 {
 # Each clock here determines update to the external state of the pins (e.g. making address/data available etc)
 
@@ -438,7 +438,7 @@ HANDLER		O2
 	}
 }
 
-HANDLER		RESET
+HANDLER		RESET	CHANGED
 {
 	IF RESET==0
 	{
@@ -450,7 +450,7 @@ HANDLER		RESET
 	}
 }
 
-HANDLER		INT
+HANDLER		INT	CHANGED
 {
 	IF PIN_INTE == 1
 	{

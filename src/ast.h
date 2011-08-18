@@ -115,7 +115,8 @@ class CIdentifier : public CExpression {
 public:
 	std::string name;
 	CIdentifier(const std::string& name) : name(name) { }
-	llvm::Value* trueSize(llvm::Value*,CodeGenContext& context);
+	static llvm::Value* trueSize(llvm::Value*,CodeGenContext& context,BitVariable& var);
+	static llvm::Value* GetAliasedData(CodeGenContext& context,llvm::Value* in,BitVariable& var);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 	virtual bool IsIdentifierExpression() { return true; }
 };
@@ -313,6 +314,8 @@ public:
 };
 
 class CVariableDeclaration : public CStatement {
+private:
+	llvm::Instruction* writeAccessor;
 public:
 	CIdentifier& id;
 	CInteger& size;
@@ -429,15 +432,30 @@ public:
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
 
+class CTrigger : public CExpression {
+public:
+	int type;
+	CInteger& param1;
+	CInteger& param2;
+	static CInteger zero;
+	CTrigger(int type) :
+		type(type), param1(zero),param2(zero) { }
+	CTrigger(int type, CInteger& param1, CInteger& param2) :
+		type(type), param1(param1), param2(param2) { }
+	virtual llvm::Value* codeGen(CodeGenContext& context,BitVariable& pin,llvm::Value* function);
+};
+
+
 class CHandlerDeclaration : public CStatement {
 public:
 	const CIdentifier& id;
+	CTrigger& trigger;
 	CBlock& block;
 	llvm::GlobalVariable* depthTree;
 	llvm::GlobalVariable* depthTreeIdx;
 	CStatesDeclaration* child;
-	CHandlerDeclaration(const CIdentifier& id, CBlock& block) :
-		id(id), block(block) { }
+	CHandlerDeclaration(const CIdentifier& id, CTrigger& trigger,CBlock& block) :
+		id(id), trigger(trigger),block(block) { }
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
 
@@ -520,3 +538,4 @@ public:
 	
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
+
