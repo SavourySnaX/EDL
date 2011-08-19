@@ -155,9 +155,6 @@ void Disassemble(unsigned int address);
 
 unsigned char NEXTINT;
 
-unsigned int PORT4_LATCH;
-unsigned int PORT2_LATCH;
-
 unsigned char HandleIOPortRead(unsigned char port)
 {
 	unsigned char res=0;
@@ -188,7 +185,7 @@ unsigned char HandleIOPortRead(unsigned char port)
 	case 2:		// ShowCoinInfo|Player2Right|Player2Left|Player2Fire|-|Easy|NumShips(last 2 bits)
 		return 0;
 	case 3:
-		return (PORT4_LATCH << PORT2_LATCH)>>8;
+		return PinGetOUTPUTS();
 	default:
 		printf("Reading from unhandled IO Port %02X\n",port);
 		break;
@@ -202,14 +199,16 @@ void HandleIOPortWrite(unsigned char port,unsigned char data)
 	switch (port)
 	{
 	case 2:
-		PORT2_LATCH=data;
+		PinSetINPUTS(data);
+		PinSetLATCH_SHIFT(0);
+		PinSetLATCH_SHIFT(1);
 		break;
 	case 3:				// Sound effects
 		break;
 	case 4:
-		PORT4_LATCH>>=8;
-		PORT4_LATCH&=0x000000FF;
-		PORT4_LATCH|=data<<8;
+		PinSetINPUTS(data);
+		PinSetLATCH_DATA(0);
+		PinSetLATCH_DATA(1);
 		break;
 	case 5:				// Sound effects
 		break;
