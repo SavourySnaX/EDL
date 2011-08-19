@@ -45,6 +45,14 @@ $A
 
 <p>Note variables are <em>ALWAYS</em> initialised to zero, and it is not possible to give them any other initial value (with the exception of constants).</p>
 
+<h2><u>Hidden/Internal Variables</u></h2>
+
+<pre style="background-color:#CCCCCC">
+<b>DECLARE</b> <b>INTERNAL</b> foo[8];
+</pre>
+
+<p>The above would declare the variable foo, but it will be private to the current file (not accessable from outside).</p>
+
 <h2><u>Constant Variables</u></h2>
 
 <p>Constant variables are supported, although at present the compiler will not treat them as such from an optimisation standpoint. See Aliases below.</p>
@@ -147,6 +155,67 @@ foo(AA)
 10 in base 2 : 1010 and in base 16 : A
 </pre>
 <p></p>
+
+<h2><u>Functions</u></h2>
+
+<p>EDL supports the idea of <b>FUNCTION</b>s which can save code duplication and help make more maintainable code. They are very similar to C functions although the syntax differs.</p>
+
+<pre style="background-color:#CCCCCC">
+<b>FUNCTION</b> foobar
+{
+	<b>DEBUG_TRACE</b> "Look at me!";
+}
+</pre>
+
+<p>The above declares a function with no parameters and no return value. It simply prints "Look at me!" when called.</p>
+
+<pre style="background-color:#CCCCCC">
+<b>FUNCTION</b> foo[8] returnsMagic8BitConstant
+{
+	foo <b>&lt-</b> %10010011;
+}
+</pre>
+
+<p>This time, the function has a return value and when called will return an 8 bit value that is magical apparantly.</p>
+
+<pre style="background-color:#CCCCCC">
+<b>FUNCTION</b> result[8] Add a[8],b[8]
+{
+	result <b>&lt-</b> a + b;
+}
+</pre>
+
+<p>Finally, the above function will add two numbers together and return the result.</p>
+
+<p>Automatic promotion/truncation of values is performed for parameters into the function, no warnings are currently generated.</p>
+
+<h2><u>Calling Functions</u></h2>
+
+<p>To call a function in EDL, you simply write <b>CALL</b> functionname(parameters). For example : </p>
+
+<pre style="background-color:#CCCCCC">
+<b>FUNCTION</b> result[8] Add a[8],b[8]
+{
+	result <b>&lt-</b> a + b;
+}
+
+<b>FUNCTION</b> foo
+{
+	<b>DECLARE</b> answer[8];
+
+	answer <b>&lt-</b> <b>CALL</b> Add(5,4);
+
+	<b>DEBUG_TRACE</b> answer;
+}
+</pre>
+
+<p>When foo is called, the following would be printed : </p>
+
+<pre style="color:white; background-color:#000000">
+answer(00001001)
+</pre>
+
+<p>Unlike C, the compiler will currently allow you to <b>CALL</b> a function with no return type and assign it in an expression. In EDL the result of calling a function with no return value is always 0.</p>
 
 <h2><u>Pins</u></h2>
 
@@ -290,7 +359,7 @@ State a2
 State b2
 </pre>
 
-<p>Unlike normal variables, state blocks are always global, but tied to a handler. This is so that the state machine can be adjusted from an external function.</p>
+<p>Unlike normal variables, state blocks are always global, but tied to a <b>HANDLER</b>. This is so that the state machine can be adjusted from an external function. At present you cannot declare state machines inside functions, but you can reference them (see testing state below).</p>
 
 <h2><u>Adjusting States</u></h2>
 
@@ -625,18 +694,18 @@ result(1011) shiftedOut(0001)
 
 <h2><u>Interfacing to C</u></h2>
 
-<p>To call a <b>HANDLER</b> from C, you must set a value to the <b>PIN</b>s accessor function - see <b>Pins</b> above. Currently any globally declared variables are also accessable, however only the non aliased names are available, and care must be taken to match the bit size to the C Variable size. Its best to only access 8,16 or 32 bit values as they have direct representation in C.</p>
+<p>To call a <b>HANDLER</b> from C, you must set a value to the <b>PIN</b>s accessor function - see <b>Pins</b> above. Currently any globally declared variables are also accessable (unless marked <b>INTERNAL</b>, however only the non aliased names are available, and care must be taken to match the bit size to the C Variable size. Its best to only access 8,16 or 32 bit values as they have direct representation in C. Similarly, any globally declared functions can be accessed from C, however similar care must be taken as with variables due to bit size matching.</p>
 
 <p>It is also possible to call C functions from within an EDL file, however the C function must only use unsigned params and return values (void return value is allowed). The compiler will currently only allow 0,8,16 or 32 bit return values and 8,16 or 32 bit parameters.</p>
 
 <pre style="background-color:#CCCCCC">
-<b>C_FUNC_EXTERN</b> Multiply [16],[8],[8];
+<b>C_FUNC_EXTERN</b> [16] Multiply [8],[8];
 
 <b>HANDLER</b> test
 {
 	<b>DECLARE</b> result[16];
 
-	result <b>&lt-</b> <b>C_FUNC</b> Multiply(5,8);
+	result <b>&lt-</b> <b>CALL</b> Multiply(5,8);
 
 	<b>DEBUG_TRACE</b> result;
 }
