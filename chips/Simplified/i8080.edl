@@ -1,12 +1,15 @@
 # Intel 8080 - This version of the core works like traditional cpu
-#             emulators. Call PinSetSTEP(1) to advance 1 instruction. Interfaces
+#             emulators. Call STEP() to advance 1 instruction. Interfaces
 #             to memory via external C functions, so the 7 calls below
 #             need to be created for the emulation to compile.
 #
 #
-# Because this version of the emulation is not designed as Pin Accurate package, STEP,RESET,INTERRUPT have fake pins
-# the pins must be written to for the HANDLER to be called, STEP & RESET don't care what value, INTERRUPT expects to be given the
-# opcode to execute (e.g. RST $10)
+# Because this version of the emulation is not designed as Pin Accurate, we
+#don't use HANDLERs and instead declare 3 functions :
+#
+# STEP() - Execute 1 instruction and set global CYCLES to the number of T states it required.
+# RESET() - Reset the cpu. (Puts PC back at 0).
+# INTERRUPT(opcode) - Interrupt the cpu with opcode to execute (e.g. RST $10)
 #
 
 C_FUNC_EXTERN	[8]	GetByte			[16];
