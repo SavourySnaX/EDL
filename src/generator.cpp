@@ -512,6 +512,7 @@ Value* CRotationOperator::codeGen(CodeGenContext& context)
 {
 	Value* toShift = value.codeGen(context);
 	Value* shiftIn = bitsIn.codeGen(context);
+	Value* rotBy = rotAmount.codeGen(context);
 	BitVariable var;
 	if (context.locals().find(bitsOut.name) == context.locals().end())
 	{
@@ -531,7 +532,7 @@ Value* CRotationOperator::codeGen(CodeGenContext& context)
 		var=context.locals()[bitsOut.name];
 	}
 	
-	if (!toShift->getType()->isIntegerTy())
+	if ((!toShift->getType()->isIntegerTy())||(!rotBy->getType()->isIntegerTy()))
 	{
 		std::cerr << "Unsupported operation" << std::endl;
 		context.errorFlagged=true;
@@ -549,15 +550,16 @@ Value* CRotationOperator::codeGen(CodeGenContext& context)
 
 	if (direction == TOK_ROL)
 	{
-		APInt rotBy = rotAmount.integer;
-		rotBy = rotBy.zextOrTrunc(toShiftType->getBitWidth());
-		APInt amountToShift = APInt(toShiftType->getBitWidth(),toShiftType->getBitWidth()) - rotBy;
+		Instruction::CastOps oprotby = CastInst::getCastOpcode(rotBy,false,toShiftType,false);
+		Value *rotByCast = CastInst::Create(oprotby,rotBy,toShiftType,"cast",context.currentBlock());
 
-		Value *shiftedDown = BinaryOperator::Create(Instruction::LShr,toShift,ConstantInt::get(getGlobalContext(),amountToShift),"carryOutShift",context.currentBlock());
+		Value *amountToShift = BinaryOperator::Create(Instruction::Sub,ConstantInt::get(getGlobalContext(),APInt(toShiftType->getBitWidth(),toShiftType->getBitWidth())),rotByCast,"shiftAmount",context.currentBlock());
+
+		Value *shiftedDown = BinaryOperator::Create(Instruction::LShr,toShift,amountToShift,"carryOutShift",context.currentBlock());
 
 		CAssignment::generateAssignment(var,shiftedDown,context);
 
-		Value *shifted=BinaryOperator::Create(Instruction::Shl,toShift,ConstantInt::get(getGlobalContext(),rotBy),"rolShift",context.currentBlock());
+		Value *shifted=BinaryOperator::Create(Instruction::Shl,toShift,rotByCast,"rolShift",context.currentBlock());
 
 		Instruction::CastOps op = CastInst::getCastOpcode(shiftIn,false,toShiftType,false);
 
@@ -569,31 +571,30 @@ Value* CRotationOperator::codeGen(CodeGenContext& context)
 	}
 	else
 	{
-		APInt rotBy = rotAmount.integer;
-		rotBy = rotBy.zextOrTrunc(toShiftType->getBitWidth());
-		APInt amountToShift = APInt(toShiftType->getBitWidth(),toShiftType->getBitWidth()) - rotBy;
-		APInt downMask(toShiftType->getBitWidth(),0);
-		downMask=~downMask;
-		downMask = downMask.lshr(amountToShift);
+		Instruction::CastOps oprotby = CastInst::getCastOpcode(rotBy,false,toShiftType,false);
+		Value *rotByCast = CastInst::Create(oprotby,rotBy,toShiftType,"cast",context.currentBlock());
 
-		Value *maskedDown = BinaryOperator::Create(Instruction::And,toShift,ConstantInt::get(getGlobalContext(),downMask),"carryOutMask",context.currentBlock());
+		Value *amountToShift = BinaryOperator::Create(Instruction::Sub,ConstantInt::get(getGlobalContext(),APInt(toShiftType->getBitWidth(),toShiftType->getBitWidth())),rotByCast,"shiftAmount",context.currentBlock());
+
+		APInt downMaskc(toShiftType->getBitWidth(),0);
+		downMaskc=~downMaskc;
+		Value *downMask = BinaryOperator::Create(Instruction::LShr,ConstantInt::get(getGlobalContext(),downMaskc),amountToShift,"downmask",context.currentBlock());
+
+		Value *maskedDown = BinaryOperator::Create(Instruction::And,toShift,downMask,"carryOutMask",context.currentBlock());
 
 		CAssignment::generateAssignment(var,maskedDown,context);
 
-		Value *shifted=BinaryOperator::Create(Instruction::LShr,toShift,ConstantInt::get(getGlobalContext(),rotBy),"rorShift",context.currentBlock());
+		Value *shifted=BinaryOperator::Create(Instruction::LShr,toShift,rotByCast,"rorShift",context.currentBlock());
 			
 		Instruction::CastOps op = CastInst::getCastOpcode(shiftIn,false,toShiftType,false);
 
 		Value *upCast = CastInst::Create(op,shiftIn,toShiftType,"cast",context.currentBlock());
 
-		Value *shiftedUp = BinaryOperator::Create(Instruction::Shl,upCast,ConstantInt::get(getGlobalContext(),amountToShift),"rorOrShift",context.currentBlock());
+		Value *shiftedUp = BinaryOperator::Create(Instruction::Shl,upCast,amountToShift,"rorOrShift",context.currentBlock());
 		
 		Value *rotResult = BinaryOperator::Create(Instruction::Or,shiftedUp,shifted,"rorOr",context.currentBlock());
 
 		return rotResult;
-		std::cerr << "Unsupported rotation" << std::endl;
-		context.errorFlagged=true;
-		return NULL;
 	}
 
 	return value.codeGen(context);

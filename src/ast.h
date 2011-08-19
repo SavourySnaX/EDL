@@ -223,9 +223,9 @@ public:
 	CExpression& value;
 	CIdentifier& bitsOut;
 	CExpression& bitsIn;
-	CInteger& rotAmount;
+	CExpression& rotAmount;
 	int direction;
-	CRotationOperator(int direction,CExpression& value, CIdentifier& bitsOut, CExpression& bitsIn,CInteger& rotAmount) :
+	CRotationOperator(int direction,CExpression& value, CIdentifier& bitsOut, CExpression& bitsIn,CExpression& rotAmount) :
 		direction(direction), value(value), bitsOut(bitsOut), bitsIn(bitsIn), rotAmount(rotAmount) { }
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
