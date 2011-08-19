@@ -29,6 +29,8 @@ MAPPING					{ return TOKEN(TOK_MAPPING); }
 AFFECT					{ return TOKEN(TOK_AFFECT); }
 AS					{ return TOKEN(TOK_AS); }
 PIN					{ return TOKEN(TOK_PIN); }
+FUNCTION				{ return TOKEN(TOK_FUNCTION); }
+CALL					{ return TOKEN(TOK_CALL); }
 
 IN					{ return TOKEN(TOK_IN); }
 OUT					{ return TOKEN(TOK_OUT); }
@@ -50,7 +52,6 @@ BIT					{ return TOKEN(TOK_BIT); }
 DEBUG_TRACE				{ return TOKEN(TOK_TRACE); }
 BASE					{ return TOKEN(TOK_BASE); }
 
-C_FUNC					{ return TOKEN(TOK_C_FUNC); }
 C_FUNC_EXTERN				{ return TOKEN(TOK_C_FUNC_EXTERN); }
 
 [a-zA-Z_][a-zA-Z0-9_]*			{ SAVE_TOKEN; return TOK_IDENTIFIER; }

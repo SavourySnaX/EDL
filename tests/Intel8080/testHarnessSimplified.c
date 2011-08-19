@@ -26,8 +26,8 @@ extern uint8_t IR;
 
 extern uint8_t CYCLES;
 
-void PinSetSTEP(uint8_t);
-void PinSetRESET(uint8_t);
+void STEP(void);
+void RESET(void);
 
 void DUMP_REGISTERS()
 {
@@ -58,7 +58,7 @@ void EXECUTE_CYCLES(unsigned char instruction,int cnt,char *named)
 {
 	someMemory[PC]=instruction;
 	Disassemble(someMemory,PC);
-	PinSetSTEP(1);			// doesn't matter what value is passed, will trigger STEP on any value
+	STEP();
 	if (cnt!=CYCLES)
 	{
 		printf("current instruction took wrong number of cycles! %s (%d != %d)\n",named,cnt,CYCLES);
@@ -80,7 +80,7 @@ void TEST_VIA_BINARY(const char *filename)
 
 	fclose(infile);
 
-	PinSetRESET(1);			// doesn't matter what value is passed, will trigger RESET on any value
+	RESET();
 
 	printf("\n\n\n\n\n\n PERFORMING EXECUTION OF 8080TEST ROM \n\n\n\n\n\n\n");
 
@@ -102,13 +102,13 @@ void TEST_VIA_BINARY(const char *filename)
 				exit(-1);
 			}
 		}
-		PinSetSTEP(1);
+		STEP();
 	}
 }
 
 int main(int argc,char**argv)
 {
-	PinSetRESET(1);
+	RESET();
 
 	if (PC!=0)
 	{

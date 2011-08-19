@@ -211,10 +211,14 @@ Value* CIdentifier::codeGen(CodeGenContext& context)
 	{
 		return var.value;
 	}
+	
+	if (var.value->getType()->isPointerTy())
+	{
+		Value* final = new LoadInst(var.value, "", false, context.currentBlock());
+		return GetAliasedData(context,final,var);
+	}
 
-	Value* final = new LoadInst(var.value, "", false, context.currentBlock());
-
-	return GetAliasedData(context,final,var);
+	return var.value;
 }
 
 CIdentifier CAliasDeclaration::empty("");
@@ -600,6 +604,13 @@ Value* CAssignment::generateAssignment(BitVariable& to, Value* from,CodeGenConte
 	Value* assignTo;
 
 	assignTo = to.value;
+
+	if (!assignTo->getType()->isPointerTy())
+	{
+		std::cerr << "You cannot assign a value to a non variable (or input parameter to function)!" << std::endl;
+		context.errorFlagged=true;
+		return NULL;
+	}
 
 	// Handle variable promotion
 	const Type* ty = Type::getIntNTy(getGlobalContext(),to.size.getLimitedValue());
@@ -1927,9 +1938,7 @@ Value* CAffect::codeGen(CodeGenContext& context,Value* exprResult,Value* lhs,Val
 			return NULL;
 	}
 
-	CAssignment::generateAssignment(var,answer,context);
-
-	return NULL;
+	return CAssignment::generateAssignment(var,answer,context);
 }
 
 Value* CAffector::codeGen(CodeGenContext& context)
@@ -1970,7 +1979,7 @@ Value* CExternDecl::codeGen(CodeGenContext& context)
 	// 	32-> unsigned int   (technically u_int32_t)
 
   	std::vector<const Type*> FuncTy_8_args;
-	for (int a=1;a<params.size();a++)			// skip the return type
+	for (int a=0;a<params.size();a++)
 	{
 		unsigned size = params[a]->integer.getLimitedValue();
 		if (size!=8 && size!=16 && size!=32)
@@ -1982,13 +1991,13 @@ Value* CExternDecl::codeGen(CodeGenContext& context)
 		FuncTy_8_args.push_back(IntegerType::get(getGlobalContext(), size));
 	}
 	FunctionType* FuncTy_8;
-	if (params[0]->integer.getLimitedValue()==0)
+	if (returns.empty())
 	{
 		FuncTy_8 = FunctionType::get(Type::getVoidTy(getGlobalContext()),FuncTy_8_args,false);
 	}
 	else
 	{
-		unsigned size = params[0]->integer.getLimitedValue();
+		unsigned size = returns[0]->integer.getLimitedValue();
 		if (size!=8 && size!=16 && size!=32)
 		{
 			std::cerr << "External C functions must use C size parameters (8,16 or 32 bits!) " << std::endl;
@@ -2012,7 +2021,7 @@ Value* CFuncCall::codeGen(CodeGenContext& context)
 {
 	if (context.m_externFunctions.find(name.name)==context.m_externFunctions.end())
 	{
-		std::cerr << "External Function Declaration Required to use a C Function : " << name.name << std::endl;
+		std::cerr << "Function Declaration Required to use a Function : " << name.name << std::endl;
 		context.errorFlagged=true;
 		return NULL;
 	}
@@ -2025,7 +2034,7 @@ Value* CFuncCall::codeGen(CodeGenContext& context)
 	{
 		if (b==funcType->getNumParams())
 		{
-			std::cerr << "Wrong Number Of Arguments To C Function : " << name.name << std::endl;
+			std::cerr << "Wrong Number Of Arguments To Function : " << name.name << std::endl;
 			context.errorFlagged=true;
 			return NULL;
 		}
@@ -2132,4 +2141,104 @@ Value* CTrigger::codeGen(CodeGenContext& context,BitVariable& pin,Value* functio
 	return NULL;
 }
 
+Value* CFunctionDecl::codeGen(CodeGenContext& context)
+{
+	int a;
+	BitVariable returnVal;
+  	std::vector<const Type*> FuncTy_8_args;
+
+	for (a=0;a<params.size();a++)
+	{
+		unsigned size = params[a]->size.integer.getLimitedValue();
+		FuncTy_8_args.push_back(IntegerType::get(getGlobalContext(), size));
+	}
+	FunctionType* FuncTy_8;
+
+	if (returns.empty())
+	{
+		FuncTy_8 = FunctionType::get(Type::getVoidTy(getGlobalContext()),FuncTy_8_args,false);
+	}
+	else
+	{
+		unsigned size = returns[0]->size.integer.getLimitedValue();
+		FuncTy_8 = FunctionType::get(IntegerType::get(getGlobalContext(), size),FuncTy_8_args,false);
+	}
+
+	Function* func = NULL;
+	if (internal)
+	{
+		func=Function::Create(FuncTy_8,GlobalValue::PrivateLinkage,name.name,context.module);
+	}
+	else
+	{
+		func=Function::Create(FuncTy_8,GlobalValue::ExternalLinkage,name.name,context.module);
+		func->setCallingConv(CallingConv::C);
+	}
+	AttrListPtr func_attrs;
+	func->setAttributes(func_attrs);
+	
+	context.m_externFunctions[name.name] = func;
+
+	BasicBlock *bblock = BasicBlock::Create(getGlobalContext(), "entry", func, 0);
+	
+	context.pushBlock(bblock);
+
+	if (!returns.empty())
+	{
+		returnVal.size = returns[0]->size.integer;
+		returnVal.trueSize = returns[0]->size.integer;
+		returnVal.cnst = APInt(returns[0]->size.integer.getLimitedValue(),0);
+		returnVal.mask = ~returnVal.cnst;
+		returnVal.shft = APInt(returns[0]->size.integer.getLimitedValue(),0);
+		returnVal.aliased = false;
+		returnVal.mappingRef = false;
+		returnVal.pinType=0;
+		returnVal.writeAccessor=NULL;
+		returnVal.writeInput=NULL;
+		returnVal.priorValue=NULL;
+
+		AllocaInst *alloc = new AllocaInst(Type::getIntNTy(getGlobalContext(),returns[0]->size.integer.getLimitedValue()), returns[0]->id.name.c_str(), context.currentBlock());
+		returnVal.value = alloc;
+		context.locals()[returns[0]->id.name] = returnVal;
+	}
+	
+	Function::arg_iterator args = func->arg_begin();
+	a=0;
+	while (args!=func->arg_end())
+	{
+		BitVariable temp;
+		temp.size = params[a]->size.integer;
+		temp.trueSize = params[a]->size.integer;
+		temp.cnst = APInt(params[a]->size.integer.getLimitedValue(),0);
+		temp.mask = ~returnVal.cnst;
+		temp.shft = APInt(params[a]->size.integer.getLimitedValue(),0);
+		temp.aliased = false;
+		temp.mappingRef = false;
+		temp.pinType=0;
+		temp.writeAccessor=NULL;
+		temp.writeInput=NULL;
+		temp.priorValue=NULL;
+
+		temp.value=args;
+		temp.value->setName(params[a]->id.name);
+		context.locals()[params[a]->id.name]=temp;
+		a++;
+		args++;
+	}
+
+	block.codeGen(context);
+
+	if (returns.empty())
+	{
+		ReturnInst::Create(getGlobalContext(), context.currentBlock());			/* block may well have changed by time we reach here */
+	}
+	else
+	{
+		ReturnInst::Create(getGlobalContext(),new LoadInst(returnVal.value,"",context.currentBlock()),context.currentBlock());
+	}
+
+	context.popBlock();
+
+	return func;
+}
 

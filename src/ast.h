@@ -25,6 +25,7 @@ class CMapping;
 class CAffect;
 class CString;
 class CInteger;
+class CParamDecl;
 
 typedef std::vector<CStatement*> StatementList;
 typedef std::vector<CExpression*> ExpressionList;
@@ -38,6 +39,7 @@ typedef std::vector<CMapping*> MappingList;
 typedef std::vector<CAffect*> AffectorList;
 typedef std::vector<CInteger*> ExternParamsList;
 typedef std::vector<CExpression*> ParamsList;
+typedef std::vector<CParamDecl*> NamedParamsList;
 
 class CNode {
 public:
@@ -520,9 +522,12 @@ public:
 
 class CExternDecl : public CStatement {
 public:
+	ExternParamsList returns;
 	CIdentifier& name;
 	ExternParamsList params;
 
+	CExternDecl(ExternParamsList& returns,CIdentifier& name,ExternParamsList& params) :
+		returns(returns), name(name), params(params) { }
 	CExternDecl(CIdentifier& name,ExternParamsList& params) :
 		name(name), params(params) { }
 
@@ -538,5 +543,29 @@ public:
 		name(name), params(params) { }
 	
 	virtual llvm::Value* codeGen(CodeGenContext& context);
+};
+
+class CFunctionDecl : public CStatement {
+public:
+	bool internal;
+	NamedParamsList returns;
+	CIdentifier& name;
+	NamedParamsList params;
+	CBlock& block;
+
+	CFunctionDecl(bool internal,NamedParamsList& returns,CIdentifier& name,NamedParamsList& params,CBlock &block) :
+		internal(internal), returns(returns), name(name), params(params),block(block) { }
+	CFunctionDecl(bool internal,CIdentifier& name,NamedParamsList& params,CBlock &block) :
+		internal(internal), name(name), params(params),block(block) { }
+
+	virtual llvm::Value* codeGen(CodeGenContext& context);
+};
+
+class CParamDecl : public CStatement {
+public:
+	CIdentifier& id;
+	CInteger& size;
+	CParamDecl(CIdentifier& id, CInteger& size) :
+		id(id), size(size) { }
 };
 
