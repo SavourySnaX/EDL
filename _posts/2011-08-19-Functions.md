@@ -1,7 +1,7 @@
 ---
 layout: post
 author: Savoury SnaX
-title: Handlers
+title: Functions
 ---
 
  I have added FUNCTIONs + the INTERNAL modifier mentioned in the previous post. I also then proceeded to shrink the simple 8080 emulation file some more by using these new fangled things.
