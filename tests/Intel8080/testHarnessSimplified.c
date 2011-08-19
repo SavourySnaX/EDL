@@ -51,6 +51,8 @@ void DUMP_REGISTERS()
 	printf("--------\n");
 }
 
+void Disassemble(unsigned char* memory,unsigned int address);
+
 unsigned char someMemory[0x10000];
 void EXECUTE_CYCLES(unsigned char instruction,int cnt,char *named)
 {
@@ -65,7 +67,6 @@ void EXECUTE_CYCLES(unsigned char instruction,int cnt,char *named)
 
 	DUMP_REGISTERS();
 }
-void Disassemble(unsigned char* memory,unsigned int address);
 
 void TEST_VIA_BINARY(const char *filename)
 {

@@ -41,16 +41,15 @@ uint8_t PIN_BUFFER_O2=0;
 uint8_t PIN_BUFFER_INT=0;
 uint8_t PIN_BUFFER_HOLD=0;
 
-extern uint8_t	SYNC_FETCH;
-extern uint8_t	SYNC_MEM_READ;
-extern uint8_t	SYNC_MEM_WRITE;
-extern uint8_t	SYNC_STACK_READ;
-extern uint8_t	SYNC_STACK_WRITE;
-extern uint8_t	SYNC_INPUT;
-extern uint8_t	SYNC_OUTPUT;
-extern uint8_t	SYNC_INT_ACK;
-extern uint8_t	SYNC_HALT_ACK;
-extern uint8_t	SYNC_INT_ACK_HALTED;
+#define	SYNC_FETCH		(0xA2)
+#define SYNC_MEM_READ		(0x82)
+#define SYNC_MEM_WRITE		(0x00)
+#define SYNC_STACK_READ		(0x86)
+#define SYNC_STACK_WRITE	(0x04)
+#define SYNC_INPUT		(0x42)
+#define SYNC_OUTPUT		(0x10)
+#define SYNC_HALT_ACK		(0x8A)
+#define SYNC_INT_ACK		(0x23)
 
 // Step 1. Memory
 

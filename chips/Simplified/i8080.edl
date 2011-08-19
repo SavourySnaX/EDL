@@ -49,7 +49,7 @@ DECLARE	BC[16] 		ALIAS B[8]:C[8];
 DECLARE	FLAGS[8]	ALIAS s[1]:z[1]:%0:ac[1]:%0:p[1]:%1:cy[1];	# Defined flags as lower case to avoid clash with WZ variable
 									# s sign bit : z zero bit : ac half carry (bit 3-4) : p parity : cy full carry (bit 7-8)
 # INTERNAL REGISTERS
-DECLARE I[1];
+DECLARE INTERNAL I[1];
 
 HANDLER		STEP		ALWAYS
 {

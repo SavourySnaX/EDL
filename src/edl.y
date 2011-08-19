@@ -51,7 +51,7 @@
 %token <token>	TOK_DECLARE TOK_HANDLER	TOK_STATES TOK_STATE TOK_ALIAS TOK_IF TOK_NEXT TOK_PUSH TOK_POP	/* Reserved words */
 %token <token>	TOK_INSTRUCTION	TOK_EXECUTE TOK_ROL TOK_ROR TOK_MAPPING TOK_AFFECT TOK_AS		/* Reserved words */
 %token <token>	TOK_PIN TOK_IN TOK_OUT TOK_BIDIRECTIONAL						/* Reserved words */
-%token <token>	TOK_ALWAYS TOK_CHANGED TOK_TRANSITION							/* Reserved words */
+%token <token>	TOK_ALWAYS TOK_CHANGED TOK_TRANSITION TOK_INTERNAL					/* Reserved words */
 %token <token>	TOK_ZERO TOK_SIGN TOK_PARITYEVEN TOK_PARITYODD TOK_CARRY TOK_BIT			/* Reserved words AFFECTORS */
 %token <token>	TOK_TRACE TOK_BASE									/* Debug reserved words */
 %token <token>	TOK_C_FUNC TOK_C_FUNC_EXTERN								/* C Calling Interface */
@@ -207,8 +207,10 @@ pin_type: TOK_IN
 	| TOK_BIDIRECTIONAL
 	;
 
-var_decl : TOK_DECLARE ident TOK_LSQR numeric TOK_RSQR { $$ = new CVariableDeclaration(*$2, *$4); }
-	| TOK_DECLARE ident TOK_LSQR numeric TOK_RSQR TOK_ALIAS aliases { $$ = new CVariableDeclaration(*$2, *$4, *$7); delete $7; }
+var_decl : TOK_DECLARE TOK_INTERNAL ident TOK_LSQR numeric TOK_RSQR { $$ = new CVariableDeclaration(true, *$3, *$5); }
+	| TOK_DECLARE TOK_INTERNAL ident TOK_LSQR numeric TOK_RSQR TOK_ALIAS aliases { $$ = new CVariableDeclaration(true, *$3, *$5, *$8); delete $8; }
+	| TOK_DECLARE ident TOK_LSQR numeric TOK_RSQR { $$ = new CVariableDeclaration(false, *$2, *$4); }
+	| TOK_DECLARE ident TOK_LSQR numeric TOK_RSQR TOK_ALIAS aliases { $$ = new CVariableDeclaration(false, *$2, *$4, *$7); delete $7; }
 	| TOK_PIN pin_type ident TOK_LSQR numeric TOK_RSQR { $$ = new CVariableDeclaration($2,*$3,*$5); }
 	| TOK_PIN pin_type ident TOK_LSQR numeric TOK_RSQR TOK_ALIAS aliases { $$ = new CVariableDeclaration($2,*$3,*$5,*$8); delete $8; }
 	;

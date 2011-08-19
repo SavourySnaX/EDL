@@ -38,6 +38,8 @@ ALWAYS					{ return TOKEN(TOK_ALWAYS); }
 CHANGED					{ return TOKEN(TOK_CHANGED); }
 TRANSITION				{ return TOKEN(TOK_TRANSITION); }
 
+INTERNAL				{ return TOKEN(TOK_INTERNAL); }
+
 ZERO					{ return TOKEN(TOK_ZERO); }
 SIGN					{ return TOKEN(TOK_SIGN); }
 PARITYEVEN				{ return TOKEN(TOK_PARITYEVEN); }
