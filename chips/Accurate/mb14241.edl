@@ -1,0 +1,38 @@
+#
+# mb14241 Fairchild custom chip - Used in space invaders as a specialist shifter
+#
+# Haven't been able to find a datasheet online for this chip, but its behaviour is well documented
+#and the equivalent circuits would suggest something along the lines of the below.
+#
+
+PIN IN INPUTS[8];
+PIN OUT OUTPUTS[8];
+
+PIN IN LATCH_SHIFT[1];
+PIN IN LATCH_DATA[1];
+
+
+DECLARE INTERNAL shiftData[15] ALIAS HI[8]:LO[7];
+DECLARE INTERNAL shiftCnt[3];
+
+FUNCTION INTERNAL UpdateOutputs	
+{
+	DECLARE dontCare[8];
+
+	OUTPUTS <- ROR(shiftData,dontCare,$00,shiftCnt);
+}
+
+HANDLER LATCH_SHIFT TRANSITION(0,1)
+{
+	shiftCnt <- ~INPUTS[0..2];
+	CALL UpdateOutputs();
+}
+
+HANDLER LATCH_DATA TRANSITION(0,1)
+{
+	DECLARE dontCare[8];
+	shiftData<-ROR(shiftData,dontCare,$00,8);
+	HI<-HI | INPUTS;
+	CALL UpdateOutputs();
+}
+
