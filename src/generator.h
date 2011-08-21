@@ -26,7 +26,7 @@ class CBlock;
 class CStatesDeclaration;
 class CHandlerDeclaration;
 class CMappingDeclaration;
-
+class CIdentifier;
 class BitVariable
 {
 public:
@@ -49,7 +49,6 @@ class StateVariable
 public:
 	Value* currentState;
 	Value* nextState;
-	Value* stateStackPrev;
 	Value* stateStackNext;
 	Value* stateStackIndex;
 	CStatesDeclaration* decl;
@@ -73,6 +72,7 @@ class CodeGenContext
 {
     std::stack<CodeGenBlock *> blocks;
     std::stack<CStatesDeclaration *> statesStack;
+    std::stack<const CIdentifier *> identifierStack;
     Function *mainFunction;
 
 public:
@@ -118,4 +118,8 @@ public:
     CStatesDeclaration* currentState() { if (statesStack.empty()) return NULL; else return statesStack.top(); }
     void pushState(CStatesDeclaration *state) { statesStack.push(state); }
     void popState() { statesStack.pop(); }
+    const std::stack<const CIdentifier*>& getIdentStack() { return identifierStack; }
+    const CIdentifier* currentIdent() { if (identifierStack.empty()) return NULL; else return identifierStack.top(); }
+    void pushIdent(const CIdentifier* id) { identifierStack.push(id); }
+    void popIdent() { identifierStack.pop(); }
 };

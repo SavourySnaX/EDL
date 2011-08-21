@@ -31,6 +31,7 @@ typedef std::vector<CStatement*> StatementList;
 typedef std::vector<CExpression*> ExpressionList;
 typedef std::vector<CVariableDeclaration*> VariableList;
 typedef std::vector<CStateDeclaration*> StateList;
+typedef std::vector<CStatesDeclaration*> StatesList;
 typedef std::vector<CAliasDeclaration*> AliasList;
 typedef std::vector<CDebugTrace*> DebugList;
 typedef std::vector<CStateIdent*> StateIdentList;
@@ -44,6 +45,7 @@ typedef std::vector<CParamDecl*> NamedParamsList;
 class CNode {
 public:
 	virtual ~CNode() {}
+	virtual void prePass(CodeGenContext& context) { }
 	virtual llvm::Value* codeGen(CodeGenContext& context) { return NULL; }
 };
 
@@ -127,13 +129,13 @@ class CStateIdent : public CExpression {
 public:
 	std::string name;
 	CStateIdent(const std::string& name) : name(name) { }
-	virtual llvm::Value* codeGen(CodeGenContext& context) { }
 };
 
 class CString : public CExpression {
 public:
 	std::string quoted;
 	CString(const std::string& quoted) : quoted(quoted) { }
+	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
 
@@ -199,6 +201,7 @@ public:
 	CBinaryOperator(CExpression& lhs, int op, CExpression& rhs) :
 		lhs(lhs), rhs(rhs), op(op) { }
 
+	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 	llvm::Value* codeGen(CodeGenContext& context,llvm::Value* left,llvm::Value* right);
 
@@ -215,6 +218,7 @@ public:
 		lhs(lhs), beg(begZero),end(end) { }
 	CCastOperator(CExpression& lhs, CInteger& beg, CInteger& end) :
 		lhs(lhs), beg(beg), end(end) { }
+	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
 
@@ -227,6 +231,7 @@ public:
 	int direction;
 	CRotationOperator(int direction,CExpression& value, CIdentifier& bitsOut, CExpression& bitsIn,CExpression& rotAmount) :
 		direction(direction), value(value), bitsOut(bitsOut), bitsIn(bitsIn), rotAmount(rotAmount) { }
+	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
 
@@ -246,6 +251,7 @@ public:
 	CExpression& rhs;
 	CAssignment(CIdentifier& lhs, CExpression& rhs) : 
 		lhs(lhs), rhs(rhs) { }
+	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 
 	static llvm::Value* generateAssignment(BitVariable& to, llvm::Value* from,CodeGenContext& context);
@@ -255,6 +261,7 @@ class CBlock : public CExpression {
 public:
 	StatementList statements;
 	CBlock() { }
+	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
 
@@ -304,7 +311,6 @@ public:
 	CDebugTraceBase(CInteger& integer) :
 		integer(integer) { }
 	virtual bool isModifier() { return true; }
-	virtual llvm::Value* codeGen(CodeGenContext& context) {return NULL; }
 };
 
 class CExpressionStatement : public CStatement {
@@ -312,6 +318,7 @@ public:
 	CExpression& expression;
 	CExpressionStatement(CExpression& expression) : 
 		expression(expression) { }
+	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
 
@@ -332,6 +339,7 @@ public:
 		id(id), size(size),pinType(pinType) { }
 	CVariableDeclaration(int pinType,CIdentifier& id, CInteger& size,AliasList& aliases) :
 		id(id), size(size),aliases(aliases),pinType(pinType) { }
+	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 
 	void CreateWriteAccessor(CodeGenContext& context,BitVariable& var);
@@ -347,7 +355,6 @@ public:
 		idOrEmpty(id), sizeOrValue(size) { }
 	CAliasDeclaration(CInteger& value) :
 		idOrEmpty(empty), sizeOrValue(value) { }
-	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
 
 class CStateDeclaration : public CStatement {
@@ -366,7 +373,9 @@ class CStatesDeclaration : public CStatement {
 public:
 	StateList states;
 	std::string label;
+	StatesList children;
 	llvm::BasicBlock* exitState;
+	llvm::Value* optocurState;
 	CBlock& block;
 	CStatesDeclaration(StateList& states,CBlock& block) :
 		states(states),block(block) { }
@@ -374,6 +383,7 @@ public:
 	CStateDeclaration* getStateDeclaration(const CIdentifier& id) { for (int a=0;a<states.size();a++) { if (states[a]->id.name == id.name) return states[a]; } return NULL; }
 	int getStateDeclarationIndex(const CIdentifier& id) { for (int a=0;a<states.size();a++) { if (states[a]->id.name == id.name) return a; } return -1; }
 
+	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
 
@@ -383,6 +393,7 @@ public:
 	CStateTest(StateIdentList& stateIdents) :
 		stateIdents(stateIdents) { }
 
+	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
 
@@ -392,6 +403,7 @@ public:
 	CStateJump(StateIdentList& stateIdents) :
 		stateIdents(stateIdents) { }
 
+	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
 
@@ -401,6 +413,7 @@ public:
 	CStatePush(StateIdentList& stateIdents) :
 		stateIdents(stateIdents) { }
 
+	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
 
@@ -410,9 +423,8 @@ public:
 	CStatePop(CIdentifier& ident) :
 		ident(ident) { }
 
+	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
-
-	void StateWalker(CodeGenContext& context,CStatesDeclaration* begin,llvm::Value* numStates);
 };
 
 
@@ -423,6 +435,7 @@ public:
 	CBlock& block;
 	CIfStatement(CExpression& expr, CBlock& block) :
 		expr(expr),block(block) { }
+	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
 
@@ -432,6 +445,7 @@ public:
 	CBlock& block;
 	CStateDefinition(const CIdentifier& id, CBlock& block) :
 		id(id), block(block) { }
+	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
 
@@ -459,6 +473,7 @@ public:
 	CStatesDeclaration* child;
 	CHandlerDeclaration(const CIdentifier& id, CTrigger& trigger,CBlock& block) :
 		id(id), trigger(trigger),block(block) { }
+	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
 
@@ -471,6 +486,7 @@ public:
 	CMappingDeclaration(const CIdentifier& ident, CInteger& size, MappingList& mappings) :
 		mappings(mappings), ident(ident), size(size) { }
 	
+	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
 
@@ -481,6 +497,7 @@ public:
 	CBlock& block;
 	CInstruction(CString& mnemonic,OperandList& operands, CBlock& block) :
 		mnemonic(mnemonic),operands(operands), block(block) { }
+	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 
 	CString& processMnemonic(CodeGenContext& context,CString& in,llvm::APInt& opcode,unsigned num);
@@ -491,6 +508,7 @@ public:
 	CIdentifier& opcode;
 	CExecute(CIdentifier& opcode) :
 		opcode(opcode) { }
+	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
 
@@ -517,6 +535,7 @@ public:
 	CAffector(AffectorList& affectors,CExpression& expr) :
 		affectors(affectors),expr(expr) { }
 
+	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
 
@@ -531,6 +550,7 @@ public:
 	CExternDecl(CIdentifier& name,ExternParamsList& params) :
 		name(name), params(params) { }
 
+	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
 
@@ -542,6 +562,7 @@ public:
 	CFuncCall(CIdentifier& name,ParamsList& params) :
 		name(name), params(params) { }
 	
+	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
 
@@ -558,6 +579,7 @@ public:
 	CFunctionDecl(bool internal,CIdentifier& name,NamedParamsList& params,CBlock &block) :
 		internal(internal), name(name), params(params),block(block) { }
 
+	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
 

@@ -34,6 +34,7 @@ void CodeGenContext::generateCode(CBlock& root)
 	debugTraceChar->setCallingConv(CallingConv::C);
 	debugTraceChar->setAttributes(func_puts_PAL);
 	
+	root.prePass(*this);	/* Run a pre-pass on the code */
 	root.codeGen(*this);	/* Generate complete code - starting at no block (global space) */
 
 	if (errorFlagged)
@@ -133,6 +134,10 @@ Value* CInteger::codeGen(CodeGenContext& context)
 	return ConstantInt::get(getGlobalContext(), integer);
 }
 
+void CString::prePass(CodeGenContext& context)
+{
+}
+
 Value* CString::codeGen(CodeGenContext& context)
 {
 	ArrayType* ArrayTy_0 = ArrayType::get(IntegerType::get(getGlobalContext(), 8), quoted.length()-1);
@@ -223,17 +228,8 @@ Value* CIdentifier::codeGen(CodeGenContext& context)
 
 CIdentifier CAliasDeclaration::empty("");
 
-Value* CAliasDeclaration::codeGen(CodeGenContext& context)
-{
-	return NULL;
-}
-
 Value* CDebugTraceString::codeGen(CodeGenContext& context)
 {
-/*	std::vector<Value*> args;
-	args.push_back(string.codeGen(context));
-	CallInst *call = CallInst::Create(context.debugTraceString,args.begin(),args.end(),"DEBUGTRACE",context.currentBlock());
-	return call;*/
 	for (unsigned a=1;a<string.quoted.length()-1;a++)
 	{
 		std::vector<Value*> args;
@@ -241,7 +237,6 @@ Value* CDebugTraceString::codeGen(CodeGenContext& context)
 		args.push_back(ConstantInt::get(getGlobalContext(),APInt(32,string.quoted[a])));
 		CallInst *call = CallInst::Create(context.debugTraceChar,args.begin(),args.end(),"DEBUGTRACE",context.currentBlock());
 	}
-
 }
 
 Value* CDebugTraceInteger::codeGen(CodeGenContext& context)
@@ -393,9 +388,16 @@ Value* CDebugLine::codeGen(CodeGenContext& context)		// Refactored away onto its
 
 	return NULL;
 }
+
 bool CBinaryOperator::IsCarryExpression()
 {
 	return (op==TOK_ADD || op==TOK_SUB); 
+}
+
+void CBinaryOperator::prePass(CodeGenContext& context)
+{
+	lhs.prePass(context);
+	rhs.prePass(context);
 }
 
 Value* CBinaryOperator::codeGen(CodeGenContext& context)
@@ -469,6 +471,11 @@ std::string stringZero("0");
 
 CInteger CCastOperator::begZero(stringZero);
 
+void CCastOperator::prePass(CodeGenContext& context)
+{
+	lhs.prePass(context);
+}
+
 Value* CCastOperator::codeGen(CodeGenContext& context)
 {
 	// Compute a mask between specified bits, shift result down by start bits
@@ -506,6 +513,13 @@ Value* CCastOperator::codeGen(CodeGenContext& context)
 	context.errorFlagged=true;
 
 	return NULL;
+}
+
+void CRotationOperator::prePass(CodeGenContext& context)
+{
+	value.prePass(context);
+	bitsIn.prePass(context);
+	rotAmount.prePass(context);
 }
 
 Value* CRotationOperator::codeGen(CodeGenContext& context)
@@ -645,6 +659,10 @@ Value* CAssignment::generateAssignment(BitVariable& to, Value* from,CodeGenConte
 	return new StoreInst(final, assignTo, false, context.currentBlock());
 }
 
+void CAssignment::prePass(CodeGenContext& context)
+{
+	rhs.prePass(context);
+}
 
 Value* CAssignment::codeGen(CodeGenContext& context)
 {
@@ -680,6 +698,15 @@ Value* CAssignment::codeGen(CodeGenContext& context)
 	return CAssignment::generateAssignment(var,assignWith,context);
 }
 
+void CBlock::prePass(CodeGenContext& context)
+{
+	StatementList::const_iterator it;
+	for (it = statements.begin(); it != statements.end(); it++) 
+	{
+		(**it).prePass(context);
+	}
+}
+
 Value* CBlock::codeGen(CodeGenContext& context)
 {
 	StatementList::const_iterator it;
@@ -689,6 +716,11 @@ Value* CBlock::codeGen(CodeGenContext& context)
 		last = (**it).codeGen(context);
 	}
 	return last;
+}
+
+void CExpressionStatement::prePass(CodeGenContext& context)
+{
+	expression.prePass(context);
 }
 
 Value* CExpressionStatement::codeGen(CodeGenContext& context)
@@ -705,14 +737,102 @@ Value* CStateDeclaration::codeGen(CodeGenContext& context,Function* parent)
 	return NULL;
 }
 
+void CStatesDeclaration::prePass(CodeGenContext& context)
+{
+	int a;
+
+	for (a=0;a<states.size();a++)
+	{
+		children.push_back(NULL);
+	}
+
+	context.pushState(this);
+
+	block.prePass(context);
+
+	context.popState();
+
+	if (context.currentIdent()!=NULL)
+	{
+		int stateIndex = context.currentState()->getStateDeclarationIndex(*context.currentIdent());
+
+		if (stateIndex!=-1)
+		{
+			context.currentState()->children[stateIndex]=this;
+		}
+	}
+}
+
+int GetNumStates(CStatesDeclaration* state)
+{
+	int a;
+	int totalStates=0;
+
+	if (state==NULL)
+		return 1;
+
+	for (a=0;a<state->states.size();a++)
+	{
+		CStatesDeclaration* downState=state->children[a];
+
+		if (downState==NULL)
+		{
+			totalStates++;
+		}
+		else
+		{
+			totalStates+=GetNumStates(downState);
+		}
+	}
+
+	return totalStates;
+}
+		
+int ComputeBaseIdx(CStatesDeclaration* cur,CStatesDeclaration* find)
+{
+	int a;
+	int totalStates=0;
+	static bool found = false;
+
+	if (cur==NULL)
+	{
+		return 0;
+	}
+
+	found=false;
+
+	for (a=0;a<cur->states.size();a++)
+	{
+		CStatesDeclaration* downState=cur->children[a];
+
+		if (downState == find)
+		{
+			found=true;
+			return totalStates;
+		}
+
+		if (downState==NULL)
+		{
+			totalStates++;
+		}
+		else
+		{
+			totalStates+=ComputeBaseIdx(downState,find);
+			if (found)
+			{
+				return totalStates;
+			}
+		}
+	}
+
+	return totalStates;
+}
+
 Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 {
-	Twine numStatesTwine(states.size());
-	std::string numStates = numStatesTwine.str();
-	APInt overSized(4*numStates.length(),numStates,10);
-	unsigned bitsNeeded = overSized.getActiveBits();
+	bool TopMostState=false;
 
-	if (context.currentState() == NULL)
+	if (context.currentState()==NULL)
 	{
 		if (context.parentHandler==NULL)
 		{
@@ -720,98 +840,145 @@ Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 			context.errorFlagged=true;
 			return NULL;
 		}
-		context.parentHandler->child = this;
+
+		TopMostState=true;
 	}
 	else
 	{
-		CStatesDeclaration* parentStates = context.currentState();
-		std::string stateForChild=context.stateLabelStack.substr(context.stateLabelStack.rfind(".")+1);
-		CStateDeclaration* parentState = parentStates->getStateDeclaration(stateForChild);
-		if (parentState == NULL)
-		{
-			std::cerr << "Unable to find parent state - this is impossible, unless i've done something badly wrong!" << std::endl;
-			context.errorFlagged=true;
-			return NULL;
-		}
-		parentState->child=this;
 	}
 
-	std::string stkStatePLbl = "STACKP" + context.stateLabelStack;
-	std::string stkStateNLbl = "STACKN" + context.stateLabelStack;
-	std::string idxStateLbl = "IDX" + context.stateLabelStack;
-	std::string curStateLbl = "CUR" + context.stateLabelStack;
-	std::string nxtStateLbl = "NEXT" + context.stateLabelStack;
+	int totalStates;
+	Twine numStatesTwine;
+	std::string numStates;
+	APInt overSized;
+	unsigned bitsNeeded;
+	int baseStateIdx;
+	
+	Value *curState;
+	Value *nxtState;
 	std::string stateLabel = "STATE" + context.stateLabelStack;
 
-	GlobalVariable *curState = new GlobalVariable(*context.module,Type::getIntNTy(getGlobalContext(),bitsNeeded), false, GlobalValue::InternalLinkage,NULL,curStateLbl);
-	GlobalVariable *nxtState = new GlobalVariable(*context.module,Type::getIntNTy(getGlobalContext(),bitsNeeded), false, GlobalValue::InternalLinkage,NULL,nxtStateLbl);
-	
-	ArrayType* ArrayTy_0 = ArrayType::get(IntegerType::get(getGlobalContext(), bitsNeeded), MAX_SUPPORTED_STACK_DEPTH);
-       	GlobalVariable* stkStateP = new GlobalVariable(*context.module, ArrayTy_0, false,  GlobalValue::InternalLinkage, NULL, stkStatePLbl);
-       	GlobalVariable* stkStateN = new GlobalVariable(*context.module, ArrayTy_0, false,  GlobalValue::InternalLinkage, NULL, stkStateNLbl);
-	GlobalVariable *stkStateIdx = new GlobalVariable(*context.module,Type::getIntNTy(getGlobalContext(),MAX_SUPPORTED_STACK_BITS), false, GlobalValue::InternalLinkage,NULL,idxStateLbl);
+	Value* int32_5=NULL;
+	if (TopMostState)
+	{
+		totalStates = GetNumStates(this);
+		numStatesTwine=Twine(totalStates);
+		numStates = numStatesTwine.str();
+		overSized=APInt(4*numStates.length(),numStates,10);
+		bitsNeeded = overSized.getActiveBits();
+		baseStateIdx=0;
 
- 
-	StateVariable newStateVar;
-	newStateVar.currentState = curState;
-	newStateVar.nextState = nxtState;
-	newStateVar.stateStackPrev = stkStateP;
-	newStateVar.stateStackNext = stkStateN;
-	newStateVar.stateStackIndex = stkStateIdx;
-	newStateVar.decl = this;
+		std::string curStateLbl = "CUR" + context.stateLabelStack;
+		std::string nxtStateLbl = "NEXT" + context.stateLabelStack;
+		std::string idxStateLbl = "IDX" + context.stateLabelStack;
+		std::string stkStateLbl = "STACK" + context.stateLabelStack;
 
-	context.states()[stateLabel]=newStateVar;
-	context.statesAlt()[this]=newStateVar;
+		GlobalVariable* gcurState = new GlobalVariable(*context.module,Type::getIntNTy(getGlobalContext(),bitsNeeded), false, GlobalValue::PrivateLinkage,NULL,curStateLbl);
+		GlobalVariable* gnxtState = new GlobalVariable(*context.module,Type::getIntNTy(getGlobalContext(),bitsNeeded), false, GlobalValue::PrivateLinkage,NULL,nxtStateLbl);
 
-	// Constant Definitions
-	ConstantInt* const_int32_n = ConstantInt::get(getGlobalContext(), APInt(bitsNeeded, 0, false));
-	ConstantInt* const_int4_n = ConstantInt::get(getGlobalContext(), APInt(MAX_SUPPORTED_STACK_BITS, 0, false));
-	ConstantAggregateZero* const_array_n = ConstantAggregateZero::get(ArrayTy_0);
+		curState = gcurState;
+		nxtState = gnxtState;
 
-	// Global Variable Definitions
-	curState->setInitializer(const_int32_n);
-	nxtState->setInitializer(const_int32_n);
-	stkStateIdx->setInitializer(const_int4_n);
-	stkStateP->setInitializer(const_array_n);
-	stkStateN->setInitializer(const_array_n);
+		ArrayType* ArrayTy_0 = ArrayType::get(IntegerType::get(getGlobalContext(), bitsNeeded), MAX_SUPPORTED_STACK_DEPTH);
+		GlobalVariable* stkState = new GlobalVariable(*context.module, ArrayTy_0, false,  GlobalValue::PrivateLinkage, NULL, stkStateLbl);
+		GlobalVariable *stkStateIdx = new GlobalVariable(*context.module,Type::getIntNTy(getGlobalContext(),MAX_SUPPORTED_STACK_BITS), false, GlobalValue::PrivateLinkage,NULL,idxStateLbl);
 
+		StateVariable newStateVar;
+		newStateVar.currentState = curState;
+		newStateVar.nextState = nxtState;
+		newStateVar.stateStackNext = stkState;
+		newStateVar.stateStackIndex = stkStateIdx;
+		newStateVar.decl = this;
+
+		context.states()[stateLabel]=newStateVar;
+		context.statesAlt()[this]=newStateVar;
+
+		// Constant Definitions
+		ConstantInt* const_int32_n = ConstantInt::get(getGlobalContext(), APInt(bitsNeeded, 0, false));
+		ConstantInt* const_int4_n = ConstantInt::get(getGlobalContext(), APInt(MAX_SUPPORTED_STACK_BITS, 0, false));
+		ConstantAggregateZero* const_array_n = ConstantAggregateZero::get(ArrayTy_0);
+
+		// Global Variable Definitions
+		gcurState->setInitializer(const_int32_n);
+		gnxtState->setInitializer(const_int32_n);
+		stkStateIdx->setInitializer(const_int4_n);
+		stkState->setInitializer(const_array_n);
+	}
+	else
+	{
+		StateVariable topState = context.states()[stateLabel];
+
+		curState=topState.currentState;
+		nxtState=topState.nextState;
+
+		totalStates = GetNumStates(topState.decl);
+		numStatesTwine=Twine(totalStates);
+		numStates = numStatesTwine.str();
+		overSized=APInt(4*numStates.length(),numStates,10);
+		bitsNeeded = overSized.getActiveBits();
+
+		baseStateIdx=ComputeBaseIdx(topState.decl,this);
+
+		int32_5 = topState.decl->optocurState;
+	}
 	BasicBlock* bb = context.currentBlock();		// cache old basic block
+
 	std::map<std::string,BitVariable> tmp = context.locals();
 
+	// Setup exit from switch statement
 	exitState = BasicBlock::Create(getGlobalContext(),"switchTerm",bb->getParent());
 	context.setBlock(exitState);
 
 	// Step 1, load next state into current state
-	LoadInst* getNextState = new LoadInst(nxtState,"",false,bb);
-	StoreInst* storeState = new StoreInst(getNextState,curState,false,bb);
+	if (TopMostState)
+	{
+		LoadInst* getNextState = new LoadInst(nxtState,"",false,bb);
+		StoreInst* storeState = new StoreInst(getNextState,curState,false,bb);
+	}
 
 	// Step 2, generate switch statement
-	LoadInst* int32_5 = new LoadInst(curState, "", false, bb);
-	SwitchInst* void_6 = SwitchInst::Create(int32_5, exitState,states.size(), bb);
+	if (TopMostState)
+	{
+		optocurState = new LoadInst(curState, "", false, bb);
+		int32_5 = optocurState;
+	}
+	SwitchInst* void_6 = SwitchInst::Create(int32_5, exitState,totalStates, bb);
+
 
 	// Step 3, build labels and initialiser for next state on entry
-	bool lastStateAutoIncrement=false;
-	int startOfAutoIncrementIdx=-1;
+	bool lastStateAutoIncrement=true;
+	int startOfAutoIncrementIdx=baseStateIdx;
+	int startIdx=baseStateIdx;
 	for (int a=0;a<states.size();a++)
 	{
 		// Build Labels
+		int total = GetNumStates(children[a]);
+
 		states[a]->codeGen(context,bb->getParent());
-		ConstantInt* tt = ConstantInt::get(getGlobalContext(),APInt(bitsNeeded,a,false));
-		void_6->addCase(tt,states[a]->entry);
+		for (int b=0;b<total;b++)
+		{
+			//
+			ConstantInt* tt = ConstantInt::get(getGlobalContext(),APInt(bitsNeeded,startIdx+b,false));
+			void_6->addCase(tt,states[a]->entry);
+		}
+		if (!lastStateAutoIncrement)
+		{
+			startOfAutoIncrementIdx=startIdx;
+		}
+		startIdx+=total;
 
 		// Compute next state and store for future
 		if (states[a]->autoIncrement)
 		{
-			if (!lastStateAutoIncrement)
+			if (children[a]==NULL)
 			{
-				startOfAutoIncrementIdx=a;
+				ConstantInt* nextState = ConstantInt::get(getGlobalContext(),APInt(bitsNeeded, a==states.size()-1 ? baseStateIdx : startIdx,false));
+				StoreInst* newState = new StoreInst(nextState,nxtState,false,states[a]->entry);
 			}
-			ConstantInt* nextState = ConstantInt::get(getGlobalContext(),APInt(bitsNeeded, a==states.size()-1 ? 0 : a+1,false));
-			StoreInst* newState = new StoreInst(nextState,nxtState,false,states[a]->entry);
 		}
 		else
 		{
-			if (lastStateAutoIncrement)
+			if (children[a]==NULL)
 			{
 				ConstantInt* nextState = ConstantInt::get(getGlobalContext(),APInt(bitsNeeded, startOfAutoIncrementIdx,false));
 				StoreInst* newState = new StoreInst(nextState,nxtState,false,states[a]->entry);
@@ -832,9 +999,66 @@ Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 		BranchInst::Create(states[a]->exit,states[a]->entry);
 		BranchInst::Create(exitState,states[a]->exit);			// this terminates the final blocks from our states
 	}
-
+	
 	return NULL;
 }
+
+void CStateDefinition::prePass(CodeGenContext& context)
+{
+	CStatesDeclaration* pStates = context.currentState();
+	if (pStates)
+	{
+		CStateDeclaration* pState = pStates->getStateDeclaration(id);
+
+	       	if (pState)
+		{
+			context.pushIdent(&id);
+			block.prePass(context);
+			context.popIdent();
+		}
+		else
+		{
+			std::cerr << "Attempt to define unknown state : " << id.name.c_str() << endl;
+			context.errorFlagged=true;
+		}
+	}
+	else
+	{
+		std::cerr << "Attempt to define state entry when no states on stack" << endl;
+		context.errorFlagged=true;
+	}
+
+}
+
+Value* CStateDefinition::codeGen(CodeGenContext& context)
+{
+	CStatesDeclaration* pStates = context.currentState();
+	if (pStates)
+	{
+		CStateDeclaration* pState = pStates->getStateDeclaration(id);
+
+	       	if (pState)
+		{
+			context.pushBlock(pState->entry);
+			block.codeGen(context);
+			pState->entry=context.currentBlock();
+			context.popBlock();
+		}
+		else
+		{
+			std::cerr << "Attempt to define unknown state : " << id.name.c_str() << endl;
+			context.errorFlagged=true;
+			return NULL;
+		}
+	}
+	else
+	{
+		std::cerr << "Attempt to define state entry when no states on stack" << endl;
+		context.errorFlagged=true;
+		return NULL;
+	}
+}
+
 
 void CVariableDeclaration::CreateWriteAccessor(CodeGenContext& context,BitVariable& var)
 {
@@ -872,6 +1096,11 @@ void CVariableDeclaration::CreateReadAccessor(CodeGenContext& context,BitVariabl
 	LoadInst* load = new LoadInst(var.value,"",false,bblock);
 
 	ReturnInst::Create(getGlobalContext(),load,bblock);
+}
+
+void CVariableDeclaration::prePass(CodeGenContext& context)
+{
+	// Do nothing, but in future we could pre compute the globals and the locals for each block, allowing use before declaration?
 }
 
 Value* CVariableDeclaration::codeGen(CodeGenContext& context)
@@ -1021,38 +1250,9 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 	return temp.value;
 }
 
-Value* CStateDefinition::codeGen(CodeGenContext& context)
+void CHandlerDeclaration::prePass(CodeGenContext& context)
 {
-	CStatesDeclaration* pStates = context.currentState();
-	if (pStates)
-	{
-		CStateDeclaration* pState = pStates->getStateDeclaration(id);
-
-	       	if (pState)
-		{
-			std::string oldStateLabelStack = context.stateLabelStack;
-			context.stateLabelStack+="." + id.name;
-	
-			context.pushBlock(pState->entry);
-			block.codeGen(context);
-			pState->entry=context.currentBlock();
-			context.popBlock();
-
-			context.stateLabelStack=oldStateLabelStack;
-		}
-		else
-		{
-			std::cerr << "Attempt to define unknown state : " << id.name.c_str() << endl;
-			context.errorFlagged=true;
-			return NULL;
-		}
-	}
-	else
-	{
-		std::cerr << "Attempt to define state entry when no states on stack" << endl;
-		context.errorFlagged=true;
-		return NULL;
-	}
+	block.prePass(context);
 }
 
 Value* CHandlerDeclaration::codeGen(CodeGenContext& context)
@@ -1078,21 +1278,6 @@ Value* CHandlerDeclaration::codeGen(CodeGenContext& context)
 	Function* function = Function::Create(ftype, GlobalValue::PrivateLinkage, "HANDLER."+id.name, context.module);
 	BasicBlock *bblock = BasicBlock::Create(getGlobalContext(), "entry", function, 0);
 	
-	std::string depth = id.name + "DEPTH";
-	std::string depthIdx = id.name + "DEPTHIDX";
-
-	ArrayType* ArrayTy_0 = ArrayType::get(IntegerType::get(getGlobalContext(), MAX_SUPPORTED_STACK_BITS), MAX_SUPPORTED_STACK_DEPTH);
-       	depthTree = new GlobalVariable(*context.module, ArrayTy_0, false,  GlobalValue::InternalLinkage, NULL, depth);
-	depthTreeIdx = new GlobalVariable(*context.module,Type::getIntNTy(getGlobalContext(),MAX_SUPPORTED_STACK_BITS), false, GlobalValue::InternalLinkage,NULL,depthIdx);
-	
-	// Constant Definitions
-	ConstantInt* const_int4_n = ConstantInt::get(getGlobalContext(), APInt(MAX_SUPPORTED_STACK_BITS, 0, false));
-	ConstantAggregateZero* const_array_n = ConstantAggregateZero::get(ArrayTy_0);
-
-	// Global Variable Definitions
-	depthTreeIdx->setInitializer(const_int4_n);
-	depthTree->setInitializer(const_array_n);
-
 	context.m_handlers[id.name]=this;
 
 	context.pushBlock(bblock);
@@ -1180,6 +1365,11 @@ CString& CInstruction::processMnemonic(CodeGenContext& context,CString& in,llvm:
 	return temp;
 }
 	
+void CInstruction::prePass(CodeGenContext& context)
+{
+	block.prePass(context);
+}
+
 Value* CInstruction::codeGen(CodeGenContext& context)
 {
 	vector<const Type*> argTypes;
@@ -1218,7 +1408,7 @@ Value* CInstruction::codeGen(CodeGenContext& context)
 // End disasm function
 
 		FunctionType *ftype = FunctionType::get(Type::getVoidTy(getGlobalContext()),argTypes, false);
-		Function* function = Function::Create(ftype, GlobalValue::InternalLinkage, "OPCODE_"+opcodeString.string.quoted.substr(1,mnemonic.quoted.length()-2) + "_" + opcode.toString(16,false),context.module);
+		Function* function = Function::Create(ftype, GlobalValue::PrivateLinkage, "OPCODE_"+opcodeString.string.quoted.substr(1,mnemonic.quoted.length()-2) + "_" + opcode.toString(16,false),context.module);
 		BasicBlock *bblock = BasicBlock::Create(getGlobalContext(), "entry", function, 0);
 
 		context.pushBlock(bblock);
@@ -1245,6 +1435,11 @@ Value* CInstruction::codeGen(CodeGenContext& context)
 	return NULL;
 }
 
+void CExecute::prePass(CodeGenContext& context)
+{
+	// this will allow us to have instructions before execute and vice versa
+}
+
 Value* CExecute::codeGen(CodeGenContext& context)
 {
 	Value* load = opcode.codeGen(context);
@@ -1266,288 +1461,289 @@ Value* CExecute::codeGen(CodeGenContext& context)
 	return NULL;
 }
 
-// Language decision : TEST.A.B@ should only return true if we are in STATE A SUBSTATE B - To do this we need to check each of the states, not just the last one
-
-Value* CStateTest::codeGen(CodeGenContext& context)
+int ComputeBaseIdx(CStatesDeclaration* cur,StateIdentList& list, int index,int &total)
 {
-	unsigned int a,b;
-	unsigned int numStatesToCheck = stateIdents.size()-1;
-	Value *res=NULL;
+	int a;
+	int totalStates=0;
+	static bool found = false;
 
-	// Locate the parent variable and value for the test
-	for (b=0;b<numStatesToCheck;b++)
+	total=0;
+	if (list.size()==1)
+		return 0;
+
+	for (a=0;a<cur->states.size();a++)
 	{
-		std::string findString = "STATE";
-		for (a=0;a<b+1;a++)
+		if (index && (cur->states[a]->id.name == list[index]->name))
 		{
-			findString+="." + stateIdents[a]->name;
-		}
+			CStatesDeclaration* downState=cur->children[a];
+				
+			if (index==list.size()-1)
+			{
+				found=true;
+				if (downState==NULL)
+				{
+					total=1;
+				}
+				else
+				{
+					total=ComputeBaseIdx(downState,list,0,total);
+				}
+				return totalStates;
+			}
 
-		if (context.states().find(findString) == context.states().end())
-		{
-			std::cerr << "Unable to find HANDLER/SUBSTATE " << findString << std::endl;
-			context.errorFlagged=true;
-			return NULL;
-		}
-	
-		StateVariable state = context.states()[findString];
-
-		int stateIndex = state.decl->getStateDeclarationIndex(stateIdents[b+1]->name);
-		if (stateIndex == -1)
-		{
-			std::cerr << "Unable to find value for state " << stateIdents[b+1]->name << std::endl;
-			context.errorFlagged=true;
-			return NULL;
-		}
-
-		Twine numStatesTwine(state.decl->states.size());
-		std::string numStates = numStatesTwine.str();
-		APInt overSized(4*numStates.length(),numStates,10);
-		unsigned bitsNeeded = overSized.getActiveBits();
-	
-		// Load value from state variable, test against being equal to found index, jump on result
-		Value* load = new LoadInst(state.currentState, "", false, context.currentBlock());
-		CmpInst* cmp = CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_EQ,load, ConstantInt::get(getGlobalContext(), APInt(bitsNeeded,stateIndex)), "", context.currentBlock());
-
-		if (b!=0)
-		{
-			res = BinaryOperator::Create(Instruction::And,res,cmp,"Combining",context.currentBlock());
+			if (downState==NULL)
+			{
+				totalStates++;
+			}
+			else
+			{
+				int numStates=ComputeBaseIdx(downState,list,index+1,total);
+				totalStates+=numStates;
+				if (found)
+				{
+					return totalStates;
+				}
+			}
 		}
 		else
 		{
-			res = cmp;
+			CStatesDeclaration* downState=cur->children[a];
+
+			if (downState==NULL)
+			{
+				totalStates++;
+			}
+			else
+			{
+				totalStates+=ComputeBaseIdx(downState,list,0,total);
+			}
+
 		}
 	}
 
-	return res;
+	if (!index)
+	{
+		return totalStates;
+	}
+	return -1;
 }
 
-// Language decision : NEXT TEST.A.B will set TEST.A and TEST.A.B states
+
+void CStateTest::prePass(CodeGenContext& context)
+{
+	
+}
+
+Value* CStateTest::codeGen(CodeGenContext& context)
+{
+	std::string stateLabel = "STATE."+stateIdents[0]->name;
+
+	if (context.states().find(stateLabel)==context.states().end())
+	{
+		std::cerr << "Unknown handler : " << stateIdents[0]->name << std::endl;
+		context.errorFlagged=true;
+		return NULL;
+	}
+
+	StateVariable topState = context.states()[stateLabel];
+
+	int totalStates=GetNumStates(topState.decl);
+	int totalInBlock;
+
+	int jumpIndex=ComputeBaseIdx(topState.decl,stateIdents,1,totalInBlock);
+	
+	if (jumpIndex==-1)
+	{
+		std::cerr << "Unknown state requested!";
+		for (int a=0;a<stateIdents.size();a++)
+		{
+			std::cerr << stateIdents[a]->name;
+			if (a!=stateIdents.size()-1)
+			{
+				std::cerr << ".";
+			}
+		}
+		std::cerr << std::endl;
+		context.errorFlagged=true;
+		return NULL;
+	}
+
+	Twine numStatesTwine(totalStates);
+	std::string numStates = numStatesTwine.str();
+	APInt overSized(4*numStates.length(),numStates,10);
+	unsigned bitsNeeded = overSized.getActiveBits();
+
+	if (totalInBlock>1)
+	{
+		// Load value from state variable, test against range of values
+		Value* load = new LoadInst(topState.currentState, "", false, context.currentBlock());
+
+		CmpInst* cmp = CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_UGE,load, ConstantInt::get(getGlobalContext(), APInt(bitsNeeded,jumpIndex)), "", context.currentBlock());
+		CmpInst* cmp2 = CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_ULT,load, ConstantInt::get(getGlobalContext(), APInt(bitsNeeded,jumpIndex+totalInBlock)), "", context.currentBlock());
+		return BinaryOperator::Create(Instruction::And,cmp,cmp2,"Combining",context.currentBlock());
+	}
+		
+	// Load value from state variable, test against being equal to found index, jump on result
+	Value* load = new LoadInst(topState.currentState, "", false, context.currentBlock());
+	return CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_EQ,load, ConstantInt::get(getGlobalContext(), APInt(bitsNeeded,jumpIndex)), "", context.currentBlock());
+}
+
+void CStateJump::prePass(CodeGenContext& context)
+{
+	
+}
 
 Value* CStateJump::codeGen(CodeGenContext& context)
 {
-	unsigned int a,b;
-	unsigned int numStatesToCheck = stateIdents.size()-1;
-	Value *res=NULL;
+	std::string stateLabel = "STATE."+stateIdents[0]->name;
 
-	// Locate the parent variable and value for the test
-	for (b=0;b<numStatesToCheck;b++)
+	if (context.states().find(stateLabel)==context.states().end())
 	{
-		std::string findString = "STATE";
-		for (a=0;a<b+1;a++)
-		{
-			findString+="." + stateIdents[a]->name;
-		}
-
-		if (context.states().find(findString) == context.states().end())
-		{
-			std::cerr << "Unable to find HANDLER/SUBSTATE " << findString << std::endl;
-			context.errorFlagged=true;
-			return NULL;
-		}
-	
-		StateVariable state = context.states()[findString];
-
-		int stateIndex = state.decl->getStateDeclarationIndex(stateIdents[b+1]->name);
-		if (stateIndex == -1)
-		{
-			std::cerr << "Unable to find value for state " << stateIdents[b+1]->name << std::endl;
-			context.errorFlagged=true;
-			return NULL;
-		}
-
-		Twine numStatesTwine(state.decl->states.size());
-		std::string numStates = numStatesTwine.str();
-		APInt overSized(4*numStates.length(),numStates,10);
-		unsigned bitsNeeded = overSized.getActiveBits();
-	
-		// We need to store new state into the next state register
-		res = new StoreInst(ConstantInt::get(getGlobalContext(),APInt(bitsNeeded,stateIndex)),state.nextState,false,context.currentBlock());
+		std::cerr << "Unknown handler : " << stateIdents[0]->name << std::endl;
+		context.errorFlagged=true;
+		return NULL;
 	}
 
-	return res;
+	StateVariable topState = context.states()[stateLabel];
+
+	int totalStates=GetNumStates(topState.decl);
+	int totalInBlock;
+
+	int jumpIndex=ComputeBaseIdx(topState.decl,stateIdents,1,totalInBlock);
+	
+	if (jumpIndex==-1)
+	{
+		std::cerr << "Unknown state requested!";
+		for (int a=0;a<stateIdents.size();a++)
+		{
+			std::cerr << stateIdents[a]->name;
+			if (a!=stateIdents.size()-1)
+			{
+				std::cerr << ".";
+			}
+		}
+		std::cerr << std::endl;
+		context.errorFlagged=true;
+		return NULL;
+	}
+
+	Twine numStatesTwine(totalStates);
+	std::string numStates = numStatesTwine.str();
+	APInt overSized(4*numStates.length(),numStates,10);
+	unsigned bitsNeeded = overSized.getActiveBits();
+	
+	return new StoreInst(ConstantInt::get(getGlobalContext(),APInt(bitsNeeded,jumpIndex)),topState.nextState,false,context.currentBlock());
 }
+
+void CStatePush::prePass(CodeGenContext& context)
+{
+	
+}
+
 
 Value* CStatePush::codeGen(CodeGenContext& context)
 {
-	unsigned int a,b;
-	unsigned int numStatesToCheck = stateIdents.size()-1;
-	Value *res=NULL;
+	std::string stateLabel = "STATE."+stateIdents[0]->name;
 
-	// Step 1, get handler ptr so we can get access to the depth stack
-	if (context.m_handlers.find(stateIdents[0]->name) == context.m_handlers.end())
+	if (context.states().find(stateLabel)==context.states().end())
 	{
-		std::cerr << "Unable to find HANDLER " << stateIdents[0]->name << std::endl;
+		std::cerr << "Unknown handler : " << stateIdents[0]->name << std::endl;
 		context.errorFlagged=true;
 		return NULL;
 	}
 
-	CHandlerDeclaration* handler = context.m_handlers[stateIdents[0]->name];
+	StateVariable topState = context.states()[stateLabel];
 
-	// Step 2, compute depth and push to depth stack
+	int totalStates=GetNumStates(topState.decl);
+	int totalInBlock;
+
+	int jumpIndex=ComputeBaseIdx(topState.decl,stateIdents,1,totalInBlock);
 	
-	Value* dIndex= new LoadInst(handler->depthTreeIdx,"depthIndex",false,context.currentBlock());
-	std::vector<Value*> indices;
-	ConstantInt* const_intn = ConstantInt::get(getGlobalContext(), APInt(MAX_SUPPORTED_STACK_BITS, StringRef("0"), 10));
-	indices.push_back(const_intn);
-	indices.push_back(dIndex);
-	Value* dRef = GetElementPtrInst::Create(handler->depthTree, indices.begin(), indices.end(),"depth",context.currentBlock());
-
-	new StoreInst(ConstantInt::get(getGlobalContext(),APInt(MAX_SUPPORTED_STACK_BITS,numStatesToCheck)),dRef,false,context.currentBlock());
-
-	Value* dInc = BinaryOperator::Create(Instruction::Add,dIndex,ConstantInt::get(getGlobalContext(),APInt(MAX_SUPPORTED_STACK_BITS,1)),"incrementIndex",context.currentBlock());
-	new StoreInst(dInc,handler->depthTreeIdx,false,context.currentBlock());
-
-	// Now iterate through state stacks, and push the relevant states
-	for (b=0;b<numStatesToCheck;b++)
+	if (jumpIndex==-1)
 	{
-		std::string findString = "STATE";
-		for (a=0;a<b+1;a++)
+		std::cerr << "Unknown state requested!";
+		for (int a=0;a<stateIdents.size();a++)
 		{
-			findString+="." + stateIdents[a]->name;
-		}
-
-		if (context.states().find(findString) == context.states().end())
-		{
-			std::cerr << "Unable to find HANDLER/SUBSTATE " << findString << std::endl;
-			context.errorFlagged=true;
-			return NULL;
-		}
-	
-		StateVariable state = context.states()[findString];
-
-		int stateIndex = state.decl->getStateDeclarationIndex(stateIdents[b+1]->name);
-		if (stateIndex == -1)
-		{
-			std::cerr << "Unable to find value for state " << stateIdents[b+1]->name << std::endl;
-			context.errorFlagged=true;
-			return NULL;
-		}
-
-		Twine numStatesTwine(state.decl->states.size());
-		std::string numStates = numStatesTwine.str();
-		APInt overSized(4*numStates.length(),numStates,10);
-		unsigned bitsNeeded = overSized.getActiveBits();
-	
-		// We need to save away the current next pointer onto the stack and the new next onto the next stack, then modify next
-
-		Value* index= new LoadInst(state.stateStackIndex,"stackIndex",false,context.currentBlock());
-		std::vector<Value*> indices;
-		ConstantInt* const_intn = ConstantInt::get(getGlobalContext(), APInt(bitsNeeded, StringRef("0"), 10));
-		indices.push_back(const_intn);
-		indices.push_back(index);
-		Value* refP = GetElementPtrInst::Create(state.stateStackPrev, indices.begin(), indices.end(),"stackPosP",context.currentBlock());
-		Value* refN = GetElementPtrInst::Create(state.stateStackNext, indices.begin(), indices.end(),"stackPosN",context.currentBlock());
-
-		Value* curNext = new LoadInst(state.nextState,"currentNext",false,context.currentBlock());
-
-		new StoreInst(curNext,refP,false,context.currentBlock());
-		new StoreInst(ConstantInt::get(getGlobalContext(),APInt(bitsNeeded,stateIndex)),refN,false,context.currentBlock());
-
-		Value* inc = BinaryOperator::Create(Instruction::Add,index,ConstantInt::get(getGlobalContext(),APInt(MAX_SUPPORTED_STACK_BITS,1)),"incrementIndex",context.currentBlock());
-		new StoreInst(inc,state.stateStackIndex,false,context.currentBlock());
-
-		res = new StoreInst(ConstantInt::get(getGlobalContext(),APInt(bitsNeeded,stateIndex)),state.nextState,false,context.currentBlock());
-	}
-
-	return res;
-}
-	
-void CStatePop::StateWalker(CodeGenContext& context,CStatesDeclaration* iterate,Value* depth)
-{
-	if (iterate)
-	{
-		StateVariable stateVar = context.statesAlt()[iterate];
-		Twine numStatesTwine(stateVar.decl->states.size());
-		std::string numStates = numStatesTwine.str();
-		APInt overSized(4*numStates.length(),numStates,10);
-		unsigned bitsNeeded = overSized.getActiveBits();
-
-		// We need to pop from our stack and put next back
-		Value* index= new LoadInst(stateVar.stateStackIndex,"stackIndex",false,context.currentBlock());
-		Value* dec = BinaryOperator::Create(Instruction::Sub,index,ConstantInt::get(getGlobalContext(),APInt(MAX_SUPPORTED_STACK_BITS,1)),"decrementIndex",context.currentBlock());
-		new StoreInst(dec,stateVar.stateStackIndex,false,context.currentBlock());
-
-		std::vector<Value*> indices;
-		ConstantInt* const_intn = ConstantInt::get(getGlobalContext(), APInt(bitsNeeded, StringRef("0"), 10));
-		indices.push_back(const_intn);
-		indices.push_back(dec);
-		Value* refP = GetElementPtrInst::Create(stateVar.stateStackPrev, indices.begin(), indices.end(),"stackPosP",context.currentBlock());
-		Value* refN = GetElementPtrInst::Create(stateVar.stateStackNext, indices.begin(), indices.end(),"stackPosN",context.currentBlock());
-
-		Value* prevState = new LoadInst(refP,"oldNext",false,context.currentBlock());
-		Value* oldNext = new LoadInst(refN,"oldNext",false,context.currentBlock());
-
-		new StoreInst(prevState,stateVar.nextState,false,context.currentBlock());
-
-		// Now decrement our depth marker, if its zero, exit - else further down the rabbit hole
-		Value* decDepth = BinaryOperator::Create(Instruction::Sub,depth,ConstantInt::get(getGlobalContext(),APInt(MAX_SUPPORTED_STACK_BITS,1)),"decrementDepth",context.currentBlock());
-
-		BasicBlock* switchBlock = BasicBlock::Create(getGlobalContext(), "descend",context.currentBlock()->getParent(),0);
-		BasicBlock* exitState = BasicBlock::Create(getGlobalContext(), "popout", context.currentBlock()->getParent(), 0);
-
-		Value* checkDepth = CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_EQ,decDepth, ConstantInt::get(getGlobalContext(),APInt(MAX_SUPPORTED_STACK_BITS,0)), "checkDepth", context.currentBlock());
-		BranchInst::Create(exitState,switchBlock,checkDepth,context.currentBlock());
-		
-		SwitchInst* void_6 = SwitchInst::Create(oldNext,exitState,iterate->states.size(), switchBlock);
-
-		// Need to add cases, then for each case descend (assuming there is anyway to descend too!)
-		for (int a=0;a<iterate->states.size();a++)
-		{
-			if (iterate->states[a]->child)
+			std::cerr << stateIdents[a]->name;
+			if (a!=stateIdents.size()-1)
 			{
-				BasicBlock* bb = BasicBlock::Create(getGlobalContext(),"",context.currentBlock()->getParent(),0);
-				ConstantInt* tt = ConstantInt::get(getGlobalContext(),APInt(bitsNeeded,a,false));
-				void_6->addCase(tt,bb);
-				context.pushBlock(bb);
-				StateWalker(context,iterate->states[a]->child,decDepth);
-				BranchInst::Create(exitState,context.currentBlock());
-				context.popBlock();
+				std::cerr << ".";
 			}
 		}
-
-		context.setBlock(exitState);
+		std::cerr << std::endl;
+		context.errorFlagged=true;
+		return NULL;
 	}
+
+	Twine numStatesTwine(totalStates);
+	std::string numStates = numStatesTwine.str();
+	APInt overSized(4*numStates.length(),numStates,10);
+	unsigned bitsNeeded = overSized.getActiveBits();
+	
+	Value* index= new LoadInst(topState.stateStackIndex,"stackIndex",false,context.currentBlock());
+	std::vector<Value*> indices;
+	ConstantInt* const_intn = ConstantInt::get(getGlobalContext(), APInt(bitsNeeded, StringRef("0"), 10));
+	indices.push_back(const_intn);
+	indices.push_back(index);
+	Value* ref = GetElementPtrInst::Create(topState.stateStackNext, indices.begin(), indices.end(),"stackPos",context.currentBlock());
+
+	Value* curNext = new LoadInst(topState.nextState,"currentNext",false,context.currentBlock());
+
+	new StoreInst(curNext,ref,false,context.currentBlock());			// Save current next point to stack
+
+	Value* inc = BinaryOperator::Create(Instruction::Add,index,ConstantInt::get(getGlobalContext(),APInt(MAX_SUPPORTED_STACK_BITS,1)),"incrementIndex",context.currentBlock());
+	new StoreInst(inc,topState.stateStackIndex,false,context.currentBlock());	// Save updated index
+
+	// Set next state
+	return new StoreInst(ConstantInt::get(getGlobalContext(),APInt(bitsNeeded,jumpIndex)),topState.nextState,false,context.currentBlock());
 }
+	
+void CStatePop::prePass(CodeGenContext& context)
+{
+	
+}
+
 
 Value* CStatePop::codeGen(CodeGenContext& context)
 {
-	unsigned int a,b;
-	Value *res=NULL;
+	std::string stateLabel = "STATE."+ident.name;
 
-	// Step 1, get handler ptr so we can get access to the depth stack
-	if (context.m_handlers.find(ident.name) == context.m_handlers.end())
+	if (context.states().find(stateLabel)==context.states().end())
 	{
-		std::cerr << "Unable to find HANDLER " << ident.name << std::endl;
+		std::cerr << "Unknown handler : " << ident.name << std::endl;
 		context.errorFlagged=true;
 		return NULL;
 	}
 
-	CHandlerDeclaration* handler = context.m_handlers[ident.name];
+	StateVariable topState = context.states()[stateLabel];
 
-	// Step 2, compute depth and push to depth stack
-	
-	Value* dIndex= new LoadInst(handler->depthTreeIdx,"depthIndex",false,context.currentBlock());
-	Value* dDec = BinaryOperator::Create(Instruction::Sub,dIndex,ConstantInt::get(getGlobalContext(),APInt(MAX_SUPPORTED_STACK_BITS,1)),"decrementIndex",context.currentBlock());
-	new StoreInst(dDec,handler->depthTreeIdx,false,context.currentBlock());
+	int totalStates=GetNumStates(topState.decl);
+	int totalInBlock;
+
+	Twine numStatesTwine(totalStates);
+	std::string numStates = numStatesTwine.str();
+	APInt overSized(4*numStates.length(),numStates,10);
+	unsigned bitsNeeded = overSized.getActiveBits();
+
+	// We need to pop from our stack and put next back
+	Value* index= new LoadInst(topState.stateStackIndex,"stackIndex",false,context.currentBlock());
+	Value* dec = BinaryOperator::Create(Instruction::Sub,index,ConstantInt::get(getGlobalContext(),APInt(MAX_SUPPORTED_STACK_BITS,1)),"decrementIndex",context.currentBlock());
+	new StoreInst(dec,topState.stateStackIndex,false,context.currentBlock());	// store new stack index
+
 	std::vector<Value*> indices;
-	ConstantInt* const_intn = ConstantInt::get(getGlobalContext(), APInt(MAX_SUPPORTED_STACK_BITS, StringRef("0"), 10));
+	ConstantInt* const_intn = ConstantInt::get(getGlobalContext(), APInt(bitsNeeded, StringRef("0"), 10));
 	indices.push_back(const_intn);
-	indices.push_back(dDec);
-	Value* dRef = GetElementPtrInst::Create(handler->depthTree, indices.begin(), indices.end(),"depth",context.currentBlock());
+	indices.push_back(dec);
+	Value* ref = GetElementPtrInst::Create(topState.stateStackNext, indices.begin(), indices.end(),"stackPos",context.currentBlock());
 
-	Value* statesToPop=new LoadInst(dRef,"numStates",false,context.currentBlock());
+	Value* oldNext = new LoadInst(ref,"oldNext",false,context.currentBlock());	// retrieve old next value
 
-	// We now know how far down the tree we must go to restore the states position.
-	// the number of states on a handler is fixed, however the depth is not, which means we need to have a way to generate code
-	// that correctly handles the various depths it may need to walk.
+	return new StoreInst(oldNext,topState.nextState,false,context.currentBlock());	// restore next state to old value
+}
 
-	// Yuk, so first off pop the main handler state, as this will tell us which state stack to pop off next, we keep going untill we run out
-	
-	CStatesDeclaration *iterate = handler->child;
-	StateWalker(context,iterate,statesToPop);
-
-	return NULL;
+void CIfStatement::prePass(CodeGenContext& context)
+{
+	block.prePass(context);
 }
 
 Value* CIfStatement::codeGen(CodeGenContext& context)
@@ -1741,6 +1937,11 @@ unsigned COperandPartial::GetNumComputableConstants(CodeGenContext& context)
 	}
 
 	return result;
+}
+
+void CMappingDeclaration::prePass(CodeGenContext& context)
+{
+
 }
 
 Value* CMappingDeclaration::codeGen(CodeGenContext& context)
@@ -1942,6 +2143,21 @@ Value* CAffect::codeGen(CodeGenContext& context,Value* exprResult,Value* lhs,Val
 	return CAssignment::generateAssignment(var,answer,context);
 }
 
+void CAffector::prePass(CodeGenContext& context)
+{
+	if (expr.IsCarryExpression())
+	{
+		CBinaryOperator* oper = cast<CBinaryOperator>(&expr);
+		oper->lhs.prePass(context);
+		oper->rhs.prePass(context);
+	}
+	else
+	{
+		expr.prePass(context);
+	}
+
+}
+
 Value* CAffector::codeGen(CodeGenContext& context)
 {
 	Value* left=NULL;
@@ -1969,6 +2185,11 @@ Value* CAffector::codeGen(CodeGenContext& context)
 	}
 
 	return exprResult;
+}
+
+void CExternDecl::prePass(CodeGenContext& context)
+{
+
 }
 
 Value* CExternDecl::codeGen(CodeGenContext& context)
@@ -2016,6 +2237,14 @@ Value* CExternDecl::codeGen(CodeGenContext& context)
 	context.m_externFunctions[name.name] = func;
 
 	return NULL;
+}
+
+void CFuncCall::prePass(CodeGenContext& context)
+{
+	for (int a=0,b=0;a<params.size();a++,b++)
+	{
+		params[a]->prePass(context);
+	}
 }
 
 Value* CFuncCall::codeGen(CodeGenContext& context)
@@ -2140,6 +2369,11 @@ Value* CTrigger::codeGen(CodeGenContext& context,BitVariable& pin,Value* functio
 	}
 
 	return NULL;
+}
+
+void CFunctionDecl::prePass(CodeGenContext& context)
+{
+	block.prePass(context);
 }
 
 Value* CFunctionDecl::codeGen(CodeGenContext& context)
