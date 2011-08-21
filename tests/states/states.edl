@@ -1,0 +1,79 @@
+
+
+PIN IN test[1];
+
+HANDLER test ALWAYS
+{
+ STATES a,b|c,d,e
+ {
+ 	STATE a
+	{
+		STATES aa,ab,ac,ad
+		{
+
+			STATE aa
+			{
+				DEBUG_TRACE "state aa";
+			}
+			STATE ab
+			{
+				DEBUG_TRACE "state ab";
+			}
+			STATE ac
+			{
+				DEBUG_TRACE "state ac";
+			}
+			STATE ad
+			{
+				STATES ada,adb
+				{
+					STATE ada
+					{
+						DEBUG_TRACE "state ada";
+					}
+					STATE adb
+					{
+						DEBUG_TRACE "state adb";
+						NEXT test.b.bf;
+					}
+				}
+			}
+		}
+	}
+	STATE b
+	{
+		STATES bf,bg,bh
+		{
+			STATE bf
+			{ 
+				DEBUG_TRACE "state bf";
+				PUSH test.c;
+			}
+			STATE bg
+			{
+				DEBUG_TRACE "state bg";
+			}
+			STATE bh
+			{
+				DEBUG_TRACE "state bh";
+			}
+		}
+	}
+	STATE c
+	{
+		DEBUG_TRACE "state c";
+	}
+	STATE d
+	{
+		DEBUG_TRACE "state d";
+		POP test;
+	}
+ }
+
+
+ IF test.a@
+ {
+   DEBUG_TRACE "bingo";
+   }
+
+}
