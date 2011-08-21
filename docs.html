@@ -313,7 +313,7 @@ State a
 State b
 </pre>
 
-<p>It is also possible to define sub states, at present it is best to only make the sub states auto increment because of the rule that states move on entry. The following code and result show the headache that can happen, here the code was run 8 times :</p>
+<p>It is also possible to define sub states, the current pin accurate 8080 core uses these to represent the tstates for each of the machine cycles. It is important to note; when a sub state exists, it overides any auto incrementing behaviour of the parent. The following code demonstrates this fact, here the code was run 8 times :</p>
 
 <pre style="background-color:#CCCCCC">
 <b>STATES</b> a<b>,</b>b
@@ -350,13 +350,13 @@ State b
 </pre>
 <pre style="color:white; background-color:#000000">
 State a1
-State b1
 State a2
-State b2
 State a1
-State b1
 State a2
-State b2
+State a1
+State a2
+State a1
+State a2
 </pre>
 
 <p>Unlike normal variables, state blocks are always global, but tied to a <b>HANDLER</b>. This is so that the state machine can be adjusted from an external function. At present you cannot declare state machines inside functions, but you can reference them (see testing state below).</p>
