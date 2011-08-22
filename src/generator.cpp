@@ -2,6 +2,78 @@
 #include "generator.h"
 #include "parser.hpp"
 
+
+#include "llvm/Pass.h"
+#include "llvm/Function.h"
+#include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/InstIterator.h"
+
+using namespace llvm;
+
+extern CodeGenContext* globalContext;
+
+namespace 
+{
+	struct StateReferenceSquasher : public FunctionPass 
+	{
+		CodeGenContext& ourContext;
+
+		static char ID;
+		StateReferenceSquasher() : ourContext(*globalContext),FunctionPass(ID) {}
+		StateReferenceSquasher(CodeGenContext& context) : ourContext(context),FunctionPass(ID) {}
+
+		virtual bool runOnFunction(Function &F) 
+		{
+			bool doneSomeWork=false;
+
+			std::map<std::string, StateVariable>::iterator stateVars;
+
+			for (stateVars=ourContext.states().begin();stateVars!=ourContext.states().end();++stateVars)
+			{
+				// Search the instructions in the function, and find Load instructions
+				Value* foundReference=NULL;
+				for (inst_iterator I = inst_begin(F), E = inst_end(F); I != E; ++I)
+				{
+					LoadInst* iRef = dyn_cast<LoadInst>(&*I);
+					if (iRef)
+					{
+						// We have a load instruction, we need to see if its operand points at our global state variable
+						if (iRef->getOperand(0)==stateVars->second.currentState)
+						{
+							if (foundReference)
+							{
+								// Replace all uses of this instruction with original result,
+								// I don't remove the current instruction - its upto a later pass to remove it
+								iRef->replaceAllUsesWith(foundReference);//BinaryOperator::Create (Instruction::Or,foundReference,foundReference,"",iRef));
+								doneSomeWork=true;
+							}
+							else
+							{
+								foundReference=iRef;
+							}
+						}
+					}
+					StoreInst* sRef = dyn_cast<StoreInst>(&*I);
+					if (sRef)
+					{
+						// We have a store instruction, we need to see if its operand points at our global state variable
+						if (sRef->getOperand(1)==stateVars->second.currentState)
+						{
+							foundReference=sRef->getOperand(0);
+						}
+					}
+				}
+
+			}
+
+			return doneSomeWork;
+		}
+	};
+
+	char StateReferenceSquasher::ID = 0;
+	static RegisterPass<StateReferenceSquasher> X("StateReferenceSquasher", "Squashes multiple accesses to the same state, which should allow if/else behaviour", false, false);
+}
+
 using namespace std;
 
 extern bool JustCompiledOutput;
@@ -55,65 +127,119 @@ void CodeGenContext::generateCode(CBlock& root)
 	pm.add(createVerifierPass());
 
 #if USE_OPTIMISER
-    // Add an appropriate TargetData instance for this module...
-    pm.add(new TargetData(*ee->getTargetData()));
-    
-    // Propagate constants at call sites into the functions they call.  This
-    // opens opportunities for globalopt (and inlining) by substituting function
-    // pointers passed as arguments to direct uses of functions.  
-    pm.add(createIPSCCPPass());
+	// Add an appropriate TargetData instance for this module...
+	pm.add(new TargetData(*ee->getTargetData()));
 
-    // Now that we internalized some globals, see if we can hack on them!
-    pm.add(createGlobalOptimizerPass());
+	pm.add(new StateReferenceSquasher(*this));		// Custom pass designed to remove redundant loads of the current state (since it can only be modified in one place)
 
-    // Linking modules together can lead to duplicated global constants, only
-    // keep one copy of each constant...
-    pm.add(createConstantMergePass());
+	pm.add(createLowerSetJmpPass());          // Lower llvm.setjmp/.longjmp
 
-    // Remove unused arguments from functions...
-    pm.add(createDeadArgEliminationPass());
+	// Propagate constants at call sites into the functions they call.  This
+	// opens opportunities for globalopt (and inlining) by substituting function
+	// pointers passed as arguments to direct uses of functions.  
+	pm.add(createIPSCCPPass());
 
-    // Reduce the code after globalopt and ipsccp.  Both can open up significant
-    // simplification opportunities, and both can propagate functions through
-    // function pointers.  When this happens, we often have to resolve varargs
-    // calls, etc, so let instcombine do this.
-    pm.add(createInstructionCombiningPass());
-    //pm.add(createFunctionInliningPass()); // Inline small functions
-    pm.add(createPruneEHPass());              // Remove dead EH info
-    pm.add(createGlobalDCEPass());            // Remove dead functions
+	// Now that we internalized some globals, see if we can hack on them!
+	pm.add(createGlobalOptimizerPass());
 
-    // If we didn't decide to inline a function, check to see if we can
-    // transform it to pass arguments by value instead of by reference.
-    pm.add(createArgumentPromotionPass());
+	// Linking modules together can lead to duplicated global constants, only
+	// keep one copy of each constant...
+	pm.add(createConstantMergePass());
 
-    // The IPO passes may leave cruft around.  Clean up after them.
-    pm.add(createInstructionCombiningPass());
-    pm.add(createJumpThreadingPass());        // Thread jumps.
-    pm.add(createScalarReplAggregatesPass()); // Break up allocas
+	// Remove unused arguments from functions...
+	pm.add(createDeadArgEliminationPass());
 
-    // Run a few AA driven optimizations here and now, to cleanup the code.
-    pm.add(createFunctionAttrsPass());        // Add nocapture
-    pm.add(createGlobalsModRefPass());        // IP alias analysis
-    pm.add(createLICMPass());                 // Hoist loop invariants
-    pm.add(createGVNPass());                  // Remove common subexprs
-    pm.add(createMemCpyOptPass());            // Remove dead memcpy's
-    pm.add(createDeadStoreEliminationPass()); // Nuke dead stores
+	// Reduce the code after globalopt and ipsccp.  Both can open up significant
+	// simplification opportunities, and both can propagate functions through
+	// function pointers.  When this happens, we often have to resolve varargs
+	// calls, etc, so let instcombine do this.
+	pm.add(createInstructionCombiningPass());
+	//pm.add(createFunctionInliningPass()); // Inline small functions
+	pm.add(createPruneEHPass());              // Remove dead EH info
+	pm.add(createGlobalDCEPass());            // Remove dead functions
 
-    // Cleanup and simplify the code after the scalar optimizations.
-    pm.add(createInstructionCombiningPass());
-    pm.add(createJumpThreadingPass());        // Thread jumps.
-    pm.add(createPromoteMemoryToRegisterPass()); // Cleanup after threading.
+	// If we didn't decide to inline a function, check to see if we can
+	// transform it to pass arguments by value instead of by reference.
+	pm.add(createArgumentPromotionPass());
+
+	// The IPO passes may leave cruft around.  Clean up after them.
+	pm.add(createInstructionCombiningPass());
+	pm.add(createJumpThreadingPass());        // Thread jumps.
+	pm.add(createScalarReplAggregatesPass()); // Break up allocas
+
+	// Run a few AA driven optimizations here and now, to cleanup the code.
+	pm.add(createFunctionAttrsPass());        // Add nocapture
+	pm.add(createGlobalsModRefPass());        // IP alias analysis
+	pm.add(createLICMPass());                 // Hoist loop invariants
+	pm.add(createGVNPass());                  // Remove common subexprs
+	pm.add(createMemCpyOptPass());            // Remove dead memcpy's
+	pm.add(createDeadStoreEliminationPass()); // Nuke dead stores
+
+	// Cleanup and simplify the code after the scalar optimizations.
+	pm.add(createInstructionCombiningPass());
+	pm.add(createJumpThreadingPass());        // Thread jumps.
+	pm.add(createPromoteMemoryToRegisterPass()); // Cleanup after threading.
 
 
-    // Delete basic blocks, which optimization passes may have killed...
-    pm.add(createCFGSimplificationPass());
+	// Delete basic blocks, which optimization passes may have killed...
+	pm.add(createCFGSimplificationPass());
 
-    // Now that we have optimized the program, discard unreachable functions...
-    pm.add(createGlobalDCEPass());
+	// Now that we have optimized the program, discard unreachable functions...
+	pm.add(createGlobalDCEPass());
+	pm.add(createCFGSimplificationPass());    // Clean up disgusting code
+	pm.add(createPromoteMemoryToRegisterPass());// Kill useless allocas
+	pm.add(createGlobalOptimizerPass());      // Optimize out global vars
+	pm.add(createGlobalDCEPass());            // Remove unused fns and globs
+	pm.add(createIPConstantPropagationPass());// IP Constant Propagation
+	pm.add(createDeadArgEliminationPass());   // Dead argument elimination
+	pm.add(createInstructionCombiningPass()); // Clean up after IPCP & DAE
+	pm.add(createCFGSimplificationPass());    // Clean up after IPCP & DAE
+
+	pm.add(createPruneEHPass());              // Remove dead EH info
+	pm.add(createFunctionAttrsPass());        // Deduce function attrs
+
+	//  if (!DisableInline)
+	pm.add(createFunctionInliningPass());   // Inline small functions
+	pm.add(createArgumentPromotionPass());    // Scalarize uninlined fn args
+
+	pm.add(createSimplifyLibCallsPass());     // Library Call Optimizations
+	pm.add(createInstructionCombiningPass()); // Cleanup for scalarrepl.
+	pm.add(createJumpThreadingPass());        // Thread jumps.
+	pm.add(createCFGSimplificationPass());    // Merge & remove BBs
+	pm.add(createScalarReplAggregatesPass()); // Break up aggregate allocas
+	pm.add(createInstructionCombiningPass()); // Combine silly seq's
+
+	pm.add(createTailCallEliminationPass());  // Eliminate tail calls
+	pm.add(createCFGSimplificationPass());    // Merge & remove BBs
+	pm.add(createReassociatePass());          // Reassociate expressions
+	pm.add(createLoopRotatePass());
+	pm.add(createLICMPass());                 // Hoist loop invariants
+	pm.add(createLoopUnswitchPass());         // Unswitch loops.
+	// FIXME : Removing instcombine causes nestedloop regression.
+	pm.add(createInstructionCombiningPass());
+	pm.add(createIndVarSimplifyPass());       // Canonicalize indvars
+	pm.add(createLoopDeletionPass());         // Delete dead loops
+	pm.add(createLoopUnrollPass());           // Unroll small loops
+	pm.add(createInstructionCombiningPass()); // Clean up after the unroller
+	pm.add(createGVNPass());                  // Remove redundancies
+	pm.add(createMemCpyOptPass());            // Remove memcpy / form memset
+	pm.add(createSCCPPass());                 // Constant prop with SCCP
+
+	// Run instcombine after redundancy elimination to exploit opportunities
+	// opened up by them.
+	pm.add(createInstructionCombiningPass());
+
+	pm.add(createDeadStoreEliminationPass()); // Delete dead stores
+	pm.add(createAggressiveDCEPass());        // Delete dead instructions
+	pm.add(createCFGSimplificationPass());    // Merge & remove BBs
+	pm.add(createStripDeadPrototypesPass());  // Get rid of dead prototypes
+	pm.add(createDeadTypeEliminationPass());  // Eliminate dead types
+	pm.add(createConstantMergePass());        // Merge dup global constants
+
+	pm.add(new StateReferenceSquasher(*this));		// Custom pass designed to remove redundant loads of the current state (since it can only be modified in one place)
 
     // Make sure everything is still good.
     pm.add(createVerifierPass());
-
 	pm.add(createPrintModulePass(&outs()));
 #endif
 	pm.run(*module);
@@ -1573,18 +1699,17 @@ Value* CStateTest::codeGen(CodeGenContext& context)
 	APInt overSized(4*numStates.length(),numStates,10);
 	unsigned bitsNeeded = overSized.getActiveBits();
 
+	// Load value from state variable, test against range of values
+	Value* load = new LoadInst(topState.currentState, "", false, context.currentBlock());
+
 	if (totalInBlock>1)
 	{
-		// Load value from state variable, test against range of values
-		Value* load = new LoadInst(topState.currentState, "", false, context.currentBlock());
-
 		CmpInst* cmp = CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_UGE,load, ConstantInt::get(getGlobalContext(), APInt(bitsNeeded,jumpIndex)), "", context.currentBlock());
 		CmpInst* cmp2 = CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_ULT,load, ConstantInt::get(getGlobalContext(), APInt(bitsNeeded,jumpIndex+totalInBlock)), "", context.currentBlock());
 		return BinaryOperator::Create(Instruction::And,cmp,cmp2,"Combining",context.currentBlock());
 	}
 		
 	// Load value from state variable, test against being equal to found index, jump on result
-	Value* load = new LoadInst(topState.currentState, "", false, context.currentBlock());
 	return CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_EQ,load, ConstantInt::get(getGlobalContext(), APInt(bitsNeeded,jumpIndex)), "", context.currentBlock());
 }
 
@@ -2476,4 +2601,5 @@ Value* CFunctionDecl::codeGen(CodeGenContext& context)
 
 	return func;
 }
+
 
