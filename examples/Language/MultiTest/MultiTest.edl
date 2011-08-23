@@ -1,0 +1,29 @@
+
+INSTANCE "../../../chips/Accurate/74154.edl" AS chip1;
+INSTANCE "../../../chips/Accurate/74154.edl" AS chip2;
+
+FUNCTION	MyTestFunction
+{
+	DECLARE result[16];
+
+	chip1 STROBE <- %00;
+	chip1 INPUTS <- %1000;
+
+	result <- chip1 OUTPUTS;
+
+	DEBUG_TRACE result;
+	
+	chip2 STROBE <- %00;
+	chip2 INPUTS <- %0001;
+
+	result <- chip1 OUTPUTS;
+	
+	DEBUG_TRACE result;
+
+	chip2 INPUTS <- %0010;
+	
+	result <- chip1 OUTPUTS;
+
+	DEBUG_TRACE result;
+}
+
