@@ -8,12 +8,12 @@ using namespace std;
 extern int yyparse();
 extern CBlock* g_ProgramBlock;
 extern FILE *yyin;
-CodeGenContext* globalContext;
 
 bool JustCompiledOutput=true;
 
 int main(int argc, char **argv)
 {
+	InitializeNativeTarget();
 	if (argc == 2)
 	{
 		yyin = fopen(argv[1],"r");
@@ -31,13 +31,12 @@ int main(int argc, char **argv)
 		cerr << "Error : Unable to parse input" << endl;
 		return 1;
 	}
-	InitializeNativeTarget();
-	CodeGenContext context;
-	globalContext = &context;
-	context.generateCode(*g_ProgramBlock);
-	context.runCode();
+	
+	CodeGenContext rootContext(NULL);
+	rootContext.generateCode(*g_ProgramBlock);
+	rootContext.runCode();
 
-	if (context.errorFlagged)
+	if (rootContext.errorFlagged)
 	{
 		return 2;
 	}

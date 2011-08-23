@@ -27,6 +27,8 @@ class CStatesDeclaration;
 class CHandlerDeclaration;
 class CMappingDeclaration;
 class CIdentifier;
+class CodeGenContext;
+
 class BitVariable
 {
 public:
@@ -38,6 +40,7 @@ public:
 	APInt	shft;
 	bool	aliased;
 	bool	mappingRef;
+	bool	fromExternal;
 	int	pinType;
 	Instruction**	writeAccessor;
 	Value*		writeInput;
@@ -81,8 +84,9 @@ public:
     CHandlerDeclaration* parentHandler;
 
     Module *module;
+    bool isRoot;
     ExecutionEngine		*ee;
-    CodeGenContext() { module = new Module("main", getGlobalContext()); }
+    CodeGenContext(CodeGenContext* parent);
     Function *debugTraceString;
     Function *debugTraceChar;
 
@@ -90,6 +94,10 @@ public:
 
     std::vector<ExecuteInformation> executeLocations;
 
+    Function* LookupFunctionInExternalModule(const std::string& module, const std::string& name);
+    bool LookupBitVariable(BitVariable& outVar,const std::string& module, const std::string& name);
+
+    std::map<std::string, CodeGenContext*> m_includes;
     std::map<std::string, BitVariable> m_globals;
     std::map<std::string, StateVariable> m_states;
     std::map<std::string, Function*> m_externFunctions;

@@ -117,8 +117,10 @@ public:
 
 class CIdentifier : public CExpression {
 public:
+	std::string module;
 	std::string name;
 	CIdentifier(const std::string& name) : name(name) { }
+	CIdentifier(const std::string& module, const std::string& name) : module(module),name(name) { }
 	static llvm::Value* trueSize(llvm::Value*,CodeGenContext& context,BitVariable& var);
 	static llvm::Value* GetAliasedData(CodeGenContext& context,llvm::Value* in,BitVariable& var);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
@@ -254,7 +256,7 @@ public:
 	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 
-	static llvm::Value* generateAssignment(BitVariable& to, llvm::Value* from,CodeGenContext& context);
+	static llvm::Value* generateAssignment(BitVariable& to,const std::string& moduleName, const std::string& name,llvm::Value* from,CodeGenContext& context);
 };
 
 class CBlock : public CExpression {
@@ -342,7 +344,7 @@ public:
 	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 
-	void CreateWriteAccessor(CodeGenContext& context,BitVariable& var);
+	void CreateWriteAccessor(CodeGenContext& context,BitVariable& var,const std::string& moduleName, const std::string& name);
 	void CreateReadAccessor(CodeGenContext& context,BitVariable& var);
 };
 
@@ -590,4 +592,17 @@ public:
 	CParamDecl(CIdentifier& id, CInteger& size) :
 		id(id), size(size) { }
 };
+
+class CInstance : public CStatement {
+public:
+	CString&	filename;
+	CIdentifier&	ident;
+
+	CInstance(CString& filename,CIdentifier& ident) :
+		filename(filename), ident(ident) { }
+
+	virtual void prePass(CodeGenContext& context);
+	virtual llvm::Value* codeGen(CodeGenContext& context);
+};
+
 

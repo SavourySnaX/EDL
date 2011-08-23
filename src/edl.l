@@ -32,6 +32,8 @@ PIN					{ return TOKEN(TOK_PIN); }
 FUNCTION				{ return TOKEN(TOK_FUNCTION); }
 CALL					{ return TOKEN(TOK_CALL); }
 
+INSTANCE				{ return TOKEN(TOK_INSTANCE); }
+
 IN					{ return TOKEN(TOK_IN); }
 OUT					{ return TOKEN(TOK_OUT); }
 BIDIRECTIONAL				{ return TOKEN(TOK_BIDIRECTIONAL); }

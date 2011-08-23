@@ -10,17 +10,15 @@
 
 using namespace llvm;
 
-extern CodeGenContext* globalContext;
-
 namespace 
 {
 	struct StateReferenceSquasher : public FunctionPass 
 	{
-		CodeGenContext& ourContext;
+		CodeGenContext *ourContext;
 
 		static char ID;
-		StateReferenceSquasher() : ourContext(*globalContext),FunctionPass(ID) {}
-		StateReferenceSquasher(CodeGenContext& context) : ourContext(context),FunctionPass(ID) {}
+		StateReferenceSquasher() : ourContext(NULL),FunctionPass(ID) {}
+		StateReferenceSquasher(CodeGenContext* context) : ourContext(context),FunctionPass(ID) {}
 
 		virtual bool runOnFunction(Function &F) 
 		{
@@ -28,7 +26,7 @@ namespace
 
 			std::map<std::string, StateVariable>::iterator stateVars;
 
-			for (stateVars=ourContext.states().begin();stateVars!=ourContext.states().end();++stateVars)
+			for (stateVars=ourContext->states().begin();stateVars!=ourContext->states().end();++stateVars)
 			{
 				// Search the instructions in the function, and find Load instructions
 				Value* foundReference=NULL;
@@ -79,33 +77,52 @@ using namespace std;
 extern bool JustCompiledOutput;
 
 #define USE_OPTIMISER	1
+    
+CodeGenContext::CodeGenContext(CodeGenContext* parent) 
+{ 
+	if (!parent) 
+	{ 
+		module = new Module("root",getGlobalContext()); 
+		ee = EngineBuilder(module).create();
+		isRoot=true; 
+	}
+	else
+	{
+		module=parent->module;
+		ee=parent->ee;
+		debugTraceChar=parent->debugTraceChar;
+		debugTraceString=parent->debugTraceString;
+		isRoot=false;
+	}
+}
 
 /* Compile the AST into a module */
 void CodeGenContext::generateCode(CBlock& root)
 {
 	errorFlagged = false;
 
-	ee = EngineBuilder(module).create();
+	if (isRoot)
+	{
+		PointerType* PointerTy_4 = PointerType::get(IntegerType::get(getGlobalContext(), 8), 0);
 
-	PointerType* PointerTy_4 = PointerType::get(IntegerType::get(getGlobalContext(), 8), 0);
+		std::vector<const Type*>FuncTy_8_args;
+		FuncTy_8_args.push_back(PointerTy_4);
+		FunctionType* FuncTy_8 = FunctionType::get(/*Result=*/IntegerType::get(getGlobalContext(), 32),/*Params=*/FuncTy_8_args,/*isVarArg=*/false);
 
-  	std::vector<const Type*>FuncTy_8_args;
-  	FuncTy_8_args.push_back(PointerTy_4);
-  	FunctionType* FuncTy_8 = FunctionType::get(/*Result=*/IntegerType::get(getGlobalContext(), 32),/*Params=*/FuncTy_8_args,/*isVarArg=*/false);
+		debugTraceString = Function::Create(/*Type=*/FuncTy_8,/*Linkage=*/GlobalValue::ExternalLinkage,/*Name=*/"puts", module); // (external, no body)
+		debugTraceString->setCallingConv(CallingConv::C);
+		AttrListPtr func_puts_PAL;
+		debugTraceString->setAttributes(func_puts_PAL);
 
-  	debugTraceString = Function::Create(/*Type=*/FuncTy_8,/*Linkage=*/GlobalValue::ExternalLinkage,/*Name=*/"puts", module); // (external, no body)
-	debugTraceString->setCallingConv(CallingConv::C);
-	AttrListPtr func_puts_PAL;
-	debugTraceString->setAttributes(func_puts_PAL);
+		std::vector<const Type*>FuncTy_6_args;
+		FuncTy_6_args.push_back(IntegerType::get(getGlobalContext(), 32));
+		FunctionType* FuncTy_6 = FunctionType::get(/*Result=*/IntegerType::get(getGlobalContext(), 32),/*Params=*/FuncTy_6_args,/*isVarArg=*/false);
 
-	std::vector<const Type*>FuncTy_6_args;
-	FuncTy_6_args.push_back(IntegerType::get(getGlobalContext(), 32));
-	FunctionType* FuncTy_6 = FunctionType::get(/*Result=*/IntegerType::get(getGlobalContext(), 32),/*Params=*/FuncTy_6_args,/*isVarArg=*/false);
+		debugTraceChar = Function::Create(/*Type=*/FuncTy_6,/*Linkage=*/GlobalValue::ExternalLinkage,/*Name=*/"putchar", module); // (external, no body)
+		debugTraceChar->setCallingConv(CallingConv::C);
+		debugTraceChar->setAttributes(func_puts_PAL);
+	}
 
-  	debugTraceChar = Function::Create(/*Type=*/FuncTy_6,/*Linkage=*/GlobalValue::ExternalLinkage,/*Name=*/"putchar", module); // (external, no body)
-	debugTraceChar->setCallingConv(CallingConv::C);
-	debugTraceChar->setAttributes(func_puts_PAL);
-	
 	root.prePass(*this);	/* Run a pre-pass on the code */
 	root.codeGen(*this);	/* Generate complete code - starting at no block (global space) */
 
@@ -115,135 +132,138 @@ void CodeGenContext::generateCode(CBlock& root)
 		return;
 	}
 
-	/* Print the bytecode in a human-readable format 
-	   to see if our program compiled properly
-	 */
-	PassManager pm;
-
-	if (!JustCompiledOutput)
+	if (isRoot)
 	{
-		pm.add(createPrintModulePass(&outs()));
-	}
-	pm.add(createVerifierPass());
+		/* Print the bytecode in a human-readable format 
+		   to see if our program compiled properly
+		   */
+		PassManager pm;
+
+		if (!JustCompiledOutput)
+		{
+			pm.add(createPrintModulePass(&outs()));
+		}
+		pm.add(createVerifierPass());
 
 #if USE_OPTIMISER
-	// Add an appropriate TargetData instance for this module...
-	pm.add(new TargetData(*ee->getTargetData()));
+		// Add an appropriate TargetData instance for this module...
+		pm.add(new TargetData(*ee->getTargetData()));
 
-	for (int a=0;a<2;a++)
-	{
-	pm.add(new StateReferenceSquasher(*this));		// Custom pass designed to remove redundant loads of the current state (since it can only be modified in one place)
+		for (int a=0;a<2;a++)		// We add things twice, as the statereferencesquasher will make more improvements once inlining has happened
+		{
+			pm.add(new StateReferenceSquasher(this));		// Custom pass designed to remove redundant loads of the current state (since it can only be modified in one place)
 
-	pm.add(createLowerSetJmpPass());          // Lower llvm.setjmp/.longjmp
+			pm.add(createLowerSetJmpPass());          // Lower llvm.setjmp/.longjmp
 
-	// Propagate constants at call sites into the functions they call.  This
-	// opens opportunities for globalopt (and inlining) by substituting function
-	// pointers passed as arguments to direct uses of functions.  
-	pm.add(createIPSCCPPass());
+			// Propagate constants at call sites into the functions they call.  This
+			// opens opportunities for globalopt (and inlining) by substituting function
+			// pointers passed as arguments to direct uses of functions.  
+			pm.add(createIPSCCPPass());
 
-	// Now that we internalized some globals, see if we can hack on them!
-	pm.add(createGlobalOptimizerPass());
+			// Now that we internalized some globals, see if we can hack on them!
+			pm.add(createGlobalOptimizerPass());
 
-	// Linking modules together can lead to duplicated global constants, only
-	// keep one copy of each constant...
-	pm.add(createConstantMergePass());
+			// Linking modules together can lead to duplicated global constants, only
+			// keep one copy of each constant...
+			pm.add(createConstantMergePass());
 
-	// Remove unused arguments from functions...
-	pm.add(createDeadArgEliminationPass());
+			// Remove unused arguments from functions...
+			pm.add(createDeadArgEliminationPass());
 
-	// Reduce the code after globalopt and ipsccp.  Both can open up significant
-	// simplification opportunities, and both can propagate functions through
-	// function pointers.  When this happens, we often have to resolve varargs
-	// calls, etc, so let instcombine do this.
-	pm.add(createInstructionCombiningPass());
-	//pm.add(createFunctionInliningPass()); // Inline small functions
-	pm.add(createPruneEHPass());              // Remove dead EH info
-	pm.add(createGlobalDCEPass());            // Remove dead functions
+			// Reduce the code after globalopt and ipsccp.  Both can open up significant
+			// simplification opportunities, and both can propagate functions through
+			// function pointers.  When this happens, we often have to resolve varargs
+			// calls, etc, so let instcombine do this.
+			pm.add(createInstructionCombiningPass());
+			//pm.add(createFunctionInliningPass()); // Inline small functions
+			pm.add(createPruneEHPass());              // Remove dead EH info
+			pm.add(createGlobalDCEPass());            // Remove dead functions
 
-	// If we didn't decide to inline a function, check to see if we can
-	// transform it to pass arguments by value instead of by reference.
-	pm.add(createArgumentPromotionPass());
+			// If we didn't decide to inline a function, check to see if we can
+			// transform it to pass arguments by value instead of by reference.
+			pm.add(createArgumentPromotionPass());
 
-	// The IPO passes may leave cruft around.  Clean up after them.
-	pm.add(createInstructionCombiningPass());
-	pm.add(createJumpThreadingPass());        // Thread jumps.
-	pm.add(createScalarReplAggregatesPass()); // Break up allocas
+			// The IPO passes may leave cruft around.  Clean up after them.
+			pm.add(createInstructionCombiningPass());
+			pm.add(createJumpThreadingPass());        // Thread jumps.
+			pm.add(createScalarReplAggregatesPass()); // Break up allocas
 
-	// Run a few AA driven optimizations here and now, to cleanup the code.
-	pm.add(createFunctionAttrsPass());        // Add nocapture
-	pm.add(createGlobalsModRefPass());        // IP alias analysis
-	pm.add(createLICMPass());                 // Hoist loop invariants
-	pm.add(createGVNPass());                  // Remove common subexprs
-	pm.add(createMemCpyOptPass());            // Remove dead memcpy's
-	pm.add(createDeadStoreEliminationPass()); // Nuke dead stores
+			// Run a few AA driven optimizations here and now, to cleanup the code.
+			pm.add(createFunctionAttrsPass());        // Add nocapture
+			pm.add(createGlobalsModRefPass());        // IP alias analysis
+			pm.add(createLICMPass());                 // Hoist loop invariants
+			pm.add(createGVNPass());                  // Remove common subexprs
+			pm.add(createMemCpyOptPass());            // Remove dead memcpy's
+			pm.add(createDeadStoreEliminationPass()); // Nuke dead stores
 
-	// Cleanup and simplify the code after the scalar optimizations.
-	pm.add(createInstructionCombiningPass());
-	pm.add(createJumpThreadingPass());        // Thread jumps.
-	pm.add(createPromoteMemoryToRegisterPass()); // Cleanup after threading.
+			// Cleanup and simplify the code after the scalar optimizations.
+			pm.add(createInstructionCombiningPass());
+			pm.add(createJumpThreadingPass());        // Thread jumps.
+			pm.add(createPromoteMemoryToRegisterPass()); // Cleanup after threading.
 
 
-	// Delete basic blocks, which optimization passes may have killed...
-	pm.add(createCFGSimplificationPass());
+			// Delete basic blocks, which optimization passes may have killed...
+			pm.add(createCFGSimplificationPass());
 
-	// Now that we have optimized the program, discard unreachable functions...
-	pm.add(createGlobalDCEPass());
-	pm.add(createCFGSimplificationPass());    // Clean up disgusting code
-	pm.add(createPromoteMemoryToRegisterPass());// Kill useless allocas
-	pm.add(createGlobalOptimizerPass());      // Optimize out global vars
-	pm.add(createGlobalDCEPass());            // Remove unused fns and globs
-	pm.add(createIPConstantPropagationPass());// IP Constant Propagation
-	pm.add(createDeadArgEliminationPass());   // Dead argument elimination
-	pm.add(createInstructionCombiningPass()); // Clean up after IPCP & DAE
-	pm.add(createCFGSimplificationPass());    // Clean up after IPCP & DAE
+			// Now that we have optimized the program, discard unreachable functions...
+			pm.add(createGlobalDCEPass());
+			pm.add(createCFGSimplificationPass());    // Clean up disgusting code
+			pm.add(createPromoteMemoryToRegisterPass());// Kill useless allocas
+			pm.add(createGlobalOptimizerPass());      // Optimize out global vars
+			pm.add(createGlobalDCEPass());            // Remove unused fns and globs
+			pm.add(createIPConstantPropagationPass());// IP Constant Propagation
+			pm.add(createDeadArgEliminationPass());   // Dead argument elimination
+			pm.add(createInstructionCombiningPass()); // Clean up after IPCP & DAE
+			pm.add(createCFGSimplificationPass());    // Clean up after IPCP & DAE
 
-	pm.add(createPruneEHPass());              // Remove dead EH info
-	pm.add(createFunctionAttrsPass());        // Deduce function attrs
+			pm.add(createPruneEHPass());              // Remove dead EH info
+			pm.add(createFunctionAttrsPass());        // Deduce function attrs
 
-	//  if (!DisableInline)
-	pm.add(createFunctionInliningPass());   // Inline small functions
-	pm.add(createArgumentPromotionPass());    // Scalarize uninlined fn args
+			//  if (!DisableInline)
+			pm.add(createFunctionInliningPass());   // Inline small functions
+			pm.add(createArgumentPromotionPass());    // Scalarize uninlined fn args
 
-	pm.add(createSimplifyLibCallsPass());     // Library Call Optimizations
-	pm.add(createInstructionCombiningPass()); // Cleanup for scalarrepl.
-	pm.add(createJumpThreadingPass());        // Thread jumps.
-	pm.add(createCFGSimplificationPass());    // Merge & remove BBs
-	pm.add(createScalarReplAggregatesPass()); // Break up aggregate allocas
-	pm.add(createInstructionCombiningPass()); // Combine silly seq's
+			pm.add(createSimplifyLibCallsPass());     // Library Call Optimizations
+			pm.add(createInstructionCombiningPass()); // Cleanup for scalarrepl.
+			pm.add(createJumpThreadingPass());        // Thread jumps.
+			pm.add(createCFGSimplificationPass());    // Merge & remove BBs
+			pm.add(createScalarReplAggregatesPass()); // Break up aggregate allocas
+			pm.add(createInstructionCombiningPass()); // Combine silly seq's
 
-	pm.add(createTailCallEliminationPass());  // Eliminate tail calls
-	pm.add(createCFGSimplificationPass());    // Merge & remove BBs
-	pm.add(createReassociatePass());          // Reassociate expressions
-	pm.add(createLoopRotatePass());
-	pm.add(createLICMPass());                 // Hoist loop invariants
-	pm.add(createLoopUnswitchPass());         // Unswitch loops.
-	// FIXME : Removing instcombine causes nestedloop regression.
-	pm.add(createInstructionCombiningPass());
-	pm.add(createIndVarSimplifyPass());       // Canonicalize indvars
-	pm.add(createLoopDeletionPass());         // Delete dead loops
-	pm.add(createLoopUnrollPass());           // Unroll small loops
-	pm.add(createInstructionCombiningPass()); // Clean up after the unroller
-	pm.add(createGVNPass());                  // Remove redundancies
-	pm.add(createMemCpyOptPass());            // Remove memcpy / form memset
-	pm.add(createSCCPPass());                 // Constant prop with SCCP
+			pm.add(createTailCallEliminationPass());  // Eliminate tail calls
+			pm.add(createCFGSimplificationPass());    // Merge & remove BBs
+			pm.add(createReassociatePass());          // Reassociate expressions
+			pm.add(createLoopRotatePass());
+			pm.add(createLICMPass());                 // Hoist loop invariants
+			pm.add(createLoopUnswitchPass());         // Unswitch loops.
+			// FIXME : Removing instcombine causes nestedloop regression.
+			pm.add(createInstructionCombiningPass());
+			pm.add(createIndVarSimplifyPass());       // Canonicalize indvars
+			pm.add(createLoopDeletionPass());         // Delete dead loops
+			pm.add(createLoopUnrollPass());           // Unroll small loops
+			pm.add(createInstructionCombiningPass()); // Clean up after the unroller
+			pm.add(createGVNPass());                  // Remove redundancies
+			pm.add(createMemCpyOptPass());            // Remove memcpy / form memset
+			pm.add(createSCCPPass());                 // Constant prop with SCCP
 
-	// Run instcombine after redundancy elimination to exploit opportunities
-	// opened up by them.
-	pm.add(createInstructionCombiningPass());
+			// Run instcombine after redundancy elimination to exploit opportunities
+			// opened up by them.
+			pm.add(createInstructionCombiningPass());
 
-	pm.add(createDeadStoreEliminationPass()); // Delete dead stores
-	pm.add(createAggressiveDCEPass());        // Delete dead instructions
-	pm.add(createCFGSimplificationPass());    // Merge & remove BBs
-	pm.add(createStripDeadPrototypesPass());  // Get rid of dead prototypes
-	pm.add(createDeadTypeEliminationPass());  // Eliminate dead types
-	pm.add(createConstantMergePass());        // Merge dup global constants
+			pm.add(createDeadStoreEliminationPass()); // Delete dead stores
+			pm.add(createAggressiveDCEPass());        // Delete dead instructions
+			pm.add(createCFGSimplificationPass());    // Merge & remove BBs
+			pm.add(createStripDeadPrototypesPass());  // Get rid of dead prototypes
+			pm.add(createDeadTypeEliminationPass());  // Eliminate dead types
+			pm.add(createConstantMergePass());        // Merge dup global constants
 
-	// Make sure everything is still good.
-	pm.add(createVerifierPass());
-	}
-	pm.add(createPrintModulePass(&outs()));
+			// Make sure everything is still good.
+			pm.add(createVerifierPass());
+		}
+		pm.add(createPrintModulePass(&outs()));
 #endif
-	pm.run(*module);
+		pm.run(*module);
+	}
 }
 
 /* Executes the AST by running the main function */
@@ -318,25 +338,55 @@ Value* CIdentifier::GetAliasedData(CodeGenContext& context,Value* in,BitVariable
 	return in;
 }
 
-Value* CIdentifier::codeGen(CodeGenContext& context)
+bool CodeGenContext::LookupBitVariable(BitVariable& outVar,const std::string& module, const std::string& name)
 {
-	BitVariable var;
-	if (context.locals().find(name) == context.locals().end())
+	if ((currentBlock()!=NULL) && (locals().find(name) != locals().end()))
 	{
-		if (context.globals().find(name) == context.globals().end())
-		{
-			std::cerr << "undeclared variable " << name << endl;
-			context.errorFlagged=true;
-			return NULL;
-		}
-		else
-		{
-			var=context.globals()[name];
-		}
+		outVar=locals()[name];
 	}
 	else
 	{
-		var=context.locals()[name];
+		if (globals().find(name) == globals().end())
+		{
+			if (m_includes.find(module)!=m_includes.end())
+			{
+				if (m_includes[module]->LookupBitVariable(outVar,"",name))
+				{
+					if (outVar.pinType!=0)		// TODO: Globals Vars!
+					{
+						outVar.fromExternal=true;
+						return true;
+					}
+				}
+			}
+			std::cerr << "undeclared variable " << name << endl;
+			errorFlagged=true;
+			return false;
+		}
+		else
+		{
+			outVar=globals()[name];
+		}
+	}
+
+	outVar.fromExternal=false;
+	return true;
+}
+
+Function* CodeGenContext::LookupFunctionInExternalModule(const std::string& moduleName, const std::string& name)
+{
+	Function* function = m_includes[moduleName]->module->getFunction(name);
+
+	return function;
+}
+
+Value* CIdentifier::codeGen(CodeGenContext& context)
+{
+	BitVariable var;
+
+	if (!context.LookupBitVariable(var,module,name))
+	{
+		return NULL;
 	}
 
 	if (var.mappingRef)
@@ -344,6 +394,26 @@ Value* CIdentifier::codeGen(CodeGenContext& context)
 		return var.value;
 	}
 	
+	if (var.fromExternal)
+	{
+		if (var.pinType!=TOK_OUT && var.pinType!=TOK_BIDIRECTIONAL)
+		{
+			std::cerr << "Pin marked as non readable in module!" << name << std::endl;
+			context.errorFlagged=true;
+			return NULL;
+		}
+		else
+		{
+			// At this point, we need to get PinGet method and call it.
+			
+			Function* function=context.LookupFunctionInExternalModule(module,"PinGet"+name);
+
+			std::vector<Value*> args;
+			return CallInst::Create(function,args.begin(),args.end(),"pinValue",context.currentBlock());
+		}
+
+	}
+
 	if (var.value->getType()->isPointerTy())
 	{
 		Value* final = new LoadInst(var.value, "", false, context.currentBlock());
@@ -655,22 +725,9 @@ Value* CRotationOperator::codeGen(CodeGenContext& context)
 	Value* shiftIn = bitsIn.codeGen(context);
 	Value* rotBy = rotAmount.codeGen(context);
 	BitVariable var;
-	if (context.locals().find(bitsOut.name) == context.locals().end())
+	if (!context.LookupBitVariable(var,bitsOut.module,bitsOut.name))
 	{
-		if (context.globals().find(bitsOut.name) == context.globals().end())
-		{
-			std::cerr << "undeclared variable " << bitsOut.name << std::endl;
-			context.errorFlagged=true;
-			return NULL;
-		}
-		else
-		{
-			var=context.globals()[bitsOut.name];
-		}
-	}
-	else
-	{
-		var=context.locals()[bitsOut.name];
+		return NULL;
 	}
 	
 	if ((!toShift->getType()->isIntegerTy())||(!rotBy->getType()->isIntegerTy()))
@@ -698,7 +755,7 @@ Value* CRotationOperator::codeGen(CodeGenContext& context)
 
 		Value *shiftedDown = BinaryOperator::Create(Instruction::LShr,toShift,amountToShift,"carryOutShift",context.currentBlock());
 
-		CAssignment::generateAssignment(var,shiftedDown,context);
+		CAssignment::generateAssignment(var,bitsOut.module,bitsOut.name,shiftedDown,context);
 
 		Value *shifted=BinaryOperator::Create(Instruction::Shl,toShift,rotByCast,"rolShift",context.currentBlock());
 
@@ -723,7 +780,7 @@ Value* CRotationOperator::codeGen(CodeGenContext& context)
 
 		Value *maskedDown = BinaryOperator::Create(Instruction::And,toShift,downMask,"carryOutMask",context.currentBlock());
 
-		CAssignment::generateAssignment(var,maskedDown,context);
+		CAssignment::generateAssignment(var,bitsOut.module,bitsOut.name,maskedDown,context);
 
 		Value *shifted=BinaryOperator::Create(Instruction::LShr,toShift,rotByCast,"rorShift",context.currentBlock());
 			
@@ -741,7 +798,7 @@ Value* CRotationOperator::codeGen(CodeGenContext& context)
 	return value.codeGen(context);
 }
 
-Value* CAssignment::generateAssignment(BitVariable& to, Value* from,CodeGenContext& context)
+Value* CAssignment::generateAssignment(BitVariable& to,const std::string& moduleName,const std::string& name, Value* from,CodeGenContext& context)
 {
 	Value* assignTo;
 
@@ -782,8 +839,30 @@ Value* CAssignment::generateAssignment(BitVariable& to, Value* from,CodeGenConte
 		BinaryOperator* primaryAndInst = BinaryOperator::Create(Instruction::And, loadInst, const_intInvMask , "InvMasking", context.currentBlock());
 		final = BinaryOperator::Create(Instruction::Or,primaryAndInst,andInst,"Combining",context.currentBlock());
 	}
+	
+	if (to.fromExternal)
+	{
+		if (to.pinType!=TOK_IN && to.pinType!=TOK_BIDIRECTIONAL)
+		{
+			std::cerr << "Pin marked as non writable in module!" << name << std::endl;
+			context.errorFlagged=true;
+			return NULL;
+		}
+		else
+		{
+			// At this point, we need to get PinSet method and call it.
+			Function* function = context.LookupFunctionInExternalModule(moduleName,"PinSet"+name);
 
-	return new StoreInst(final, assignTo, false, context.currentBlock());
+			std::vector<Value*> args;
+			args.push_back(final);
+			return CallInst::Create(function,args.begin(),args.end(),"",context.currentBlock());
+		}
+
+	}
+	else
+	{
+		return new StoreInst(final, assignTo, false, context.currentBlock());
+	}
 }
 
 void CAssignment::prePass(CodeGenContext& context)
@@ -795,22 +874,9 @@ Value* CAssignment::codeGen(CodeGenContext& context)
 {
 	BitVariable var;
 	Value* assignWith;
-	if (context.locals().find(lhs.name) == context.locals().end())
+	if (!context.LookupBitVariable(var,lhs.module,lhs.name))
 	{
-		if (context.globals().find(lhs.name) == context.globals().end())
-		{
-			std::cerr << "undeclared variable " << lhs.name << endl;
-			context.errorFlagged=true;
-			return NULL;
-		}
-		else
-		{
-			var=context.globals()[lhs.name];
-		}
-	}
-	else
-	{
-		var=context.locals()[lhs.name];
+		return NULL;
 	}
 
 	if (var.mappingRef)
@@ -822,7 +888,7 @@ Value* CAssignment::codeGen(CodeGenContext& context)
 
 	assignWith = rhs.codeGen(context);
 
-	return CAssignment::generateAssignment(var,assignWith,context);
+	return CAssignment::generateAssignment(var,lhs.module,lhs.name,assignWith,context);
 }
 
 void CBlock::prePass(CodeGenContext& context)
@@ -1187,12 +1253,12 @@ Value* CStateDefinition::codeGen(CodeGenContext& context)
 }
 
 
-void CVariableDeclaration::CreateWriteAccessor(CodeGenContext& context,BitVariable& var)
+void CVariableDeclaration::CreateWriteAccessor(CodeGenContext& context,BitVariable& var,const std::string& moduleName,const std::string& name)
 {
 	vector<const Type*> argTypes;
 	argTypes.push_back(IntegerType::get(getGlobalContext(), var.size.getLimitedValue()));
 	FunctionType *ftype = FunctionType::get(Type::getVoidTy(getGlobalContext()),argTypes, false);
-	Function* function = Function::Create(ftype, GlobalValue::ExternalLinkage, "PinSet"+id.name, context.module);
+	Function* function = Function::Create(ftype, context.isRoot ? GlobalValue::ExternalLinkage : GlobalValue::PrivateLinkage, "PinSet"+id.name, context.module);
 	BasicBlock *bblock = BasicBlock::Create(getGlobalContext(), "entry", function, 0);
 
 	context.pushBlock(bblock);
@@ -1202,7 +1268,7 @@ void CVariableDeclaration::CreateWriteAccessor(CodeGenContext& context,BitVariab
 	setVal->setName("InputVal");
 
 	LoadInst* load=new LoadInst(var.value,"",false,bblock);
-	Value* stor=CAssignment::generateAssignment(var,setVal,context);
+	Value* stor=CAssignment::generateAssignment(var,moduleName, name,setVal,context);
 
 	var.priorValue=load;
 	var.writeInput=setVal;
@@ -1216,7 +1282,7 @@ void CVariableDeclaration::CreateReadAccessor(CodeGenContext& context,BitVariabl
 {
 	vector<const Type*> argTypes;
 	FunctionType *ftype = FunctionType::get(IntegerType::get(getGlobalContext(), var.size.getLimitedValue()),argTypes, false);
-	Function* function = Function::Create(ftype, GlobalValue::ExternalLinkage, "PinGet"+id.name, context.module);
+	Function* function = Function::Create(ftype, context.isRoot ? GlobalValue::ExternalLinkage : GlobalValue::PrivateLinkage, "PinGet"+id.name, context.module);
 	BasicBlock *bblock = BasicBlock::Create(getGlobalContext(), "entry", function, 0);
 	function->setOnlyReadsMemory(true);
 
@@ -1245,6 +1311,7 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 	temp.writeAccessor=NULL;
 	temp.writeInput=NULL;
 	temp.priorValue=NULL;
+	temp.fromExternal=false;
 
 	if (context.currentBlock())
 	{
@@ -1264,7 +1331,7 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 		// Rules for globals have changed. If we are definining a PIN then the variable should be private to this module, and accessors should be created instead. 
 		if (pinType==0)
 		{
-			if (internal)
+			if (internal || !context.isRoot)
 			{
 				temp.value = new GlobalVariable(*context.module,Type::getIntNTy(getGlobalContext(),size.integer.getLimitedValue()), false, GlobalValue::PrivateLinkage,NULL,id.name.c_str());
 			}
@@ -1279,13 +1346,13 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 			switch (pinType)
 			{
 				case TOK_IN:
-					CreateWriteAccessor(context,temp);
+					CreateWriteAccessor(context,temp,id.module,id.name);
 					break;
 				case TOK_OUT:
 					CreateReadAccessor(context,temp);
 					break;
 				case TOK_BIDIRECTIONAL:
-					CreateWriteAccessor(context,temp);
+					CreateWriteAccessor(context,temp,id.module,id.name);
 					CreateReadAccessor(context,temp);
 					break;
 				default:
@@ -1942,22 +2009,9 @@ BitVariable COperandMapping::GetBitVariable(CodeGenContext& context,unsigned num
 
 		CIdentifier* identifier = cast<CIdentifier>(&mapping->expr);
 
-		if (context.locals().find(identifier->name) == context.locals().end())
+		if (!context.LookupBitVariable(temp,identifier->module,identifier->name))
 		{
-			if (context.globals().find(identifier->name) == context.globals().end())
-			{
-				std::cerr << "undeclared variable " << identifier->name << endl;
-				context.errorFlagged=true;
-				return temp;
-			}
-			else
-			{
-				temp=context.globals()[identifier->name];
-			}
-		}
-		else
-		{
-			temp=context.locals()[identifier->name];
+			return temp;
 		}
 	}
 	else
@@ -2088,22 +2142,9 @@ CInteger CAffect::emptyParam(stringZero);
 Value* CAffect::codeGen(CodeGenContext& context,Value* exprResult,Value* lhs,Value* rhs,int optype)
 {
 	BitVariable var;
-	if (context.locals().find(ident.name) == context.locals().end())
+	if (!context.LookupBitVariable(var,ident.module,ident.name))
 	{
-		if (context.globals().find(ident.name) == context.globals().end())
-		{
-			std::cerr << "undeclared variable " << ident.name << std::endl;
-			context.errorFlagged=true;
-			return NULL;
-		}
-		else
-		{
-			var=context.globals()[ident.name];
-		}
-	}
-	else
-	{
-		var=context.locals()[ident.name];
+		return NULL;
 	}
 	
 	if (var.mappingRef)
@@ -2266,7 +2307,7 @@ Value* CAffect::codeGen(CodeGenContext& context,Value* exprResult,Value* lhs,Val
 			return NULL;
 	}
 
-	return CAssignment::generateAssignment(var,answer,context);
+	return CAssignment::generateAssignment(var,ident.module,ident.name,answer,context);
 }
 
 void CAffector::prePass(CodeGenContext& context)
@@ -2526,7 +2567,7 @@ Value* CFunctionDecl::codeGen(CodeGenContext& context)
 	}
 
 	Function* func = NULL;
-	if (internal)
+	if (internal || !context.isRoot)
 	{
 		func=Function::Create(FuncTy_8,GlobalValue::PrivateLinkage,name.name,context.module);
 	}
@@ -2603,4 +2644,44 @@ Value* CFunctionDecl::codeGen(CodeGenContext& context)
 	return func;
 }
 
+extern int yyparse();
+extern CBlock* g_ProgramBlock;
+extern FILE *yyin;
 
+#include <stdio.h>
+
+void CInstance::prePass(CodeGenContext& context)
+{
+	// On the prepass, we need to generate the code for this module
+	std::string includeName = filename.quoted.substr(1,filename.quoted.length()-2);
+
+	yyin = fopen(includeName.c_str(),"r");
+	if (!yyin)
+	{
+		std::cerr << "Unable to instance module : " << includeName << endl;
+		context.errorFlagged=true;
+		return;
+	}
+
+	g_ProgramBlock=0;
+	yyparse();
+	if (g_ProgramBlock==0)
+	{
+		std::cerr << "Error : Unable to parse module : " << includeName << endl;
+		context.errorFlagged=true;
+		return;
+	}
+	
+	CodeGenContext* includefile;
+
+	includefile = new CodeGenContext(&context);
+	includefile->generateCode(*g_ProgramBlock);
+
+	context.m_includes[ident.name]=includefile;
+}
+
+Value* CInstance::codeGen(CodeGenContext& context)
+{
+	// At present doesn't generate any code - maybe never will
+	return NULL;
+}

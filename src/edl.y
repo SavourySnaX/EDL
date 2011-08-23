@@ -51,7 +51,7 @@
 %token <string> TOK_IDENTIFIER TOK_INTEGER TOK_STRING
 %token <token>	TOK_DECLARE TOK_HANDLER	TOK_STATES TOK_STATE TOK_ALIAS TOK_IF TOK_NEXT TOK_PUSH TOK_POP	/* Reserved words */
 %token <token>	TOK_INSTRUCTION	TOK_EXECUTE TOK_ROL TOK_ROR TOK_MAPPING TOK_AFFECT TOK_AS		/* Reserved words */
-%token <token>	TOK_PIN TOK_IN TOK_OUT TOK_BIDIRECTIONAL						/* Reserved words */
+%token <token>	TOK_PIN TOK_IN TOK_OUT TOK_BIDIRECTIONAL TOK_INSTANCE					/* Reserved words */
 %token <token>	TOK_ALWAYS TOK_CHANGED TOK_TRANSITION TOK_INTERNAL TOK_FUNCTION TOK_CALL		/* Reserved words */
 %token <token>	TOK_ZERO TOK_SIGN TOK_PARITYEVEN TOK_PARITYODD TOK_CARRY TOK_BIT			/* Reserved words AFFECTORS */
 %token <token>	TOK_TRACE TOK_BASE									/* Debug reserved words */
@@ -72,6 +72,7 @@
 %type <opPartial> partialOperands
 %type <strng> quoted
 %type <ident> ident
+%type <ident> ident_ref
 %type <state_ident> state_ident
 %type <intgr> numeric 
 %type <expr> expr
@@ -105,7 +106,8 @@ stmts : stmt { $$ = new CBlock(); $$->statements.push_back($<stmt>1); }
 	  | stmts stmt { $1->statements.push_back($<stmt>2); }
 	  ;
 
-stmt : var_decl TOK_EOS
+stmt : TOK_INSTANCE quoted TOK_AS ident TOK_EOS { $$ = new CInstance(*$2,*$4); }
+     | var_decl TOK_EOS
      | states_decl
      | state_def
      | handler_decl
@@ -254,8 +256,8 @@ params : params TOK_COMMA expr	{ $$->push_back($3); }
 	|			{ $$ = new ParamsList(); }
 	;
 
-expr : ident TOK_ASSIGNLEFT expr { $$ = new CAssignment(*$<ident>1,*$3); }
-     | expr TOK_ASSIGNRIGHT ident { $$ = new CAssignment(*$<ident>3,*$1); }
+expr : ident_ref TOK_ASSIGNLEFT expr { $$ = new CAssignment(*$<ident>1,*$3); }
+     | expr TOK_ASSIGNRIGHT ident_ref { $$ = new CAssignment(*$<ident>3,*$1); }
      | expr TOK_ADD expr { $$ = new CBinaryOperator(*$1,TOK_ADD,*$3); }
      | expr TOK_SUB expr { $$ = new CBinaryOperator(*$1,TOK_SUB,*$3); }
      | expr TOK_CMPEQ expr { $$ = new CBinaryOperator(*$1,TOK_CMPEQ,*$3); }
@@ -269,13 +271,13 @@ expr : ident TOK_ASSIGNLEFT expr { $$ = new CAssignment(*$<ident>1,*$3); }
      | expr TOK_HAT expr { $$ = new CBinaryOperator(*$1,TOK_HAT,*$3); }
      | state_ident_list TOK_AT { $$ = new CStateTest(*$1); }
      | TOK_TILDE expr { $$ = new CBinaryOperator(*$2,TOK_TILDE,*$2); }
-     | TOK_ROL TOK_OBR expr TOK_COMMA ident TOK_COMMA expr TOK_COMMA expr TOK_CBR { $$ = new CRotationOperator(TOK_ROL,*$3,*$5,*$7,*$9); }
-     | TOK_ROR TOK_OBR expr TOK_COMMA ident TOK_COMMA expr TOK_COMMA expr TOK_CBR { $$ = new CRotationOperator(TOK_ROR,*$3,*$5,*$7,*$9); }
+     | TOK_ROL TOK_OBR expr TOK_COMMA ident_ref TOK_COMMA expr TOK_COMMA expr TOK_CBR { $$ = new CRotationOperator(TOK_ROL,*$3,*$5,*$7,*$9); }
+     | TOK_ROR TOK_OBR expr TOK_COMMA ident_ref TOK_COMMA expr TOK_COMMA expr TOK_CBR { $$ = new CRotationOperator(TOK_ROR,*$3,*$5,*$7,*$9); }
      | expr TOK_LSQR numeric TOK_RSQR { $3->Decrement(); $$ = new CCastOperator(*$1,*$3); }
      | expr TOK_LSQR numeric TOK_DDOT numeric TOK_RSQR { $$ = new CCastOperator(*$1,*$3,*$5); }
-     | TOK_CALL ident TOK_OBR params TOK_CBR { $$ = new CFuncCall(*$2,*$4); }
+     | TOK_CALL ident_ref TOK_OBR params TOK_CBR { $$ = new CFuncCall(*$2,*$4); }
      | TOK_AFFECT affectors TOK_LBRACE expr TOK_RBRACE { $$ = new CAffector(*$2,*$4); }
-     | ident { $<ident>$ = $1; }
+     | ident_ref { $<ident>$ = $1; }
      | numeric { $$ = new CInteger(*$1); delete $1; }
      | TOK_OBR expr TOK_CBR { $$ = $2; }
 	;
@@ -284,6 +286,10 @@ quoted : TOK_STRING { $$ = new CString(*$1); delete $1; }
        ;
 
 ident : TOK_IDENTIFIER { $$ = new CIdentifier(*$1); delete $1; }
+	  ;
+
+ident_ref : TOK_IDENTIFIER { $$ = new CIdentifier(*$1); }
+	  | TOK_IDENTIFIER TOK_IDENTIFIER { $$ = new CIdentifier(*$1,*$2); }
 	  ;
 
 numeric : TOK_INTEGER { $$ = new CInteger(*$1); delete $1; }
