@@ -1,6 +1,6 @@
 all: hello
 
-EDL=../../bin/edl.exe
+EDL=../../../bin/edl.exe
 
 clean:
 	$(RM) -rf out/*
