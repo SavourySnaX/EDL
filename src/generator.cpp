@@ -130,6 +130,8 @@ void CodeGenContext::generateCode(CBlock& root)
 	// Add an appropriate TargetData instance for this module...
 	pm.add(new TargetData(*ee->getTargetData()));
 
+	for (int a=0;a<2;a++)
+	{
 	pm.add(new StateReferenceSquasher(*this));		// Custom pass designed to remove redundant loads of the current state (since it can only be modified in one place)
 
 	pm.add(createLowerSetJmpPass());          // Lower llvm.setjmp/.longjmp
@@ -236,10 +238,9 @@ void CodeGenContext::generateCode(CBlock& root)
 	pm.add(createDeadTypeEliminationPass());  // Eliminate dead types
 	pm.add(createConstantMergePass());        // Merge dup global constants
 
-	pm.add(new StateReferenceSquasher(*this));		// Custom pass designed to remove redundant loads of the current state (since it can only be modified in one place)
-
-    // Make sure everything is still good.
-    pm.add(createVerifierPass());
+	// Make sure everything is still good.
+	pm.add(createVerifierPass());
+	}
 	pm.add(createPrintModulePass(&outs()));
 #endif
 	pm.run(*module);
