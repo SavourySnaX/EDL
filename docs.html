@@ -692,6 +692,49 @@ result(1011) shiftedOut(0001)
 <p>For disassembler purposes the %$n components are used to specify the offset from the address being disassembled that the subsequent operands can be found.</p>
 <p></p>
 
+<h2><u>Instances (or how to use other edl files)</u></h2>
+
+<p>As has been mentioned before, an edl file is supposed to be a black box, with the <b>PIN</b>s providing the interface. This leads to the question of how to make use of these files from another. EDL uses the concept of an <b>INSTANCE</b> for this purpose.</p>
+
+<pre style="background-color:#CCCCCC">
+#This file is saved as inverter.edl
+
+<b>PIN IN</b> INPUT[1];
+<b>PIN OUT</b> OUTPUT[1];
+
+<b>HANDLER</b> INPUT
+{
+	OUTPUT <b>&lt-</b> ~INPUT;
+}
+</pre>
+<p></p>
+<pre style="background-color:#CCCCCC">
+<b>INSTANCE</b> "inverter.edl" <b>AS</b> Chip1;
+
+<b>FUNCTION</b> test
+{
+	<b>DECLARE</b> result[1];
+
+	Chip1 INPUT<b>&lt-</b>%0;
+
+	result <b>&lt-</b> Chip1 OUTPUT;
+
+	<b>DEBUG_TRACE</b> result;
+}
+</pre>
+<p></p>
+<pre style="color:white; background-color:#000000">
+result(1)
+</pre>
+
+<p>The first file above, is a simple 1 bit inverter.. it will output the opposite of its input. The second file, shows how <b>INSTANCE</b>s work. The first parameter is a string containing the path to the edl file, the second parameter is how you wish it to be known. </p>
+
+<p>To reference a <b>PIN</b> within an <b>INSTANCE</b>d module, you supply the name you chose before the <b>PIN</b> name (seperated by a space). In case it is not immediately obvious from the above, you can <b>INSTANCE</b> the same file multiple times, giving each a unique name.</p>
+
+<h2><u>Instances and scoping</u></h2>
+
+<p>Once an edl file is <b>INSTANCE</b>d any global declarations from within the <b>INSTANCE</b> become private to the edl file including it. This allows each file to maintain its black box behaviour, even when it uses others. For instance, if we had an edl file called alu.edl and we <b>INSTANCE</b>d it from within a file cpu.edl, and then in turn, <b>INSTANCE</b>d that within a file computer.edl, to the outside world (perhaps a C Language driver), the contents of alu.edl and cpu.edl would be inaccessable.</p>
+
 <h2><u>Interfacing to C</u></h2>
 
 <p>To call a <b>HANDLER</b> from C, you must set a value to the <b>PIN</b>s accessor function - see <b>Pins</b> above. Currently any globally declared variables are also accessable (unless marked <b>INTERNAL</b>, however only the non aliased names are available, and care must be taken to match the bit size to the C Variable size. Its best to only access 8,16 or 32 bit values as they have direct representation in C. Similarly, any globally declared functions can be accessed from C, however similar care must be taken as with variables due to bit size matching.</p>
@@ -701,7 +744,7 @@ result(1011) shiftedOut(0001)
 <pre style="background-color:#CCCCCC">
 <b>C_FUNC_EXTERN</b> [16] Multiply [8],[8];
 
-<b>HANDLER</b> test
+<b>FUNCTION</b> test
 {
 	<b>DECLARE</b> result[16];
 
