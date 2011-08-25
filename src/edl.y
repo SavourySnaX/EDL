@@ -116,6 +116,7 @@ stmt : TOK_INSTANCE quoted TOK_AS ident TOK_EOS { $$ = new CInstance(*$2,*$4); }
      | instruction_decl
      | mapping_decl
      | ifblock
+     | TOK_EXECUTE ident ident TOK_EOS { $$ = new CExecute(*$2,*$3); }
      | TOK_EXECUTE ident TOK_EOS { $$ = new CExecute(*$2); }
      | TOK_NEXT state_ident_list TOK_EOS { $$ = new CStateJump(*$2); delete $2; }
      | TOK_PUSH state_ident_list TOK_EOS { $$ = new CStatePush(*$2); delete $2; }
@@ -213,7 +214,8 @@ operandList : operandList TOK_COMMA partialOperands { $$->push_back($<operand>3)
 	    | partialOperands { $$ = new OperandList(); $$->push_back($<operand>1); }
 	;
 
-instruction_decl : TOK_INSTRUCTION quoted operandList block { $$ = new CInstruction(*$2,*$3,*$4); }
+instruction_decl : TOK_INSTRUCTION ident quoted operandList block { $$ = new CInstruction(*$2,*$3,*$4,*$5); }
+		 | TOK_INSTRUCTION quoted operandList block { $$ = new CInstruction(*$2,*$3,*$4); }
 		 ;
 
 mapping : numeric quoted expr TOK_EOS { $$ = new CMapping(*$1,*$2,*$3); }

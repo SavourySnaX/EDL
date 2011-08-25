@@ -1558,7 +1558,10 @@ CString& CInstruction::processMnemonic(CodeGenContext& context,CString& in,llvm:
 
 	return temp;
 }
-	
+
+CIdentifier CInstruction::emptyTable("");
+CIdentifier CExecute::emptyTable("");
+
 void CInstruction::prePass(CodeGenContext& context)
 {
 	block.prePass(context);
@@ -1616,13 +1619,13 @@ Value* CInstruction::codeGen(CodeGenContext& context)
 		context.popBlock();
 
 		// Glue callee back into execute (assumes execute comes before instructions at all times for now)
-		for (int b=0;b<context.executeLocations.size();b++)
+		for (int b=0;b<context.executeLocations[table.name].size();b++)
 		{
-			BasicBlock* tempBlock = BasicBlock::Create(getGlobalContext(),"callOut" + opcode.toString(16,false),context.executeLocations[b].blockEndForExecute->getParent(),0);
+			BasicBlock* tempBlock = BasicBlock::Create(getGlobalContext(),"callOut" + opcode.toString(16,false),context.executeLocations[table.name][b].blockEndForExecute->getParent(),0);
 			std::vector<Value*> args;
 			CallInst* fcall = CallInst::Create(function,args.begin(),args.end(),"",tempBlock);
-			BranchInst::Create(context.executeLocations[b].blockEndForExecute,tempBlock);
-			context.executeLocations[b].switchForExecute->addCase(ConstantInt::get(getGlobalContext(),opcode),tempBlock);
+			BranchInst::Create(context.executeLocations[table.name][b].blockEndForExecute,tempBlock);
+			context.executeLocations[table.name][b].switchForExecute->addCase(ConstantInt::get(getGlobalContext(),opcode),tempBlock);
 		}
 
 	}
@@ -1650,7 +1653,7 @@ Value* CExecute::codeGen(CodeGenContext& context)
 
 		context.setBlock(temp.blockEndForExecute);
 
-		context.executeLocations.push_back(temp);
+		context.executeLocations[table.name].push_back(temp);
 	}
 	return NULL;
 }

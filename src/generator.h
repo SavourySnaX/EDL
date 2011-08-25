@@ -92,7 +92,7 @@ public:
 
     bool errorFlagged;
 
-    std::vector<ExecuteInformation> executeLocations;
+    std::map<std::string, std::vector<ExecuteInformation> > executeLocations;
 
     Function* LookupFunctionInExternalModule(const std::string& module, const std::string& name);
     bool LookupBitVariable(BitVariable& outVar,const std::string& module, const std::string& name);

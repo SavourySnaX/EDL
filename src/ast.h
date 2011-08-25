@@ -494,11 +494,16 @@ public:
 
 class CInstruction : public CStatement {
 public:
+	CIdentifier& table;
 	CString& mnemonic;
 	OperandList operands;
 	CBlock& block;
+	static CIdentifier emptyTable;
+
+	CInstruction(CIdentifier& table,CString& mnemonic,OperandList& operands, CBlock& block) :
+		table(table),mnemonic(mnemonic),operands(operands), block(block) { }
 	CInstruction(CString& mnemonic,OperandList& operands, CBlock& block) :
-		mnemonic(mnemonic),operands(operands), block(block) { }
+		table(emptyTable),mnemonic(mnemonic),operands(operands), block(block) { }
 	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 
@@ -507,9 +512,13 @@ public:
 
 class CExecute : public CStatement {
 public:
+	CIdentifier& table;
 	CIdentifier& opcode;
+	static CIdentifier emptyTable;
+	CExecute(CIdentifier& table,CIdentifier& opcode) :
+		table(table),opcode(opcode) { }
 	CExecute(CIdentifier& opcode) :
-		opcode(opcode) { }
+		table(emptyTable),opcode(opcode) { }
 	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
