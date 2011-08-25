@@ -614,4 +614,14 @@ public:
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
 
+class CExchange : public CStatement {
+public:
+	CIdentifier&	lhs;
+	CIdentifier&	rhs;
+
+	CExchange(CIdentifier& lhs,CIdentifier& rhs) :
+		lhs(lhs), rhs(rhs) { }
+
+	virtual llvm::Value* codeGen(CodeGenContext& context);
+};
 

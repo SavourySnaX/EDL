@@ -62,6 +62,7 @@ C_FUNC_EXTERN				{ return TOKEN(TOK_C_FUNC_EXTERN); }
 \$[0-9a-fA-F]+				{ SAVE_TOKEN; return TOK_INTEGER; /* hexadecimal */}
 \"(\\.|[^"])*\"				{ SAVE_TOKEN; return TOK_STRING; }
 
+"<->"					{ return TOKEN(TOK_EXCHANGE); }
 ".."					{ return TOKEN(TOK_DDOT); }
 "!="					{ return TOKEN(TOK_CMPNEQ); }
 "=="					{ return TOKEN(TOK_CMPEQ); }

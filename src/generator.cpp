@@ -2688,3 +2688,48 @@ Value* CInstance::codeGen(CodeGenContext& context)
 	// At present doesn't generate any code - maybe never will
 	return NULL;
 }
+
+Value* CExchange::codeGen(CodeGenContext& context)
+{
+	BitVariable lhsVar,rhsVar;
+
+	if (!context.LookupBitVariable(lhsVar,lhs.module,lhs.name))
+	{
+		return NULL;
+	}
+	if (!context.LookupBitVariable(rhsVar,rhs.module,rhs.name))
+	{
+		return NULL;
+	}
+
+	if (lhsVar.value->getType()->isPointerTy() && rhsVar.value->getType()->isPointerTy())
+	{
+		// Both sides must be identifiers
+
+		Value* left = lhs.codeGen(context);
+		Value* right= rhs.codeGen(context);
+	
+		if (left->getType()->isIntegerTy() && right->getType()->isIntegerTy())
+		{
+			const IntegerType* leftType = cast<IntegerType>(left->getType());
+			const IntegerType* rightType = cast<IntegerType>(right->getType());
+
+			if (leftType->getBitWidth() != rightType->getBitWidth())
+			{
+				std::cerr << "Both operands to exchange must be same size!" << std::endl;
+				context.errorFlagged=true;
+				return NULL;
+			}
+		
+			CAssignment::generateAssignment(lhsVar,lhs.module,lhs.name,right,context);
+			CAssignment::generateAssignment(rhsVar,rhs.module,rhs.name,left,context);
+		}
+		
+		return NULL;
+	}
+	
+	std::cerr<<"Illegal operands to exchange"<<std::endl;
+	context.errorFlagged=true;
+	return NULL;
+}
+

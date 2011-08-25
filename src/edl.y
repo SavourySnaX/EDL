@@ -51,7 +51,7 @@
 %token <string> TOK_IDENTIFIER TOK_INTEGER TOK_STRING
 %token <token>	TOK_DECLARE TOK_HANDLER	TOK_STATES TOK_STATE TOK_ALIAS TOK_IF TOK_NEXT TOK_PUSH TOK_POP	/* Reserved words */
 %token <token>	TOK_INSTRUCTION	TOK_EXECUTE TOK_ROL TOK_ROR TOK_MAPPING TOK_AFFECT TOK_AS		/* Reserved words */
-%token <token>	TOK_PIN TOK_IN TOK_OUT TOK_BIDIRECTIONAL TOK_INSTANCE					/* Reserved words */
+%token <token>	TOK_PIN TOK_IN TOK_OUT TOK_BIDIRECTIONAL TOK_INSTANCE TOK_EXCHANGE			/* Reserved words */
 %token <token>	TOK_ALWAYS TOK_CHANGED TOK_TRANSITION TOK_INTERNAL TOK_FUNCTION TOK_CALL		/* Reserved words */
 %token <token>	TOK_ZERO TOK_SIGN TOK_PARITYEVEN TOK_PARITYODD TOK_CARRY TOK_BIT			/* Reserved words AFFECTORS */
 %token <token>	TOK_TRACE TOK_BASE									/* Debug reserved words */
@@ -116,6 +116,7 @@ stmt : TOK_INSTANCE quoted TOK_AS ident TOK_EOS { $$ = new CInstance(*$2,*$4); }
      | instruction_decl
      | mapping_decl
      | ifblock
+     | ident TOK_EXCHANGE ident TOK_EOS { $$ = new CExchange(*$1,*$3); }
      | TOK_EXECUTE ident ident TOK_EOS { $$ = new CExecute(*$2,*$3); }
      | TOK_EXECUTE ident TOK_EOS { $$ = new CExecute(*$2); }
      | TOK_NEXT state_ident_list TOK_EOS { $$ = new CStateJump(*$2); delete $2; }
