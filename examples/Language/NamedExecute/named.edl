@@ -1,0 +1,49 @@
+#
+# Multi table execute
+#
+
+FUNCTION step
+{
+	DECLARE IR[8];
+
+	EXECUTE main IR;
+
+	IR<-IR+1;
+	
+	EXECUTE main IR;
+
+	EXECUTE other IR;
+	
+	IR<-IR-1;
+
+	EXECUTE other IR;
+
+
+	EXECUTE IR;
+}
+
+INSTRUCTION "IGNORED" $00
+{
+	DEBUG_TRACE "Unamed";
+}
+
+INSTRUCTION main "FIRST" $00
+{
+	DEBUG_TRACE "I AM FIRST IN MAIN";
+}
+
+INSTRUCTION main "SECOND" $01
+{
+	DEBUG_TRACE "I AM SECOND IN MAIN";
+}
+
+INSTRUCTION other "FIRST" $00
+{
+	DEBUG_TRACE "I AM FIRST IN OTHER";
+}
+
+INSTRUCTION other "SECOND" $01
+{
+	DEBUG_TRACE "I AM SECOND IN OTHER";
+}
+
