@@ -51,7 +51,7 @@
 %token <string> TOK_IDENTIFIER TOK_INTEGER TOK_STRING
 %token <token>	TOK_DECLARE TOK_HANDLER	TOK_STATES TOK_STATE TOK_ALIAS TOK_IF TOK_NEXT TOK_PUSH TOK_POP	/* Reserved words */
 %token <token>	TOK_INSTRUCTION	TOK_EXECUTE TOK_ROL TOK_ROR TOK_MAPPING TOK_AFFECT TOK_AS		/* Reserved words */
-%token <token>	TOK_PIN TOK_IN TOK_OUT TOK_BIDIRECTIONAL TOK_INSTANCE TOK_EXCHANGE			/* Reserved words */
+%token <token>	TOK_PIN TOK_IN TOK_OUT TOK_BIDIRECTIONAL TOK_INSTANCE TOK_EXCHANGE TOK_DADD TOK_DSUB	/* Reserved words */
 %token <token>	TOK_ALWAYS TOK_CHANGED TOK_TRANSITION TOK_INTERNAL TOK_FUNCTION TOK_CALL		/* Reserved words */
 %token <token>	TOK_ZERO TOK_SIGN TOK_PARITYEVEN TOK_PARITYODD TOK_CARRY TOK_BIT			/* Reserved words AFFECTORS */
 %token <token>	TOK_TRACE TOK_BASE									/* Debug reserved words */
@@ -93,7 +93,7 @@
 %left TOK_LSQR
 %left TOK_BAR TOK_AMP TOK_HAT
 %left TOK_CMPEQ TOK_CMPNEQ TOK_CMPLESS TOK_CMPLESSEQ TOK_CMPGREATER TOK_CMPGREATEREQ
-%left TOK_ADD TOK_SUB
+%left TOK_ADD TOK_DADD TOK_SUB TOK_DSUB
 
 %start program
 
@@ -263,6 +263,8 @@ expr : ident_ref TOK_ASSIGNLEFT expr { $$ = new CAssignment(*$<ident>1,*$3); }
      | expr TOK_ASSIGNRIGHT ident_ref { $$ = new CAssignment(*$<ident>3,*$1); }
      | expr TOK_ADD expr { $$ = new CBinaryOperator(*$1,TOK_ADD,*$3); }
      | expr TOK_SUB expr { $$ = new CBinaryOperator(*$1,TOK_SUB,*$3); }
+     | expr TOK_DADD expr { $$ = new CBinaryOperator(*$1,TOK_DADD,*$3); }
+     | expr TOK_DSUB expr { $$ = new CBinaryOperator(*$1,TOK_DSUB,*$3); }
      | expr TOK_CMPEQ expr { $$ = new CBinaryOperator(*$1,TOK_CMPEQ,*$3); }
      | expr TOK_CMPNEQ expr { $$ = new CBinaryOperator(*$1,TOK_CMPNEQ,*$3); }
      | expr TOK_CMPLESSEQ expr { $$ = new CBinaryOperator(*$1,TOK_CMPLESSEQ,*$3); }

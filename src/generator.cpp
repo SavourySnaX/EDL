@@ -588,7 +588,7 @@ Value* CDebugLine::codeGen(CodeGenContext& context)		// Refactored away onto its
 
 bool CBinaryOperator::IsCarryExpression()
 {
-	return (op==TOK_ADD || op==TOK_SUB); 
+	return (op==TOK_ADD || op==TOK_DADD || op==TOK_DSUB || op==TOK_SUB); 
 }
 
 void CBinaryOperator::prePass(CodeGenContext& context)
@@ -615,15 +615,27 @@ Value* CBinaryOperator::codeGen(CodeGenContext& context,Value* left,Value* right
 		const IntegerType* leftType = cast<IntegerType>(left->getType());
 		const IntegerType* rightType = cast<IntegerType>(right->getType());
 
+		bool signExtend;
+		switch (op)
+		{
+		case TOK_DADD:
+		case TOK_DSUB:
+			signExtend=true;
+			break;
+		default:
+			signExtend=false;
+			break;
+		}
+
 		if (leftType->getBitWidth() < rightType->getBitWidth())
 		{
-			Instruction::CastOps op = CastInst::getCastOpcode(left,false,rightType,false);
+			Instruction::CastOps op = CastInst::getCastOpcode(left,signExtend,rightType,false);
 
 			left = CastInst::Create(op,left,rightType,"cast",context.currentBlock());
 		}
 		if (leftType->getBitWidth() > rightType->getBitWidth())
 		{
-			Instruction::CastOps op = CastInst::getCastOpcode(right,false,leftType,false);
+			Instruction::CastOps op = CastInst::getCastOpcode(right,signExtend,leftType,false);
 
 			right = CastInst::Create(op,right,leftType,"cast",context.currentBlock());
 		}
@@ -631,8 +643,10 @@ Value* CBinaryOperator::codeGen(CodeGenContext& context,Value* left,Value* right
 		switch (op) 
 		{
 		case TOK_ADD:
+		case TOK_DADD:
 			return BinaryOperator::Create(Instruction::Add,left,right,"",context.currentBlock());
 		case TOK_SUB:
+		case TOK_DSUB:
 			return BinaryOperator::Create(Instruction::Sub,left,right,"",context.currentBlock());
 		case TOK_CMPEQ:
 			return CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_EQ,left, right, "", context.currentBlock());
@@ -2254,7 +2268,7 @@ Value* CAffect::codeGen(CodeGenContext& context,Value* exprResult,Value* lhs,Val
 				Instruction::CastOps rhsOp = CastInst::getCastOpcode(rhs,false,resultType,false);
 				rhs = CastInst::Create(rhsOp,rhs,resultType,"cast",context.currentBlock());
 
-				if (optype==TOK_ADD)
+				if (optype==TOK_ADD || optype==TOK_DADD)
 				{
 					//((lh & rh) | ((~Result) & rh) | (lh & (~Result)))
 
