@@ -1604,7 +1604,7 @@ Value* CInstruction::codeGen(CodeGenContext& context)
 		PointerType* PointerTy_2 = PointerType::get(IntegerType::get(getGlobalContext(), 8), 0);
   
   		FunctionType* ftypeDeb = FunctionType::get(/*Result=*/PointerTy_2,/*Params=*/argTypes,/*isVarArg=*/false);
-		Function* functionDeb = Function::Create(ftypeDeb, GlobalValue::ExternalLinkage, "DIS_"+opcode.toString(16,false),context.module);
+		Function* functionDeb = Function::Create(ftypeDeb, GlobalValue::ExternalLinkage, "DIS_"+table.name+opcode.toString(16,false),context.module);
 		BasicBlock *bblockDeb = BasicBlock::Create(getGlobalContext(), "entry", functionDeb, 0);
 
 		context.pushBlock(bblockDeb);
@@ -1619,7 +1619,7 @@ Value* CInstruction::codeGen(CodeGenContext& context)
 // End disasm function
 
 		FunctionType *ftype = FunctionType::get(Type::getVoidTy(getGlobalContext()),argTypes, false);
-		Function* function = Function::Create(ftype, GlobalValue::PrivateLinkage, "OPCODE_"+opcodeString.string.quoted.substr(1,mnemonic.quoted.length()-2) + "_" + opcode.toString(16,false),context.module);
+		Function* function = Function::Create(ftype, GlobalValue::PrivateLinkage, "OPCODE_"+opcodeString.string.quoted.substr(1,mnemonic.quoted.length()-2) + "_" + table.name+opcode.toString(16,false),context.module);
 		BasicBlock *bblock = BasicBlock::Create(getGlobalContext(), "entry", function, 0);
 
 		context.pushBlock(bblock);
@@ -1635,7 +1635,7 @@ Value* CInstruction::codeGen(CodeGenContext& context)
 		// Glue callee back into execute (assumes execute comes before instructions at all times for now)
 		for (int b=0;b<context.executeLocations[table.name].size();b++)
 		{
-			BasicBlock* tempBlock = BasicBlock::Create(getGlobalContext(),"callOut" + opcode.toString(16,false),context.executeLocations[table.name][b].blockEndForExecute->getParent(),0);
+			BasicBlock* tempBlock = BasicBlock::Create(getGlobalContext(),"callOut" + table.name + opcode.toString(16,false),context.executeLocations[table.name][b].blockEndForExecute->getParent(),0);
 			std::vector<Value*> args;
 			CallInst* fcall = CallInst::Create(function,args.begin(),args.end(),"",tempBlock);
 			BranchInst::Create(context.executeLocations[table.name][b].blockEndForExecute,tempBlock);
