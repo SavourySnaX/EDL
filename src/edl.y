@@ -53,7 +53,8 @@
 %token <token>	TOK_INSTRUCTION	TOK_EXECUTE TOK_ROL TOK_ROR TOK_MAPPING TOK_AFFECT TOK_AS		/* Reserved words */
 %token <token>	TOK_PIN TOK_IN TOK_OUT TOK_BIDIRECTIONAL TOK_INSTANCE TOK_EXCHANGE TOK_DADD TOK_DSUB	/* Reserved words */
 %token <token>	TOK_ALWAYS TOK_CHANGED TOK_TRANSITION TOK_INTERNAL TOK_FUNCTION TOK_CALL		/* Reserved words */
-%token <token>	TOK_ZERO TOK_SIGN TOK_PARITYEVEN TOK_PARITYODD TOK_CARRY TOK_BIT			/* Reserved words AFFECTORS */
+%token <token>	TOK_ZERO TOK_SIGN TOK_PARITYEVEN TOK_PARITYODD TOK_CARRY TOK_BIT TOK_OVERFLOW			/* Reserved words AFFECTORS */
+%token <token>	TOK_NONZERO TOK_NOSIGN TOK_NOCARRY TOK_INVBIT TOK_FORCERESET TOK_FORCESET TOK_NOOVERFLOW	/* Reserved words AFFECTORS */
 %token <token>	TOK_TRACE TOK_BASE									/* Debug reserved words */
 %token <token>	TOK_C_FUNC_EXTERN									/* C Calling Interface */
 %token <token> TOK_LSQR TOK_RSQR TOK_LBRACE TOK_RBRACE TOK_COMMA TOK_COLON TOK_EOS 			/* Operators/Seperators */
@@ -243,11 +244,19 @@ var_decl : TOK_DECLARE TOK_INTERNAL ident TOK_LSQR numeric TOK_RSQR { $$ = new C
 	;
 
 affector : ident TOK_AS TOK_ZERO { $$ = new CAffect(*$1,TOK_ZERO); }
+	 | ident TOK_AS TOK_NONZERO { $$ = new CAffect(*$1,TOK_NONZERO); }
 	 | ident TOK_AS TOK_SIGN { $$ = new CAffect(*$1,TOK_SIGN); }
+	 | ident TOK_AS TOK_NOSIGN { $$ = new CAffect(*$1,TOK_NOSIGN); }
+	 | ident TOK_AS TOK_FORCESET { $$ = new CAffect(*$1,TOK_FORCESET); }
+	 | ident TOK_AS TOK_FORCERESET { $$ = new CAffect(*$1,TOK_FORCERESET); }
 	 | ident TOK_AS TOK_PARITYEVEN { $$ = new CAffect(*$1,TOK_PARITYEVEN); }
 	 | ident TOK_AS TOK_PARITYODD { $$ = new CAffect(*$1,TOK_PARITYODD); }
 	 | ident TOK_AS TOK_BIT TOK_OBR numeric TOK_CBR { $$ = new CAffect(*$1,TOK_BIT,*$5); }
+	 | ident TOK_AS TOK_INVBIT TOK_OBR numeric TOK_CBR { $$ = new CAffect(*$1,TOK_INVBIT,*$5); }
 	 | ident TOK_AS TOK_CARRY TOK_OBR numeric TOK_CBR { $$ = new CAffect(*$1,TOK_CARRY,*$5); }
+	 | ident TOK_AS TOK_NOCARRY TOK_OBR numeric TOK_CBR { $$ = new CAffect(*$1,TOK_NOCARRY,*$5); }
+	 | ident TOK_AS TOK_OVERFLOW TOK_OBR numeric TOK_CBR { $$ = new CAffect(*$1,TOK_OVERFLOW,*$5); }
+	 | ident TOK_AS TOK_NOOVERFLOW TOK_OBR numeric TOK_CBR { $$ = new CAffect(*$1,TOK_NOOVERFLOW,*$5); }
 	 ;
 
 affectors : affectors TOK_COMMA affector { $$->push_back($<affect>3); }

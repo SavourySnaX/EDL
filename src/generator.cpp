@@ -2175,14 +2175,36 @@ Value* CAffect::codeGen(CodeGenContext& context,Value* exprResult,Value* lhs,Val
 	Value *answer;
 	switch (type)
 	{
+		case TOK_FORCESET:
+		case TOK_FORCERESET:
+			{
+				APInt bits(resultType->getBitWidth(),0,false);
+				if (TOK_FORCESET)
+				{
+					bits = ~bits;
+				}
+				answer=ConstantInt::get(getGlobalContext(),bits);
+			}
+			break;
 		case TOK_ZERO:
 			answer=CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_EQ,exprResult, ConstantInt::get(getGlobalContext(),APInt(resultType->getBitWidth(),0,false)), "", context.currentBlock());
 			break;
+		case TOK_NONZERO:
+			answer=CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_NE,exprResult, ConstantInt::get(getGlobalContext(),APInt(resultType->getBitWidth(),0,false)), "", context.currentBlock());
+			break;
 		case TOK_SIGN:
+		case TOK_NOSIGN:
 			{
 				APInt signBit(resultType->getBitWidth(),0,false);
 				signBit.setBit(resultType->getBitWidth()-1);
-				answer=BinaryOperator::Create(Instruction::And,exprResult,ConstantInt::get(getGlobalContext(),signBit),"",context.currentBlock());
+				if (type==TOK_SIGN)
+				{
+					answer=BinaryOperator::Create(Instruction::And,exprResult,ConstantInt::get(getGlobalContext(),signBit),"",context.currentBlock());
+				}
+				else
+				{
+					answer=BinaryOperator::Create(Instruction::Xor,exprResult,ConstantInt::get(getGlobalContext(),signBit),"",context.currentBlock());
+				}
 				answer=BinaryOperator::Create(Instruction::LShr,answer,ConstantInt::get(getGlobalContext(),APInt(resultType->getBitWidth(),(uint64_t)(resultType->getBitWidth()-1),false)),"",context.currentBlock());
 			}
 			break;
@@ -2236,16 +2258,25 @@ Value* CAffect::codeGen(CodeGenContext& context,Value* exprResult,Value* lhs,Val
 			}
 			break;
 		case TOK_BIT:
+		case TOK_INVBIT:
 			{
 				APInt bit(resultType->getBitWidth(),0,false);
 				APInt shift = param.integer.zextOrTrunc(resultType->getBitWidth());
 				bit.setBit(param.integer.getLimitedValue());
-				answer=BinaryOperator::Create(Instruction::And,exprResult,ConstantInt::get(getGlobalContext(),bit),"",context.currentBlock());
+				if (type==TOK_BIT)
+				{
+					answer=BinaryOperator::Create(Instruction::And,exprResult,ConstantInt::get(getGlobalContext(),bit),"",context.currentBlock());
+				}
+				else
+				{
+					answer=BinaryOperator::Create(Instruction::Xor,exprResult,ConstantInt::get(getGlobalContext(),bit),"",context.currentBlock());
+				}
 				answer=BinaryOperator::Create(Instruction::LShr,answer,ConstantInt::get(getGlobalContext(),shift),"",context.currentBlock());
 			}
 			break;
 
 		case TOK_CARRY:
+		case TOK_NOCARRY:
 			{
 				if (lhs==NULL || rhs==NULL)
 				{
@@ -2313,7 +2344,105 @@ Value* CAffect::codeGen(CodeGenContext& context,Value* exprResult,Value* lhs,Val
 				ConstantInt* bitC=ConstantInt::get(getGlobalContext(),bit);
 				ConstantInt* shiftC=ConstantInt::get(getGlobalContext(),shift);
 
-				answer=BinaryOperator::Create(Instruction::And,answer,bitC,"",context.currentBlock());
+				if (type==TOK_CARRY)
+				{
+					answer=BinaryOperator::Create(Instruction::And,answer,bitC,"",context.currentBlock());
+				}
+				else
+				{
+					answer=BinaryOperator::Create(Instruction::Xor,answer,bitC,"",context.currentBlock());
+				}
+				answer=BinaryOperator::Create(Instruction::LShr,answer,shiftC,"",context.currentBlock());
+			}
+			break;
+		case TOK_OVERFLOW:
+		case TOK_NOOVERFLOW:
+			{
+				if (lhs==NULL || rhs==NULL)
+				{
+					std::cerr << "CARRY is not supported for non carry expressions" << std::endl;
+					context.errorFlagged=true;
+					return NULL;
+				}
+				if (param.integer.getLimitedValue() >= resultType->getBitWidth())
+				{
+					std::cerr << "Bit to carry is outside of range for result" << std::endl;
+					context.errorFlagged=true;
+					return NULL;
+				}
+				
+				const IntegerType* lhsType = cast<IntegerType>(lhs->getType());
+				const IntegerType* rhsType = cast<IntegerType>(rhs->getType());
+		       		
+				Instruction::CastOps lhsOp = CastInst::getCastOpcode(lhs,false,resultType,false);
+				lhs = CastInst::Create(lhsOp,lhs,resultType,"cast",context.currentBlock());
+				Instruction::CastOps rhsOp = CastInst::getCastOpcode(rhs,false,resultType,false);
+				rhs = CastInst::Create(rhsOp,rhs,resultType,"cast",context.currentBlock());
+
+				if (optype==TOK_ADD || optype==TOK_DADD)
+				{
+					//((rh & lh & (~Result)) | ((~rh) & (~lh) & Result))
+
+					// ~Result
+					Value* cmpResult = BinaryOperator::Create(Instruction::Xor,exprResult,ConstantInt::get(getGlobalContext(),~APInt(resultType->getBitWidth(),0,false)),"",context.currentBlock());
+					// ~lh
+					Value* cmplh = BinaryOperator::Create(Instruction::Xor,lhs,ConstantInt::get(getGlobalContext(),~APInt(resultType->getBitWidth(),0,false)),"",context.currentBlock());
+					// ~rh
+					Value* cmprh = BinaryOperator::Create(Instruction::Xor,rhs,ConstantInt::get(getGlobalContext(),~APInt(resultType->getBitWidth(),0,false)),"",context.currentBlock());
+
+					// lh&rh
+					Value* expr1 = BinaryOperator::Create(Instruction::And,rhs,lhs,"",context.currentBlock());
+					// ~rh&~lh
+					Value* expr2 = BinaryOperator::Create(Instruction::And,cmprh,cmplh,"",context.currentBlock());
+
+					// rh & lh & ~Result
+					Value* expr3 = BinaryOperator::Create(Instruction::And,expr1,cmpResult,"",context.currentBlock());
+					// ~rh & ~lh & Result
+					Value* expr4 = BinaryOperator::Create(Instruction::And,expr2,exprResult,"",context.currentBlock());
+
+					// rh & lh & ~Result | ~rh & ~lh & Result
+					answer = BinaryOperator::Create(Instruction::Or,expr3,expr4,"",context.currentBlock());
+				}
+				else
+				{
+					//(((~rh) & lh & (~Result)) | (rh & (~lh) & Result))
+					
+					// ~Result
+					Value* cmpResult = BinaryOperator::Create(Instruction::Xor,exprResult,ConstantInt::get(getGlobalContext(),~APInt(resultType->getBitWidth(),0,false)),"",context.currentBlock());
+					// ~lh
+					Value* cmplh = BinaryOperator::Create(Instruction::Xor,lhs,ConstantInt::get(getGlobalContext(),~APInt(resultType->getBitWidth(),0,false)),"",context.currentBlock());
+					// ~rh
+					Value* cmprh = BinaryOperator::Create(Instruction::Xor,rhs,ConstantInt::get(getGlobalContext(),~APInt(resultType->getBitWidth(),0,false)),"",context.currentBlock());
+
+					// ~rh&lh
+					Value* expr1 = BinaryOperator::Create(Instruction::And,cmprh,lhs,"",context.currentBlock());
+					// rh&~lh
+					Value* expr2 = BinaryOperator::Create(Instruction::And,rhs,cmplh,"",context.currentBlock());
+					
+					// ~rh & lh & ~Result
+					Value* expr3 = BinaryOperator::Create(Instruction::And,expr1,cmpResult,"",context.currentBlock());
+					// rh & ~lh & Result
+					Value* expr4 = BinaryOperator::Create(Instruction::And,expr2,exprResult,"",context.currentBlock());
+
+					// ~rh & lh & ~Result | rh & ~lh & Result
+					answer = BinaryOperator::Create(Instruction::Or,expr3,expr4,"",context.currentBlock());
+				}
+
+				APInt bit(resultType->getBitWidth(),0,false);
+				APInt shift = param.integer.zextOrTrunc(resultType->getBitWidth());
+				bit.setBit(param.integer.getLimitedValue());
+				ConstantInt* bitC=ConstantInt::get(getGlobalContext(),bit);
+				ConstantInt* shiftC=ConstantInt::get(getGlobalContext(),shift);
+
+				if (type==TOK_OVERFLOW)
+				{
+					answer=BinaryOperator::Create(Instruction::And,answer,bitC,"",context.currentBlock());
+				}
+				else
+				{
+					answer=BinaryOperator::Create(Instruction::Xor,answer,bitC,"",context.currentBlock());
+				}
+
 				answer=BinaryOperator::Create(Instruction::LShr,answer,shiftC,"",context.currentBlock());
 			}
 			break;
