@@ -28,6 +28,7 @@ class CHandlerDeclaration;
 class CMappingDeclaration;
 class CIdentifier;
 class CodeGenContext;
+class CExpression;
 
 class BitVariable
 {
@@ -40,6 +41,7 @@ public:
 	APInt	shft;
 	bool	aliased;
 	bool	mappingRef;
+	CExpression* mapping;
 	bool	fromExternal;
 	int	pinType;
 	Instruction**	writeAccessor;

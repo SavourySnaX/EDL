@@ -391,7 +391,7 @@ Value* CIdentifier::codeGen(CodeGenContext& context)
 
 	if (var.mappingRef)
 	{
-		return var.value;
+		return var.mapping->codeGen(context);
 	}
 	
 	if (var.fromExternal)
@@ -2036,7 +2036,7 @@ BitVariable COperandMapping::GetBitVariable(CodeGenContext& context,unsigned num
 		// Not an identifier, so we must create an expression maps (this limits the mapping to only being useful for a limited set of things, (but is an accepted part of the language!)
 
 		temp.mappingRef=true;
-		temp.value = mapping->expr.codeGen(context);
+		temp.mapping = &mapping->expr;
 	}
 }
 
