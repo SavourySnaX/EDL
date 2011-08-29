@@ -2117,9 +2117,36 @@ const CString* COperandMapping::GetString(CodeGenContext& context,unsigned num,u
 	return &context.m_mappings[ident.name]->mappings[num]->label;
 }
 
+bool COperandPartial::isStringReturnable()
+{
+	for (int a=0;a<operands.size();a++)
+	{
+		if (operands[a]->isStringReturnable())
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
 const CString* COperandPartial::GetString(CodeGenContext& context,unsigned num,unsigned slot)
 {
-	for (int a=operands.size()-1;a>=0;a--)
+	int a;
+	int cnt=0;
+	// BUGFIX: string generation params are designed to be forward iterated, but the partial loops
+	//go backwards. This fixes the problem
+
+	for (a=0;a<operands.size();a++)
+	{
+		if (operands[a]->isStringReturnable())
+		{
+			cnt++;
+		}
+	}
+
+	slot=(cnt-slot)-1;
+	for (a=operands.size()-1;a>=0;a--)
 	{
 		unsigned tNum=num % operands[a]->GetNumComputableConstants(context);
 		const CString* temp= operands[a]->GetString(context,tNum,slot);

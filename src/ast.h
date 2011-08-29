@@ -64,6 +64,8 @@ public:
 	virtual llvm::APInt GetComputableConstant(CodeGenContext& context,unsigned num)=0;
 	virtual unsigned GetNumComputableConstants(CodeGenContext& context)=0;
 	virtual const CString* GetString(CodeGenContext& context,unsigned num,unsigned slot)=0;
+
+	virtual bool isStringReturnable() { return false; }
 };
 
 class CInteger : public CExpression {
@@ -178,6 +180,8 @@ public:
 	
 	BitVariable GetBitVariable(CodeGenContext& context,unsigned num);
 	virtual const CString* GetString(CodeGenContext& context,unsigned num,unsigned slot);
+
+	virtual bool isStringReturnable() { return true; }
 };
 
 class COperandPartial : public COperand {
@@ -193,6 +197,8 @@ public:
 	virtual llvm::APInt GetComputableConstant(CodeGenContext& context,unsigned num);
 	virtual unsigned GetNumComputableConstants(CodeGenContext& context);
 	virtual const CString* GetString(CodeGenContext& context,unsigned num,unsigned slot);
+	
+	virtual bool isStringReturnable();
 };
 
 class CBinaryOperator : public CExpression {
