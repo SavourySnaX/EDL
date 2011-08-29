@@ -63,7 +63,7 @@ class ExecuteInformation
 {
 public:
     llvm::BasicBlock* blockEndForExecute;
-    llvm::SwitchInst* switchForExecute;	
+    llvm::SwitchInst* switchForExecute;
 };
 
 class CodeGenBlock 
@@ -80,6 +80,8 @@ class CodeGenContext
     std::stack<const CIdentifier *> identifierStack;
     Function *mainFunction;
 
+    void GenerateDisassmTables();
+
 public:
     std::string stateLabelStack;
 
@@ -95,6 +97,16 @@ public:
     bool errorFlagged;
 
     std::map<std::string, std::vector<ExecuteInformation> > executeLocations;
+
+    struct myAPIntCompare
+    {
+	bool operator()(const APInt& s1,const APInt& s2) const
+	{
+		return s1.ult(s2);
+	}
+    };
+
+    std::map<std::string, std::map<APInt,std::string,myAPIntCompare> >     disassemblyTable;
 
     Function* LookupFunctionInExternalModule(const std::string& module, const std::string& name);
     bool LookupBitVariable(BitVariable& outVar,const std::string& module, const std::string& name);

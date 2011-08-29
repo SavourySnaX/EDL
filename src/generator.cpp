@@ -95,6 +95,56 @@ CodeGenContext::CodeGenContext(CodeGenContext* parent)
 		isRoot=false;
 	}
 }
+    
+void CodeGenContext::GenerateDisassmTables()
+{
+	std::map<std::string, std::map<APInt,std::string,myAPIntCompare> >::iterator tableIter;
+
+	for (tableIter=disassemblyTable.begin();tableIter!=disassemblyTable.end();++tableIter)
+	{
+		// Create a global array to hold the table
+		APInt tableSize=tableIter->second.rbegin()->first;
+		PointerType* PointerTy_5 = PointerType::get(IntegerType::get(getGlobalContext(), tableSize.getBitWidth()), 0);
+	       	ArrayType* ArrayTy_4 = ArrayType::get(PointerTy_5, tableSize.getLimitedValue()+1);
+		ConstantPointerNull* const_ptr_13 = ConstantPointerNull::get(PointerTy_5);	
+		GlobalVariable* gvar_array_table = new GlobalVariable(*module,ArrayTy_4,true,GlobalValue::ExternalLinkage,NULL, "DIS_"+tableIter->first);
+		std::vector<Constant*> const_array_9_elems;
+
+		std::map<APInt,std::string,myAPIntCompare>::iterator slot=tableIter->second.begin();
+		APInt trackingSlot(tableSize.getBitWidth(),"0",16);
+
+		while (slot!=tableIter->second.end())
+		{
+			if (slot->first == trackingSlot)
+			{
+				ArrayType* ArrayTy_0 = ArrayType::get(IntegerType::get(getGlobalContext(), 8), slot->second.length()-1);
+				GlobalVariable* gvar_array__str = new GlobalVariable(*module, ArrayTy_0,true,GlobalValue::PrivateLinkage,0,".str"+trackingSlot.toString(16,false));
+				gvar_array__str->setAlignment(1);
+  
+				Constant* const_array_9 = ConstantArray::get(getGlobalContext(), slot->second.substr(1,slot->second.length()-2), true);
+				std::vector<Constant*> const_ptr_12_indices;
+				ConstantInt* const_int64_13 = ConstantInt::get(getGlobalContext(), APInt(64, StringRef("0"), 10));
+				const_ptr_12_indices.push_back(const_int64_13);
+				const_ptr_12_indices.push_back(const_int64_13);
+				Constant* const_ptr_12 = ConstantExpr::getGetElementPtr(gvar_array__str, &const_ptr_12_indices[0], const_ptr_12_indices.size());
+
+				gvar_array__str->setInitializer(const_array_9);
+
+				const_array_9_elems.push_back(const_ptr_12);
+
+				++slot;
+			}
+			else
+			{
+				const_array_9_elems.push_back(const_ptr_13);
+			}
+			trackingSlot++;
+		}
+
+		Constant* const_array_9 = ConstantArray::get(ArrayTy_4, const_array_9_elems);
+		gvar_array_table->setInitializer(const_array_9);
+	}
+}
 
 /* Compile the AST into a module */
 void CodeGenContext::generateCode(CBlock& root)
@@ -126,6 +176,9 @@ void CodeGenContext::generateCode(CBlock& root)
 	root.prePass(*this);	/* Run a pre-pass on the code */
 	root.codeGen(*this);	/* Generate complete code - starting at no block (global space) */
 
+	// Finalise disassembly arrays
+	GenerateDisassmTables();
+	
 	if (errorFlagged)
 	{
 		std::cerr << "Compilation Failed" << std::endl;
@@ -1581,6 +1634,8 @@ void CInstruction::prePass(CodeGenContext& context)
 	block.prePass(context);
 }
 
+
+
 Value* CInstruction::codeGen(CodeGenContext& context)
 {
 	vector<const Type*> argTypes;
@@ -1599,24 +1654,10 @@ Value* CInstruction::codeGen(CodeGenContext& context)
 	{
 		APInt opcode = operands[0]->GetComputableConstant(context,a);
 
-// Generate quick disasm function for this opcode (this is currently crude and only does the Opcode)
+		CString disassembled=processMnemonic(context,mnemonic,opcode,a);
+		CDebugTraceString opcodeString(disassembled);
 
-		PointerType* PointerTy_2 = PointerType::get(IntegerType::get(getGlobalContext(), 8), 0);
-  
-  		FunctionType* ftypeDeb = FunctionType::get(/*Result=*/PointerTy_2,/*Params=*/argTypes,/*isVarArg=*/false);
-		Function* functionDeb = Function::Create(ftypeDeb, GlobalValue::ExternalLinkage, "DIS_"+table.name+opcode.toString(16,false),context.module);
-		BasicBlock *bblockDeb = BasicBlock::Create(getGlobalContext(), "entry", functionDeb, 0);
-
-		context.pushBlock(bblockDeb);
-
-		///do quick trace
-		CDebugTraceString opcodeString(processMnemonic(context,mnemonic,opcode,a));
-
-		ReturnInst::Create(getGlobalContext(),opcodeString.string.codeGen(context),context.currentBlock());
-
-		context.popBlock();
-
-// End disasm function
+		context.disassemblyTable[table.name][opcode]=disassembled.quoted;
 
 		FunctionType *ftype = FunctionType::get(Type::getVoidTy(getGlobalContext()),argTypes, false);
 		Function* function = Function::Create(ftype, GlobalValue::PrivateLinkage, "OPCODE_"+opcodeString.string.quoted.substr(1,mnemonic.quoted.length()-2) + "_" + table.name+opcode.toString(16,false),context.module);
