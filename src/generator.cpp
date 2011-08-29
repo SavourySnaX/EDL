@@ -2220,7 +2220,7 @@ Value* CAffect::codeGen(CodeGenContext& context,Value* exprResult,Value* lhs,Val
 		case TOK_FORCERESET:
 			{
 				APInt bits(resultType->getBitWidth(),0,false);
-				if (TOK_FORCESET)
+				if (type==TOK_FORCESET)
 				{
 					bits = ~bits;
 				}
