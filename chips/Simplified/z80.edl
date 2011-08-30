@@ -1,0 +1,1795 @@
+# Zilog Z80 - This version of the core works like traditional cpu
+#             emulators. Call STEP() to advance 1 instruction. Interfaces
+#             to memory via external C functions, so the 4 calls below
+#             need to be created for the emulation to compile.
+#
+#
+# Because this version of the emulation is not designed as Pin Accurate, we
+#don't use HANDLERs and instead declare 3 functions :
+#
+# STEP() - Execute 1 instruction and set global CYCLES to the number of T states it required.
+# RESET() - Reset the cpu. (Puts PC back at 0).
+# INTERRUPT(opcode) - Interrupt the cpu with opcode to execute (e.g. RST $10)
+#
+
+##
+## TODO : BIT Instruction flags are not correct yet + possibly some other undocumented flags are missing too
+##        Some undocumented instructions are missing
+##        NMI is missing
+
+C_FUNC_EXTERN	[8]	GetByte			[16];
+# unsigned char GetByte(unsigned short);
+#  Called when the cpu wants to read from memory
+C_FUNC_EXTERN		SetByte			[16],[8];
+# void SetByte(unsigned short,unsigned char);
+#  Called when the cpu wants to write to memory
+C_FUNC_EXTERN	[8]	GetPort			[16];
+# unsigned char GetPort(unsigned short);
+#  Called when the cpu wants the value from a given port
+C_FUNC_EXTERN		SetPort			[16],[8];
+# void SetPort(unsigned short,unsiged char);
+#  Called when the cpu wants to write a byte to an output port
+
+# CYCLE COUNTER
+DECLARE CYCLES[8];
+
+# REAL REGISTERS FROM HARDWARE
+DECLARE	AF[16]		ALIAS A[8]:s[1]:z[1]:b5[1]:h[1]:b3[1]:p[1]:n[1]:c[1];	# s sign bit : z zero bit : b5 (undocumented) : h half carry (bit 3-4) 
+										# b3 (undocumented) : p parity : n add/subtract : c full carry (bit 7-8)
+DECLARE	PC[16] 		ALIAS PCH[8]:PCL[8];
+DECLARE	SP[16] 		ALIAS SPH[8]:SPL[8];
+DECLARE	HL[16] 		ALIAS H[8]:L[8];
+DECLARE	DE[16] 		ALIAS D[8]:E[8];
+DECLARE	BC[16] 		ALIAS B[8]:C[8];
+DECLARE IX[16]		ALIAS IXh[8]:IXl[8];
+DECLARE IY[16]		ALIAS IYh[8]:IYl[8];
+DECLARE IR[16]		ALIAS I[8]:r[1]:R[7];					# I interrupt vector : r msb of R (but unnafected apart from store LD R,A) : R is refresh
+
+# Alternative register set
+DECLARE	_AF[16];
+DECLARE	_HL[16];
+DECLARE	_DE[16];
+DECLARE	_BC[16];
+
+# INTERNAL REGISTERS
+DECLARE INTERNAL IM[2];
+DECLARE INTERNAL HALTED[1];
+DECLARE INTERNAL IFF1[1];
+DECLARE INTERNAL IFF2[1];
+
+FUNCTION STEP
+{
+	DECLARE	IR[8];
+
+	IF ~HALTED
+	{
+		IR<-CALL GetByte(PC);
+		PC<-PC+1;
+	}
+
+	EXECUTE	IR;
+}
+
+FUNCTION RESET
+{
+	SP<-$FFFF;
+	AF<-$FFFF;
+	PC<-$0;
+}
+
+FUNCTION INTERNAL PushWord word[16]
+{
+	DECLARE WZ[16] ALIAS W[8]:Z[8];
+	WZ<-word;
+	SP<-SP-1;
+	CALL SetByte(SP,W);
+	SP<-SP-1;
+	CALL SetByte(SP,Z);
+}
+
+FUNCTION INTERNAL word[16] PopWord
+{
+	DECLARE	WZ[16] ALIAS W[8]:Z[8];
+	Z<-CALL GetByte(SP);
+	SP<-SP+1;
+	W<-CALL GetByte(SP);
+	SP<-SP+1;
+	word<-WZ;
+}
+
+FUNCTION INTERRUPT opcode[8]
+{
+	HALTED<-0;
+	IF IFF1
+	{
+		IFF2<-IFF1;
+		IFF1<-0;
+		IF IM == 0
+		{
+			DECLARE	IR[8];
+		
+			IR<-opcode;
+
+			EXECUTE IR;
+			
+			CYCLES<-13;
+		}
+		IF IM == 1
+		{
+			DECLARE IR[8];
+
+			IR<-$FF;
+
+			EXECUTE IR;
+			
+			CYCLES<-13;
+		}
+		IF IM == 2
+		{
+			DECLARE Vector[16] ALIAS VH[8]:VL[8];
+
+			VH<-I;
+			VL<-opcode;
+
+			CALL PushWord(PC);
+
+			PCH <- CALL GetByte(Vector);
+			PCL <- CALL GetByte(Vector+1);
+
+			CYCLES<-19;
+		}
+	}
+}
+
+MAPPING	rS[3]
+{
+	%000	"B"	B;
+	%001	"C"	C;
+	%010	"D"	D;
+	%011	"E"	E;
+	%100	"H"	H;
+	%101	"L"	L;
+	%111	"A"	A;
+}
+
+MAPPING rD[3]
+{
+	%000	"B"	B;
+	%001	"C"	C;
+	%010	"D"	D;
+	%011	"E"	E;
+	%100	"H"	H;
+	%101	"L"	L;
+	%111	"A"	A;
+}
+
+MAPPING	pS[3]
+{
+	%000	"B"	B;
+	%001	"C"	C;
+	%010	"D"	D;
+	%011	"E"	E;
+	%100	"IXh"	IXh;
+	%101	"IXl"	IXl;
+	%111	"A"	A;
+}
+
+MAPPING pD[3]
+{
+	%000	"B"	B;
+	%001	"C"	C;
+	%010	"D"	D;
+	%011	"E"	E;
+	%100	"IXh"	IXh;
+	%101	"IXl"	IXl;
+	%111	"A"	A;
+}
+
+MAPPING	qS[3]
+{
+	%000	"B"	B;
+	%001	"C"	C;
+	%010	"D"	D;
+	%011	"E"	E;
+	%100	"IYh"	IYh;
+	%101	"IYl"	IYl;
+	%111	"A"	A;
+}
+
+MAPPING qD[3]
+{
+	%000	"B"	B;
+	%001	"C"	C;
+	%010	"D"	D;
+	%011	"E"	E;
+	%100	"IYh"	IYh;
+	%101	"IYl"	IYl;
+	%111	"A"	A;
+}
+
+MAPPING	rP[2]
+{
+	%00	"BC"	BC;
+	%01	"DE"	DE;
+	%10	"HL"	HL;
+	%11	"SP"	SP;
+}
+
+MAPPING	pP[2]
+{
+	%00	"BC"	BC;
+	%01	"DE"	DE;
+	%10	"IX"	IX;
+	%11	"SP"	SP;
+}
+
+MAPPING	qP[2]
+{
+	%00	"BC"	BC;
+	%01	"DE"	DE;
+	%10	"IY"	IY;
+	%11	"SP"	SP;
+}
+
+MAPPING	PRP[2]
+{
+	%00	"BC"	BC;
+	%01	"DE"	DE;
+	%10	"HL"	HL;
+	%11	"AF"	AF;
+}
+
+MAPPING	BCDE[2]
+{
+	%00	"BC"	BC;
+	%01	"DE"	DE;
+}
+
+MAPPING CCC[3]
+{
+	%000	"NZ"	z == 0;
+	%001	"Z"	z == 1;
+	%010	"NC"	c == 0;
+	%011	"C"	c == 1;
+	%100	"PO"	p == 0;
+	%101	"PE"	p == 1;
+	%110	"P"	s == 0;
+	%111	"M"	s == 1;
+}
+
+MAPPING SS[2]
+{
+	%00	"NZ"	z == 0;
+	%01	"Z"	z == 1;
+	%10	"NC"	c == 0;
+	%11	"C"	c == 1;
+}
+
+MAPPING NNN[3]
+{
+	%000	"$00"	$00;
+	%001	"$08"	$08;
+	%010	"$10"	$10;
+	%011	"$18"	$18;
+	%100	"$20"	$20;
+	%101	"$28"	$28;
+	%110	"$30"	$30;
+	%111	"$38"	$38;
+}
+
+FUNCTION INTERNAL CompareFlags	src[8]	# Seperated as a function because undocumented bits come from the operand and not from the result
+{
+	AFFECT s AS SIGN, z AS ZERO, h AS CARRY(3), p AS OVERFLOW(7), n AS FORCESET, c AS CARRY(7)
+	{ 
+		A - src
+	};
+	AFFECT b5 AS BIT(5), b3 AS BIT(3)
+	{
+		src
+	};
+}
+
+MAPPING ALU[3]
+{
+	%000	"ADD A,"	AFFECT s AS SIGN, z AS ZERO, b5 AS BIT(5), h AS CARRY(3), b3 AS BIT(3), p AS OVERFLOW(7), n AS FORCERESET, c AS CARRY(7) { A + TMP }->A;
+	%001	"ADC A,"	AFFECT s AS SIGN, z AS ZERO, b5 AS BIT(5), h AS CARRY(3), b3 AS BIT(3), p AS OVERFLOW(7), n AS FORCERESET, c AS CARRY(7) { A + (TMP+c) }->A;
+	%010	"SUB A,"	AFFECT s AS SIGN, z AS ZERO, b5 AS BIT(5), h AS CARRY(3), b3 AS BIT(3), p AS OVERFLOW(7), n AS FORCESET, c AS CARRY(7) { A - TMP }->A;
+	%011	"SBC A,"	AFFECT s AS SIGN, z AS ZERO, b5 AS BIT(5), h AS CARRY(3), b3 AS BIT(3), p AS OVERFLOW(7), n AS FORCESET, c AS CARRY(7) { A - (TMP+c) }->A;
+	%100	"AND "		AFFECT s AS SIGN, z AS ZERO, b5 AS BIT(5), h AS FORCESET,b3 AS BIT(3), p AS PARITYEVEN, n AS FORCERESET, c AS FORCERESET { A & TMP }->A;
+	%101	"XOR "		AFFECT s AS SIGN, z AS ZERO, b5 AS BIT(5), h AS FORCERESET,b3 AS BIT(3), p AS PARITYEVEN, n AS FORCERESET, c AS FORCERESET { A ^ TMP }->A;
+	%110	"OR "		AFFECT s AS SIGN, z AS ZERO, b5 AS BIT(5), h AS FORCERESET,b3 AS BIT(3), p AS PARITYEVEN, n AS FORCERESET, c AS FORCERESET { A | TMP }->A;
+	%111	"CP "		CALL CompareFlags(TMP);
+}
+
+MAPPING INCDEC[3]
+{
+	%100	"INC "		AFFECT s AS SIGN, z AS ZERO, b5 AS BIT(5), h AS CARRY(3), b3 AS BIT(3), p AS OVERFLOW(7), n AS FORCERESET { TMP + 1 }->TMP;
+	%101	"DEC "		AFFECT s AS SIGN, z AS ZERO, b5 AS BIT(5), h AS CARRY(3), b3 AS BIT(3), p AS OVERFLOW(7), n AS FORCESET { TMP - 1 }->TMP;
+}
+
+MAPPING IMM[2]
+{
+	%00	"0"	0;
+	%10	"1"	1;
+	%11	"2"	2;
+}
+
+MAPPING ROT[3]
+{
+	%000	"RLC "		AFFECT s AS SIGN, z AS ZERO, b5 AS BIT(5), h AS FORCERESET, b3 AS BIT(3),p AS PARITYEVEN,n AS FORCERESET { ROL(TMP,c,TMP[7..7],1) }->TMP;
+	%001	"RRC "		AFFECT s AS SIGN, z AS ZERO, b5 AS BIT(5), h AS FORCERESET, b3 AS BIT(3),p AS PARITYEVEN,n AS FORCERESET { ROR(TMP,c,TMP[0..0],1) }->TMP;
+	%010	"RL "		AFFECT s AS SIGN, z AS ZERO, b5 AS BIT(5), h AS FORCERESET, b3 AS BIT(3),p AS PARITYEVEN,n AS FORCERESET { ROL(TMP,c,c,1) }->TMP;
+	%011	"RR "		AFFECT s AS SIGN, z AS ZERO, b5 AS BIT(5), h AS FORCERESET, b3 AS BIT(3),p AS PARITYEVEN,n AS FORCERESET { ROR(TMP,c,c,1) }->TMP;
+	%100	"SLA "		AFFECT s AS SIGN, z AS ZERO, b5 AS BIT(5), h AS FORCERESET, b3 AS BIT(3),p AS PARITYEVEN,n AS FORCERESET { ROL(TMP,c,1,1) }->TMP;
+	%101	"SRA "		AFFECT s AS SIGN, z AS ZERO, b5 AS BIT(5), h AS FORCERESET, b3 AS BIT(3),p AS PARITYEVEN,n AS FORCERESET { ROR(TMP,c,TMP[7..7],1) }->TMP;
+	%110	"SLL "		AFFECT s AS SIGN, z AS ZERO, b5 AS BIT(5), h AS FORCERESET, b3 AS BIT(3),p AS PARITYEVEN,n AS FORCERESET { ROL(TMP,c,0,1) }->TMP;
+	%111	"SRL "		AFFECT s AS SIGN, z AS ZERO, b5 AS BIT(5), h AS FORCERESET, b3 AS BIT(3),p AS PARITYEVEN,n AS FORCERESET { ROR(TMP,c,0,1) }->TMP;
+}
+
+FUNCTION INTERNAL immediate[16] GetImmediateWord
+{
+	DECLARE	WZ[16] 		ALIAS W[8]:Z[8];
+	Z <- CALL GetByte(PC);
+	PC<-PC+1;
+	W <- CALL GetByte(PC);
+	PC<-PC+1;
+	immediate <- WZ;
+}
+
+# Multi Opcode Group
+
+INSTRUCTION		"CB"			%11001011
+{
+	DECLARE IR[8];
+	IR<-CALL GetByte(PC);
+	PC<-PC+1;
+	EXECUTE	CB IR;
+}
+
+INSTRUCTION		"DD"			%11011101
+{
+	DECLARE IR[8];
+	IR<-CALL GetByte(PC);
+	PC<-PC+1;
+	EXECUTE	DD IR;
+}
+
+INSTRUCTION		"ED"			%11101101
+{
+	DECLARE IR[8];
+	IR<-CALL GetByte(PC);
+	PC<-PC+1;
+	EXECUTE	ED IR;
+}
+
+INSTRUCTION		"FD"			%11111101
+{
+	DECLARE IR[8];
+	IR<-CALL GetByte(PC);
+	PC<-PC+1;
+	EXECUTE	FD IR;
+}
+
+INSTRUCTION	DD	"DDCB"			%11001011
+{
+	DECLARE IR[8];
+	IR<-CALL GetByte(PC+1);
+	PC<-PC+2;				# Skips displacement
+	EXECUTE	DDCB IR;
+}
+
+INSTRUCTION	FD	"FDCB"			%11001011
+{
+	DECLARE IR[8];
+	IR<-CALL GetByte(PC+1);
+	PC<-PC+2;				# Skips displacement
+	EXECUTE	FDCB IR;
+}
+
+# 8 Bit Load Group
+
+INSTRUCTION		"LD %M0,%M1"		%01:rD:rS
+{
+	rD <- rS;
+	4->CYCLES;
+}
+
+INSTRUCTION	DD	"LD %M0,%M1"		%01:pD:pS
+{
+	pD <- pS;
+	8->CYCLES;
+}
+
+INSTRUCTION	FD	"LD %M0,%M1"		%01:qD:qS
+{
+	qD <- qS;
+	8->CYCLES;
+}
+
+INSTRUCTION		"LD %M0,%$1"		%00:rD:%110,B2[8]
+{
+	rD <- CALL GetByte(PC);
+	PC<-PC+1;
+	7->CYCLES;
+}
+
+INSTRUCTION	DD	"LD %M0,%$1"		%00:pD:%110,B2[8]
+{
+	pD <- CALL GetByte(PC);
+	PC<-PC+1;
+	11->CYCLES;
+}
+
+INSTRUCTION	FD	"LD %M0,%$1"		%00:qD:%110,B2[8]
+{
+	qD <- CALL GetByte(PC);
+	PC<-PC+1;
+	11->CYCLES;
+}
+
+INSTRUCTION		"LD %M0,(HL)"		%01:rD:%110
+{
+	rD <- CALL GetByte(HL);
+	7->CYCLES;
+}
+
+INSTRUCTION	DD	"LD %M0,(IX+%$1)"	%01:rD:%110,B2[8]
+{
+	rD <- CALL GetByte(IX++CALL GetByte(PC));
+	PC<-PC+1;
+	19->CYCLES;
+}
+
+INSTRUCTION	FD	"LD %M0,(IY+%$1)"	%01:rD:%110,B2[8]
+{
+	rD <- CALL GetByte(IY++CALL GetByte(PC));
+	PC<-PC+1;
+	19->CYCLES;
+}
+
+INSTRUCTION		"LD (HL),%M0"		%01110:rS
+{
+	CALL SetByte(HL,rS);
+	7->CYCLES;
+}
+
+INSTRUCTION	DD	"LD (IX+%$1),%M0"	%01110:rS,B2[8]
+{
+	CALL SetByte(IX++CALL GetByte(PC),rS);
+	PC<-PC+1;
+	19->CYCLES;
+}
+
+INSTRUCTION	FD	"LD (IY+%$1),%M0"	%01110:rS,B2[8]
+{
+	CALL SetByte(IY++CALL GetByte(PC),rS);
+	PC<-PC+1;
+	19->CYCLES;
+}
+
+INSTRUCTION		"LD (HL),%$1"		%00110110,B2[8]
+{
+	CALL SetByte(HL,CALL GetByte(PC));
+	PC<-PC+1;
+	10->CYCLES;
+}
+
+INSTRUCTION	DD	"LD (IX+%$1),%$2"	%00110110,B2[8],B3[8]
+{
+	CALL SetByte(IX++CALL GetByte(PC),CALL GetByte(PC+1));
+	PC<-PC+2;
+	19->CYCLES;
+}
+
+INSTRUCTION	FD	"LD (IY+%$1),%$2"	%00110110,B2[8],B3[8]
+{
+	CALL SetByte(IY++CALL GetByte(PC),CALL GetByte(PC+1));
+	PC<-PC+2;
+	19->CYCLES;
+}
+
+INSTRUCTION		"LD A,(BC)"		%00001010
+{
+	A<-CALL GetByte(BC);
+	7->CYCLES;
+}
+
+INSTRUCTION		"LD A,(DE)"		%00011010
+{
+	A<-CALL GetByte(DE);
+	7->CYCLES;
+}
+
+INSTRUCTION		"LD A,(%$2%$1)"		%00111010,B2[8],B3[8]
+{
+	A<-CALL GetByte(CALL GetImmediateWord());
+	13->CYCLES;
+}
+
+INSTRUCTION		"LD (BC),A"		%00000010
+{
+	CALL SetByte(BC,A);
+	7->CYCLES;
+}
+
+INSTRUCTION		"LD (DE),A"		%00010010
+{
+	CALL SetByte(DE,A);
+	7->CYCLES;
+}
+
+INSTRUCTION		"LD (%$2%$1),A"		%00110010,B2[8],B3[8]
+{
+	CALL SetByte(CALL GetImmediateWord(),A);
+	13->CYCLES;
+}
+
+INSTRUCTION	ED	"LD A,I"		%01010111
+{
+	AFFECT s AS SIGN, z AS ZERO, b5 AS BIT(5), b3 AS BIT(3)
+	{
+		I
+	}->A;
+	n<-0;
+	h<-0;
+	p<-IFF2;
+	9->CYCLES;
+}
+
+INSTRUCTION	ED	"LD A,R"		%01011111
+{
+	AFFECT s AS SIGN, z AS ZERO, b5 AS BIT(5), b3 AS BIT(3)
+	{
+		R
+	}->A;
+	n<-0;
+	h<-0;
+	p<-IFF2;
+	9->CYCLES;
+}
+
+INSTRUCTION	ED	"LD I,A"		%01000111
+{
+	I<-A;
+	9->CYCLES;
+}
+
+INSTRUCTION	ED	"LD R,A"		%01001111
+{
+	R<-A;
+	9->CYCLES;
+}
+
+# 16 Bit Load Group
+
+INSTRUCTION		"LD %M0,%$2%$1"		%00:rP:%0001,B2[8],B3[8]
+{
+	rP<-CALL GetImmediateWord();
+	10->CYCLES;
+}
+
+INSTRUCTION	DD	"LD IX,%$2%$1"		%00100001,B2[8],B3[8]
+{
+	IX<-CALL GetImmediateWord();
+	14->CYCLES;
+}
+
+INSTRUCTION	FD	"LD IY,%$2%$1"		%00100001,B2[8],B3[8]
+{
+	IY<-CALL GetImmediateWord();
+	14->CYCLES;
+}
+
+INSTRUCTION		"LD HL,(%$2%$1)"	%00101010,B2[8],B3[8]
+{
+	DECLARE WZ[16];
+	WZ<-CALL GetImmediateWord();
+	L<-CALL GetByte(WZ);
+	H<-CALL GetByte(WZ+1);
+	16->CYCLES;
+}
+
+INSTRUCTION	ED	"LD %M0,(%$2%$1)"	%01:rP:%1011,B2[8],B3[8]
+{
+	DECLARE WZ[16];
+	DECLARE TMPW[16] ALIAS TMPH[8]:TMPL[8];
+	WZ<-CALL GetImmediateWord();
+	TMPL<-CALL GetByte(WZ);
+	TMPH<-CALL GetByte(WZ+1);
+	rP<-TMPW;
+	20->CYCLES;
+}
+
+INSTRUCTION	DD	"LD IX,(%$2%$1)"	%00101010,B2[8],B3[8]
+{
+	DECLARE WZ[16];
+	WZ<-CALL GetImmediateWord();
+	IXl<-CALL GetByte(WZ);
+	IXh<-CALL GetByte(WZ+1);
+	20->CYCLES;
+}
+
+INSTRUCTION	FD	"LD IY,(%$2%$1)"	%00101010,B2[8],B3[8]
+{
+	DECLARE WZ[16];
+	WZ<-CALL GetImmediateWord();
+	IYl<-CALL GetByte(WZ);
+	IYh<-CALL GetByte(WZ+1);
+	16->CYCLES;
+}
+
+INSTRUCTION		"LD (%$2%$1),HL"	%00100010,B2[8],B3[8]
+{
+	DECLARE WZ[16];
+	WZ<-CALL GetImmediateWord();
+	CALL SetByte(WZ,L);
+	CALL SetByte(WZ+1,H);
+	16->CYCLES;
+}
+
+INSTRUCTION	ED	"LD (%$2%$1),%M0"	%01:rP:%0011,B2[8],B3[8]
+{
+	DECLARE WZ[16];
+	WZ<-CALL GetImmediateWord();
+	CALL SetByte(WZ,rP[0..7]);
+	CALL SetByte(WZ+1,rP[8..15]);
+	20->CYCLES;
+}
+
+INSTRUCTION	DD	"LD (%$2%$1),IX"	%00100010,B2[8],B3[8]
+{
+	DECLARE WZ[16];
+	WZ<-CALL GetImmediateWord();
+	CALL SetByte(WZ,IXl);
+	CALL SetByte(WZ+1,IXh);
+	20->CYCLES;
+}
+
+INSTRUCTION	FD	"LD (%$2%$1),IY"	%00100010,B2[8],B3[8]
+{
+	DECLARE WZ[16];
+	WZ<-CALL GetImmediateWord();
+	CALL SetByte(WZ,IYl);
+	CALL SetByte(WZ+1,IYh);
+	20->CYCLES;
+}
+
+INSTRUCTION		"LD SP,HL"		%11111001
+{
+	SP <- HL;
+	6->CYCLES;
+}
+
+INSTRUCTION	DD	"LD SP,IX"		%11111001
+{
+	SP <- IX;
+	10->CYCLES;
+}
+
+INSTRUCTION	FD	"LD SP,IY"		%11111001
+{
+	SP <- IY;
+	10->CYCLES;
+}
+
+INSTRUCTION		"PUSH %M0"		%11:PRP:%0101
+{
+	CALL PushWord(PRP);
+	11->CYCLES;
+}
+
+INSTRUCTION	DD	"PUSH IX"		%11100101
+{
+	CALL PushWord(IX);
+	15->CYCLES;
+}
+
+INSTRUCTION	FD	"PUSH IY"		%11100101
+{
+	CALL PushWord(IY);
+	15->CYCLES;
+}
+
+INSTRUCTION		"POP %M0"		%11:PRP:%0001
+{
+	PRP<-CALL PopWord();
+	10->CYCLES;
+}
+
+INSTRUCTION	DD	"POP IX"		%11100001
+{
+	IX<-CALL PopWord();
+	14->CYCLES;
+}
+
+INSTRUCTION	FD	"POP IY"		%11100001
+{
+	IY<-CALL PopWord();
+	14->CYCLES;
+}
+
+# Exchange Group
+
+INSTRUCTION		"EX DE,HL"		%11101011
+{
+	HL <-> DE;
+	4->CYCLES;
+}
+
+INSTRUCTION		"EX AF,AF'"		%00001000
+{
+	AF <-> _AF;
+	4->CYCLES;
+}
+
+INSTRUCTION		"EXX"			%11011001
+{
+	BC <-> _BC;
+	DE <-> _DE;
+	HL <-> _HL;
+	4->CYCLES;
+}
+
+INSTRUCTION		"EX (SP),HL"		%11100011
+{
+	DECLARE	WZ[16];
+	WZ<-CALL PopWord();
+	WZ<->HL;
+	CALL PushWord(WZ);
+	19->CYCLES;
+}
+
+INSTRUCTION	DD	"EX (SP),IX"		%11100011
+{
+	DECLARE	WZ[16];
+	WZ<-CALL PopWord();
+	WZ<->IX;
+	CALL PushWord(WZ);
+	23->CYCLES;
+}
+
+INSTRUCTION	FD	"EX (SP),IY"		%11100011
+{
+	DECLARE	WZ[16];
+	WZ<-CALL PopWord();
+	WZ<->IY;
+	CALL PushWord(WZ);
+	23->CYCLES;
+}
+
+# Block Transfer Group
+
+FUNCTION INTERNAL BlockTransferFlags
+{
+	DECLARE TMP[8];
+	TMP<-CALL GetByte(HL);
+	AFFECT b5 AS BIT(1),b3 AS BIT(3),n AS FORCERESET,h AS FORCERESET
+	{
+		A + TMP
+	};
+	AFFECT p AS NONZERO
+	{
+		BC - 1
+	}->BC;
+	CALL SetByte(DE,TMP);
+	16->CYCLES;
+}
+
+INSTRUCTION	ED	"LDI"			%10100000
+{
+	CALL BlockTransferFlags();
+	DE<-DE+1;
+	HL<-HL+1;
+}
+
+INSTRUCTION	ED	"LDIR"			%10110000
+{
+	CALL BlockTransferFlags();
+	DE<-DE+1;
+	HL<-HL+1;
+	IF p
+	{
+		PC<-PC-2;
+		21->CYCLES;
+	}
+}
+
+INSTRUCTION	ED	"LDD"			%10101000
+{
+	CALL BlockTransferFlags();
+	DE<-DE-1;
+	HL<-HL-1;
+}
+
+INSTRUCTION	ED	"LDDR"			%10111000
+{
+	CALL BlockTransferFlags();
+	DE<-DE-1;
+	HL<-HL-1;
+	IF p
+	{
+		PC<-PC-2;
+		21->CYCLES;
+	}
+}
+
+# Search Group
+
+FUNCTION INTERNAL SearchFlags
+{
+	DECLARE TMP[8];
+	TMP<-CALL GetByte(HL);
+
+	AFFECT s AS SIGN, z AS ZERO, h AS CARRY(3)
+	{
+		A - TMP
+	};
+	n<-1;
+
+	AFFECT b5 AS BIT(1),b3 AS BIT(3)
+	{
+		A - (TMP+h)
+	};
+	AFFECT p AS NONZERO
+	{
+		BC - 1
+	}->BC;
+	16->CYCLES;
+}
+
+INSTRUCTION	ED	"CPI"			%10100001
+{
+	CALL SearchFlags();
+	HL<-HL+1;
+}
+
+INSTRUCTION	ED	"CPIR"			%10110001
+{
+	CALL SearchFlags();
+	HL<-HL+1;
+	IF p & ~z
+	{
+		PC<-PC-2;
+		21->CYCLES;
+	}
+}
+
+INSTRUCTION	ED	"CPD"			%10101001
+{
+	CALL SearchFlags();
+	HL<-HL-1;
+}
+
+INSTRUCTION	ED	"LDDR"			%10111001
+{
+	CALL SearchFlags();
+	HL<-HL-1;
+	IF p & ~z
+	{
+		PC<-PC-2;
+		21->CYCLES;
+	}
+}
+
+# 8 Bit Arithmetic And Logical Group
+
+INSTRUCTION		"%M0%M1"		%10:ALU:rS
+{
+	DECLARE TMP[8];
+	TMP<-rS;
+	ALU;
+	4->CYCLES;
+}
+
+INSTRUCTION	DD	"%M0%M1"		%10:ALU:pS
+{
+	DECLARE TMP[8];
+	TMP<-pS;
+	ALU;
+	8->CYCLES;
+}
+
+INSTRUCTION	FD	"%M0%M1"		%10:ALU:qS
+{
+	DECLARE TMP[8];
+	TMP<-qS;
+	ALU;
+	8->CYCLES;
+}
+
+INSTRUCTION		"%M0%$1"		%11:ALU:%110,B2[8]
+{
+	DECLARE TMP[8];
+	TMP<-CALL GetByte(PC);
+	PC<-PC+1;
+	ALU;
+	7->CYCLES;
+}
+
+INSTRUCTION		"%M0(HL)"		%10:ALU:%110
+{
+	DECLARE TMP[8];
+	TMP<-CALL GetByte(HL);
+	ALU;
+	7->CYCLES;
+}
+
+INSTRUCTION	DD	"%M0(IX+%$1)"		%10:ALU:%110,B2[8]
+{
+	DECLARE TMP[8];
+	TMP <- CALL GetByte(IX++CALL GetByte(PC));
+	PC<-PC+1;
+	ALU;
+	19->CYCLES;
+}
+
+INSTRUCTION	FD	"%M0(IY+%$1)"		%10:ALU:%110,B2[8]
+{
+	DECLARE TMP[8];
+	TMP <- CALL GetByte(IY++CALL GetByte(PC));
+	PC<-PC+1;
+	ALU;
+	19->CYCLES;
+}
+
+INSTRUCTION		"%M1%M0"		%00:rD:INCDEC
+{
+	DECLARE TMP[8];
+	TMP <- rD;
+	INCDEC;
+	rD <- TMP;
+	4->CYCLES;
+}
+
+INSTRUCTION	DD	"%M1%M0"		%00:pD:INCDEC
+{
+	DECLARE TMP[8];
+	TMP <- pD;
+	INCDEC;
+	pD <- TMP;
+	8->CYCLES;
+}
+
+INSTRUCTION	FD	"%M1%M0"		%00:qD:INCDEC
+{
+	DECLARE TMP[8];
+	TMP <- qD;
+	INCDEC;
+	qD <- TMP;
+	8->CYCLES;
+}
+
+INSTRUCTION		"%M0(HL)"		%00110:INCDEC
+{
+	DECLARE TMP[8];
+	TMP <- CALL GetByte(HL);
+	INCDEC;
+	CALL SetByte(HL,TMP);
+	11->CYCLES;
+}
+
+INSTRUCTION	DD	"%M0(IX+%$1)"		%00110:INCDEC,B2[8]
+{
+	DECLARE TMP[8];
+	DECLARE EA[16];
+	EA<-IX++CALL GetByte(PC);
+	PC<-PC+1;
+	TMP <- CALL GetByte(EA);
+	INCDEC;
+	CALL SetByte(EA,TMP);
+	23->CYCLES;
+}
+
+INSTRUCTION	FD	"%M0(IY+%$1)"		%00110:INCDEC,B2[8]
+{
+	DECLARE TMP[8];
+	DECLARE EA[16];
+	EA<-IY++CALL GetByte(PC);
+	PC<-PC+1;
+	TMP <- CALL GetByte(EA);
+	INCDEC;
+	CALL SetByte(EA,TMP);
+	23->CYCLES;
+}
+
+# General Purpose Arithmetic And Control Group
+
+INSTRUCTION		"DAA"			%00100111
+{
+	DECLARE TMP[8];
+	TMP<-A;
+	IF n == 1
+	{
+		IF h | ((TMP&$F)>9)
+		{
+			TMP<-TMP-6;
+		}
+		IF c | (TMP>$99)
+		{
+			TMP<-TMP-$60;
+		}
+	}
+	IF n == 0
+	{
+		IF h | ((TMP&$F)>9)
+		{
+			TMP<-TMP+6;
+		}
+		IF c | (TMP>$99)
+		{
+			TMP<-TMP+$60;
+		}
+	}
+	
+	AFFECT s AS SIGN,z AS ZERO,b5 AS BIT(5),b3 AS BIT(3),p AS PARITYEVEN
+	{
+		TMP
+	}->A;
+	
+	c<-A>$99;
+	h<-(A^TMP)[3..3];
+	4->CYCLES;
+}
+
+INSTRUCTION		"CPL"			%00101111
+{
+	AFFECT b5 AS BIT(5),h AS FORCESET,b3 AS BIT(3),n AS FORCESET
+	{
+		~A
+	}->A;
+	4->CYCLES;
+}
+
+INSTRUCTION	ED	"NEG"			%01000100
+{
+	AFFECT s AS SIGN, z AS ZERO, b5 AS BIT(5), h AS CARRY(3), b3 AS BIT(3), p AS OVERFLOW(7), n AS FORCESET, c AS CARRY(7) 
+	{
+		0 - A
+	}->A;
+	8->CYCLES;
+}
+
+INSTRUCTION		"CCF"			%00111111
+{
+	h<-c;
+	AFFECT b5 AS BIT(5),b3 AS BIT(3),n AS FORCERESET
+	{
+		A
+	};
+	c<-~c;
+	4->CYCLES;
+}
+
+INSTRUCTION		"SCF"			%00110111
+{
+	AFFECT b5 AS BIT(5),h AS FORCERESET,b3 AS BIT(3),n AS FORCERESET
+	{
+		A
+	};
+	c<-1;
+	4->CYCLES;
+}
+
+INSTRUCTION		"NOP"			%00000000
+{
+	4->CYCLES;
+}
+
+INSTRUCTION		"HALT"			%01110110
+{
+	HALTED<-1;
+	4->CYCLES;
+}
+
+INSTRUCTION		"DI"			%11110011
+{
+	IFF1<-0;
+	IFF2<-0;
+	4->CYCLES;
+}
+
+INSTRUCTION		"EI"			%11111011
+{
+	IFF1<-1;
+	IFF2<-1;
+	4->CYCLES;
+}
+
+INSTRUCTION	ED	"IM %M0"		%010:IMM:%110
+{
+	IM<-IMM;
+	8->CYCLES;
+}
+
+# 16 Bit Arithmetic Group
+
+INSTRUCTION		"ADD HL,%M0"		%00:rP:%1001
+{
+	AFFECT b5 AS BIT(13),h AS CARRY(11),b3 AS BIT(11),n AS FORCERESET,c AS CARRY(15)
+	{
+		HL + rP
+	}->HL;
+	11->CYCLES;
+}
+
+INSTRUCTION	ED	"ADC HL,%M0"		%01:rP:%1010
+{
+	AFFECT s AS SIGN, z AS ZERO,b5 AS BIT(13),h AS CARRY(11),b3 AS BIT(11),p AS OVERFLOW(15),n AS FORCERESET,c AS CARRY(15)
+	{
+		HL + (rP+c)
+	}->HL;
+	15->CYCLES;
+}
+
+INSTRUCTION	ED	"SBC HL,%M0"		%01:rP:%0010
+{
+	AFFECT s AS SIGN, z AS ZERO,b5 AS BIT(13),h AS CARRY(11),b3 AS BIT(11),p AS OVERFLOW(15),n AS FORCESET,c AS CARRY(15)
+	{
+		HL - (rP+c)
+	}->HL;
+	15->CYCLES;
+}
+
+INSTRUCTION	DD	"ADD IX,%M0"		%00:pP:%1001
+{
+	AFFECT b5 AS BIT(13),h AS CARRY(11),b3 AS BIT(11),n AS FORCERESET,c AS CARRY(15)
+	{
+		IX + pP
+	}->IX;
+	15->CYCLES;
+}
+
+INSTRUCTION	FD	"ADD IY,%M0"		%00:qP:%1001
+{
+	AFFECT b5 AS BIT(13),h AS CARRY(11),b3 AS BIT(11),n AS FORCERESET,c AS CARRY(15)
+	{
+		IY + qP
+	}->IY;
+	15->CYCLES;
+}
+
+INSTRUCTION		"INC %M0"		%00:rP:%0011
+{
+	rP<-rP+1;
+	6->CYCLES;
+}
+
+INSTRUCTION	DD	"INC IX"		%00100011
+{
+	IX<-IX+1;
+	10->CYCLES;
+}
+INSTRUCTION	FD	"INC IY"		%00100011
+{
+	IY<-IY+1;
+	10->CYCLES;
+}
+
+INSTRUCTION		"DEC %M0"		%00:rP:%1011
+{
+	rP<-rP-1;
+	6->CYCLES;
+}
+
+INSTRUCTION	DD	"DEC IX"		%00101011
+{
+	IX<-IX-1;
+	10->CYCLES;
+}
+
+INSTRUCTION	FD	"DEC IY"		%00101011
+{
+	IY<-IY-1;
+	10->CYCLES;
+}
+
+# Rotate And Shift Group
+
+INSTRUCTION		"RLCA"			%00000111
+{
+	AFFECT b5 AS BIT(5), h AS FORCERESET, b3 AS BIT(3),n AS FORCERESET
+	{
+		ROL(A,c,A[7..7],1)
+	}->A;
+	4->CYCLES;
+}
+
+INSTRUCTION		"RLA"			%00010111
+{
+	AFFECT b5 AS BIT(5), h AS FORCERESET, b3 AS BIT(3),n AS FORCERESET
+	{
+		ROL(A,c,c,1)
+	}->A;
+	4->CYCLES;
+}
+
+INSTRUCTION		"RRCA"			%00001111
+{
+	AFFECT b5 AS BIT(5), h AS FORCERESET, b3 AS BIT(3),n AS FORCERESET
+	{
+		ROR(A,c,A[0..0],1)
+	}->A;
+	4->CYCLES;
+}
+
+INSTRUCTION		"RRA"			%00011111
+{
+	AFFECT b5 AS BIT(5), h AS FORCERESET, b3 AS BIT(3),n AS FORCERESET
+	{
+		ROR(A,c,c,1)
+	}->A;
+	4->CYCLES;
+}
+
+INSTRUCTION	CB	"%M0%M1"		%00:ROT:rD
+{
+	DECLARE TMP[8];
+	TMP<-rD;
+	ROT;
+	rD<-TMP;
+	8->CYCLES;
+}
+
+INSTRUCTION	CB	"%M0(HL)"		%00:ROT:%110
+{
+	DECLARE TMP[8];
+	TMP<-CALL GetByte(HL);
+	ROT;
+	CALL SetByte(HL,TMP);
+	15->CYCLES;
+}
+
+INSTRUCTION	DDCB	"%M0(IX+%$-1)"		%00:ROT:%110,B[8]		# Technically the operand for displacement occurs before the opcode..
+{
+	DECLARE TMP[8];
+	DECLARE EA[16];
+	EA<-IX++CALL GetByte(PC-2);
+	TMP<-CALL GetByte(EA);
+	ROT;
+	CALL SetByte(EA,TMP);
+	23->CYCLES;
+}
+
+INSTRUCTION	FDCB	"%M0(IY+%$-1)"		%00:ROT:%110,B[8]
+{
+	DECLARE TMP[8];
+	DECLARE EA[16];
+	EA<-IY++CALL GetByte(PC-2);
+	TMP<-CALL GetByte(EA);
+	ROT;
+	CALL SetByte(EA,TMP);
+	23->CYCLES;
+}
+
+INSTRUCTION	DDCB	"%M0(IX+%$-1),%M1"	%00:ROT:rD,B[8]	
+{
+	DECLARE TMP[8];
+	DECLARE EA[16];
+	EA<-IX++CALL GetByte(PC-2);
+	TMP<-CALL GetByte(EA);
+	ROT;
+	CALL SetByte(EA,TMP);
+	rD<-TMP;
+	23->CYCLES;
+}
+
+INSTRUCTION	FDCB	"%M0(IY+%$-1),%M1"	%00:ROT:rD,B[8]
+{
+	DECLARE TMP[8];
+	DECLARE EA[16];
+	EA<-IY++CALL GetByte(PC-2);
+	TMP<-CALL GetByte(EA);
+	ROT;
+	CALL SetByte(EA,TMP);
+	rD<-TMP;
+	23->CYCLES;
+}
+
+INSTRUCTION	ED	"RLD"			%01101111
+{
+	DECLARE TMP[8];
+	DECLARE TMPROT[4];
+	TMP<-CALL GetByte(HL);
+	TMP<-ROL(TMP,TMPROT,A[0..3],4);
+	AFFECT s AS SIGN,z AS ZERO,b5 AS BIT(5),h AS FORCERESET,b3 AS BIT(3),p AS PARITYEVEN,n AS FORCESET
+	{
+		(A & $F0) | TMPROT
+	}->A;
+	CALL SetByte(HL,TMP);
+	18->CYCLES;
+}
+
+INSTRUCTION	ED	"RRD"			%01100111
+{
+	DECLARE TMP[8];
+	DECLARE TMPROT[4];
+	TMP<-CALL GetByte(HL);
+	TMP<-ROR(TMP,TMPROT,A[0..3],4);
+	AFFECT s AS SIGN,z AS ZERO,b5 AS BIT(5),h AS FORCERESET,b3 AS BIT(3),p AS PARITYEVEN,n AS FORCESET
+	{
+		(A & $F0) | TMPROT
+	}->A;
+	CALL SetByte(HL,TMP);
+	18->CYCLES;
+}
+
+# Bit Set Reset And Test Group
+
+MAPPING BITINDEX[3]
+{
+	%000	"0"		%00000001;
+	%001	"1"		%00000010;
+	%010	"2"		%00000100;
+	%011	"3"		%00001000;
+	%100	"4"		%00010000;
+	%101	"5"		%00100000;
+	%110	"6"		%01000000;
+	%111	"7"		%10000000;
+}
+
+MAPPING SETRES[2]
+{
+	%10	"RES "		TMP & (~TMP2) -> TMP;
+	%11	"SET "		TMP | TMP2 -> TMP;
+}
+
+INSTRUCTION	CB	"BIT %M0,%M1"		%01:BITINDEX:rS
+{
+	AFFECT s AS SIGN,z AS ZERO,b5 AS BIT(5),h AS FORCESET,b3 AS BIT(3),p AS PARITYEVEN,n AS FORCERESET
+	{
+		rS & BITINDEX
+	};
+	8->CYCLES;
+}
+
+INSTRUCTION	CB	"BIT %M0,(HL)"		%01:BITINDEX:%110
+{
+	AFFECT s AS SIGN,z AS ZERO,b5 AS BIT(5),h AS FORCESET,b3 AS BIT(3),p AS PARITYEVEN,n AS FORCERESET
+	{
+		CALL GetByte(HL) & BITINDEX
+	};
+	12->CYCLES;
+}
+
+INSTRUCTION	DDCB	"BIT %M0,(IX+%$-1)"	%01:BITINDEX:UNDOCUMENTED[3],B2[8]
+{
+	DECLARE EA[16];
+	EA<-IX ++ CALL GetByte(PC-2);
+	AFFECT s AS SIGN,z AS ZERO,b5 AS BIT(5),h AS FORCESET,b3 AS BIT(3),p AS PARITYEVEN,n AS FORCERESET
+	{
+		CALL GetByte(EA) & BITINDEX
+	};
+	20->CYCLES;
+}
+
+INSTRUCTION	FDCB	"BIT %M0,(IY+%$-1)"	%01:BITINDEX:UNDOCUMENTED[3],B2[8]
+{
+	DECLARE EA[16];
+	EA<-IY ++ CALL GetByte(PC-2);
+	AFFECT s AS SIGN,z AS ZERO,b5 AS BIT(5),h AS FORCESET,b3 AS BIT(3),p AS PARITYEVEN,n AS FORCERESET
+	{
+		CALL GetByte(EA) & BITINDEX
+	};
+	20->CYCLES;
+}
+
+INSTRUCTION	CB	"%M0%M1,%M2"		SETRES:BITINDEX:rD
+{
+	DECLARE TMP[8];
+	DECLARE TMP2[8];
+	TMP<-rD;
+	TMP2<-BITINDEX;
+	SETRES;
+	rD<-TMP;
+	8->CYCLES;
+}
+
+INSTRUCTION	CB	"%M0%M1,(HL)"		SETRES:BITINDEX:%110
+{
+	DECLARE TMP[8];
+	DECLARE TMP2[8];
+	TMP<-CALL GetByte(HL);
+	TMP2<-BITINDEX;
+	SETRES;
+	CALL SetByte(HL,TMP);
+	15->CYCLES;
+}
+
+INSTRUCTION	DDCB	"%M0%M1,(IX+%$-1)"	SETRES:BITINDEX:%110,B2[8]
+{
+	DECLARE TMP[8];
+	DECLARE TMP2[8];
+	DECLARE EA[16];
+	EA<-IX ++ CALL GetByte(PC-2);
+	TMP<-CALL GetByte(EA);
+	TMP2<-BITINDEX;
+	SETRES;
+	CALL SetByte(EA,TMP);
+	23->CYCLES;
+}
+
+INSTRUCTION	FDCB	"%M0%M1,(IY+%$-1)"	SETRES:BITINDEX:%110,B2[8]
+{
+	DECLARE TMP[8];
+	DECLARE TMP2[8];
+	DECLARE EA[16];
+	EA<-IY ++ CALL GetByte(PC-2);
+	TMP<-CALL GetByte(EA);
+	TMP2<-BITINDEX;
+	SETRES;
+	CALL SetByte(EA,TMP);
+	23->CYCLES;
+}
+
+INSTRUCTION	DDCB	"%M0%M1,(IX+%$-1),%M2"	SETRES:BITINDEX:rD,B2[8]
+{
+	DECLARE TMP[8];
+	DECLARE TMP2[8];
+	DECLARE EA[16];
+	EA<-IX ++ CALL GetByte(PC-2);
+	TMP<-CALL GetByte(EA);
+	TMP2<-BITINDEX;
+	SETRES;
+	CALL SetByte(EA,TMP);
+	rD<-TMP;
+	23->CYCLES;
+}
+
+INSTRUCTION	FDCB	"%M0%M1,(IY+%$-1),%M2"	SETRES:BITINDEX:rD,B2[8]
+{
+	DECLARE TMP[8];
+	DECLARE TMP2[8];
+	DECLARE EA[16];
+	EA<-IY ++ CALL GetByte(PC-2);
+	TMP<-CALL GetByte(EA);
+	TMP2<-BITINDEX;
+	SETRES;
+	CALL SetByte(EA,TMP);
+	rD<-TMP;
+	23->CYCLES;
+}
+
+# Jump Group
+
+INSTRUCTION		"JP %$2%$1"		%11000011,B2[8],B3[8]
+{
+	PC<-CALL GetImmediateWord();
+	10->CYCLES;
+}
+
+INSTRUCTION		"JP %M0,%$2%$1"		%11:CCC:%010,B2[8],B3[8]
+{
+	DECLARE	WZ[16];
+	WZ<-CALL GetImmediateWord();
+	IF CCC
+	{
+		PC<-WZ;
+	}
+	10->CYCLES;
+}
+
+INSTRUCTION		"JR %$1"		%00011000,B2[8]
+{
+	PC<-(PC+1) ++ CALL GetByte(PC);
+	12->CYCLES;
+}
+
+INSTRUCTION		"JR %M0,%$1"		%001:SS:%000,B2[8]
+{
+	DECLARE	WZ[16];
+	WZ<-(PC+1) ++ CALL GetByte(PC);
+	PC<-PC+1;
+	7->CYCLES;
+	IF SS
+	{
+		PC<-WZ;
+		12->CYCLES;
+	}
+}
+
+INSTRUCTION		"JP (HL)"		%11101001
+{
+	PC<-HL;
+	4->CYCLES;
+}
+
+INSTRUCTION	DD	"JP (IX)"		%11101001
+{
+	PC<-IX;
+	8->CYCLES;
+}
+
+INSTRUCTION	FD	"JP (IY)"		%11101001
+{
+	PC<-IY;
+	8->CYCLES;
+}
+
+INSTRUCTION		"DJNZ %$1"		%00010000,B2[8]
+{
+	DECLARE TMP[8];
+	TMP<-CALL GetByte(PC);
+	PC<-PC+1;
+	B<-B-1;
+	8->CYCLES;
+	IF B!=0
+	{
+		PC<-PC ++ TMP;
+		13->CYCLES;
+	}
+}
+
+# Call And Return Group
+
+INSTRUCTION		"CALL %$2%$1"		%11001101,B2[8],B3[8]
+{
+	DECLARE	WZ[16] 		ALIAS W[8]:Z[8];
+	WZ<-CALL GetImmediateWord();
+	CALL PushWord(PC);
+	PC<-WZ;
+	17->CYCLES;
+}
+
+INSTRUCTION		"CALL %M0,%$2%$1"	%11:CCC:%100,B2[8],B3[8]
+{
+	DECLARE	WZ[16] 		ALIAS W[8]:Z[8];
+	WZ<-CALL GetImmediateWord();
+	10->CYCLES;
+	IF CCC
+	{
+		CALL PushWord(PC);
+		PC<-WZ;
+		17->CYCLES;
+	}
+}
+
+INSTRUCTION		"RET"			%11001001
+{
+	PC<-CALL PopWord();
+	10->CYCLES;
+}
+
+INSTRUCTION		"RET %M0"		%11:CCC:%000
+{
+	5->CYCLES;
+	IF CCC
+	{
+		PC<-CALL PopWord();
+		11->CYCLES;
+	}
+}
+
+INSTRUCTION	ED	"RETI"			%01001101
+{
+	PC<-CALL PopWord();
+	IFF1<-IFF2;
+	14->CYCLES;
+}
+
+INSTRUCTION	ED	"RETN"			%01000101
+{
+	PC<-CALL PopWord();
+	IFF1<-IFF2;
+	14->CYCLES;
+}
+
+INSTRUCTION		"RST %M0"		%11:NNN:%111
+{
+	CALL PushWord(PC);
+	0->PCH;
+	NNN->PCL;
+	11->CYCLES;
+}
+
+# Input And Output Group
+
+INSTRUCTION		"IN A,(%$1)"		%11011011,B2[8]
+{
+	DECLARE	WZ[16] 		ALIAS W[8]:Z[8];
+	Z<-CALL GetByte(PC);
+	PC<-PC+1;
+	W<-A;
+	A<-CALL GetPort(WZ);
+	11->CYCLES;
+}
+
+INSTRUCTION	ED	"IN %M0,(C)"		%01:rD:%000
+{
+	AFFECT s AS SIGN,z AS ZERO,b5 AS BIT(5),h AS FORCERESET,b3 AS BIT(3),p AS PARITYEVEN,n AS FORCERESET
+	{
+		CALL GetPort(BC)
+	}->rD;
+	12->CYCLES;
+}
+
+INSTRUCTION	ED	"IN F,(C)"		%01110000
+{
+	AFFECT s AS SIGN,z AS ZERO,b5 AS BIT(5),h AS FORCERESET,b3 AS BIT(3),p AS PARITYEVEN,n AS FORCERESET
+	{
+		CALL GetPort(BC)
+	};
+	12->CYCLES;
+}
+
+FUNCTION INTERNAL INIFlags
+{
+	DECLARE TMP[8];
+	AFFECT s AS SIGN,z AS ZERO,b5 AS BIT(5),b3 AS BIT(3)
+	{
+		B-1
+	}->B;
+	AFFECT n AS BIT(7)
+	{
+		CALL GetPort(BC)
+	}->TMP;
+	CALL SetByte(HL,TMP);
+	AFFECT c AS CARRY(7)
+	{
+		TMP + (C+1)
+	}->TMP;
+	AFFECT p AS PARITYEVEN
+	{
+		(TMP&7) ^ B
+	};
+	h<-c;
+	HL<-HL+1;
+	16->CYCLES;
+}
+
+INSTRUCTION	ED	"INI"			%10100010
+{
+	CALL INIFlags();
+}
+
+INSTRUCTION	ED	"INIR"			%10110010
+{
+	CALL INIFlags();
+	IF B!=0
+	{
+		PC<-PC-2;
+		21->CYCLES;
+	}
+}
+
+FUNCTION INTERNAL INDFlags
+{
+	DECLARE TMP[8];
+	AFFECT s AS SIGN,z AS ZERO,b5 AS BIT(5),b3 AS BIT(3)
+	{
+		B-1
+	}->B;
+	AFFECT n AS BIT(7)
+	{
+		CALL GetPort(BC)
+	}->TMP;
+	CALL SetByte(HL,TMP);
+	AFFECT c AS CARRY(7)
+	{
+		TMP + (C-1)
+	}->TMP;
+	AFFECT p AS PARITYEVEN
+	{
+		(TMP&7) ^ B
+	};
+	h<-c;
+	HL<-HL-1;
+	16->CYCLES;
+}
+
+INSTRUCTION	ED	"IND"			%10101010
+{
+	CALL INDFlags();
+}
+
+INSTRUCTION	ED	"INDR"			%10111010
+{
+	CALL INDFlags();
+	IF B!=0
+	{
+		PC<-PC-2;
+		21->CYCLES;
+	}
+}
+
+INSTRUCTION		"OUT (%$1),A"		%11010011,B2[8]
+{
+	DECLARE	WZ[16] 		ALIAS W[8]:Z[8];
+	Z<-CALL GetByte(PC);
+	PC<-PC+1;
+	W<-A;
+	CALL SetPort(WZ,A);
+	11->CYCLES;
+}
+
+INSTRUCTION	ED	"OUT (C),%M0"		%01:rS:%001
+{
+	CALL SetPort(BC,rS);
+	12->CYCLES;
+}
+
+INSTRUCTION	ED	"OUT (C),0"		%01110001
+{
+	CALL SetPort(BC,0);
+	12->CYCLES;
+}
+
+FUNCTION INTERNAL OUTIFlags
+{
+	DECLARE TMP[8];
+	AFFECT n AS BIT(7)
+	{
+		CALL GetByte(HL)
+	}->TMP;
+	CALL SetPort(BC,HL);
+	AFFECT s AS SIGN,z AS ZERO,b5 AS BIT(5),b3 AS BIT(3)
+	{
+		B-1
+	}->B;
+	HL<-HL+1;
+	AFFECT c AS CARRY(7)
+	{
+		TMP + L
+	}->TMP;
+	AFFECT p AS PARITYEVEN
+	{
+		(TMP&7) ^ B
+	};
+	h<-c;
+	16->CYCLES;
+}
+
+INSTRUCTION	ED	"OUTI"			%10100011
+{
+	CALL OUTIFlags();
+}
+
+INSTRUCTION	ED	"OTIR"			%10110011
+{
+	CALL OUTIFlags();
+	IF B!=0
+	{
+		PC<-PC-2;
+		21->CYCLES;
+	}
+}
+
+FUNCTION INTERNAL OUTDFlags
+{
+	DECLARE TMP[8];
+	AFFECT n AS BIT(7)
+	{
+		CALL GetByte(HL)
+	}->TMP;
+	CALL SetPort(BC,HL);
+	AFFECT s AS SIGN,z AS ZERO,b5 AS BIT(5),b3 AS BIT(3)
+	{
+		B-1
+	}->B;
+	HL<-HL-1;
+	AFFECT c AS CARRY(7)
+	{
+		TMP + L
+	}->TMP;
+	AFFECT p AS PARITYEVEN
+	{
+		(TMP&7) ^ B
+	};
+	h<-c;
+	16->CYCLES;
+}
+
+INSTRUCTION	ED	"OUTD"			%10101011
+{
+	CALL OUTDFlags();
+}
+
+INSTRUCTION	ED	"OTDR"			%10111011
+{
+	CALL OUTDFlags();
+	IF B!=0
+	{
+		PC<-PC-2;
+		21->CYCLES;
+	}
+}
+
