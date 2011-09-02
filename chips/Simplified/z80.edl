@@ -1021,13 +1021,14 @@ INSTRUCTION		"DAA"			%00100111
 		}
 	}
 	
+	h<-(A^TMP)[4..4];
+	c<-c | (A>$99);
+
 	AFFECT s AS SIGN,z AS ZERO,b5 AS BIT(5),b3 AS BIT(3),p AS PARITYEVEN
 	{
 		TMP
 	}->A;
 	
-	c<-A>$99;
-	h<-(A^TMP)[3..3];
 	4->CYCLES;
 }
 
