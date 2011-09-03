@@ -29,6 +29,9 @@ class CMappingDeclaration;
 class CIdentifier;
 class CodeGenContext;
 class CExpression;
+class CAffect;
+
+typedef std::vector<CAffect*> AffectorList;
 
 class BitVariable
 {
@@ -97,6 +100,8 @@ public:
     bool errorFlagged;
 
     std::map<std::string, std::vector<ExecuteInformation> > executeLocations;
+
+    AffectorList	curAffectors;
 
     struct myAPIntCompare
     {

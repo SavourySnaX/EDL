@@ -51,6 +51,7 @@ public:
 
 class CExpression : public CNode {
 public:
+	virtual bool IsLeaf() { return true; }
 	virtual bool IsIdentifierExpression() { return false; }
 	virtual bool IsCarryExpression() { return false; }
 };
@@ -214,6 +215,8 @@ public:
 	llvm::Value* codeGen(CodeGenContext& context,llvm::Value* left,llvm::Value* right);
 
 	virtual bool IsCarryExpression();
+	
+	virtual bool IsLeaf() { return false; }
 };
 
 class CCastOperator : public CExpression {
@@ -228,6 +231,8 @@ public:
 		lhs(lhs), beg(beg), end(end) { }
 	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
+	
+	virtual bool IsLeaf() { if (lhs.IsLeaf()) return true; return false; }
 };
 
 class CRotationOperator : public CExpression {
@@ -251,6 +256,8 @@ public:
 
 	CMapping(CInteger& selector,CString& label,CExpression& expr) :
 		expr(expr), selector(selector), label(label) { }
+	
+	virtual bool IsLeaf() { return false; }
 };
 
 class CAssignment : public CExpression {
@@ -261,6 +268,8 @@ public:
 		lhs(lhs), rhs(rhs) { }
 	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
+	
+	virtual bool IsLeaf() { return false; }
 
 	static llvm::Value* generateAssignment(BitVariable& to,const std::string& moduleName, const std::string& name,llvm::Value* from,CodeGenContext& context);
 };
@@ -534,6 +543,7 @@ public:
 	const CIdentifier& ident;
 	int type;
 	CInteger& param;
+	llvm::Value* tmpResult;
 	static CInteger emptyParam;
 
 	CAffect(CIdentifier& ident,int type) :
@@ -541,7 +551,8 @@ public:
 	CAffect(CIdentifier& ident,int type,CInteger& param) :
 		ident(ident),type(type),param(param) { }
 
-	llvm::Value* codeGen(CodeGenContext& context,llvm::Value* exprResult,llvm::Value* lhs,llvm::Value* rhs,int type);
+	llvm::Value* codeGenCarryOverflow(CodeGenContext& context,llvm::Value* exprResult,llvm::Value* lhs,llvm::Value* rhs,int type);
+	llvm::Value* codeGenFinal(CodeGenContext& context,llvm::Value* exprResult);
 };
 
 class CAffector : public CExpression {
@@ -553,6 +564,7 @@ public:
 		affectors(affectors),expr(expr) { }
 
 	virtual void prePass(CodeGenContext& context);
+
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
 
