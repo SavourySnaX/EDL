@@ -716,12 +716,11 @@ INSTRUCTION	"LXI %M0,%$2%$1"	%00:RP:%0001,B2[8],B3[8]
 	{
 		IF STAGECHECK == 1
 		{
-			DATA_BUFF -> W; #RP[8..15];
-			WZ -> RP;
+			DATA_BUFF -> RP[8..15];
 		}
 		IF STAGECHECK == 0
 		{
-			DATA_BUFF -> Z; #RP[0..7];
+			DATA_BUFF -> RP[0..7];
 			STAGECHECK<-1;
 		}
 		POP O1;
@@ -1450,13 +1449,12 @@ INSTRUCTION	"INX %M0"	%00:RP:%0011
 		AFFECT TMP AS CARRY(7)
 		{
 			RP[0..7] + 1 
-		} -> Z;#RP[0..7];
+		} -> RP[0..7];
 	}
 
 	IF O1.FETCH.T5@
 	{
-		RP[8..15] + TMP -> W;#RP[8..15];
-		WZ -> RP;
+		RP[8..15] + TMP -> RP[8..15];
 	}
 }
 
@@ -1467,13 +1465,12 @@ INSTRUCTION	"DCX %M0"	%00:RP:%1011
 		AFFECT TMP AS CARRY(7)
 		{
 			RP[0..7] - 1
-		} -> Z;#RP[0..7];
+		} -> RP[0..7];
 	}
 	
 	IF O1.FETCH.T5@
 	{
-		RP[8..15] - TMP -> W;#RP[8..15];
-		WZ -> RP;
+		RP[8..15] - TMP -> RP[8..15];
 	}
 }
 
@@ -2477,12 +2474,11 @@ INSTRUCTION	"POP %M0"	%11:PRP:%0001
 	{
 		IF STAGECHECK == 1
 		{
-			DATA_BUFF -> W;#PRP[8..15];
-			WZ-> PRP;
+			DATA_BUFF -> PRP[8..15];
 		}
 		IF STAGECHECK == 0
 		{
-			DATA_BUFF -> Z;#PRP[0..7];
+			DATA_BUFF -> PRP[0..7];
 			STAGECHECK<-1;
 		}
 		POP O1;

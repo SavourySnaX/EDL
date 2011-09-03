@@ -51,6 +51,7 @@ public:
 
 class CExpression : public CNode {
 public:
+	virtual bool IsAssignmentExpression() { return false; }
 	virtual bool IsLeaf() { return true; }
 	virtual bool IsIdentifierExpression() { return false; }
 	virtual bool IsCarryExpression() { return false; }
@@ -268,8 +269,10 @@ public:
 		lhs(lhs), rhs(rhs) { }
 	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
-	
+	virtual llvm::Value* codeGen(CodeGenContext& context,CCastOperator* cast);
+
 	virtual bool IsLeaf() { return false; }
+	virtual bool IsAssignmentExpression() { return true; }
 
 	static llvm::Value* generateAssignment(BitVariable& to,const std::string& moduleName, const std::string& name,llvm::Value* from,CodeGenContext& context);
 };

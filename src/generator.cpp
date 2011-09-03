@@ -767,34 +767,39 @@ Value* CCastOperator::codeGen(CodeGenContext& context)
 {
 	// Compute a mask between specified bits, shift result down by start bits
 	
-	// Step 1, get bit size of input operand
-	Value* left = lhs.codeGen(context);
-
-	if (left->getType()->isIntegerTy())
+    if (lhs.IsAssignmentExpression())
 	{
-		const IntegerType* leftType = cast<IntegerType>(left->getType());
-
-		APInt mask(leftType->getBitWidth(),"0",10);
-		APInt start=beg.integer;
-		APInt loop=beg.integer.zextOrTrunc(leftType->getBitWidth());
-		APInt endloop = end.integer.zextOrTrunc(leftType->getBitWidth());
-		start=start.zextOrTrunc(leftType->getBitWidth());
-
-		while (1==1)
-		{
-			mask.setBit(loop.getLimitedValue());
-			if (loop.uge(endloop))
-				break;
-			loop++;
-		}
-
-		Value *masked=BinaryOperator::Create(Instruction::And,left,ConstantInt::get(getGlobalContext(),mask),"castMask",context.currentBlock());
-		Value *shifted=BinaryOperator::Create(Instruction::LShr,masked,ConstantInt::get(getGlobalContext(),start),"castShift",context.currentBlock());
-
-		// Final step cast it to correct size - not actually required, will be handled by expr lowering/raising anyway
-		return shifted;
+		CAssignment* assign=(CAssignment*)&lhs;
+		return assign->codeGen(context,this);
 	}
+	else
+	{
+		Value* left = lhs.codeGen(context);
+		if (left->getType()->isIntegerTy())
+		{
+			const IntegerType* leftType = cast<IntegerType>(left->getType());
 
+			APInt mask(leftType->getBitWidth(),"0",10);
+			APInt start=beg.integer;
+			APInt loop=beg.integer.zextOrTrunc(leftType->getBitWidth());
+			APInt endloop = end.integer.zextOrTrunc(leftType->getBitWidth());
+			start=start.zextOrTrunc(leftType->getBitWidth());
+
+			while (1==1)
+			{
+				mask.setBit(loop.getLimitedValue());
+				if (loop.uge(endloop))
+					break;
+				loop++;
+			}
+
+			Value *masked=BinaryOperator::Create(Instruction::And,left,ConstantInt::get(getGlobalContext(),mask),"castMask",context.currentBlock());
+			Value *shifted=BinaryOperator::Create(Instruction::LShr,masked,ConstantInt::get(getGlobalContext(),start),"castShift",context.currentBlock());
+
+			// Final step cast it to correct size - not actually required, will be handled by expr lowering/raising anyway
+			return shifted;
+		}
+	}
 	std::cerr << "Illegal type in cast" << std::endl;
 	
 	context.errorFlagged=true;
@@ -975,6 +980,47 @@ Value* CAssignment::codeGen(CodeGenContext& context)
 		context.errorFlagged=true;
 		return NULL;
 	}
+
+	assignWith = rhs.codeGen(context);
+
+	return CAssignment::generateAssignment(var,lhs.module,lhs.name,assignWith,context);
+}
+
+Value* CAssignment::codeGen(CodeGenContext& context,CCastOperator* cast)
+{
+	BitVariable var;
+	Value* assignWith;
+	if (!context.LookupBitVariable(var,lhs.module,lhs.name))
+	{
+		return NULL;
+	}
+
+	if (var.mappingRef)
+	{
+		std::cerr << "Cannot perform operation on a mappingRef" << std::endl;
+		context.errorFlagged=true;
+		return NULL;
+	}
+
+	var.aliased=true;		// We pretend we are assigning to an alias, even if we are not, this forces the compiler to generate the correct code
+
+	APInt mask(var.size.getLimitedValue(),"0",10);
+	APInt start=cast->beg.integer;
+	APInt loop=cast->beg.integer.zextOrTrunc(var.size.getLimitedValue());
+	APInt endloop = cast->end.integer.zextOrTrunc(var.size.getLimitedValue());
+	start=start.zextOrTrunc(var.size.getLimitedValue());
+
+	while (1==1)
+	{
+		mask.setBit(loop.getLimitedValue());
+		if (loop.uge(endloop))
+			break;
+		loop++;
+	}
+
+
+	var.shft=start;
+	var.mask=mask;
 
 	assignWith = rhs.codeGen(context);
 
