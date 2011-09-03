@@ -303,7 +303,7 @@ INSTRUCTION	"ADC %M0"	%10001:SSS
 {
 	AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3),cy AS CARRY(7)
 	{
-		A + (SSS + cy)
+		(A + SSS) + cy
 	} -> A;
 	4->CYCLES;
 }
@@ -312,7 +312,7 @@ INSTRUCTION	"ADC M"		%10001110
 {
 	AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3),cy AS CARRY(7)
 	{
-		A + (CALL GetByte(HL) + cy)
+		(A + CALL GetByte(HL)) + cy
 	} -> A;
 	7->CYCLES;
 }
@@ -321,7 +321,7 @@ INSTRUCTION	"ACI %$1"	%11001110,B2[8]
 {
 	AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3),cy AS CARRY(7)
 	{
-		A + (CALL GetByte(PC) + cy)
+		(A + CALL GetByte(PC)) + cy
 	} -> A;
 	PC<-PC+1;
 	7->CYCLES;
@@ -359,7 +359,7 @@ INSTRUCTION	"SBB %M0"	%10011:SSS
 {
 	AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3),cy AS CARRY(7)
 	{
-		A - (SSS + cy)
+		(A - SSS) - cy
 	} -> A;
 	4->CYCLES;
 }
@@ -368,7 +368,7 @@ INSTRUCTION	"SBB M"		%10011110
 {
 	AFFECT z AS ZERO, s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3),cy AS CARRY(7)
 	{
-		A - (CALL GetByte(HL) + cy)
+		(A - CALL GetByte(HL)) - cy
 	} -> A;
 	7->CYCLES;
 }
@@ -377,7 +377,7 @@ INSTRUCTION	"SBI %$1"	%11011110,B2[8]
 {
 	AFFECT z AS ZERO, s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3),cy AS CARRY(7)
 	{
-		A - (CALL GetByte(PC) + cy)
+		(A - CALL GetByte(PC)) - cy
 	} -> A;
 	PC<-PC+1;
 	7->CYCLES;

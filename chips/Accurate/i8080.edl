@@ -1096,7 +1096,7 @@ INSTRUCTION	"ADC %M0"	%10001:SSS
 	{
 		AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3),cy AS CARRY(7)
 		{
-			A_LATCH + (TMP + cy)
+			(A_LATCH + TMP) + cy
 		} -> A;
 	}
 
@@ -1114,7 +1114,7 @@ INSTRUCTION	"ADC M"		%10001110
 	{
 		AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3),cy AS CARRY(7)
 		{
-			A_LATCH + (TMP + cy)
+			(A_LATCH + TMP) + cy
 		} -> A;
 	}
 
@@ -1143,7 +1143,7 @@ INSTRUCTION	"ACI %$1"	%11001110,B2[8]
 	{
 		AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3),cy AS CARRY(7)
 		{
-			A_LATCH + (TMP + cy)
+			(A_LATCH + TMP) + cy
 		} -> A;
 	}
 
@@ -1258,7 +1258,7 @@ INSTRUCTION	"SBB %M0"	%10011:SSS
 	{
 		AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3),cy AS CARRY(7)
 		{
-			A_LATCH - (TMP + cy)
+			(A_LATCH - TMP) - cy
 		} -> A;
 	}
 
@@ -1276,7 +1276,7 @@ INSTRUCTION	"SBB M"		%10011110
 	{
 		AFFECT z AS ZERO, s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3),cy AS CARRY(7)
 		{
-			A_LATCH - (TMP + cy)
+			(A_LATCH - TMP) - cy
 		} -> A;
 	}
 
@@ -1305,7 +1305,7 @@ INSTRUCTION	"SBI %$1"	%11011110,B2[8]
 	{
 		AFFECT z AS ZERO, s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3),cy AS CARRY(7)
 		{
-			A_LATCH - (TMP + cy)
+			(A_LATCH - TMP) - cy
 		} -> A;
 	}
 
@@ -1517,7 +1517,7 @@ INSTRUCTION	"DAD %M0"	%00:RP:%1001
 		{
 			AFFECT cy AS CARRY(7)
 			{
-				A_LATCH + (TMP + cy)
+				(A_LATCH + TMP) + cy
 			} -> H;
 		}
 		IF STAGECHECK == 0
