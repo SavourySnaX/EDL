@@ -104,7 +104,7 @@ void CodeGenContext::GenerateDisassmTables()
 	{
 		// Create a global array to hold the table
 		APInt tableSize=tableIter->second.rbegin()->first;
-		PointerType* PointerTy_5 = PointerType::get(IntegerType::get(getGlobalContext(), tableSize.getBitWidth()), 0);
+		PointerType* PointerTy_5 = PointerType::get(IntegerType::get(getGlobalContext(), 8), 0);
 	       	ArrayType* ArrayTy_4 = ArrayType::get(PointerTy_5, tableSize.getLimitedValue()+1);
 		ConstantPointerNull* const_ptr_13 = ConstantPointerNull::get(PointerTy_5);	
 		GlobalVariable* gvar_array_table = new GlobalVariable(*module,ArrayTy_4,true,GlobalValue::ExternalLinkage,NULL, "DIS_"+tableIter->first);
