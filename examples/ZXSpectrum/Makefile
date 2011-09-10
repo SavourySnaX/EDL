@@ -8,9 +8,9 @@ clean:
 	rmdir out
 	$(RM) spectrum.exe
 
-out/z80.lls: ../../chips/Simplified/z80.edl
+out/z80.lls: ../../chips/Accurate/z80.edl
 	mkdir -p out
-	$(EDL) ../../chips/Simplified/z80.edl >out/z80.lls
+	$(EDL) ../../chips/Accurate/z80.edl >out/z80.lls
 
 out/z80.lls.s: out/z80.lls
 	llc out/z80.lls
