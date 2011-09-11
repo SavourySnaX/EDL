@@ -255,8 +255,8 @@ affector : ident TOK_AS TOK_ZERO { $$ = new CAffect(*$1,TOK_ZERO); }
 	 | ident TOK_AS TOK_INVBIT TOK_OBR numeric TOK_CBR { $$ = new CAffect(*$1,TOK_INVBIT,*$5); }
 	 | ident TOK_AS TOK_CARRY TOK_OBR numeric TOK_CBR { $$ = new CAffect(*$1,TOK_CARRY,*$5); }
 	 | ident TOK_AS TOK_NOCARRY TOK_OBR numeric TOK_CBR { $$ = new CAffect(*$1,TOK_NOCARRY,*$5); }
-	 | ident TOK_AS TOK_OVERFLOW TOK_OBR numeric TOK_CBR { $$ = new CAffect(*$1,TOK_OVERFLOW,*$5); }
-	 | ident TOK_AS TOK_NOOVERFLOW TOK_OBR numeric TOK_CBR { $$ = new CAffect(*$1,TOK_NOOVERFLOW,*$5); }
+	 | ident TOK_AS TOK_OVERFLOW TOK_OBR expr TOK_COMMA expr TOK_COMMA numeric TOK_CBR { $$ = new CAffect(*$1,TOK_OVERFLOW,*$5,*$7,*$9); }
+	 | ident TOK_AS TOK_NOOVERFLOW TOK_OBR expr TOK_COMMA expr TOK_COMMA numeric TOK_CBR { $$ = new CAffect(*$1,TOK_NOOVERFLOW,*$5,*$7,*$9); }
 	 ;
 
 affectors : affectors TOK_COMMA affector { $$->push_back($<affect>3); }

@@ -719,7 +719,44 @@ Value* CBinaryOperator::codeGen(CodeGenContext& context,Value* left,Value* right
 				
 				for (int a=0;a<context.curAffectors.size();a++)
 				{
-					context.curAffectors[a]->codeGenCarryOverflow(context,result,left,right,op);
+					switch (context.curAffectors[a]->type)
+					{
+						case TOK_NOOVERFLOW:
+						case TOK_OVERFLOW:
+							if (context.curAffectors[a]->opType==TOK_NOOVERFLOW || context.curAffectors[a]->opType==TOK_OVERFLOW)
+							{
+								context.curAffectors[a]->opType=op;
+							}
+							else
+							{
+								switch(context.curAffectors[a]->opType)
+								{
+									case TOK_ADD:
+									case TOK_DADD:
+										if (op!=TOK_ADD && op!=TOK_DADD)
+										{
+											std::cerr<<"Can't Compute OVERFLOW for differing mathematical operations"<<std::endl;
+											context.errorFlagged=true;
+											return NULL;
+										}
+										break;
+									case TOK_SUB:
+									case TOK_DSUB:
+										if (op!=TOK_SUB && op!=TOK_DSUB)
+										{
+											std::cerr<<"Can't Compute OVERFLOW for differing mathematical operations"<<std::endl;
+											context.errorFlagged=true;
+											return NULL;
+										}
+										break;
+								}
+							}
+							break;
+						case TOK_NOCARRY:
+						case TOK_CARRY:
+							context.curAffectors[a]->codeGenCarry(context,result,left,right,op);
+							break;
+					}
 				}
 
 				return result;
@@ -2293,7 +2330,7 @@ Value* CMappingDeclaration::codeGen(CodeGenContext& context)
 
 CInteger CAffect::emptyParam(stringZero);
 
-Value* CAffect::codeGenCarryOverflow(CodeGenContext& context,Value* exprResult,Value* lhs,Value* rhs,int optype)
+Value* CAffect::codeGenCarry(CodeGenContext& context,Value* exprResult,Value* lhs,Value* rhs,int optype)
 {
 	const IntegerType* resultType = cast<IntegerType>(exprResult->getType());
 	Value *answer;
@@ -2354,74 +2391,6 @@ Value* CAffect::codeGenCarryOverflow(CodeGenContext& context,Value* exprResult,V
 					Value* combine = BinaryOperator::Create(Instruction::Or,expr1,expr2,"",context.currentBlock());
 					// (~lh&Result | ~lh&rh) | rh&Result
 					answer = BinaryOperator::Create(Instruction::Or,combine,expr3,"",context.currentBlock());
-				}
-			}
-			break;
-		case TOK_OVERFLOW:
-		case TOK_NOOVERFLOW:
-			{
-				if (param.integer.getLimitedValue() >= resultType->getBitWidth())
-				{
-					std::cerr << "Bit for overflow detection is outside of range for result" << std::endl;
-					context.errorFlagged=true;
-					return NULL;
-				}
-				
-				const IntegerType* lhsType = cast<IntegerType>(lhs->getType());
-				const IntegerType* rhsType = cast<IntegerType>(rhs->getType());
-		       		
-				Instruction::CastOps lhsOp = CastInst::getCastOpcode(lhs,false,resultType,false);
-				lhs = CastInst::Create(lhsOp,lhs,resultType,"cast",context.currentBlock());
-				Instruction::CastOps rhsOp = CastInst::getCastOpcode(rhs,false,resultType,false);
-				rhs = CastInst::Create(rhsOp,rhs,resultType,"cast",context.currentBlock());
-
-				if (optype==TOK_ADD || optype==TOK_DADD)
-				{
-					//((rh & lh & (~Result)) | ((~rh) & (~lh) & Result))
-
-					// ~Result
-					Value* cmpResult = BinaryOperator::Create(Instruction::Xor,exprResult,ConstantInt::get(getGlobalContext(),~APInt(resultType->getBitWidth(),0,false)),"",context.currentBlock());
-					// ~lh
-					Value* cmplh = BinaryOperator::Create(Instruction::Xor,lhs,ConstantInt::get(getGlobalContext(),~APInt(resultType->getBitWidth(),0,false)),"",context.currentBlock());
-					// ~rh
-					Value* cmprh = BinaryOperator::Create(Instruction::Xor,rhs,ConstantInt::get(getGlobalContext(),~APInt(resultType->getBitWidth(),0,false)),"",context.currentBlock());
-
-					// lh&rh
-					Value* expr1 = BinaryOperator::Create(Instruction::And,rhs,lhs,"",context.currentBlock());
-					// ~rh&~lh
-					Value* expr2 = BinaryOperator::Create(Instruction::And,cmprh,cmplh,"",context.currentBlock());
-
-					// rh & lh & ~Result
-					Value* expr3 = BinaryOperator::Create(Instruction::And,expr1,cmpResult,"",context.currentBlock());
-					// ~rh & ~lh & Result
-					Value* expr4 = BinaryOperator::Create(Instruction::And,expr2,exprResult,"",context.currentBlock());
-
-					// rh & lh & ~Result | ~rh & ~lh & Result
-					answer = BinaryOperator::Create(Instruction::Or,expr3,expr4,"",context.currentBlock());
-				}
-				else
-				{
-					//(((~rh) & lh & (~Result)) | (rh & (~lh) & Result))
-					
-					// ~Result
-					Value* cmpResult = BinaryOperator::Create(Instruction::Xor,exprResult,ConstantInt::get(getGlobalContext(),~APInt(resultType->getBitWidth(),0,false)),"",context.currentBlock());
-					// ~lh
-					Value* cmplh = BinaryOperator::Create(Instruction::Xor,lhs,ConstantInt::get(getGlobalContext(),~APInt(resultType->getBitWidth(),0,false)),"",context.currentBlock());
-					// ~rh
-					Value* cmprh = BinaryOperator::Create(Instruction::Xor,rhs,ConstantInt::get(getGlobalContext(),~APInt(resultType->getBitWidth(),0,false)),"",context.currentBlock());
-
-					// ~rh&lh
-					Value* expr1 = BinaryOperator::Create(Instruction::And,cmprh,lhs,"",context.currentBlock());
-					// rh&~lh
-					Value* expr2 = BinaryOperator::Create(Instruction::And,rhs,cmplh,"",context.currentBlock());
-					
-					// ~rh & lh & ~Result
-					Value* expr3 = BinaryOperator::Create(Instruction::And,expr1,cmpResult,"",context.currentBlock());
-					// rh & ~lh & Result
-					Value* expr4 = BinaryOperator::Create(Instruction::And,expr2,exprResult,"",context.currentBlock());
-
-					// ~rh & lh & ~Result | rh & ~lh & Result
-					answer = BinaryOperator::Create(Instruction::Or,expr3,expr4,"",context.currentBlock());
 				}
 			}
 			break;
@@ -2562,10 +2531,116 @@ Value* CAffect::codeGenFinal(CodeGenContext& context,Value* exprResult)
 				answer=BinaryOperator::Create(Instruction::LShr,answer,ConstantInt::get(getGlobalContext(),shift),"",context.currentBlock());
 			}
 			break;
-		case TOK_CARRY:
-		case TOK_NOCARRY:
 		case TOK_OVERFLOW:
 		case TOK_NOOVERFLOW:
+			{
+				APInt bit(resultType->getBitWidth(),0,false);
+				APInt shift = param.integer.zextOrTrunc(resultType->getBitWidth());
+				bit.setBit(param.integer.getLimitedValue());
+				ConstantInt* bitC=ConstantInt::get(getGlobalContext(),bit);
+				ConstantInt* shiftC=ConstantInt::get(getGlobalContext(),shift);
+
+				if (param.integer.getLimitedValue() >= resultType->getBitWidth())
+				{
+					std::cerr << "Bit for overflow detection is outside of range for result" << std::endl;
+					context.errorFlagged=true;
+					return NULL;
+				}
+				Value* lhs = ov1Val;		// Lhs and Rhs are provided in the overflow affector
+				if (lhs==NULL)
+				{
+					context.errorFlagged=true;
+					return NULL;
+				}
+				Value* rhs = ov2Val;
+				if (rhs==NULL)
+				{
+					context.errorFlagged=true;
+					return NULL;
+				}
+				
+				const IntegerType* lhsType = cast<IntegerType>(lhs->getType());
+				const IntegerType* rhsType = cast<IntegerType>(rhs->getType());
+				
+				if (param.integer.getLimitedValue() >= lhsType->getBitWidth())
+				{
+					std::cerr << "Bit for overflow detection is outside of range for source1" << std::endl;
+					context.errorFlagged=true;
+					return NULL;
+				}
+				if (param.integer.getLimitedValue() >= rhsType->getBitWidth())
+				{
+					std::cerr << "Bit for overflow detection is outside of range for source2" << std::endl;
+					context.errorFlagged=true;
+					return NULL;
+				}
+		       		
+				Instruction::CastOps lhsOp = CastInst::getCastOpcode(lhs,false,resultType,false);
+				lhs = CastInst::Create(lhsOp,lhs,resultType,"cast",context.currentBlock());
+				Instruction::CastOps rhsOp = CastInst::getCastOpcode(rhs,false,resultType,false);
+				rhs = CastInst::Create(rhsOp,rhs,resultType,"cast",context.currentBlock());
+
+				if (opType==TOK_ADD || opType==TOK_DADD)
+				{
+					//((rh & lh & (~Result)) | ((~rh) & (~lh) & Result))
+
+					// ~Result
+					Value* cmpResult = BinaryOperator::Create(Instruction::Xor,exprResult,ConstantInt::get(getGlobalContext(),~APInt(resultType->getBitWidth(),0,false)),"",context.currentBlock());
+					// ~lh
+					Value* cmplh = BinaryOperator::Create(Instruction::Xor,lhs,ConstantInt::get(getGlobalContext(),~APInt(resultType->getBitWidth(),0,false)),"",context.currentBlock());
+					// ~rh
+					Value* cmprh = BinaryOperator::Create(Instruction::Xor,rhs,ConstantInt::get(getGlobalContext(),~APInt(resultType->getBitWidth(),0,false)),"",context.currentBlock());
+
+					// lh&rh
+					Value* expr1 = BinaryOperator::Create(Instruction::And,rhs,lhs,"",context.currentBlock());
+					// ~rh&~lh
+					Value* expr2 = BinaryOperator::Create(Instruction::And,cmprh,cmplh,"",context.currentBlock());
+
+					// rh & lh & ~Result
+					Value* expr3 = BinaryOperator::Create(Instruction::And,expr1,cmpResult,"",context.currentBlock());
+					// ~rh & ~lh & Result
+					Value* expr4 = BinaryOperator::Create(Instruction::And,expr2,exprResult,"",context.currentBlock());
+
+					// rh & lh & ~Result | ~rh & ~lh & Result
+					answer = BinaryOperator::Create(Instruction::Or,expr3,expr4,"",context.currentBlock());
+				}
+				else
+				{
+					//(((~rh) & lh & (~Result)) | (rh & (~lh) & Result))
+					
+					// ~Result
+					Value* cmpResult = BinaryOperator::Create(Instruction::Xor,exprResult,ConstantInt::get(getGlobalContext(),~APInt(resultType->getBitWidth(),0,false)),"",context.currentBlock());
+					// ~lh
+					Value* cmplh = BinaryOperator::Create(Instruction::Xor,lhs,ConstantInt::get(getGlobalContext(),~APInt(resultType->getBitWidth(),0,false)),"",context.currentBlock());
+					// ~rh
+					Value* cmprh = BinaryOperator::Create(Instruction::Xor,rhs,ConstantInt::get(getGlobalContext(),~APInt(resultType->getBitWidth(),0,false)),"",context.currentBlock());
+
+					// ~rh&lh
+					Value* expr1 = BinaryOperator::Create(Instruction::And,cmprh,lhs,"",context.currentBlock());
+					// rh&~lh
+					Value* expr2 = BinaryOperator::Create(Instruction::And,rhs,cmplh,"",context.currentBlock());
+					
+					// ~rh & lh & ~Result
+					Value* expr3 = BinaryOperator::Create(Instruction::And,expr1,cmpResult,"",context.currentBlock());
+					// rh & ~lh & Result
+					Value* expr4 = BinaryOperator::Create(Instruction::And,expr2,exprResult,"",context.currentBlock());
+
+					// ~rh & lh & ~Result | rh & ~lh & Result
+					answer = BinaryOperator::Create(Instruction::Or,expr3,expr4,"",context.currentBlock());
+				}
+				if (type==TOK_OVERFLOW)
+				{
+					answer=BinaryOperator::Create(Instruction::And,answer,bitC,"",context.currentBlock());
+				}
+				else
+				{
+					answer=BinaryOperator::Create(Instruction::Xor,answer,bitC,"",context.currentBlock());
+				}
+				answer=BinaryOperator::Create(Instruction::LShr,answer,shiftC,"",context.currentBlock());
+			}
+			break;
+		case TOK_CARRY:
+		case TOK_NOCARRY:
 			{
 				APInt bit(resultType->getBitWidth(),0,false);
 				APInt shift = param.integer.zextOrTrunc(resultType->getBitWidth());
@@ -2580,7 +2655,7 @@ Value* CAffect::codeGenFinal(CodeGenContext& context,Value* exprResult)
 					return NULL;
 				}
 
-				if (type==TOK_CARRY || type==TOK_OVERFLOW)
+				if (type==TOK_CARRY)
 				{
 					answer=BinaryOperator::Create(Instruction::And,tmpResult,bitC,"",context.currentBlock());
 				}
@@ -2629,10 +2704,16 @@ Value* CAffector::codeGen(CodeGenContext& context)
 		{
 			case TOK_CARRY:
 			case TOK_NOCARRY:
+				containsCarryOverflow=true;
+				affectors[a]->tmpResult=NULL;
+				context.curAffectors.push_back(affectors[a]);
+				break;
 			case TOK_OVERFLOW:
 			case TOK_NOOVERFLOW:
 				containsCarryOverflow=true;
 				affectors[a]->tmpResult=NULL;
+				affectors[a]->ov1Val=affectors[a]->ov1.codeGen(context);
+				affectors[a]->ov2Val=affectors[a]->ov2.codeGen(context);
 				context.curAffectors.push_back(affectors[a]);
 				break;
 			default:
@@ -2649,7 +2730,7 @@ Value* CAffector::codeGen(CodeGenContext& context)
 			return NULL;
 		}
 	}
-		
+
 	exprResult=expr.codeGen(context);
 
 	// Final result is in exprResult (+affectors for carry/overflow).. do final operations
