@@ -357,6 +357,7 @@ uint8_t CheckKeys(uint8_t scan,int key0,int key1,int key2,int key3,int key4)
 }
 
 void LoadTape();
+void LoadSNA();
 void UpdateTape(uint8_t cycles);
 uint8_t GetTapeLevel();
 
@@ -410,10 +411,20 @@ extern uint16_t	AF;
 extern uint16_t	BC;
 extern uint16_t	DE;
 extern uint16_t	HL;
+extern uint16_t	_AF;
+extern uint16_t	_BC;
+extern uint16_t	_DE;
+extern uint16_t	_HL;
 extern uint16_t	IX;
 extern uint16_t	IY;
 extern uint16_t	PC;
 extern uint16_t	SP;
+extern uint16_t	IR;
+
+extern uint8_t IM;
+extern uint8_t IFF1;
+extern uint8_t IFF2;
+
 
 void DUMP_REGISTERS()
 {
@@ -432,8 +443,13 @@ void DUMP_REGISTERS()
 	printf("BC= %04X\n",BC);
 	printf("DE= %04X\n",DE);
 	printf("HL= %04X\n",HL);
+	printf("AF'= %04X\n",_AF);
+	printf("BC'= %04X\n",_BC);
+	printf("DE'= %04X\n",_DE);
+	printf("HL'= %04X\n",_HL);
 	printf("IX= %04X\n",IX);
 	printf("IY= %04X\n",IY);
+	printf("IR= %04X\n",IR);
 	printf("SP= %04X\n",SP);
 	printf("--------\n");
 }
@@ -648,6 +664,8 @@ int main(int argc,char**argv)
 	
 //	DisassembleRange(0x0000,0x4000);
 
+	LoadSNA();
+
 	while (1==1)
 	{
 		static int doDebug=0;
@@ -659,13 +677,14 @@ int main(int argc,char**argv)
 		}
 
 		PinSetPIN__CLK(1);
-
+#if 0
 		if ((!PinGetPIN__M1()) && PinGetPIN__MREQ())		// NOT PERFECT, SINCE IT WILL CATCH INTERRUPT REQUESTS.. 
 		{
 			// First cycle of a new instruction
 			if (doDebug)
 				Disassemble(PinGetPIN_A(),1);
 		}
+#endif
 		if ((!PinGetPIN__M1()) && PinGetPIN__IORQ())
 		{
 			PinSetPIN_D(0xFF);
@@ -784,7 +803,7 @@ unsigned char *qLoad(char *romName,uint32_t *length)
 
 void LoadTape()
 {
-	RawTapFile=qLoad("jsw.raw",&RawTapLength);
+	RawTapFile=qLoad("Magnetron.raw",&RawTapLength);
 	if (!RawTapFile)
 	{
 		printf("Failed to load file\n");
@@ -814,3 +833,38 @@ uint8_t GetTapeLevel()
 	return casLevel;
 }
 
+void LoadSNA()
+{
+	uint32_t snapLength=0;
+	uint8_t *snap=qLoad(".sna",&snapLength);
+
+	if (!snap || snapLength!=49179)
+		return;
+
+	IR=(snap[0]<<8)|(snap[20]);
+	IFF1=(snap[19]&1);
+	IFF2=(snap[19]&2)>>1;
+	_HL=(snap[2]<<8)|snap[1];
+	_DE=(snap[4]<<8)|snap[3];
+	_BC=(snap[6]<<8)|snap[5];
+	_AF=(snap[8]<<8)|snap[7];
+	HL=(snap[10]<<8)|snap[9];
+	DE=(snap[12]<<8)|snap[11];
+	BC=(snap[14]<<8)|snap[13];
+	AF=(snap[22]<<8)|snap[21];
+	IY=(snap[16]<<8)|(snap[15]);
+	IX=(snap[18]<<8)|(snap[17]);
+	SP=(snap[24]<<8)|(snap[23]);
+	IM=snap[25];
+	
+	memcpy(Ram,&snap[27],32768+16384);
+
+	PC=GetByte(SP);
+	SetByte(SP,0);
+	SP++;
+	PC|=GetByte(SP)<<8;
+	SetByte(SP,0);
+	SP++;
+
+	IFF1=IFF2;
+}
