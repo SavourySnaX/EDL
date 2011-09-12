@@ -1,0 +1,3804 @@
+
+
+#
+# BUS_REQ/ACK cycles are not handled yet
+#
+#
+
+# PINS 
+
+PIN OUT			PIN_A[16];			# Adress Bus
+PIN BIDIRECTIONAL	PIN_D[8];			# Data Bus
+PIN OUT			PIN__M1[1];			# Machine Cycle 1 (opcode fetch)
+PIN OUT			PIN__MREQ[1];			# Indicates address bus contains 16 bit address for read/write operation
+PIN OUT			PIN__IORQ[1];			# Indicates address bus contains 16 bit IO port - Zilog docs state only the lower half is valid - this is untrue
+PIN OUT			PIN__RD[1];			# Indicates cpu wants to read data on its data bus
+PIN OUT			PIN__WR[1];			# Indicates data bus valid for write
+PIN OUT			PIN__RFSH[1];			# This along with MREQ indicate low 7 bits of address bus can be used as a refresh address for dynamic ram
+PIN OUT			PIN__HALT[1];			# Indicates waiting on interrupt (happens due to HALT instruction)
+PIN IN			PIN__WAIT[1];			# Let cpu know memory/io not ready, causes cpu to insert wait states
+PIN IN			PIN__INT[1];			# Interrupt request
+PIN IN			PIN__NMI[1];			# Non Maskable Interrupt Request
+PIN IN			PIN__RESET[1];			# Reset cpu - should be held low for a minimum of 3 Tstates
+PIN IN			PIN__BUSRQ[1];			# Request BUS
+PIN OUT			PIN__BUSACK[1];			# Inidicates ACK of PIN__BUSRQ
+PIN IN			PIN__CLK[1];			# clock
+
+# REAL REGISTERS FROM HARDWARE
+DECLARE	AF[16]		ALIAS A[8]:s[1]:z[1]:b5[1]:h[1]:b3[1]:p[1]:n[1]:c[1];	# s sign bit : z zero bit : b5 (undocumented) : h half carry (bit 3-4) 
+										# b3 (undocumented) : p parity : n add/subtract : c full carry (bit 7-8)
+DECLARE	PC[16] 		ALIAS PCH[8]:PCL[8];
+DECLARE	SP[16] 		ALIAS SPH[8]:SPL[8];
+DECLARE	HL[16] 		ALIAS H[8]:L[8];
+DECLARE	DE[16] 		ALIAS D[8]:E[8];
+DECLARE	BC[16] 		ALIAS B[8]:C[8];
+DECLARE IX[16]		ALIAS IXh[8]:IXl[8];
+DECLARE IY[16]		ALIAS IYh[8]:IYl[8];
+DECLARE IR[16]		ALIAS I[8]:r[1]:R[7];		# I interrupt vector : r msb of R (but unnafected apart from store LD R,A) : R is refresh
+
+# Alternative register set
+DECLARE	_AF[16];
+DECLARE	_HL[16];
+DECLARE	_DE[16];
+DECLARE	_BC[16];
+
+DECLARE IM[2];		# These are technically hidden from the programmers view (but exposed to allow debugger and snapshots access)
+DECLARE IFF1[1];
+DECLARE IFF2[1];
+
+# INTERNAL REGISTERS
+DECLARE	INTERNAL ADDR_BUFF[16];
+DECLARE INTERNAL DATA_BUFF[8];
+DECLARE INTERNAL WZ[16]	ALIAS W[8]:Z[8];
+DECLARE INTERNAL TMP[8];
+
+# EMULATION INTERNAL REGISTERS
+DECLARE INTERNAL InstructionTable[4];
+DECLARE INTERNAL NxtTable[4]	ALIAS	TableCB[1]:TableDD[1]:TableED[1]:TableFD[1];
+
+DECLARE INTERNAL CallUsesVector[1];			# Used for handling IM2 (which is effectively a call
+DECLARE	INTERNAL Vector[16]	ALIAS 	VH[8]:VL[8];	# but the immediate word is forced to this value)
+
+DECLARE INTERNAL IntCheck[1];
+DECLARE INTERNAL LastCycle[1];
+DECLARE INTERNAL InstructionRegister[8];
+DECLARE INTERNAL MachineCycle[8];
+
+HANDLER PIN__CLK	TRANSITION(0,1)
+{
+	STATES	M1|LONGOP|MEM_READ|MEM_WRITE|INPUT|OUTPUT|BUS_ACK|INT|WAIT|RESET
+	{
+		STATE M1
+		{
+			STATES T1,T2,T3,T4,T5,T6
+			{
+				STATE T1
+				{
+					MachineCycle<-0;
+					PIN_A<-PC;
+					IF PIN__HALT
+					{
+						PC<-PC+1;
+					}
+					IF InstructionTable==%0000
+					{
+						PIN__M1<-0;
+					}
+				}
+
+	
+				STATE T3
+				{
+					PIN_D->InstructionRegister;
+					IF ~PIN__HALT
+					{
+						$00->InstructionRegister;
+					}
+					PIN__M1<-1;
+					PIN__MREQ<-1;
+					PIN__RD<-1;
+					PIN__RFSH<-0;			# No idea if refresh is generated for second opcodes.. assume for now it is
+					PIN_A<-IR;			# Various sources indicate it is the entire IR thats placed on the bus
+				}
+
+				STATE T4
+				{
+					R<-R+1;
+				}
+			}	
+		}
+		STATE INT
+		{
+			STATES T1,T2,TW1,TW2,T3
+			{
+				STATE T1
+				{
+					MachineCycle<-0;
+					PIN_A<-PC;
+					PIN__M1<-0;
+				}
+
+	
+				STATE T3
+				{
+					IF IM==0
+					{
+						PIN_D->InstructionRegister;
+					}
+					IF IM==1
+					{
+						$FF->InstructionRegister;
+					}
+					IF IM==2
+					{
+						PIN_D->VL;
+						I->VH;
+						CallUsesVector<-1;
+						$CD->InstructionRegister;
+					}
+					PIN__M1<-1;
+					PIN__IORQ<-1;
+					PIN__RFSH<-0;
+					PIN_A<-IR;
+					NEXT PIN__CLK.M1.T4;
+				}
+			}
+		}
+		STATE LONGOP
+		{
+			STATES T1,T2,T3,T4,T5,T6
+			{
+				STATE T1
+				{
+					MachineCycle<-MachineCycle+1;
+				}
+			}
+		}
+		STATE MEM_READ
+		{
+			STATES T1,T2,T3,T4,T5
+			{
+				STATE T1
+				{
+					MachineCycle<-MachineCycle+1;
+					PIN_A<-ADDR_BUFF;
+				}
+				STATE T3
+				{
+					PIN_D->DATA_BUFF;
+				}
+			}
+		}
+		STATE MEM_WRITE
+		{
+			STATES T1,T2,T3,T4,T5
+			{
+				STATE T1
+				{
+					MachineCycle<-MachineCycle+1;
+					PIN_A<-ADDR_BUFF;
+				}
+			}
+		}
+		STATE INPUT
+		{
+			STATES T1,T2,TW,T3
+			{
+				STATE T1
+				{
+					MachineCycle<-MachineCycle+1;
+					PIN_A<-ADDR_BUFF;
+				}
+				STATE T2
+				{
+					PIN__IORQ<-0;
+					PIN__RD<-0;
+				}
+				STATE T3
+				{
+					PIN_D->DATA_BUFF;
+				}
+			}
+		}
+		STATE OUTPUT
+		{
+			STATES T1,T2,TW,T3
+			{
+				STATE T1
+				{
+					MachineCycle<-MachineCycle+1;
+					PIN_A<-ADDR_BUFF;
+				}
+				STATE T2
+				{
+					PIN__IORQ<-0;
+					PIN__WR<-0;
+				}
+			}
+		}
+		STATE RESET
+		{
+			STATES T1,T2,T3|TREST
+			{
+				STATE T1
+				{
+					CallUsesVector<-0;
+					InstructionTable<-0;
+					NxtTable<-0;
+					PIN__M1<-1;
+					PIN__MREQ<-1;
+					PIN__IORQ<-1;
+					PIN__RD<-1;
+					PIN__WR<-1;
+					PIN__RFSH<-1;
+					PIN__HALT<-1;
+					PIN__BUSACK<-1;
+					LastCycle<-0;
+					IFF1<-0;
+					IFF2<-0;
+				}
+				STATE T2
+				{
+					IR<-0;
+				}
+				STATE T3
+				{
+					PC<-0;
+					NEXT PIN__CLK.RESET.TREST;
+				}
+			}
+		}
+	}
+
+	IF InstructionTable == %0000
+	{
+		EXECUTE InstructionRegister;
+	}
+	IF InstructionTable == %0001
+	{
+		EXECUTE FD InstructionRegister;
+	}
+	IF InstructionTable == %0010
+	{
+		EXECUTE ED InstructionRegister;
+	}
+	IF InstructionTable == %0100
+	{
+		EXECUTE DD InstructionRegister;
+	}
+	IF InstructionTable == %1000
+	{
+		EXECUTE CB InstructionRegister;
+	}
+	IF InstructionTable == %1100
+	{
+		EXECUTE DDCB InstructionRegister;
+	}
+	IF InstructionTable == %1001
+	{
+		EXECUTE FDCB InstructionRegister;
+	}
+	InstructionTable<-NxtTable;
+
+	IF LastCycle
+	{
+		LastCycle<-0;
+		IF IntCheck
+		{
+			# TODO NMI PIN CHECK
+			IF (PIN__INT==0) & IFF1
+			{
+				IFF2<-IFF1;
+				IFF1<-0;
+				PIN__HALT<-1;
+				NEXT PIN__CLK.INT.T1;
+			}
+		}
+		IF ~IntCheck
+		{
+			IntCheck<-1;	# This deals with the don't check interrupts for instruction after an EI
+		}
+	}
+}
+
+HANDLER PIN__CLK	TRANSITION(1,0)
+{
+	IF PIN__CLK.M1.T1@ |
+	   PIN__CLK.MEM_READ.T1@
+	{
+		PIN__MREQ<-0;
+		PIN__RD<-0;
+	}
+	IF PIN__CLK.M1.T2@ |
+	   PIN__CLK.MEM_READ.T2@ |
+	   PIN__CLK.INPUT.TW@ |
+	   PIN__CLK.OUTPUT.TW@ |
+	   PIN__CLK.INT.T2@ |
+	   PIN__CLK.INT.TW1@ |
+	   PIN__CLK.INT.TW2@ 
+	{
+		IF PIN__WAIT==0
+		{
+			PUSH PIN__CLK.WAIT;
+		}
+	}
+	IF PIN__CLK.M1.T3@
+	{
+		PIN__MREQ<-0;
+	}
+	IF PIN__CLK.M1.T4@
+	{
+		PIN__MREQ<-1;
+		PIN__RFSH<-1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@
+	{
+		PIN__MREQ<-1;
+		PIN__RD<-1;
+	}
+	
+	IF PIN__CLK.MEM_WRITE.T1@
+	{
+		PIN_D<-DATA_BUFF;
+		PIN__MREQ<-0;
+	}
+	IF PIN__CLK.MEM_WRITE.T2@
+	{
+		PIN__WR<-0;
+		IF PIN__WAIT==0
+		{
+			PUSH PIN__CLK.WAIT;
+		}
+	}
+	IF PIN__CLK.MEM_WRITE.T3@
+	{
+		PIN__MREQ<-1;
+		PIN__WR<-1;
+	}
+
+	IF PIN__CLK.INPUT.T3@
+	{
+		PIN__IORQ<-1;
+		PIN__RD<-1;
+	}
+
+	IF PIN__CLK.OUTPUT.T1@
+	{
+		PIN_D<-DATA_BUFF;
+	}
+	IF PIN__CLK.OUTPUT.T3@
+	{
+		PIN__IORQ<-1;
+		PIN__WR<-1;
+	}
+
+	IF PIN__CLK.INT.TW1@ 
+	{
+		PIN__IORQ<-0;
+	}
+
+	IF PIN__CLK.WAIT@
+	{
+		IF PIN__WAIT==1
+		{
+			POP PIN__CLK;
+		}
+	}
+}
+
+HANDLER PIN__RESET	ALWAYS
+{
+	IF PIN__RESET==0
+	{
+		NEXT PIN__CLK.RESET.T1;
+	}
+
+	IF PIN__RESET==1
+	{
+		NEXT PIN__CLK.M1.T1;
+	}
+}
+
+MAPPING	rS[3]
+{
+	%000	"B"	B;
+	%001	"C"	C;
+	%010	"D"	D;
+	%011	"E"	E;
+	%100	"H"	H;
+	%101	"L"	L;
+	%111	"A"	A;
+}
+
+MAPPING rD[3]
+{
+	%000	"B"	B;
+	%001	"C"	C;
+	%010	"D"	D;
+	%011	"E"	E;
+	%100	"H"	H;
+	%101	"L"	L;
+	%111	"A"	A;
+}
+
+MAPPING	pS[3]
+{
+	%000	"B"	B;
+	%001	"C"	C;
+	%010	"D"	D;
+	%011	"E"	E;
+	%100	"IXh"	IXh;
+	%101	"IXl"	IXl;
+	%111	"A"	A;
+}
+
+MAPPING pD[3]
+{
+	%000	"B"	B;
+	%001	"C"	C;
+	%010	"D"	D;
+	%011	"E"	E;
+	%100	"IXh"	IXh;
+	%101	"IXl"	IXl;
+	%111	"A"	A;
+}
+
+MAPPING	qS[3]
+{
+	%000	"B"	B;
+	%001	"C"	C;
+	%010	"D"	D;
+	%011	"E"	E;
+	%100	"IYh"	IYh;
+	%101	"IYl"	IYl;
+	%111	"A"	A;
+}
+
+MAPPING qD[3]
+{
+	%000	"B"	B;
+	%001	"C"	C;
+	%010	"D"	D;
+	%011	"E"	E;
+	%100	"IYh"	IYh;
+	%101	"IYl"	IYl;
+	%111	"A"	A;
+}
+
+MAPPING	rP[2]
+{
+	%00	"BC"	BC;
+	%01	"DE"	DE;
+	%10	"HL"	HL;
+	%11	"SP"	SP;
+}
+
+MAPPING	pP[2]
+{
+	%00	"BC"	BC;
+	%01	"DE"	DE;
+	%10	"IX"	IX;
+	%11	"SP"	SP;
+}
+
+MAPPING	qP[2]
+{
+	%00	"BC"	BC;
+	%01	"DE"	DE;
+	%10	"IY"	IY;
+	%11	"SP"	SP;
+}
+
+MAPPING	PRP[2]
+{
+	%00	"BC"	BC;
+	%01	"DE"	DE;
+	%10	"HL"	HL;
+	%11	"AF"	AF;
+}
+
+MAPPING	BCDE[2]
+{
+	%00	"BC"	BC;
+	%01	"DE"	DE;
+}
+
+MAPPING CCC[3]
+{
+	%000	"NZ"	z == 0;
+	%001	"Z"	z == 1;
+	%010	"NC"	c == 0;
+	%011	"C"	c == 1;
+	%100	"PO"	p == 0;
+	%101	"PE"	p == 1;
+	%110	"P"	s == 0;
+	%111	"M"	s == 1;
+}
+
+MAPPING SS[2]
+{
+	%00	"NZ"	z == 0;
+	%01	"Z"	z == 1;
+	%10	"NC"	c == 0;
+	%11	"C"	c == 1;
+}
+
+MAPPING NNN[3]
+{
+	%000	"$00"	$00;
+	%001	"$08"	$08;
+	%010	"$10"	$10;
+	%011	"$18"	$18;
+	%100	"$20"	$20;
+	%101	"$28"	$28;
+	%110	"$30"	$30;
+	%111	"$38"	$38;
+}
+
+FUNCTION INTERNAL CompareFlags	src[8]	# Seperated as a function because undocumented bits come from the operand and not from the result
+{
+	AFFECT s AS SIGN, z AS ZERO, h AS CARRY(3), p AS OVERFLOW(A,src,7), n AS FORCESET, c AS CARRY(7)
+	{ 
+		A - src
+	};
+	AFFECT b5 AS BIT(5), b3 AS BIT(3)
+	{
+		src
+	};
+}
+
+MAPPING ALU[3]
+{
+	%000	"ADD A,"	AFFECT s AS SIGN, z AS ZERO, b5 AS BIT(5), h AS CARRY(3), b3 AS BIT(3), p AS OVERFLOW(A,TMP,7), n AS FORCERESET, c AS CARRY(7) { A + TMP }->A;
+	%001	"ADC A,"	AFFECT s AS SIGN, z AS ZERO, b5 AS BIT(5), h AS CARRY(3), b3 AS BIT(3), p AS OVERFLOW(A,TMP,7), n AS FORCERESET, c AS CARRY(7) { (A + TMP)+c }->A;
+	%010	"SUB "		AFFECT s AS SIGN, z AS ZERO, b5 AS BIT(5), h AS CARRY(3), b3 AS BIT(3), p AS OVERFLOW(A,TMP,7), n AS FORCESET, c AS CARRY(7) { A - TMP }->A;
+	%011	"SBC A,"	AFFECT s AS SIGN, z AS ZERO, b5 AS BIT(5), h AS CARRY(3), b3 AS BIT(3), p AS OVERFLOW(A,TMP,7), n AS FORCESET, c AS CARRY(7) { (A - TMP)-c }->A;
+	%100	"AND "		AFFECT s AS SIGN, z AS ZERO, b5 AS BIT(5), h AS FORCESET,b3 AS BIT(3), p AS PARITYEVEN, n AS FORCERESET, c AS FORCERESET { A & TMP }->A;
+	%101	"XOR "		AFFECT s AS SIGN, z AS ZERO, b5 AS BIT(5), h AS FORCERESET,b3 AS BIT(3), p AS PARITYEVEN, n AS FORCERESET, c AS FORCERESET { A ^ TMP }->A;
+	%110	"OR "		AFFECT s AS SIGN, z AS ZERO, b5 AS BIT(5), h AS FORCERESET,b3 AS BIT(3), p AS PARITYEVEN, n AS FORCERESET, c AS FORCERESET { A | TMP }->A;
+	%111	"CP "		CALL CompareFlags(TMP);
+}
+
+MAPPING INCDEC[3]
+{
+	%100	"INC "		AFFECT s AS SIGN, z AS ZERO, b5 AS BIT(5), h AS CARRY(3), b3 AS BIT(3), p AS OVERFLOW(TMP,$01,7), n AS FORCERESET { TMP + 1 }->TMP;
+	%101	"DEC "		AFFECT s AS SIGN, z AS ZERO, b5 AS BIT(5), h AS CARRY(3), b3 AS BIT(3), p AS OVERFLOW(TMP,$01,7), n AS FORCESET { TMP - 1 }->TMP;
+}
+
+MAPPING IMM[2]
+{
+	%00	"0"	0;
+	%10	"1"	1;
+	%11	"2"	2;
+}
+
+MAPPING ROT[3]
+{
+	%000	"RLC "		AFFECT s AS SIGN, z AS ZERO, b5 AS BIT(5), h AS FORCERESET, b3 AS BIT(3),p AS PARITYEVEN,n AS FORCERESET { ROL(TMP,c,TMP[7..7],1) }->TMP;
+	%001	"RRC "		AFFECT s AS SIGN, z AS ZERO, b5 AS BIT(5), h AS FORCERESET, b3 AS BIT(3),p AS PARITYEVEN,n AS FORCERESET { ROR(TMP,c,TMP[0..0],1) }->TMP;
+	%010	"RL "		AFFECT s AS SIGN, z AS ZERO, b5 AS BIT(5), h AS FORCERESET, b3 AS BIT(3),p AS PARITYEVEN,n AS FORCERESET { ROL(TMP,c,c,1) }->TMP;
+	%011	"RR "		AFFECT s AS SIGN, z AS ZERO, b5 AS BIT(5), h AS FORCERESET, b3 AS BIT(3),p AS PARITYEVEN,n AS FORCERESET { ROR(TMP,c,c,1) }->TMP;
+	%100	"SLA "		AFFECT s AS SIGN, z AS ZERO, b5 AS BIT(5), h AS FORCERESET, b3 AS BIT(3),p AS PARITYEVEN,n AS FORCERESET { ROL(TMP,c,0,1) }->TMP;
+	%101	"SRA "		AFFECT s AS SIGN, z AS ZERO, b5 AS BIT(5), h AS FORCERESET, b3 AS BIT(3),p AS PARITYEVEN,n AS FORCERESET { ROR(TMP,c,TMP[7..7],1) }->TMP;
+	%110	"SLL "		AFFECT s AS SIGN, z AS ZERO, b5 AS BIT(5), h AS FORCERESET, b3 AS BIT(3),p AS PARITYEVEN,n AS FORCERESET { ROL(TMP,c,1,1) }->TMP;
+	%111	"SRL "		AFFECT s AS SIGN, z AS ZERO, b5 AS BIT(5), h AS FORCERESET, b3 AS BIT(3),p AS PARITYEVEN,n AS FORCERESET { ROR(TMP,c,0,1) }->TMP;
+}
+
+FUNCTION INTERNAL LastInstructionCycle
+{
+	LastCycle<-1;
+	NxtTable<-0;
+	NEXT PIN__CLK.M1.T1;
+}
+
+# Multi Opcode Group
+
+INSTRUCTION		"CB"			%11001011
+{
+	IF PIN__CLK.M1.T4@
+	{
+		TableCB<-1;
+		NEXT PIN__CLK.M1.T1;
+	}
+}
+
+INSTRUCTION		"DD"			%11011101
+{
+	IF PIN__CLK.M1.T4@
+	{
+		TableDD<-1;
+		NEXT PIN__CLK.M1.T1;
+	}
+}
+
+INSTRUCTION		"ED"			%11101101
+{
+	IF PIN__CLK.M1.T4@
+	{
+		TableED<-1;
+		NEXT PIN__CLK.M1.T1;
+	}
+}
+
+INSTRUCTION		"FD"			%11111101
+{
+	IF PIN__CLK.M1.T4@
+	{
+		TableFD<-1;
+		NEXT PIN__CLK.M1.T1;
+	}
+}
+
+INSTRUCTION	DD	"DDCB"			%11001011
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==1)
+	{
+		TMP<-DATA_BUFF;
+		WZ<-IX++TMP;
+		ADDR_BUFF<-WZ;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T5@ & (MachineCycle==2)
+	{
+		TMP<-DATA_BUFF;
+		TableCB<-1;
+		NEXT PIN__CLK.M1.T1;
+	}
+}
+
+INSTRUCTION	FD	"FDCB"			%11001011
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==1)
+	{
+		TMP<-DATA_BUFF;
+		WZ<-IY++TMP;
+		ADDR_BUFF<-WZ;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T5@ & (MachineCycle==2)
+	{
+		TMP<-DATA_BUFF;
+		TableCB<-1;
+		NEXT PIN__CLK.M1.T1;
+	}
+}
+
+# 8 Bit Load Group
+
+INSTRUCTION		"LD %M0,%M1"		%01:rD:rS
+{
+	IF PIN__CLK.M1.T4@
+	{
+		rD <- rS;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	DD	"LD %M0,%M1"		%01:pD:pS
+{
+	IF PIN__CLK.M1.T4@
+	{
+		pD <- pS;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	FD	"LD %M0,%M1"		%01:qD:qS
+{
+	IF PIN__CLK.M1.T4@
+	{
+		qD <- qS;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION		"LD %M0,%$1"		%00:rD:%110,B2[8]
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@
+	{
+		rD <- DATA_BUFF;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	DD	"LD %M0,%$1"		%00:pD:%110,B2[8]
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@
+	{
+		pD <- DATA_BUFF;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	FD	"LD %M0,%$1"		%00:qD:%110,B2[8]
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@
+	{
+		qD <- DATA_BUFF;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION		"LD %M0,(HL)"		%01:rD:%110
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-HL;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@
+	{
+		rD <- DATA_BUFF;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	DD	"LD %M0,(IX+%$1)"	%01:rD:%110,B2[8]
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==1)
+	{
+		TMP<-DATA_BUFF;
+		NEXT PIN__CLK.LONGOP.T1;
+	}
+
+	IF PIN__CLK.LONGOP.T5@
+	{
+		WZ<-IX++TMP;
+		ADDR_BUFF<-WZ;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==3)
+	{
+		rD<-DATA_BUFF;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	FD	"LD %M0,(IY+%$1)"	%01:rD:%110,B2[8]
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==1)
+	{
+		TMP<-DATA_BUFF;
+		NEXT PIN__CLK.LONGOP.T1;
+	}
+
+	IF PIN__CLK.LONGOP.T5@
+	{
+		WZ<-IY++TMP;
+		ADDR_BUFF<-WZ;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==3)
+	{
+		rD<-DATA_BUFF;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION		"LD (HL),%M0"		%01110:rS
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-HL;
+		DATA_BUFF<-rS;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+
+	IF PIN__CLK.MEM_WRITE.T3@
+	{
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	DD	"LD (IX+%$1),%M0"	%01110:rS,B2[8]
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@
+	{
+		TMP<-DATA_BUFF;
+		NEXT PIN__CLK.LONGOP.T1;
+	}
+
+	IF PIN__CLK.LONGOP.T5@
+	{
+		WZ<-IX++TMP;
+		ADDR_BUFF<-WZ;
+		DATA_BUFF<-rS;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+
+	IF PIN__CLK.MEM_WRITE.T3@
+	{
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	FD	"LD (IY+%$1),%M0"	%01110:rS,B2[8]
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@
+	{
+		TMP<-DATA_BUFF;
+		NEXT PIN__CLK.LONGOP.T1;
+	}
+
+	IF PIN__CLK.LONGOP.T5@
+	{
+		WZ<-IY++TMP;
+		ADDR_BUFF<-WZ;
+		DATA_BUFF<-rS;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+
+	IF PIN__CLK.MEM_WRITE.T3@
+	{
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION		"LD (HL),%$1"		%00110110,B2[8]
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@
+	{
+		ADDR_BUFF<-HL;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+
+	IF PIN__CLK.MEM_WRITE.T3@
+	{
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	DD	"LD (IX+%$1),%$2"	%00110110,B2[8],B3[8]
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==1)
+	{
+		TMP<-DATA_BUFF;
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T5@ & (MachineCycle==2)
+	{
+		WZ<-IX++TMP;
+		ADDR_BUFF<-WZ;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+
+	IF PIN__CLK.MEM_WRITE.T3@
+	{
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	FD	"LD (IY+%$1),%$2"	%00110110,B2[8],B3[8]
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==1)
+	{
+		TMP<-DATA_BUFF;
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T5@ & (MachineCycle==2)
+	{
+		WZ<-IY++TMP;
+		ADDR_BUFF<-WZ;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+
+	IF PIN__CLK.MEM_WRITE.T3@
+	{
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION		"LD A,(%M0)"		%00:BCDE:%1010
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-BCDE;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@
+	{
+		A<-DATA_BUFF;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION		"LD A,(%$2%$1)"		%00111010,B2[8],B3[8]
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==1)
+	{
+		Z<-DATA_BUFF;
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==2)
+	{
+		W<-DATA_BUFF;
+		ADDR_BUFF<-WZ;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+	
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==3)
+	{
+		A<-DATA_BUFF;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION		"LD (%M0),A"		%00:BCDE:%0010
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-BCDE;
+		DATA_BUFF<-A;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+
+	IF PIN__CLK.MEM_WRITE.T3@
+	{
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION		"LD (%$2%$1),A"		%00110010,B2[8],B3[8]
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==1)
+	{
+		Z<-DATA_BUFF;
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==2)
+	{
+		W<-DATA_BUFF;
+		ADDR_BUFF<-WZ;
+		DATA_BUFF<-A;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+	
+	IF PIN__CLK.MEM_WRITE.T3@ 
+	{
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	ED	"LD A,I"		%01010111
+{
+	IF PIN__CLK.M1.T5@
+	{
+		AFFECT s AS SIGN, z AS ZERO, b5 AS BIT(5), b3 AS BIT(3)
+		{
+			I
+		}->A;
+		n<-0;
+		h<-0;
+		p<-IFF2;
+	       	CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	ED	"LD A,R"		%01011111
+{
+	IF PIN__CLK.M1.T5@
+	{
+		AFFECT s AS SIGN, z AS ZERO, b5 AS BIT(5), b3 AS BIT(3)
+		{
+			IR[0..7]
+		}->A;
+		n<-0;
+		h<-0;
+		p<-IFF2;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	ED	"LD I,A"		%01000111
+{
+	IF PIN__CLK.M1.T5@
+	{
+		I<-A;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	ED	"LD R,A"		%01001111
+{
+	IF PIN__CLK.M1.T5@
+	{
+		R<-A;
+		CALL LastInstructionCycle();
+	}
+}
+
+## 16 Bit Load Group
+
+INSTRUCTION		"LD %M0,%$2%$1"		%00:rP:%0001,B2[8],B3[8]
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==1)
+	{
+		Z<-DATA_BUFF;
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==2)
+	{
+		W<-DATA_BUFF;
+		rP<-WZ;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	DD	"LD IX,%$2%$1"		%00100001,B2[8],B3[8]
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==1)
+	{
+		Z<-DATA_BUFF;
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==2)
+	{
+		W<-DATA_BUFF;
+		IX<-WZ;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	FD	"LD IY,%$2%$1"		%00100001,B2[8],B3[8]
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==1)
+	{
+		Z<-DATA_BUFF;
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==2)
+	{
+		W<-DATA_BUFF;
+		IY<-WZ;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION		"LD HL,(%$2%$1)"	%00101010,B2[8],B3[8]
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==1)
+	{
+		Z<-DATA_BUFF;
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==2)
+	{
+		W<-DATA_BUFF;
+		ADDR_BUFF<-WZ;
+		WZ<-WZ+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+	
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==3)
+	{
+		L<-DATA_BUFF;
+		ADDR_BUFF<-WZ;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+	
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==4)
+	{
+		H<-DATA_BUFF;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	ED	"LD %M0,(%$2%$1)"	%01:rP:%1011,B2[8],B3[8]
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==1)
+	{
+		Z<-DATA_BUFF;
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==2)
+	{
+		W<-DATA_BUFF;
+		ADDR_BUFF<-WZ;
+		WZ<-WZ+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+	
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==3)
+	{
+		ADDR_BUFF<-WZ;
+		Z<-DATA_BUFF;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+	
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==4)
+	{
+		W<-DATA_BUFF;
+		rP<-WZ;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	DD	"LD IX,(%$2%$1)"	%00101010,B2[8],B3[8]
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==1)
+	{
+		Z<-DATA_BUFF;
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==2)
+	{
+		W<-DATA_BUFF;
+		ADDR_BUFF<-WZ;
+		WZ<-WZ+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+	
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==3)
+	{
+		ADDR_BUFF<-WZ;
+		Z<-DATA_BUFF;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+	
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==4)
+	{
+		W<-DATA_BUFF;
+		IX<-WZ;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	FD	"LD IY,(%$2%$1)"	%00101010,B2[8],B3[8]
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==1)
+	{
+		Z<-DATA_BUFF;
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==2)
+	{
+		W<-DATA_BUFF;
+		ADDR_BUFF<-WZ;
+		WZ<-WZ+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+	
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==3)
+	{
+		ADDR_BUFF<-WZ;
+		Z<-DATA_BUFF;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+	
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==4)
+	{
+		W<-DATA_BUFF;
+		IY<-WZ;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION		"LD (%$2%$1),HL"	%00100010,B2[8],B3[8]
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==1)
+	{
+		Z<-DATA_BUFF;
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==2)
+	{
+		W<-DATA_BUFF;
+		ADDR_BUFF<-WZ;
+		WZ<-WZ+1;
+		DATA_BUFF<-L;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+	
+	IF PIN__CLK.MEM_WRITE.T3@ & (MachineCycle==3)
+	{
+		ADDR_BUFF<-WZ;
+		DATA_BUFF<-H;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+	
+	IF PIN__CLK.MEM_WRITE.T3@ & (MachineCycle==4)
+	{
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	ED	"LD (%$2%$1),%M0"	%01:rP:%0011,B2[8],B3[8]
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==1)
+	{
+		Z<-DATA_BUFF;
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==2)
+	{
+		W<-DATA_BUFF;
+		ADDR_BUFF<-WZ;
+		WZ<-WZ+1;
+		DATA_BUFF<-rP[0..7];
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+	
+	IF PIN__CLK.MEM_WRITE.T3@ & (MachineCycle==3)
+	{
+		ADDR_BUFF<-WZ;
+		DATA_BUFF<-rP[8..15];
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+	
+	IF PIN__CLK.MEM_WRITE.T3@ & (MachineCycle==4)
+	{
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	DD	"LD (%$2%$1),IX"	%00100010,B2[8],B3[8]
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==1)
+	{
+		Z<-DATA_BUFF;
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==2)
+	{
+		W<-DATA_BUFF;
+		ADDR_BUFF<-WZ;
+		WZ<-WZ+1;
+		DATA_BUFF<-IXl;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+	
+	IF PIN__CLK.MEM_WRITE.T3@ & (MachineCycle==3)
+	{
+		ADDR_BUFF<-WZ;
+		DATA_BUFF<-IXh;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+	
+	IF PIN__CLK.MEM_WRITE.T3@ & (MachineCycle==4)
+	{
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	FD	"LD (%$2%$1),IY"	%00100010,B2[8],B3[8]
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==1)
+	{
+		Z<-DATA_BUFF;
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==2)
+	{
+		W<-DATA_BUFF;
+		ADDR_BUFF<-WZ;
+		WZ<-WZ+1;
+		DATA_BUFF<-IYl;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+	
+	IF PIN__CLK.MEM_WRITE.T3@ & (MachineCycle==3)
+	{
+		ADDR_BUFF<-WZ;
+		DATA_BUFF<-IYh;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+	
+	IF PIN__CLK.MEM_WRITE.T3@ & (MachineCycle==4)
+	{
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION		"LD SP,HL"		%11111001
+{
+	IF PIN__CLK.M1.T6@
+	{
+		SP <- HL;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	DD	"LD SP,IX"		%11111001
+{
+	IF PIN__CLK.M1.T6@
+	{
+		SP <- IX;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	FD	"LD SP,IY"		%11111001
+{
+	IF PIN__CLK.M1.T6@
+	{
+		SP <- IY;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION		"PUSH %M0"		%11:PRP:%0101
+{
+	IF PIN__CLK.M1.T5@
+	{
+		SP<-SP-1;
+		ADDR_BUFF<-SP;
+		DATA_BUFF<-PRP[8..15];
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+
+	IF PIN__CLK.MEM_WRITE.T3@ & (MachineCycle==1)
+	{
+		SP<-SP-1;
+		ADDR_BUFF<-SP;
+		DATA_BUFF<-PRP[0..7];
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+	
+	IF PIN__CLK.MEM_WRITE.T3@ & (MachineCycle==2)
+	{
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	DD	"PUSH IX"		%11100101
+{
+	IF PIN__CLK.M1.T5@
+	{
+		SP<-SP-1;
+		ADDR_BUFF<-SP;
+		DATA_BUFF<-IXh;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+
+	IF PIN__CLK.MEM_WRITE.T3@ & (MachineCycle==1)
+	{
+		SP<-SP-1;
+		ADDR_BUFF<-SP;
+		DATA_BUFF<-IXl;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+	
+	IF PIN__CLK.MEM_WRITE.T3@ & (MachineCycle==2)
+	{
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	FD	"PUSH IY"		%11100101
+{
+	IF PIN__CLK.M1.T5@
+	{
+		SP<-SP-1;
+		ADDR_BUFF<-SP;
+		DATA_BUFF<-IYh;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+
+	IF PIN__CLK.MEM_WRITE.T3@ & (MachineCycle==1)
+	{
+		SP<-SP-1;
+		ADDR_BUFF<-SP;
+		DATA_BUFF<-IYl;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+	
+	IF PIN__CLK.MEM_WRITE.T3@ & (MachineCycle==2)
+	{
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION		"POP %M0"		%11:PRP:%0001
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-SP;
+		SP<-SP+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==1)
+	{
+		DATA_BUFF->PRP[0..7];
+		ADDR_BUFF<-SP;
+		SP<-SP+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+	
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==2)
+	{
+		DATA_BUFF->PRP[8..15];
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	DD	"POP IX"		%11100001
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-SP;
+		SP<-SP+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==1)
+	{
+		DATA_BUFF->IXl;
+		ADDR_BUFF<-SP;
+		SP<-SP+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+	
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==2)
+	{
+		DATA_BUFF->IXh;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	FD	"POP IY"		%11100001
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-SP;
+		SP<-SP+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==1)
+	{
+		DATA_BUFF->IYl;
+		ADDR_BUFF<-SP;
+		SP<-SP+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+	
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==2)
+	{
+		DATA_BUFF->IYh;
+		CALL LastInstructionCycle();
+	}
+}
+
+## Exchange Group
+
+INSTRUCTION		"EX DE,HL"		%11101011
+{
+	IF PIN__CLK.M1.T4@
+	{
+		HL <-> DE;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION		"EX AF,AF'"		%00001000
+{
+	IF PIN__CLK.M1.T4@
+	{
+		AF <-> _AF;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION		"EXX"			%11011001
+{
+	IF PIN__CLK.M1.T4@
+	{
+		BC <-> _BC;
+		DE <-> _DE;
+		HL <-> _HL;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION		"EX (SP),HL"		%11100011
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-SP;
+		SP<-SP+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==1)
+	{
+		DATA_BUFF->Z;
+		ADDR_BUFF<-SP;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+	
+	IF PIN__CLK.MEM_READ.T4@ & (MachineCycle==2)
+	{
+		DATA_BUFF->W;
+		ADDR_BUFF<-SP;
+		DATA_BUFF<-H;
+		SP<-SP-1;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+	
+	IF PIN__CLK.MEM_WRITE.T3@ & (MachineCycle==3)
+	{
+		ADDR_BUFF<-SP;
+		DATA_BUFF<-L;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+	
+	IF PIN__CLK.MEM_WRITE.T5@ & (MachineCycle==4)
+	{
+		HL<-WZ;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	DD	"EX (SP),IX"		%11100011
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-SP;
+		SP<-SP+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==1)
+	{
+		DATA_BUFF->Z;
+		ADDR_BUFF<-SP;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+	
+	IF PIN__CLK.MEM_READ.T4@ & (MachineCycle==2)
+	{
+		DATA_BUFF->W;
+		ADDR_BUFF<-SP;
+		DATA_BUFF<-IXh;
+		SP<-SP-1;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+	
+	IF PIN__CLK.MEM_WRITE.T3@ & (MachineCycle==3)
+	{
+		ADDR_BUFF<-SP;
+		DATA_BUFF<-IXl;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+	
+	IF PIN__CLK.MEM_WRITE.T5@ & (MachineCycle==4)
+	{
+		IX<-WZ;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	FD	"EX (SP),IY"		%11100011
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-SP;
+		SP<-SP+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==1)
+	{
+		DATA_BUFF->Z;
+		ADDR_BUFF<-SP;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+	
+	IF PIN__CLK.MEM_READ.T4@ & (MachineCycle==2)
+	{
+		DATA_BUFF->W;
+		ADDR_BUFF<-SP;
+		DATA_BUFF<-IYh;
+		SP<-SP-1;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+	
+	IF PIN__CLK.MEM_WRITE.T3@ & (MachineCycle==3)
+	{
+		ADDR_BUFF<-SP;
+		DATA_BUFF<-IYl;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+	
+	IF PIN__CLK.MEM_WRITE.T5@ & (MachineCycle==4)
+	{
+		IY<-WZ;
+		CALL LastInstructionCycle();
+	}
+}
+
+## Block Transfer Group
+
+FUNCTION INTERNAL BlockTransferFlags	TMP[8]
+{
+	AFFECT b5 AS BIT(1),b3 AS BIT(3),n AS FORCERESET,h AS FORCERESET
+	{
+		A + TMP
+	};
+	AFFECT p AS NONZERO
+	{
+		BC - 1
+	}->BC;
+}
+
+INSTRUCTION	ED	"LDI"			%10100000
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-HL;
+		HL<-HL+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@
+	{
+		TMP<-DATA_BUFF;
+		ADDR_BUFF<-DE;
+		DE<-DE+1;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+
+	IF PIN__CLK.MEM_WRITE.T5@
+	{
+		CALL BlockTransferFlags(TMP);
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	ED	"LDIR"			%10110000
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-HL;
+		HL<-HL+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@
+	{
+		TMP<-DATA_BUFF;
+		ADDR_BUFF<-DE;
+		DE<-DE+1;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+
+	IF PIN__CLK.MEM_WRITE.T5@
+	{
+		CALL BlockTransferFlags(TMP);
+		NEXT PIN__CLK.LONGOP.T1;
+		IF ~p
+		{
+			CALL LastInstructionCycle();
+		}
+	}
+
+	IF PIN__CLK.LONGOP.T5@
+	{
+		PC<-PC-2;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	ED	"LDD"			%10101000
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-HL;
+		HL<-HL-1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@
+	{
+		TMP<-DATA_BUFF;
+		ADDR_BUFF<-DE;
+		DE<-DE-1;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+
+	IF PIN__CLK.MEM_WRITE.T5@
+	{
+		CALL BlockTransferFlags(TMP);
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	ED	"LDDR"			%10111000
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-HL;
+		HL<-HL-1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@
+	{
+		TMP<-DATA_BUFF;
+		ADDR_BUFF<-DE;
+		DE<-DE-1;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+
+	IF PIN__CLK.MEM_WRITE.T5@
+	{
+		CALL BlockTransferFlags(TMP);
+		NEXT PIN__CLK.LONGOP.T1;
+		IF ~p
+		{
+			CALL LastInstructionCycle();
+		}
+	}
+
+	IF PIN__CLK.LONGOP.T5@
+	{
+		PC<-PC-2;
+		CALL LastInstructionCycle();
+	}
+}
+
+## Search Group
+
+FUNCTION INTERNAL SearchFlags	TMP[8]
+{
+	DECLARE res[8];
+	AFFECT s AS SIGN, z AS ZERO, h AS CARRY(3)
+	{
+		A - TMP
+	}->res;
+	n<-1;
+
+	AFFECT b5 AS BIT(1),b3 AS BIT(3)
+	{
+		res - h
+	};
+	AFFECT p AS NONZERO
+	{
+		BC - 1
+	}->BC;
+}
+
+INSTRUCTION	ED	"CPI"			%10100001
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-HL;
+		HL<-HL+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@
+	{
+		TMP<-DATA_BUFF;
+		NEXT PIN__CLK.LONGOP.T1;
+	}
+
+	IF PIN__CLK.LONGOP.T5@
+	{
+		CALL SearchFlags(TMP);
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	ED	"CPIR"			%10110001
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-HL;
+		HL<-HL+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@
+	{
+		TMP<-DATA_BUFF;
+		NEXT PIN__CLK.LONGOP.T1;
+	}
+
+	IF PIN__CLK.LONGOP.T5@ & (MachineCycle==2)
+	{
+		CALL SearchFlags(TMP);
+		NEXT PIN__CLK.LONGOP.T1;
+		IF ~(p & ~z)
+		{
+			CALL LastInstructionCycle();
+		}
+	}
+
+	IF PIN__CLK.LONGOP.T5@ & (MachineCycle==3)
+	{
+		PC<-PC-2;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	ED	"CPD"			%10101001
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-HL;
+		HL<-HL-1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@
+	{
+		TMP<-DATA_BUFF;
+		NEXT PIN__CLK.LONGOP.T1;
+	}
+
+	IF PIN__CLK.LONGOP.T5@
+	{
+		CALL SearchFlags(TMP);
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	ED	"CPDR"			%10111001
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-HL;
+		HL<-HL-1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@
+	{
+		TMP<-DATA_BUFF;
+		NEXT PIN__CLK.LONGOP.T1;
+	}
+
+	IF PIN__CLK.LONGOP.T5@ & (MachineCycle==2)
+	{
+		CALL SearchFlags(TMP);
+		NEXT PIN__CLK.LONGOP.T1;
+		IF ~(p & ~z)
+		{
+			CALL LastInstructionCycle();
+		}
+	}
+
+	IF PIN__CLK.LONGOP.T5@ & (MachineCycle==3)
+	{
+		PC<-PC-2;
+		CALL LastInstructionCycle();
+	}
+}
+
+## 8 Bit Arithmetic And Logical Group
+
+INSTRUCTION		"%M0%M1"		%10:ALU:rS
+{
+	IF PIN__CLK.M1.T4@
+	{
+		TMP<-rS;
+		ALU;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	DD	"%M0%M1"		%10:ALU:pS
+{
+	IF PIN__CLK.M1.T4@
+	{
+		TMP<-pS;
+		ALU;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	FD	"%M0%M1"		%10:ALU:qS
+{
+	IF PIN__CLK.M1.T4@
+	{
+		TMP<-qS;
+		ALU;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION		"%M0%$1"		%11:ALU:%110,B2[8]
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@
+	{
+		TMP <- DATA_BUFF;
+		ALU;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION		"%M0(HL)"		%10:ALU:%110
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-HL;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@
+	{
+		TMP <- DATA_BUFF;
+		ALU;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	DD	"%M0(IX+%$1)"		%10:ALU:%110,B2[8]
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==1)
+	{
+		TMP<-DATA_BUFF;
+		NEXT PIN__CLK.LONGOP.T1;
+	}
+
+	IF PIN__CLK.LONGOP.T5@
+	{
+		WZ<-IX++TMP;
+		ADDR_BUFF<-WZ;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==3)
+	{
+		TMP<-DATA_BUFF;
+		ALU;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	FD	"%M0(IY+%$1)"		%10:ALU:%110,B2[8]
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==1)
+	{
+		TMP<-DATA_BUFF;
+		NEXT PIN__CLK.LONGOP.T1;
+	}
+
+	IF PIN__CLK.LONGOP.T5@
+	{
+		WZ<-IY++TMP;
+		ADDR_BUFF<-WZ;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==3)
+	{
+		TMP<-DATA_BUFF;
+		ALU;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION		"%M1%M0"		%00:rD:INCDEC
+{
+	IF PIN__CLK.M1.T4@
+	{
+		TMP <- rD;
+		INCDEC;
+		rD <- TMP;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	DD	"%M1%M0"		%00:pD:INCDEC
+{
+	IF PIN__CLK.M1.T4@
+	{
+		TMP <- pD;
+		INCDEC;
+		pD <- TMP;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	FD	"%M1%M0"		%00:qD:INCDEC
+{
+	IF PIN__CLK.M1.T4@
+	{
+		TMP <- qD;
+		INCDEC;
+		qD <- TMP;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION		"%M0(HL)"		%00110:INCDEC
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-HL;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T4@
+	{
+		DATA_BUFF->TMP;
+		INCDEC;
+		DATA_BUFF<-TMP;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+	
+	IF PIN__CLK.MEM_WRITE.T3@
+	{
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	DD	"%M0(IX+%$1)"		%00110:INCDEC,B2[8]
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==1)
+	{
+		TMP<-DATA_BUFF;
+		NEXT PIN__CLK.LONGOP.T1;
+	}
+
+	IF PIN__CLK.LONGOP.T5@
+	{
+		WZ<-IX++TMP;
+		ADDR_BUFF<-WZ;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T4@ & (MachineCycle==3)
+	{
+		TMP<-DATA_BUFF;
+		INCDEC;
+		DATA_BUFF<-TMP;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+
+	IF PIN__CLK.MEM_WRITE.T3@
+	{
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	FD	"%M0(IY+%$1)"		%00110:INCDEC,B2[8]
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==1)
+	{
+		TMP<-DATA_BUFF;
+		NEXT PIN__CLK.LONGOP.T1;
+	}
+
+	IF PIN__CLK.LONGOP.T5@
+	{
+		WZ<-IY++TMP;
+		ADDR_BUFF<-WZ;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T4@ & (MachineCycle==3)
+	{
+		TMP<-DATA_BUFF;
+		INCDEC;
+		DATA_BUFF<-TMP;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+
+	IF PIN__CLK.MEM_WRITE.T3@
+	{
+		CALL LastInstructionCycle();
+	}
+}
+
+## General Purpose Arithmetic And Control Group
+
+INSTRUCTION		"DAA"			%00100111
+{
+	IF PIN__CLK.M1.T4@
+	{
+		TMP<-A;
+		IF n == 1
+		{
+			IF h | ((TMP&$F)>9)
+			{
+				TMP<-TMP-6;
+			}
+			IF c | (TMP>$99)
+			{
+				TMP<-TMP-$60;
+			}
+		}
+		IF n == 0
+		{
+			IF h | ((TMP&$F)>9)
+			{
+				TMP<-TMP+6;
+			}
+			IF c | (TMP>$99)
+			{
+				TMP<-TMP+$60;
+			}
+		}
+
+		h<-(A^TMP)[4..4];
+		c<-c | (A>$99);
+
+		AFFECT s AS SIGN,z AS ZERO,b5 AS BIT(5),b3 AS BIT(3),p AS PARITYEVEN
+		{
+			TMP
+		}->A;
+	
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION		"CPL"			%00101111
+{
+	IF PIN__CLK.M1.T4@
+	{
+		AFFECT b5 AS BIT(5),h AS FORCESET,b3 AS BIT(3),n AS FORCESET
+		{
+			~A
+		}->A;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	ED	"NEG"			%01000100
+{
+	IF PIN__CLK.M1.T4@
+	{
+		AFFECT s AS SIGN, z AS ZERO, b5 AS BIT(5), h AS CARRY(3), b3 AS BIT(3), p AS OVERFLOW($00,A,7), n AS FORCESET, c AS CARRY(7) 
+		{
+			0 - A
+		}->A;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION		"CCF"			%00111111
+{
+	IF PIN__CLK.M1.T4@
+	{
+		h<-c;
+		AFFECT b5 AS BIT(5),b3 AS BIT(3),n AS FORCERESET
+		{
+			A
+		};
+		c<-~c;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION		"SCF"			%00110111
+{
+	IF PIN__CLK.M1.T4@
+	{
+		AFFECT b5 AS BIT(5),h AS FORCERESET,b3 AS BIT(3),n AS FORCERESET
+		{
+			A
+		};
+		c<-1;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION		"NOP"			%00000000
+{
+	IF PIN__CLK.M1.T4@
+	{
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION		"HALT"			%01110110
+{
+	IF PIN__CLK.M1.T4@
+	{
+		PIN__HALT<-0;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION		"DI"			%11110011
+{
+	IF PIN__CLK.M1.T4@
+	{
+		IFF1<-0;
+		IFF2<-0;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION		"EI"			%11111011
+{
+	IF PIN__CLK.M1.T4@
+	{
+		IFF1<-1;
+		IFF2<-1;
+		IntCheck<-0;
+		NEXT PIN__CLK.M1.T1;		# We don't perform Last Instruction Cycle here, since interrupts cannot be accepted straight after an EI
+	}
+}
+
+INSTRUCTION	ED	"IM %M0"		%010:IMM:%110
+{
+	IF PIN__CLK.M1.T4@
+	{
+		IM<-IMM;
+		CALL LastInstructionCycle();
+	}
+}
+
+## 16 Bit Arithmetic Group
+
+INSTRUCTION		"ADD HL,%M0"		%00:rP:%1001
+{
+	IF PIN__CLK.M1.T4@
+	{
+		WZ<-rP;
+		NEXT PIN__CLK.LONGOP.T1;
+	}
+
+	IF PIN__CLK.LONGOP.T4@ & (MachineCycle==1)
+	{
+		AFFECT c AS CARRY(7)
+		{
+			L + Z
+		} -> L;
+		NEXT PIN__CLK.LONGOP.T1;
+	}
+
+	IF PIN__CLK.LONGOP.T3@ & (MachineCycle==2)
+	{
+		AFFECT b5 AS BIT(5),h AS CARRY(3),b3 AS BIT(3),n AS FORCERESET,c AS CARRY(7)
+		{
+			(H + W) + c
+		} -> H;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	ED	"ADC HL,%M0"		%01:rP:%1010
+{
+	IF PIN__CLK.M1.T4@
+	{
+		WZ<-rP;
+		NEXT PIN__CLK.LONGOP.T1;
+	}
+
+	IF PIN__CLK.LONGOP.T4@ & (MachineCycle==1)
+	{
+		AFFECT c AS CARRY(7)
+		{
+			(L + Z) + c
+		} -> L;
+		NEXT PIN__CLK.LONGOP.T1;
+	}
+
+	IF PIN__CLK.LONGOP.T3@ & (MachineCycle==2)
+	{
+		AFFECT s AS SIGN, b5 AS BIT(5),h AS CARRY(3),b3 AS BIT(3),p AS OVERFLOW(H,W,7),n AS FORCERESET,c AS CARRY(7)
+		{
+			(H + W)+c
+		}->H;
+		AFFECT z AS ZERO
+		{
+			HL
+		};
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	ED	"SBC HL,%M0"		%01:rP:%0010
+{
+	IF PIN__CLK.M1.T4@
+	{
+		WZ<-rP;
+		NEXT PIN__CLK.LONGOP.T1;
+	}
+
+	IF PIN__CLK.LONGOP.T4@ & (MachineCycle==1)
+	{
+		AFFECT c AS CARRY(7)
+		{
+			(L - Z) - c
+		} -> L;
+		NEXT PIN__CLK.LONGOP.T1;
+	}
+
+	IF PIN__CLK.LONGOP.T3@ & (MachineCycle==2)
+	{
+		AFFECT s AS SIGN, b5 AS BIT(5),h AS CARRY(3),b3 AS BIT(3),p AS OVERFLOW(H,W,7),n AS FORCESET,c AS CARRY(7)
+		{
+			(H - W)-c
+		}->H;
+		AFFECT z AS ZERO
+		{
+			HL
+		};
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	DD	"ADD IX,%M0"		%00:pP:%1001
+{
+	IF PIN__CLK.M1.T4@
+	{
+		WZ<-pP;
+		NEXT PIN__CLK.LONGOP.T1;
+	}
+
+	IF PIN__CLK.LONGOP.T4@ & (MachineCycle==1)
+	{
+		AFFECT c AS CARRY(7)
+		{
+			IXl + Z
+		} -> IXl;
+		NEXT PIN__CLK.LONGOP.T1;
+	}
+
+	IF PIN__CLK.LONGOP.T3@ & (MachineCycle==2)
+	{
+		AFFECT b5 AS BIT(5),h AS CARRY(3),b3 AS BIT(3),n AS FORCERESET,c AS CARRY(7)
+		{
+			(IXh + W) + c
+		} -> IXh;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	FD	"ADD IY,%M0"		%00:qP:%1001
+{
+	IF PIN__CLK.M1.T4@
+	{
+		WZ<-qP;
+		NEXT PIN__CLK.LONGOP.T1;
+	}
+
+	IF PIN__CLK.LONGOP.T4@ & (MachineCycle==1)
+	{
+		AFFECT c AS CARRY(7)
+		{
+			IYl + Z
+		} -> IYl;
+		NEXT PIN__CLK.LONGOP.T1;
+	}
+
+	IF PIN__CLK.LONGOP.T3@ & (MachineCycle==2)
+	{
+		AFFECT b5 AS BIT(5),h AS CARRY(3),b3 AS BIT(3),n AS FORCERESET,c AS CARRY(7)
+		{
+			(IYh + W) + c
+		} -> IYh;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION		"INC %M0"		%00:rP:%0011
+{
+	IF PIN__CLK.M1.T6@
+	{
+		rP<-rP+1;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	DD	"INC IX"		%00100011
+{
+	IF PIN__CLK.M1.T6@
+	{
+		IX<-IX+1;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	FD	"INC IY"		%00100011
+{
+	IF PIN__CLK.M1.T6@
+	{
+		IY<-IY+1;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION		"DEC %M0"		%00:rP:%1011
+{
+	IF PIN__CLK.M1.T6@
+	{
+		rP<-rP-1;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	DD	"DEC IX"		%00101011
+{
+	IF PIN__CLK.M1.T6@
+	{
+		IX<-IX-1;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	FD	"DEC IY"		%00101011
+{
+	IF PIN__CLK.M1.T6@
+	{
+		IY<-IY-1;
+		CALL LastInstructionCycle();
+	}
+}
+
+## Rotate And Shift Group
+
+INSTRUCTION		"RLCA"			%00000111
+{
+	IF PIN__CLK.M1.T4@
+	{
+		AFFECT b5 AS BIT(5), h AS FORCERESET, b3 AS BIT(3),n AS FORCERESET
+		{
+			ROL(A,c,A[7..7],1)
+		}->A;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION		"RLA"			%00010111
+{
+	IF PIN__CLK.M1.T4@
+	{
+		AFFECT b5 AS BIT(5), h AS FORCERESET, b3 AS BIT(3),n AS FORCERESET
+		{
+			ROL(A,c,c,1)
+		}->A;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION		"RRCA"			%00001111
+{
+	IF PIN__CLK.M1.T4@
+	{
+		AFFECT b5 AS BIT(5), h AS FORCERESET, b3 AS BIT(3),n AS FORCERESET
+		{
+			ROR(A,c,A[0..0],1)
+		}->A;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION		"RRA"			%00011111
+{
+	IF PIN__CLK.M1.T4@
+	{
+		AFFECT b5 AS BIT(5), h AS FORCERESET, b3 AS BIT(3),n AS FORCERESET
+		{
+			ROR(A,c,c,1)
+		}->A;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	CB	"%M0%M1"		%00:ROT:rD
+{
+	IF PIN__CLK.M1.T4@
+	{
+		TMP<-rD;
+		ROT;
+		rD<-TMP;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	CB	"%M0(HL)"		%00:ROT:%110
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-HL;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T4@
+	{
+		TMP<-DATA_BUFF;
+		ROT;
+		DATA_BUFF<-TMP;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+
+	IF PIN__CLK.MEM_WRITE.T3@
+	{
+		CALL LastInstructionCycle();
+	}
+}
+
+#INSTRUCTION	DDCB	"%M0(IX+%$-1)"		%00:ROT:%110,B[8]
+#{
+#	DECLARE TMP[8];
+#	DECLARE EA[16];
+#	EA<-IX++CALL GetByte(PC-2);
+#	TMP<-CALL GetByte(EA);
+#	ROT;
+#	CALL SetByte(EA,TMP);
+#	23->CYCLES;
+#}
+#
+#INSTRUCTION	FDCB	"%M0(IY+%$-1)"		%00:ROT:%110,B[8]
+#{
+#	DECLARE TMP[8];
+#	DECLARE EA[16];
+#	EA<-IY++CALL GetByte(PC-2);
+#	TMP<-CALL GetByte(EA);
+#	ROT;
+#	CALL SetByte(EA,TMP);
+#	23->CYCLES;
+#}
+#
+#INSTRUCTION	DDCB	"%M0(IX+%$-1),%M1"	%00:ROT:rD,B[8]	
+#{
+#	DECLARE TMP[8];
+#	DECLARE EA[16];
+#	EA<-IX++CALL GetByte(PC-2);
+#	TMP<-CALL GetByte(EA);
+#	ROT;
+#	CALL SetByte(EA,TMP);
+#	rD<-TMP;
+#	23->CYCLES;
+#}
+#
+#INSTRUCTION	FDCB	"%M0(IY+%$-1),%M1"	%00:ROT:rD,B[8]
+#{
+#	DECLARE TMP[8];
+#	DECLARE EA[16];
+#	EA<-IY++CALL GetByte(PC-2);
+#	TMP<-CALL GetByte(EA);
+#	ROT;
+#	CALL SetByte(EA,TMP);
+#	rD<-TMP;
+#	23->CYCLES;
+#}
+
+INSTRUCTION	ED	"RLD"			%01101111
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-HL;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@
+	{
+		TMP<-DATA_BUFF;
+		NEXT PIN__CLK.LONGOP.T1;
+	}
+
+	IF PIN__CLK.LONGOP.T4@
+	{
+		DECLARE TMPROT[4];
+		TMP<-ROL(TMP,TMPROT,A[0..3],4);
+		AFFECT s AS SIGN,z AS ZERO,b5 AS BIT(5),h AS FORCERESET,b3 AS BIT(3),p AS PARITYEVEN,n AS FORCERESET
+		{
+			(A & $F0) | TMPROT
+		}->A;
+		DATA_BUFF<-TMP;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+
+	IF PIN__CLK.MEM_WRITE.T3@
+	{
+		CALL LastInstructionCycle();
+	}
+}
+
+#INSTRUCTION	ED	"RRD"			%01100111
+#{
+#	DECLARE TMP[8];
+#	DECLARE TMPROT[4];
+#	TMP<-CALL GetByte(HL);
+#	TMP<-ROR(TMP,TMPROT,A[0..3],4);
+#	AFFECT s AS SIGN,z AS ZERO,b5 AS BIT(5),h AS FORCERESET,b3 AS BIT(3),p AS PARITYEVEN,n AS FORCERESET
+#	{
+#		(A & $F0) | TMPROT
+#	}->A;
+#	CALL SetByte(HL,TMP);
+#	18->CYCLES;
+#}
+#
+## Bit Set Reset And Test Group
+
+MAPPING BITINDEX[3]
+{
+	%000	"0"		%00000001;
+	%001	"1"		%00000010;
+	%010	"2"		%00000100;
+	%011	"3"		%00001000;
+	%100	"4"		%00010000;
+	%101	"5"		%00100000;
+	%110	"6"		%01000000;
+	%111	"7"		%10000000;
+}
+
+MAPPING SETRES[2]
+{
+	%10	"RES "		TMP & (~TMP2) -> TMP;
+	%11	"SET "		TMP | TMP2 -> TMP;
+}
+
+FUNCTION INTERNAL 	HandleBitFlags	b3b5[8],res[8],BitIndex[8]
+{
+	AFFECT z AS ZERO,h AS FORCESET,p AS PARITYEVEN,n AS FORCERESET
+	{
+		res
+	};
+	IF BitIndex==%10000000
+	{
+		AFFECT s AS SIGN
+		{
+			res
+		};
+	}
+	IF BitIndex==%00100000
+	{
+		AFFECT b5 AS BIT(5)
+		{
+			b3b5
+		};
+	}
+	IF BitIndex==%00001000
+	{
+		AFFECT b3 AS BIT(3)
+		{
+			b3b5	
+		};
+	}
+
+}
+
+INSTRUCTION	CB	"BIT %M0,%M1"		%01:BITINDEX:rS
+{
+	IF PIN__CLK.M1.T4@
+	{
+		CALL HandleBitFlags(rS & BITINDEX,rS & BITINDEX,BITINDEX);
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	CB	"BIT %M0,(HL)"		%01:BITINDEX:%110
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-HL;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T4@
+	{
+		DECLARE TMP2[8];
+		TMP<-DATA_BUFF & BITINDEX;
+		CALL HandleBitFlags(TMP,TMP,BITINDEX);
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	DDCB	"BIT %M0,(IX+%$-1)"	%01:BITINDEX:UNDOCUMENTED[3],B2[8]
+{
+	IF PIN__CLK.M1.T4@
+	{
+		TMP<-TMP & BITINDEX;
+		CALL HandleBitFlags(TMP,TMP,BITINDEX);
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	FDCB	"BIT %M0,(IY+%$-1)"	%01:BITINDEX:UNDOCUMENTED[3],B2[8]
+{
+	IF PIN__CLK.M1.T4@
+	{
+		TMP<-TMP & BITINDEX;
+		CALL HandleBitFlags(TMP,TMP,BITINDEX);
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	CB	"%M0%M1,%M2"		SETRES:BITINDEX:rD
+{
+	IF PIN__CLK.M1.T4@
+	{
+		DECLARE TMP2[8];
+		TMP<-rD;
+		TMP2<-BITINDEX;
+		SETRES;
+		rD<-TMP;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	CB	"%M0%M1,(HL)"		SETRES:BITINDEX:%110
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-HL;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T4@
+	{
+		DECLARE TMP2[8];
+		TMP<-DATA_BUFF;
+		TMP2<-BITINDEX;
+		SETRES;
+		DATA_BUFF<-TMP;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+
+	IF PIN__CLK.MEM_WRITE.T3@
+	{
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	DDCB	"%M0%M1,(IX+%$-1)"	SETRES:BITINDEX:%110,B2[8]
+{
+	IF PIN__CLK.M1.T4@
+	{
+		DECLARE TMP2[8];
+		TMP2<-BITINDEX;
+		SETRES;
+		ADDR_BUFF<-WZ;
+		DATA_BUFF<-TMP;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+
+	IF PIN__CLK.MEM_WRITE.T3@
+	{
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	FDCB	"%M0%M1,(IY+%$-1)"	SETRES:BITINDEX:%110,B2[8]
+{
+	IF PIN__CLK.M1.T4@
+	{
+		DECLARE TMP2[8];
+		TMP2<-BITINDEX;
+		SETRES;
+		ADDR_BUFF<-WZ;
+		DATA_BUFF<-TMP;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+
+	IF PIN__CLK.MEM_WRITE.T3@
+	{
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	DDCB	"%M0%M1,(IX+%$-1),%M2"	SETRES:BITINDEX:rD,B2[8]
+{
+	IF PIN__CLK.M1.T4@
+	{
+		DECLARE TMP2[8];
+		TMP2<-BITINDEX;
+		SETRES;
+		ADDR_BUFF<-WZ;
+		DATA_BUFF<-TMP;
+		rD<-TMP;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+
+	IF PIN__CLK.MEM_WRITE.T3@
+	{
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	FDCB	"%M0%M1,(IY+%$-1),%M2"	SETRES:BITINDEX:rD,B2[8]
+{
+	IF PIN__CLK.M1.T4@
+	{
+		DECLARE TMP2[8];
+		TMP2<-BITINDEX;
+		SETRES;
+		ADDR_BUFF<-WZ;
+		DATA_BUFF<-TMP;
+		rD<-TMP;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+
+	IF PIN__CLK.MEM_WRITE.T3@
+	{
+		CALL LastInstructionCycle();
+	}
+}
+
+## Jump Group
+
+INSTRUCTION		"JP %$2%$1"		%11000011,B2[8],B3[8]
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==1)
+	{
+		Z<-DATA_BUFF;
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==2)
+	{
+		W<-DATA_BUFF;
+		PC<-WZ;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION		"JP %M0,%$2%$1"		%11:CCC:%010,B2[8],B3[8]
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==1)
+	{
+		Z<-DATA_BUFF;
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==2)
+	{
+		W<-DATA_BUFF;
+		IF CCC
+		{
+			PC<-WZ;
+		}
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION		"JR %$1"		%00011000,B2[8]
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ 
+	{
+		TMP<-DATA_BUFF;
+		NEXT PIN__CLK.LONGOP.T1;
+	}
+
+	IF PIN__CLK.LONGOP.T5@
+	{
+		PC<-PC ++ TMP;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION		"JR %M0,%$1"		%001:SS:%000,B2[8]
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ 
+	{
+		TMP<-DATA_BUFF;
+		NEXT PIN__CLK.LONGOP.T1;
+		IF ~(SS)
+		{
+			CALL LastInstructionCycle();
+		}
+	}
+
+	IF PIN__CLK.LONGOP.T5@
+	{
+		PC<-PC ++ TMP;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION		"JP (HL)"		%11101001
+{
+	IF PIN__CLK.M1.T4@
+	{
+		PC<-HL;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	DD	"JP (IX)"		%11101001
+{
+	IF PIN__CLK.M1.T4@
+	{
+		PC<-IX;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	FD	"JP (IY)"		%11101001
+{
+	IF PIN__CLK.M1.T4@
+	{
+		PC<-IY;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION		"DJNZ %$1"		%00010000,B2[8]
+{
+	IF PIN__CLK.M1.T5@
+	{
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		B<-B-1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ 
+	{
+		TMP<-DATA_BUFF;
+		NEXT PIN__CLK.LONGOP.T1;
+		IF B==0
+		{
+			CALL LastInstructionCycle();
+		}
+	}
+
+	IF PIN__CLK.LONGOP.T5@
+	{
+		PC<-PC ++ TMP;
+		CALL LastInstructionCycle();
+	}
+}
+
+## Call And Return Group
+
+INSTRUCTION		"CALL %$2%$1"		%11001101,B2[8],B3[8]
+{
+	IF PIN__CLK.M1.T4@
+	{
+		IF ~CallUsesVector
+		{
+			ADDR_BUFF<-PC;
+			PC<-PC+1;
+		}
+		IF CallUsesVector
+		{
+			ADDR_BUFF<-Vector;
+			Vector<-Vector+1;
+		}
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==1)
+	{
+		Z<-DATA_BUFF;
+		IF ~CallUsesVector
+		{
+			ADDR_BUFF<-PC;
+			PC<-PC+1;
+		}
+		IF CallUsesVector
+		{
+			ADDR_BUFF<-Vector;
+			CallUsesVector<-0;
+		}
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T4@ & (MachineCycle==2)
+	{
+		W<-DATA_BUFF;
+		SP<-SP-1;
+		ADDR_BUFF<-SP;
+		DATA_BUFF<-PCH;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+	
+	IF PIN__CLK.MEM_WRITE.T3@ & (MachineCycle==3)
+	{
+		SP<-SP-1;
+		ADDR_BUFF<-SP;
+		DATA_BUFF<-PCL;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+	
+	IF PIN__CLK.MEM_WRITE.T3@ & (MachineCycle==4)
+	{
+		PC<-WZ;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION		"CALL %M0,%$2%$1"	%11:CCC:%100,B2[8],B3[8]
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==1)
+	{
+		Z<-DATA_BUFF;
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==2)
+	{
+		W<-DATA_BUFF;
+		IF ~(CCC)
+		{
+			CALL LastInstructionCycle();
+		}
+	}
+	
+	IF PIN__CLK.MEM_READ.T4@ & (MachineCycle==2)
+	{
+		SP<-SP-1;
+		ADDR_BUFF<-SP;
+		DATA_BUFF<-PCH;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+	
+	IF PIN__CLK.MEM_WRITE.T3@ & (MachineCycle==3)
+	{
+		SP<-SP-1;
+		ADDR_BUFF<-SP;
+		DATA_BUFF<-PCL;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+	
+	IF PIN__CLK.MEM_WRITE.T3@ & (MachineCycle==4)
+	{
+		PC<-WZ;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION		"RET"			%11001001
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-SP;
+		SP<-SP+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==1)
+	{
+		DATA_BUFF->Z;
+		ADDR_BUFF<-SP;
+		SP<-SP+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+	
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==2)
+	{
+		DATA_BUFF->W;
+		PC<-WZ;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION		"RET %M0"		%11:CCC:%000
+{
+	IF PIN__CLK.M1.T5@
+	{
+		IF ~(CCC)
+		{
+			CALL LastInstructionCycle();
+		}
+		IF CCC
+		{
+			ADDR_BUFF<-SP;
+			SP<-SP+1;
+			NEXT PIN__CLK.MEM_READ.T1;
+		}
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==1)
+	{
+		DATA_BUFF->Z;
+		ADDR_BUFF<-SP;
+		SP<-SP+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+	
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==2)
+	{
+		DATA_BUFF->W;
+		PC<-WZ;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	ED	"RETI"			%01001101
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-SP;
+		SP<-SP+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==1)
+	{
+		DATA_BUFF->Z;
+		ADDR_BUFF<-SP;
+		SP<-SP+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+	
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==2)
+	{
+		DATA_BUFF->W;
+		PC<-WZ;
+		IFF1<-IFF2;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	ED	"RETN"			%01000101
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-SP;
+		SP<-SP+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==1)
+	{
+		DATA_BUFF->Z;
+		ADDR_BUFF<-SP;
+		SP<-SP+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+	
+	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==2)
+	{
+		DATA_BUFF->W;
+		PC<-WZ;
+		IFF1<-IFF2;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION		"RST %M0"		%11:NNN:%111
+{
+	IF PIN__CLK.M1.T5@
+	{
+		SP<-SP-1;
+		ADDR_BUFF<-SP;
+		DATA_BUFF<-PCH;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+
+	IF PIN__CLK.MEM_WRITE.T3@ & (MachineCycle==1)
+	{
+		SP<-SP-1;
+		ADDR_BUFF<-SP;
+		DATA_BUFF<-PCL;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+	
+	IF PIN__CLK.MEM_WRITE.T3@ & (MachineCycle==2)
+	{
+		NNN->PC;
+		CALL LastInstructionCycle();
+	}
+}
+
+## Input And Output Group
+
+INSTRUCTION		"IN A,(%$1)"		%11011011,B2[8]
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@
+	{
+		Z<-DATA_BUFF;
+		W<-A;
+		ADDR_BUFF<-WZ;
+		NEXT PIN__CLK.INPUT.T1;
+	}
+
+	IF PIN__CLK.INPUT.T3@
+	{
+		A<-DATA_BUFF;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	ED	"IN %M0,(C)"		%01:rD:%000
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-BC;
+		NEXT PIN__CLK.INPUT.T1;
+	}
+
+	IF PIN__CLK.INPUT.T3@
+	{
+		AFFECT s AS SIGN,z AS ZERO,b5 AS BIT(5),h AS FORCERESET,b3 AS BIT(3),p AS PARITYEVEN,n AS FORCERESET
+		{
+			DATA_BUFF
+		}->rD;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	ED	"IN F,(C)"		%01110000
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-BC;
+		NEXT PIN__CLK.INPUT.T1;
+	}
+
+	IF PIN__CLK.INPUT.T3@
+	{
+		AFFECT s AS SIGN,z AS ZERO,b5 AS BIT(5),h AS FORCERESET,b3 AS BIT(3),p AS PARITYEVEN,n AS FORCERESET
+		{
+			DATA_BUFF
+		};
+		CALL LastInstructionCycle();
+	}
+}
+
+FUNCTION INTERNAL 	INIFlags	FromPort[8],ByteCounter[8],Adj[8]
+{
+	DECLARE TMP[8];
+	DECLARE	ADJC[8];
+	AFFECT s AS SIGN,z AS ZERO,b5 AS BIT(5),b3 AS BIT(3)
+	{
+		ByteCounter
+	};
+	AFFECT n AS BIT(7)
+	{
+		FromPort
+	}->TMP;
+	ADJC<-C+Adj;
+	AFFECT c AS CARRY(7)
+	{
+		TMP + ADJC
+	}->TMP;
+	AFFECT p AS PARITYEVEN
+	{
+		(TMP&7) ^ B
+	};
+	h<-c;
+}
+
+INSTRUCTION	ED	"INI"			%10100010
+{
+	IF PIN__CLK.M1.T5@
+	{
+		B<-B-1;
+		ADDR_BUFF<-BC;
+		NEXT PIN__CLK.INPUT.T1;
+	}
+
+	IF PIN__CLK.INPUT.T3@
+	{
+		TMP<-DATA_BUFF;
+		CALL INIFlags(TMP,B,$01);
+		ADDR_BUFF<-HL;
+		HL<-HL+1;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+
+	IF PIN__CLK.MEM_WRITE.T3@
+	{
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	ED	"INIR"			%10110010
+{
+	IF PIN__CLK.M1.T5@
+	{
+		B<-B-1;
+		ADDR_BUFF<-BC;
+		NEXT PIN__CLK.INPUT.T1;
+	}
+
+	IF PIN__CLK.INPUT.T3@
+	{
+		TMP<-DATA_BUFF;
+		CALL INIFlags(TMP,B,$01);
+		ADDR_BUFF<-HL;
+		HL<-HL+1;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+
+	IF PIN__CLK.MEM_WRITE.T3@
+	{
+		NEXT PIN__CLK.LONGOP.T1;
+		IF B==0
+		{
+			CALL LastInstructionCycle();
+		}
+	}
+
+	IF PIN__CLK.LONGOP.T5@
+	{
+		PC<-PC-2;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	ED	"IND"			%10101010
+{
+	IF PIN__CLK.M1.T5@
+	{
+		B<-B-1;
+		ADDR_BUFF<-BC;
+		NEXT PIN__CLK.INPUT.T1;
+	}
+
+	IF PIN__CLK.INPUT.T3@
+	{
+		TMP<-DATA_BUFF;
+		CALL INIFlags(TMP,B,$FF);
+		ADDR_BUFF<-HL;
+		HL<-HL-1;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+
+	IF PIN__CLK.MEM_WRITE.T3@
+	{
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	ED	"INDR"			%10111010
+{
+	IF PIN__CLK.M1.T5@
+	{
+		B<-B-1;
+		ADDR_BUFF<-BC;
+		NEXT PIN__CLK.INPUT.T1;
+	}
+
+	IF PIN__CLK.INPUT.T3@
+	{
+		TMP<-DATA_BUFF;
+		CALL INIFlags(TMP,B,$FF);
+		ADDR_BUFF<-HL;
+		HL<-HL-1;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+
+	IF PIN__CLK.MEM_WRITE.T3@
+	{
+		NEXT PIN__CLK.LONGOP.T1;
+		IF B==0
+		{
+			CALL LastInstructionCycle();
+		}
+	}
+
+	IF PIN__CLK.LONGOP.T5@
+	{
+		PC<-PC-2;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION		"OUT (%$1),A"		%11010011,B2[8]
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@
+	{
+		Z<-DATA_BUFF;
+		W<-A;
+		ADDR_BUFF<-WZ;
+		DATA_BUFF<-A;
+		NEXT PIN__CLK.OUTPUT.T1;
+	}
+
+	IF PIN__CLK.OUTPUT.T3@
+	{
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	ED	"OUT (C),%M0"		%01:rS:%001
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-BC;
+		DATA_BUFF<-rS;
+		NEXT PIN__CLK.OUTPUT.T1;
+	}
+
+	IF PIN__CLK.OUTPUT.T3@
+	{
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	ED	"OUT (C),0"		%01110001
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-BC;
+		DATA_BUFF<-$00;
+		NEXT PIN__CLK.OUTPUT.T1;
+	}
+
+	IF PIN__CLK.OUTPUT.T3@
+	{
+		CALL LastInstructionCycle();
+	}
+}
+
+#FUNCTION INTERNAL OUTIFlags
+#{
+#	DECLARE TMP[8];
+#	AFFECT n AS BIT(7)
+#	{
+#		CALL GetByte(HL)
+#	}->TMP;
+#	CALL SetPort(BC,HL);
+#	AFFECT s AS SIGN,z AS ZERO,b5 AS BIT(5),b3 AS BIT(3)
+#	{
+#		B-1
+#	}->B;
+#	HL<-HL+1;
+#	AFFECT c AS CARRY(7)
+#	{
+#		TMP + L
+#	}->TMP;
+#	AFFECT p AS PARITYEVEN
+#	{
+#		(TMP&7) ^ B
+#	};
+#	h<-c;
+#	16->CYCLES;
+#}
+#
+#INSTRUCTION	ED	"OUTI"			%10100011
+#{
+#	CALL OUTIFlags();
+#}
+#
+#INSTRUCTION	ED	"OTIR"			%10110011
+#{
+#	CALL OUTIFlags();
+#	IF B!=0
+#	{
+#		PC<-PC-2;
+#		21->CYCLES;
+#	}
+#}
+#
+#FUNCTION INTERNAL OUTDFlags
+#{
+#	DECLARE TMP[8];
+#	AFFECT n AS BIT(7)
+#	{
+#		CALL GetByte(HL)
+#	}->TMP;
+#	CALL SetPort(BC,HL);
+#	AFFECT s AS SIGN,z AS ZERO,b5 AS BIT(5),b3 AS BIT(3)
+#	{
+#		B-1
+#	}->B;
+#	HL<-HL-1;
+#	AFFECT c AS CARRY(7)
+#	{
+#		TMP + L
+#	}->TMP;
+#	AFFECT p AS PARITYEVEN
+#	{
+#		(TMP&7) ^ B
+#	};
+#	h<-c;
+#	16->CYCLES;
+#}
+#
+#INSTRUCTION	ED	"OUTD"			%10101011
+#{
+#	CALL OUTDFlags();
+#}
+#
+#INSTRUCTION	ED	"OTDR"			%10111011
+#{
+#	CALL OUTDFlags();
+#	IF B!=0
+#	{
+#		PC<-PC-2;
+#		21->CYCLES;
+#	}
+#}
+#
