@@ -358,6 +358,9 @@ uint8_t CheckKeys(uint8_t scan,int key0,int key1,int key2,int key3,int key4)
 
 void LoadTape();
 void LoadSNA();
+void LoadTAP();
+void UpdateTAP(uint8_t cycles);
+uint8_t GetTAPLevel();
 void UpdateTape(uint8_t cycles);
 uint8_t GetTapeLevel();
 
@@ -380,10 +383,14 @@ uint8_t GetPort(uint16_t port)
 		retVal=(~retVal)&0x1F;
 
 		retVal|=0xA0;			// apparantly always logic 1
-		if (GetTapeLevel()>=0x80)
+		if (GetTAPLevel()>=0x80)
 		{
 			retVal|=0x40;
 		}
+/*		if (GetTapeLevel()>=0x80)
+		{
+			retVal|=0x40;
+		}*/
 
 		return retVal;
 	}
@@ -611,7 +618,7 @@ void DisassembleRange(unsigned int start,unsigned int end)
 		start+=Disassemble(start,0);
 	}
 }	
-
+	
 int main(int argc,char**argv)
 {
 	double	atStart,now,remain;
@@ -643,6 +650,7 @@ int main(int argc,char**argv)
 #endif
 	//////////////////
 
+	LoadTAP();
 	LoadTape();
 	if (InitialiseMemory())
 		return -1;
@@ -680,9 +688,15 @@ int main(int argc,char**argv)
 #if 0
 		if ((!PinGetPIN__M1()) && PinGetPIN__MREQ())		// NOT PERFECT, SINCE IT WILL CATCH INTERRUPT REQUESTS.. 
 		{
+#if 0
+			if (PinGetPIN_A()==0x056C)
+				doDebug=1;
+#endif
 			// First cycle of a new instruction
 			if (doDebug)
+			{
 				Disassemble(PinGetPIN_A(),1);
+			}
 		}
 #endif
 		if ((!PinGetPIN__M1()) && PinGetPIN__IORQ())
@@ -715,6 +729,7 @@ int main(int argc,char**argv)
 		masterClock+=1;
 
 		UpdateTape(1);
+		UpdateTAP(1);
 		
 		if (masterClock>=TSTATES_PER_ROW)
 		{	
@@ -741,11 +756,12 @@ int main(int argc,char**argv)
 			{
 				break;
 			}
+#if 0
 			if (glfwGetKey(windows[MAIN_WINDOW],' '))
 			{
 				doDebug=1;
 			}
-
+#endif
 
 			now=glfwGetTime();
 
@@ -801,9 +817,212 @@ unsigned char *qLoad(char *romName,uint32_t *length)
 	return romData;
 }
 
+uint8_t tapPhase;		//0 - initial (start of new block)
+uint8_t	tapLevel;
+uint32_t tapPosition;
+uint32_t tapLength;
+uint8_t *tap=NULL;
+
+void LoadTAP()
+{
+	uint32_t a;
+	uint16_t blockLength;
+	uint32_t curPos=0;
+
+	tap=qLoad("SHOCK.TAP",&tapLength);
+	if (!tap)
+		return;
+
+	// Test.. Dump block infos
+	
+	while (curPos<tapLength)
+	{
+		// First 2 bytes is length of next item
+		blockLength=tap[curPos++];
+		blockLength|=tap[curPos++]<<8;
+		if (tap[curPos]<0x80)
+		{
+			// Header block
+			curPos++;
+			switch (tap[curPos++])
+			{
+				case 0:
+					printf("BasicProgram: \n");
+					break;
+				case 1:
+					printf("NumberArray: \n");
+					break;
+				case 2:
+					printf("CharacterArray: \n");
+					break;
+				case 3:
+					printf("Code: \n");
+					break;
+				default:
+					printf("Unknown: \n");
+					break;
+			}
+			for (a=0;a<10;a++)
+			{
+				printf("%c",tap[curPos++]);
+			}
+			printf("\nData Length : %02X%02X\n",tap[curPos+1],tap[curPos]);
+			curPos+=2;
+			printf("Param1 : %02X%02X\n",tap[curPos+1],tap[curPos]);
+			curPos+=2;
+			printf("Param2 : %02X%02X\n",tap[curPos+1],tap[curPos]);
+			curPos+=2;
+			printf("CheckByte: %02X\n",tap[curPos++]);
+		}
+		else
+		{
+			printf("DataBlock: Length %04X\n",blockLength-2);
+			// Data block
+			for (a=0;a<blockLength;a++)
+			{
+				curPos++;
+			}
+		}
+	}
+
+	tapPosition=0;
+	tapPhase=0;
+	tapLevel=0;
+}
+
+uint16_t tapDataLength;
+uint8_t tapDataBit;
+uint16_t tapPilotLength;
+uint32_t tapPilotPulseLength;
+uint32_t tapTStateCounter;
+
+void UpdateTAP(uint8_t cycles)
+{
+	switch (tapPhase)
+	{
+		case 0:								// New block
+			if (tapPosition>=tapLength)
+				tapPosition=0;
+
+			tapDataLength=tap[tapPosition++];
+			tapDataLength|=tap[tapPosition++]<<8;
+			if (tap[tapPosition]<0x80)
+			{
+				// Header Pilot Pulse
+				tapPilotLength=8063;
+				tapPilotPulseLength=2168;
+			}
+			else
+			{
+				// data Pilot Pulse
+				tapPilotLength=3223;
+				tapPilotPulseLength=2168;
+			}
+			tapTStateCounter=0;
+			tapPhase=1;
+			// Fall through?
+		case 1:								// Pilot pulse
+			tapTStateCounter++;
+			if (tapTStateCounter>=tapPilotPulseLength)
+			{
+				tapTStateCounter-=tapPilotPulseLength;
+				tapLevel=~tapLevel;
+				tapPilotLength--;
+				if (tapPilotLength==0)
+				{
+					tapPhase=2;
+					tapPilotPulseLength=667;
+				}
+			}
+			break;
+		case 2:								// Sync 1 pulse
+			tapTStateCounter++;
+			if (tapTStateCounter>=tapPilotPulseLength)
+			{
+				tapTStateCounter-=tapPilotPulseLength;
+				tapLevel=~tapLevel;
+				tapPhase=3;
+				tapPilotPulseLength=735;
+			}
+			break;
+		case 3:								// Sync 2 pulse
+			tapTStateCounter++;
+			if (tapTStateCounter>=tapPilotPulseLength)
+			{
+				tapLevel=~tapLevel;
+				tapTStateCounter-=tapPilotPulseLength;
+				tapDataBit=0x80;
+				tapPhase=4;
+			}
+			break;
+		case 4:								// Data
+			// For each byte in tapDataLength
+			// We get a bit, set the correct pulse length
+			// rinse and repeat
+			
+			if (tap[tapPosition]&tapDataBit)
+			{
+				tapPilotPulseLength=1710;
+			}
+			else
+			{
+				tapPilotPulseLength=855;
+			}
+			tapPhase=5;
+			// Fallthrough
+		case 5:
+			tapTStateCounter++;
+			if (tapTStateCounter>=tapPilotPulseLength)
+			{
+				tapPhase=6;
+				tapTStateCounter-=tapPilotPulseLength;
+				tapLevel=~tapLevel;
+			}
+			break;
+		case 6:
+			tapTStateCounter++;
+			if (tapTStateCounter>=tapPilotPulseLength)
+			{
+				tapPhase=4;
+				tapTStateCounter-=tapPilotPulseLength;
+				tapLevel=~tapLevel;
+				tapDataBit>>=1;
+				if (tapDataBit==0)
+				{
+					tapDataBit=0x80;
+					tapPosition++;
+					tapDataLength--;
+					if (tapDataLength==0)
+					{
+						tapPilotPulseLength=/*50*ROWS_PER_VBLANK**/TSTATES_PER_ROW;
+						tapPhase=7;
+					}
+					else
+					{
+					}
+
+				}
+			}
+			break;
+		case 7:								// Silence
+			tapTStateCounter++;
+			if (tapTStateCounter>=tapPilotPulseLength)
+			{
+				tapLevel=~tapLevel;
+				tapPhase=0;
+			}
+			break;
+	}
+}
+
+uint8_t GetTAPLevel()
+{
+	return tapLevel;
+}
+
 void LoadTape()
 {
-	RawTapFile=qLoad("Magnetron.raw",&RawTapLength);
+	RawTapFile=qLoad("007Spy.raw",&RawTapLength);
 	if (!RawTapFile)
 	{
 		printf("Failed to load file\n");
