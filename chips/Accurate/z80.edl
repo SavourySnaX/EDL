@@ -1119,7 +1119,7 @@ INSTRUCTION	ED	"LD R,A"		%01001111
 {
 	IF PIN__CLK.M1.T5@
 	{
-		R<-A;
+		A->IR[0..7];
 		CALL LastInstructionCycle();
 	}
 }
