@@ -2846,20 +2846,38 @@ INSTRUCTION	ED	"RLD"			%01101111
 	}
 }
 
-#INSTRUCTION	ED	"RRD"			%01100111
-#{
-#	DECLARE TMP[8];
-#	DECLARE TMPROT[4];
-#	TMP<-CALL GetByte(HL);
-#	TMP<-ROR(TMP,TMPROT,A[0..3],4);
-#	AFFECT s AS SIGN,z AS ZERO,b5 AS BIT(5),h AS FORCERESET,b3 AS BIT(3),p AS PARITYEVEN,n AS FORCERESET
-#	{
-#		(A & $F0) | TMPROT
-#	}->A;
-#	CALL SetByte(HL,TMP);
-#	18->CYCLES;
-#}
-#
+INSTRUCTION	ED	"RRD"			%01100111
+{
+	IF PIN__CLK.M1.T4@
+	{
+		ADDR_BUFF<-HL;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@
+	{
+		TMP<-DATA_BUFF;
+		NEXT PIN__CLK.LONGOP.T1;
+	}
+
+	IF PIN__CLK.LONGOP.T4@
+	{
+		DECLARE TMPROT[4];
+		TMP<-ROR(TMP,TMPROT,A[0..3],4);
+		AFFECT s AS SIGN,z AS ZERO,b5 AS BIT(5),h AS FORCERESET,b3 AS BIT(3),p AS PARITYEVEN,n AS FORCERESET
+		{
+			(A & $F0) | TMPROT
+		}->A;
+		DATA_BUFF<-TMP;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+
+	IF PIN__CLK.MEM_WRITE.T3@
+	{
+		CALL LastInstructionCycle();
+	}
+}
+
 ## Bit Set Reset And Test Group
 
 MAPPING BITINDEX[3]
@@ -3722,83 +3740,137 @@ INSTRUCTION	ED	"OUT (C),0"		%01110001
 	}
 }
 
-#FUNCTION INTERNAL OUTIFlags
-#{
-#	DECLARE TMP[8];
-#	AFFECT n AS BIT(7)
-#	{
-#		CALL GetByte(HL)
-#	}->TMP;
-#	CALL SetPort(BC,HL);
-#	AFFECT s AS SIGN,z AS ZERO,b5 AS BIT(5),b3 AS BIT(3)
-#	{
-#		B-1
-#	}->B;
-#	HL<-HL+1;
-#	AFFECT c AS CARRY(7)
-#	{
-#		TMP + L
-#	}->TMP;
-#	AFFECT p AS PARITYEVEN
-#	{
-#		(TMP&7) ^ B
-#	};
-#	h<-c;
-#	16->CYCLES;
-#}
-#
-#INSTRUCTION	ED	"OUTI"			%10100011
-#{
-#	CALL OUTIFlags();
-#}
-#
-#INSTRUCTION	ED	"OTIR"			%10110011
-#{
-#	CALL OUTIFlags();
-#	IF B!=0
-#	{
-#		PC<-PC-2;
-#		21->CYCLES;
-#	}
-#}
-#
-#FUNCTION INTERNAL OUTDFlags
-#{
-#	DECLARE TMP[8];
-#	AFFECT n AS BIT(7)
-#	{
-#		CALL GetByte(HL)
-#	}->TMP;
-#	CALL SetPort(BC,HL);
-#	AFFECT s AS SIGN,z AS ZERO,b5 AS BIT(5),b3 AS BIT(3)
-#	{
-#		B-1
-#	}->B;
-#	HL<-HL-1;
-#	AFFECT c AS CARRY(7)
-#	{
-#		TMP + L
-#	}->TMP;
-#	AFFECT p AS PARITYEVEN
-#	{
-#		(TMP&7) ^ B
-#	};
-#	h<-c;
-#	16->CYCLES;
-#}
-#
-#INSTRUCTION	ED	"OUTD"			%10101011
-#{
-#	CALL OUTDFlags();
-#}
-#
-#INSTRUCTION	ED	"OTDR"			%10111011
-#{
-#	CALL OUTDFlags();
-#	IF B!=0
-#	{
-#		PC<-PC-2;
-#		21->CYCLES;
-#	}
-#}
-#
+FUNCTION INTERNAL OUTIFlags	ToPort[8]
+{
+	DECLARE TMP[8];
+	AFFECT n AS BIT(7)
+	{
+		ToPort
+	}->TMP;
+	AFFECT s AS SIGN,z AS ZERO,b5 AS BIT(5),b3 AS BIT(3)
+	{
+		B-1
+	}->B;
+	AFFECT c AS CARRY(7)
+	{
+		TMP + L
+	}->TMP;
+	AFFECT p AS PARITYEVEN
+	{
+		(TMP&7) ^ B
+	};
+	h<-c;
+}
+
+INSTRUCTION	ED	"OUTI"			%10100011
+{
+	IF PIN__CLK.M1.T5@
+	{
+		ADDR_BUFF<-HL;
+		HL<-HL+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@
+	{
+		TMP<-DATA_BUFF;
+		ADDR_BUFF<-BC;
+		CALL OUTIFlags(TMP);
+		NEXT PIN__CLK.OUTPUT.T1;
+	}
+
+	IF PIN__CLK.OUTPUT.T3@
+	{
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	ED	"OTIR"			%10110011
+{
+	IF PIN__CLK.M1.T5@
+	{
+		ADDR_BUFF<-HL;
+		HL<-HL+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@
+	{
+		TMP<-DATA_BUFF;
+		ADDR_BUFF<-BC;
+		CALL OUTIFlags(TMP);
+		NEXT PIN__CLK.OUTPUT.T1;
+	}
+
+	IF PIN__CLK.OUTPUT.T3@
+	{
+		NEXT PIN__CLK.LONGOP.T1;
+		IF B==0
+		{
+			CALL LastInstructionCycle();
+		}
+	}
+
+	IF PIN__CLK.LONGOP.T5@
+	{
+		PC<-PC-2;
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	ED	"OUTD"			%10101011
+{
+	IF PIN__CLK.M1.T5@
+	{
+		ADDR_BUFF<-HL;
+		HL<-HL-1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@
+	{
+		TMP<-DATA_BUFF;
+		ADDR_BUFF<-BC;
+		CALL OUTIFlags(TMP);
+		NEXT PIN__CLK.OUTPUT.T1;
+	}
+
+	IF PIN__CLK.OUTPUT.T3@
+	{
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	ED	"OTDR"			%10111011
+{
+	IF PIN__CLK.M1.T5@
+	{
+		ADDR_BUFF<-HL;
+		HL<-HL+1;
+		NEXT PIN__CLK.MEM_READ.T1;
+	}
+
+	IF PIN__CLK.MEM_READ.T3@
+	{
+		TMP<-DATA_BUFF;
+		ADDR_BUFF<-BC;
+		CALL OUTIFlags(TMP);
+		NEXT PIN__CLK.OUTPUT.T1;
+	}
+
+	IF PIN__CLK.OUTPUT.T3@
+	{
+		NEXT PIN__CLK.LONGOP.T1;
+		IF B==0
+		{
+			CALL LastInstructionCycle();
+		}
+	}
+
+	IF PIN__CLK.LONGOP.T5@
+	{
+		PC<-PC-2;
+		CALL LastInstructionCycle();
+	}
+}
+
