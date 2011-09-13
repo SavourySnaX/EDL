@@ -364,6 +364,9 @@ uint8_t CheckKeys(uint8_t scan,int key0,int key1,int key2,int key3,int key4)
 	return retVal;
 }
 
+int tapePaused=1;
+int syncOff=0;
+
 void LoadTape();
 void LoadSNA();
 void LoadTAP();
@@ -394,14 +397,14 @@ uint8_t GetPort(uint16_t port)
 		retVal=(~retVal)&0x1F;
 
 		retVal|=0xA0;			// apparantly always logic 1
-		if (GetTZXLevel()>=0x80)
-		{
-			retVal|=0x40;
-		}
-/*		if (GetTAPLevel()>=0x80)
+/*		if (GetTZXLevel()>=0x80)
 		{
 			retVal|=0x40;
 		}*/
+		if (GetTAPLevel()>=0x80)
+		{
+			retVal|=0x40;
+		}
 /*		if (GetTapeLevel()>=0x80)
 		{
 			retVal|=0x40;
@@ -711,7 +714,7 @@ int main(int argc,char**argv)
 		}
 
 		PinSetPIN__CLK(1);
-#if 1
+#if 0
 		if ((!PinGetPIN__M1()) && PinGetPIN__MREQ())		// NOT PERFECT, SINCE IT WILL CATCH INTERRUPT REQUESTS.. 
 		{
 #if 0
@@ -784,6 +787,16 @@ int main(int argc,char**argv)
 			{
 				break;
 			}
+			if (CheckKey(GLFW_KEY_PAGEUP))
+			{
+				tapePaused=!tapePaused;
+				ClearKey(GLFW_KEY_PAGEUP);
+			}
+			if (CheckKey(GLFW_KEY_PAGEDOWN))
+			{
+				syncOff=!syncOff;
+				ClearKey(GLFW_KEY_PAGEDOWN);
+			}
 #if 0
 			if (glfwGetKey(windows[MAIN_WINDOW],' '))
 			{
@@ -795,7 +808,7 @@ int main(int argc,char**argv)
 
 			remain = now-atStart;
 
-			while ((remain<0.02f))
+			while ((remain<0.02f) && (!syncOff))
 			{
 				now=glfwGetTime();
 
@@ -859,7 +872,7 @@ void LoadTAP()
 	uint16_t blockLength;
 	uint32_t curPos=0;
 
-	tap=qLoad("007Spy.tap",&tapLength);
+	tap=qLoad(".tap",&tapLength);
 	if (!tap)
 		return;
 
@@ -928,7 +941,7 @@ uint32_t tapTStateCounter;
 
 void UpdateTAP(uint8_t cycles)
 {
-	if (!tap)
+	if (!tap || tapePaused)
 		return;
 
 	switch (tapPhase)
@@ -1057,6 +1070,7 @@ uint8_t tzxPhase;		//0 - initial (start of new block)
 uint8_t	tzxLevel;
 uint32_t tzxPosition;
 uint32_t tzxLength;
+uint32_t tzxTStateCounter;
 uint8_t *tzx=NULL;
 
 void LoadTZX()
@@ -1065,7 +1079,7 @@ void LoadTZX()
 	uint32_t blockLength;
 	uint32_t curPos=0;
 
-	tzx=qLoad("Outcast.tzx",&tzxLength);
+	tzx=qLoad(".tzx",&tzxLength);
 	if (!tzx)
 		return;
 
@@ -1128,7 +1142,34 @@ void LoadTZX()
 				printf("Number Pulses : %02X\n",tzx[curPos]);
 				curPos+=2*tzx[curPos];
 				break;
-
+			case 0x14:
+				printf("ID14 : Pure Data Block\n");
+				printf("Zero Length : %02X%02X\n",tzx[curPos+1],tzx[curPos]);
+				curPos+=2;
+				printf("One Length : %02X%02X\n",tzx[curPos+1],tzx[curPos]);
+				curPos+=2;
+				printf("Used bits in last byte : %02X\n",tzx[curPos++]);
+				printf("Delay After Block : %02X%02X\n",tzx[curPos+1],tzx[curPos]);
+				curPos+=2;
+				blockLength=tzx[curPos++];
+				blockLength|=tzx[curPos++]<<8;
+				blockLength|=tzx[curPos++]<<16;
+				printf("Data Length : %08X\n",blockLength);
+				curPos+=blockLength;
+				break;
+			case 0x21:
+				printf("ID21 : Group Start\n");
+				printf("Data Length : %02X\n",tzx[curPos]);
+				curPos+=tzx[curPos]+1;
+				break;
+			case 0x22:
+				printf("ID22 : Group End\n");
+				break;
+			case 0x30:
+				printf("ID30 : Text Description\n");
+				printf("Data Length : %02X\n",tzx[curPos]);
+				curPos+=tzx[curPos]+1;
+				break;
 			case 0x32:
 				printf("ID32 : Archive Info\n");
 				blockLength=tzx[curPos++];
@@ -1147,13 +1188,13 @@ void LoadTZX()
 	tzxPosition=10;
 	tzxPhase=0;
 	tzxLevel=0;
+	tzxTStateCounter=0;
 }
 
 uint32_t tzxDataLength;
 uint8_t tzxDataBit;
 uint16_t tzxPilotLength;
 uint32_t tzxPilotPulseLength;
-uint32_t tzxTStateCounter;
 
 uint16_t tzxParamPilotLength;
 uint32_t tzxParamPilotPulseLength;
@@ -1163,88 +1204,127 @@ uint32_t tzxParamOneLength;
 uint32_t tzxParamZeroLength;
 uint32_t tzxParamDelayLength;
 
-void GetNextBlock()
+uint8_t GetNextBlock()
 {
-	int doOver=1;
-	while (doOver)
+	while (1)
 	{
 		uint32_t blockLength;
-		uint8_t blockId=tzx[tzxPosition++];
-		switch (blockId)
+		
+		if (tzxPosition>=tzxLength)
 		{
-			case 0x10:
-				tzxParamDelayLength=tzx[tzxPosition++];
-				tzxParamDelayLength|=tzx[tzxPosition++]<<8;
-				tzxParamDelayLength=tzxParamDelayLength*3494.4f;
-				tzxDataLength=tzx[tzxPosition++];
-				tzxDataLength|=tzx[tzxPosition++]<<8;
-				tzxParamPilotPulseLength=2168;
-				if (tzx[tzxPosition]<0x80)
-				{
-					// Header Pilot Pulse
-					tzxParamPilotLength=8063;
-				}
-				else
-				{
-					// data Pilot Pulse
-					tzxParamPilotLength=3223;
-				}
-				tzxParamSync1Length=667;
-				tzxParamSync2Length=735;
-				tzxParamOneLength=1710;
-				tzxParamZeroLength=855;
-				doOver=0;
-				break;
-			case 0x11:
-				tzxParamPilotPulseLength=tzx[tzxPosition++];
-				tzxParamPilotPulseLength|=tzx[tzxPosition++]<<8;
-				tzxParamSync1Length=tzx[tzxPosition++];
-				tzxParamSync1Length|=tzx[tzxPosition++]<<8;
-				tzxParamSync2Length=tzx[tzxPosition++];
-				tzxParamSync2Length|=tzx[tzxPosition++]<<8;
-				tzxParamZeroLength=tzx[tzxPosition++];
-				tzxParamZeroLength|=tzx[tzxPosition++]<<8;
-				tzxParamOneLength=tzx[tzxPosition++];
-				tzxParamOneLength|=tzx[tzxPosition++]<<8;
-				tzxParamPilotLength=tzx[tzxPosition++];
-				tzxParamPilotLength|=tzx[tzxPosition++]<<8;
-				tzxPosition++;	// Used bits not handled yet
-				tzxParamDelayLength=tzx[tzxPosition++];
-				tzxParamDelayLength|=tzx[tzxPosition++]<<8;
-				tzxParamDelayLength=tzxParamDelayLength*3494.4f;
-				tzxDataLength=tzx[tzxPosition++];
-				tzxDataLength|=tzx[tzxPosition++]<<8;
-				tzxDataLength|=tzx[tzxPosition++]<<16;
-				doOver=0;
-				break;
-			case 0x32:
-				blockLength=tzx[tzxPosition++];
-				blockLength|=tzx[tzxPosition++]<<8;
-				tzxPosition+=blockLength;
-				break;
+				tzxPosition=10;
+		}
+
+		{
+			uint8_t blockId=tzx[tzxPosition++];
+			switch (blockId)
+			{
+				case 0x10:
+					printf("Standard\n");
+					tzxParamDelayLength=tzx[tzxPosition++];
+					tzxParamDelayLength|=tzx[tzxPosition++]<<8;
+					tzxParamDelayLength=tzxParamDelayLength*3494.4f;
+					tzxDataLength=tzx[tzxPosition++];
+					tzxDataLength|=tzx[tzxPosition++]<<8;
+					tzxParamPilotPulseLength=2168;
+					if (tzx[tzxPosition]<0x80)
+					{
+						// Header Pilot Pulse
+						tzxParamPilotLength=8063;
+					}
+					else
+					{
+						// data Pilot Pulse
+						tzxParamPilotLength=3223;
+					}
+					tzxParamSync1Length=667;
+					tzxParamSync2Length=735;
+					tzxParamOneLength=1710;
+					tzxParamZeroLength=855;
+					return 1;
+				case 0x11:
+					printf("Speed\n");
+					tzxParamPilotPulseLength=tzx[tzxPosition++];
+					tzxParamPilotPulseLength|=tzx[tzxPosition++]<<8;
+					tzxParamSync1Length=tzx[tzxPosition++];
+					tzxParamSync1Length|=tzx[tzxPosition++]<<8;
+					tzxParamSync2Length=tzx[tzxPosition++];
+					tzxParamSync2Length|=tzx[tzxPosition++]<<8;
+					tzxParamZeroLength=tzx[tzxPosition++];
+					tzxParamZeroLength|=tzx[tzxPosition++]<<8;
+					tzxParamOneLength=tzx[tzxPosition++];
+					tzxParamOneLength|=tzx[tzxPosition++]<<8;
+					tzxParamPilotLength=tzx[tzxPosition++];
+					tzxParamPilotLength|=tzx[tzxPosition++]<<8;
+					tzxPosition++;	// Used bits not handled yet
+					tzxParamDelayLength=tzx[tzxPosition++];
+					tzxParamDelayLength|=tzx[tzxPosition++]<<8;
+					tzxParamDelayLength=tzxParamDelayLength*3494.4f;
+					tzxDataLength=tzx[tzxPosition++];
+					tzxDataLength|=tzx[tzxPosition++]<<8;
+					tzxDataLength|=tzx[tzxPosition++]<<16;
+					return 1;
+				case 0x14:
+					printf("Pure Data\n");
+					tzxParamZeroLength=tzx[tzxPosition++];
+					tzxParamZeroLength|=tzx[tzxPosition++]<<8;
+					tzxParamOneLength=tzx[tzxPosition++];
+					tzxParamOneLength|=tzx[tzxPosition++]<<8;
+					tzxPosition++;	// Used bits not handled yet
+					tzxParamDelayLength=tzx[tzxPosition++];
+					tzxParamDelayLength|=tzx[tzxPosition++]<<8;
+					tzxParamDelayLength=tzxParamDelayLength*3494.4f;
+					tzxDataLength=tzx[tzxPosition++];
+					tzxDataLength|=tzx[tzxPosition++]<<8;
+					tzxDataLength|=tzx[tzxPosition++]<<16;
+					return 4;
+				case 0x21:
+					printf("Group Start\n");
+					tzxPosition+=tzx[tzxPosition]+1;
+					break;
+				case 0x22:
+					printf("Group End\n");
+					break;
+				case 0x30:
+					printf("Text Description\n");
+					tzxPosition+=tzx[tzxPosition]+1;
+					break;
+				case 0x32:
+					printf("Archive Info\n");
+					blockLength=tzx[tzxPosition++];
+					blockLength|=tzx[tzxPosition++]<<8;
+					tzxPosition+=blockLength;
+					break;
+				default:
+					printf("OH DEAR\n");
+					break;
+			}
 		}
 	}
-
-	printf("tzxParamPilotLength = %08X\n",tzxParamPilotLength);
 }
 
 void UpdateTZX(uint8_t cycles)
 {
-	if (!tzx)
+	int redo;
+	if (!tzx || tapePaused)
 		return;
-
+crap:
+	redo=0;
 	switch (tzxPhase)
 	{
 		case 0:								// New block
 			if (tzxPosition>=tzxLength)
 				tzxPosition=10;
 
-			GetNextBlock();		// Will only work for ID10 and ID11 blocks at present
+			tzxPhase = GetNextBlock();		// Will only work for ID10 and ID11 blocks at present
 				
 			tzxPilotLength=tzxParamPilotLength;
 			tzxPilotPulseLength=tzxParamPilotPulseLength;
-			tzxTStateCounter=0;
-			tzxPhase=1;
+			if (tzxPhase!=1)
+			{
+				redo=1;
+				break;
+			}
 			// Fall through?
 		case 1:								// Pilot pulse
 			tzxTStateCounter++;
@@ -1320,7 +1400,10 @@ void UpdateTZX(uint8_t cycles)
 					if (tzxDataLength==0)
 					{
 						tzxPilotPulseLength=tzxParamDelayLength;
-						tzxPhase=7;
+						if (tzxPilotPulseLength==0)
+							tzxPhase=0;
+						else
+							tzxPhase=7;
 					}
 					else
 					{
@@ -1333,11 +1416,14 @@ void UpdateTZX(uint8_t cycles)
 			tzxTStateCounter++;
 			if (tzxTStateCounter>=tzxPilotPulseLength)
 			{
-				tzxLevel=~tzxLevel;
+				tzxTStateCounter-=tzxPilotPulseLength;
+				tzxLevel=0;//~tzxLevel;
 				tzxPhase=0;
 			}
 			break;
 	}
+	if (redo)
+		goto crap;
 }
 
 uint8_t GetTZXLevel()
@@ -1360,6 +1446,9 @@ void LoadTape()
 
 void UpdateTape(uint8_t cycles)
 {
+	if (!RawTapFile || tapePaused)
+		return;
+
 	tapeClock+=cycles*4096;
 	if (tapeClock>=(TSTATES_PER_ROW*ROWS_PER_VBLANK*4096)/((44100)/50))
 	{
@@ -1380,7 +1469,7 @@ uint8_t GetTapeLevel()
 void LoadSNA()
 {
 	uint32_t snapLength=0;
-	uint8_t *snap=qLoad(".sna",&snapLength);
+	uint8_t *snap=qLoad("lordsmid.sna",&snapLength);
 
 	if (!snap || snapLength!=49179)
 		return;
