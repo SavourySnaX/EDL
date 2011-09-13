@@ -8,6 +8,9 @@
 #include <GL/glfw3.h>
 #include <GL/glext.h>
 
+#include <al.h>
+#include <alc.h>
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -31,6 +34,11 @@ void PinSetPIN__BUSRQ(uint8_t);
 
 unsigned char Rom[0x4000];
 unsigned char Ram[0xC000];
+
+void AudioKill();
+void AudioInitialise();
+void UpdateAudio();
+void _AudioAddData(int channel,int16_t dacValue);
 
 #define TSTATES_PER_ROW		224
 #define	ROWS_PER_VBLANK		312
@@ -410,6 +418,14 @@ void SetPort(uint16_t port,uint8_t byte)
 	if ((port&0x01)==0)				// ula responds on all even addresses
 	{
 		borderCol=byte&0x07;
+		if (byte&0x10)
+		{
+			_AudioAddData(0,32767);
+		}
+		else
+		{
+			_AudioAddData(0,-32768);
+		}
 	}
 }
 
@@ -653,6 +669,8 @@ int main(int argc,char**argv)
 
 	glfwSetKeyCallback(kbHandler);
 
+	AudioInitialise();
+
 	atStart=glfwGetTime();
 #endif
 	//////////////////
@@ -739,6 +757,7 @@ int main(int argc,char**argv)
 		UpdateTape(1);
 		UpdateTAP(1);
 		UpdateTZX(1);
+		UpdateAudio();
 		
 		if (masterClock>=TSTATES_PER_ROW)
 		{	
@@ -785,8 +804,10 @@ int main(int argc,char**argv)
 			atStart=glfwGetTime();
 		}
 	}
-	return 0;
 
+	AudioKill();
+
+	return 0;
 }
 
 // Tape handling
@@ -1391,3 +1412,161 @@ void LoadSNA()
 
 	IFF1=IFF2;
 }
+
+#define NUMBUFFERS            (3)				/* living dangerously*/
+
+ALuint		  uiBuffers[NUMBUFFERS];
+ALuint		  uiSource;
+
+ALboolean ALFWInitOpenAL()
+{
+	ALCcontext *pContext = NULL;
+	ALCdevice *pDevice = NULL;
+	ALboolean bReturn = AL_FALSE;
+	
+	pDevice = alcOpenDevice(NULL);				/* Request default device*/
+	if (pDevice)
+	{
+		pContext = alcCreateContext(pDevice, NULL);
+		if (pContext)
+		{
+			printf("\nOpened %s Device\n", alcGetString(pDevice, ALC_DEVICE_SPECIFIER));
+			alcMakeContextCurrent(pContext);
+			bReturn = AL_TRUE;
+		}
+		else
+		{
+			alcCloseDevice(pDevice);
+		}
+	}
+
+	return bReturn;
+}
+
+ALboolean ALFWShutdownOpenAL()
+{
+	ALCcontext *pContext;
+	ALCdevice *pDevice;
+
+	pContext = alcGetCurrentContext();
+	pDevice = alcGetContextsDevice(pContext);
+	
+	alcMakeContextCurrent(NULL);
+	alcDestroyContext(pContext);
+	alcCloseDevice(pDevice);
+
+	return AL_TRUE;
+}
+
+#if 0/*USE_8BIT_OUTPUT*/
+
+#define AL_FORMAT						(AL_FORMAT_MONO8)
+#define BUFFER_FORMAT				U8
+#define BUFFER_FORMAT_SIZE	(1)
+#define BUFFER_FORMAT_SHIFT	(8)
+
+#else
+
+#define AL_FORMAT						(AL_FORMAT_MONO16)
+#define BUFFER_FORMAT				int16_t
+#define BUFFER_FORMAT_SIZE	(2)
+#define BUFFER_FORMAT_SHIFT	(0)
+
+#endif
+
+int curPlayBuffer=0;
+
+#define BUFFER_LEN		(44100/50)
+
+BUFFER_FORMAT audioBuffer[BUFFER_LEN];
+int amountAdded=0;
+
+void AudioInitialise()
+{
+	int a=0;
+	for (a=0;a<BUFFER_LEN;a++)
+	{
+		audioBuffer[a]=0;
+	}
+
+	ALFWInitOpenAL();
+
+  /* Generate some AL Buffers for streaming */
+	alGenBuffers( NUMBUFFERS, uiBuffers );
+
+	/* Generate a Source to playback the Buffers */
+  alGenSources( 1, &uiSource );
+
+	for (a=0;a<NUMBUFFERS;a++)
+	{
+		alBufferData(uiBuffers[a], AL_FORMAT, audioBuffer, BUFFER_LEN*BUFFER_FORMAT_SIZE, 44100);
+		alSourceQueueBuffers(uiSource, 1, &uiBuffers[a]);
+	}
+
+	alSourcePlay(uiSource);
+}
+
+
+void AudioKill()
+{
+	ALFWShutdownOpenAL();
+}
+
+int16_t currentDAC[2] = {0,0};
+
+void _AudioAddData(int channel,int16_t dacValue)
+{
+	currentDAC[channel]=dacValue;
+}
+
+float tickCnt=0;
+float tickRate=((TSTATES_PER_ROW*ROWS_PER_VBLANK*50)/44100.f);
+
+/* audio ticked at same clock as everything else... so need a step down */
+void UpdateAudio()
+{
+	tickCnt+=1.f;
+	
+	if (tickCnt>=tickRate)
+	{
+		tickCnt-=tickRate;
+
+		if (amountAdded!=BUFFER_LEN)
+		{
+			int32_t res=0;
+			res+=currentDAC[0];
+			res+=tzxLevel?4095:-4096;
+			res>>=1;
+			audioBuffer[amountAdded]=res>>BUFFER_FORMAT_SHIFT;
+			amountAdded++;
+		}
+	}
+
+	if (amountAdded==BUFFER_LEN)
+		{
+			/* 1 second has passed by */
+
+			ALint processed;
+			ALint state;
+			alGetSourcei(uiSource, AL_SOURCE_STATE, &state);
+			alGetSourcei(uiSource, AL_BUFFERS_PROCESSED, &processed);
+			if (processed>0)
+			{
+				ALuint buffer;
+
+				amountAdded=0;
+				alSourceUnqueueBuffers(uiSource,1, &buffer);
+				alBufferData(buffer, AL_FORMAT, audioBuffer, BUFFER_LEN*BUFFER_FORMAT_SIZE, 44100);
+				alSourceQueueBuffers(uiSource, 1, &buffer);
+			}
+
+			if (state!=AL_PLAYING)
+			{
+				alSourcePlay(uiSource);
+			}
+		}
+	
+
+}
+
+
