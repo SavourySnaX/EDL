@@ -1,6 +1,9 @@
 This folder contains an example of using EDL to create a ZXSpectrum Emulator.
 
-At present it uses the simplified z80 definition for emulating the cpu and the rest of the hardware is handled in the C code. 
+2 seperate executables are built, spectrum.exe and spectrumSimple.exe.
+
+Both use a common.c file to handle the spectrum hardware + tzx,tap,raw and sna support. (at present a .tzx,.raw,.tap can be supplied on the command line).
 
 You will need to place a 48k.rom into roms/
 
+This has audio support, you will need OpenAL SDK.
