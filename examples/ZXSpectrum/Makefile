@@ -8,6 +8,7 @@ clean:
 	$(RM) -rf out/*
 	rmdir out
 	$(RM) spectrum.exe
+	$(RM) spectrumSimple.exe
 
 out/z80.lls: ../../chips/Accurate/z80.edl
 	mkdir -p out
