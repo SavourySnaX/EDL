@@ -1,6 +1,0 @@
-This folder contains an example of using EDL to create a ZXSpectrum Emulator.
-
-At present it uses the simplified z80 definition for emulating the cpu and the rest of the hardware is handled in the C code. 
-
-You will need to place a 48k.rom into roms/
-

@@ -80,10 +80,7 @@ HANDLER PIN__CLK	TRANSITION(0,1)
 					{
 						PC<-PC+1;
 					}
-					IF InstructionTable==%0000
-					{
-						PIN__M1<-0;
-					}
+					PIN__M1<-0;
 				}
 
 	
@@ -97,7 +94,7 @@ HANDLER PIN__CLK	TRANSITION(0,1)
 					PIN__M1<-1;
 					PIN__MREQ<-1;
 					PIN__RD<-1;
-					PIN__RFSH<-0;			# No idea if refresh is generated for second opcodes.. assume for now it is
+					PIN__RFSH<-0;
 					PIN_A<-IR;			# Various sources indicate it is the entire IR thats placed on the bus
 				}
 
