@@ -67,6 +67,7 @@ FUNCTION STEP
 		PC<-PC+1;
 	}
 
+	R<-R+1;
 	EXECUTE	IR;
 }
 
@@ -343,6 +344,7 @@ INSTRUCTION		"CB"			%11001011
 	DECLARE IR[8];
 	IR<-CALL GetByte(PC);
 	PC<-PC+1;
+	R<-R+1;
 	EXECUTE	CB IR;
 }
 
@@ -351,6 +353,7 @@ INSTRUCTION		"DD"			%11011101
 	DECLARE IR[8];
 	IR<-CALL GetByte(PC);
 	PC<-PC+1;
+	R<-R+1;
 	EXECUTE	DD IR;
 }
 
@@ -359,6 +362,7 @@ INSTRUCTION		"ED"			%11101101
 	DECLARE IR[8];
 	IR<-CALL GetByte(PC);
 	PC<-PC+1;
+	R<-R+1;
 	EXECUTE	ED IR;
 }
 
@@ -367,6 +371,7 @@ INSTRUCTION		"FD"			%11111101
 	DECLARE IR[8];
 	IR<-CALL GetByte(PC);
 	PC<-PC+1;
+	R<-R+1;
 	EXECUTE	FD IR;
 }
 
@@ -375,6 +380,7 @@ INSTRUCTION	DD	"DDCB"			%11001011
 	DECLARE IR[8];
 	IR<-CALL GetByte(PC+1);
 	PC<-PC+2;				# Skips displacement
+	R<-R+1;
 	EXECUTE	DDCB IR;
 }
 
@@ -383,6 +389,7 @@ INSTRUCTION	FD	"FDCB"			%11001011
 	DECLARE IR[8];
 	IR<-CALL GetByte(PC+1);
 	PC<-PC+2;				# Skips displacement
+	R<-R+1;
 	EXECUTE	FDCB IR;
 }
 
@@ -540,7 +547,7 @@ INSTRUCTION	ED	"LD A,R"		%01011111
 {
 	AFFECT s AS SIGN, z AS ZERO, b5 AS BIT(5), b3 AS BIT(3)
 	{
-		R
+		IR[0..7]
 	}->A;
 	n<-0;
 	h<-0;
@@ -556,7 +563,7 @@ INSTRUCTION	ED	"LD I,A"		%01000111
 
 INSTRUCTION	ED	"LD R,A"		%01001111
 {
-	R<-A;
+	A->IR[0..7];
 	9->CYCLES;
 }
 
