@@ -1007,39 +1007,32 @@ INSTRUCTION	FD	"%M0(IY+%$1)"		%00110:INCDEC,B2[8]
 
 INSTRUCTION		"DAA"			%00100111
 {
-	DECLARE TMP[8];
-	TMP<-A;
+	DECLARE Modifier[8];
+
+	IF h | (A[0..3]>9)
+	{
+		Modifier<-6;
+	}
+	IF c | (A>$99)
+	{
+		Modifier<-Modifier | $60;
+		c<-1;
+	}
+
 	IF n == 1
 	{
-		IF h | ((TMP&$F)>9)
+		AFFECT s AS SIGN,z AS ZERO,b5 AS BIT(5),h AS CARRY(3),b3 AS BIT(3),p AS PARITYEVEN
 		{
-			TMP<-TMP-6;
-		}
-		IF c | (TMP>$99)
-		{
-			TMP<-TMP-$60;
-		}
+			A - Modifier
+		}->A;
 	}
 	IF n == 0
 	{
-		IF h | ((TMP&$F)>9)
+		AFFECT s AS SIGN,z AS ZERO,b5 AS BIT(5),h AS CARRY(3),b3 AS BIT(3),p AS PARITYEVEN
 		{
-			TMP<-TMP+6;
-		}
-		IF c | (TMP>$99)
-		{
-			TMP<-TMP+$60;
-		}
+			A + Modifier
+		}->A;
 	}
-	
-	h<-(A^TMP)[4..4];
-	c<-c | (A>$99);
-
-	AFFECT s AS SIGN,z AS ZERO,b5 AS BIT(5),b3 AS BIT(3),p AS PARITYEVEN
-	{
-		TMP
-	}->A;
-	
 	4->CYCLES;
 }
 
@@ -1347,37 +1340,23 @@ MAPPING SETRES[2]
 
 FUNCTION INTERNAL 	HandleBitFlags	b3b5[8],res[8],BitIndex[8]
 {
-	AFFECT z AS ZERO,h AS FORCESET,p AS PARITYEVEN,n AS FORCERESET
+	AFFECT s AS FORCERESET,z AS ZERO,h AS FORCESET,p AS PARITYEVEN,n AS FORCERESET
 	{
 		res
 	};
-	IF BitIndex==%10000000
+	IF (BitIndex & res)==%10000000
 	{
-		AFFECT s AS SIGN
-		{
-			res
-		};
+		s<-1;
 	}
-	IF BitIndex==%00100000
+	AFFECT b5 AS BIT(5),b3 AS BIT(3)
 	{
-		AFFECT b5 AS BIT(5)
-		{
-			b3b5
-		};
-	}
-	IF BitIndex==%00001000
-	{
-		AFFECT b3 AS BIT(3)
-		{
-			b3b5	
-		};
-	}
-
+		b3b5
+	};
 }
 
 INSTRUCTION	CB	"BIT %M0,%M1"		%01:BITINDEX:rS
 {
-	CALL HandleBitFlags(rS & BITINDEX,rS & BITINDEX,BITINDEX);
+	CALL HandleBitFlags(rS,rS & BITINDEX,BITINDEX);
 	8->CYCLES;
 }
 
@@ -1395,7 +1374,7 @@ INSTRUCTION	DDCB	"BIT %M0,(IX+%$-1)"	%01:BITINDEX:UNDOCUMENTED[3],B2[8]
 	DECLARE TMP[8];
 	EA<-IX ++ CALL GetByte(PC-2);
 	TMP<-CALL GetByte(EA) & BITINDEX;
-	CALL HandleBitFlags(TMP,TMP,BITINDEX);
+	CALL HandleBitFlags(EA[8..15],TMP,BITINDEX);
 	20->CYCLES;
 }
 
@@ -1405,7 +1384,7 @@ INSTRUCTION	FDCB	"BIT %M0,(IY+%$-1)"	%01:BITINDEX:UNDOCUMENTED[3],B2[8]
 	DECLARE TMP[8];
 	EA<-IY ++ CALL GetByte(PC-2);
 	TMP<-CALL GetByte(EA) & BITINDEX;
-	CALL HandleBitFlags(TMP,TMP,BITINDEX);
+	CALL HandleBitFlags(EA[8..15],TMP,BITINDEX);
 	20->CYCLES;
 }
 
