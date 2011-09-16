@@ -1812,3 +1812,15 @@ INSTRUCTION	ED	"OTDR"			%10111011
 	}
 }
 
+# Undocumented Opcodes - Not covered by above
+
+MAPPING NOPBLOCK[2]
+{
+	%00	""	0;
+	%11	""	0;
+}
+
+INSTRUCTION	ED	"NOP"			NOPBLOCK:undocumented[6]
+{
+	8->CYCLES;
+}
