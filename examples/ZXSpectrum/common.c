@@ -50,7 +50,6 @@ int InitialiseMemory()
 }
 
 int masterClock=0;
-int pixelClock=0;
 
 int KeyDown(int key);
 int CheckKey(int key);
@@ -64,8 +63,8 @@ void ClearKey(int key);
 
 #define BORDERWIDTH	(16)
 
-#define WIDTH	(256+(2*BORDERWIDTH))
-#define	HEIGHT	(192+(2*BORDERWIDTH))
+#define WIDTH	(256+48+96+48)
+#define	HEIGHT	(64+192+56)
 
 #define MAX_WINDOWS		(8)
 
@@ -77,6 +76,17 @@ GLint videoTexture[MAX_WINDOWS];
 
 uint8_t flashTimer=0;
 uint8_t borderCol=0;
+uint8_t curScrByte;
+uint8_t curAttrByte;
+uint8_t nextScrByte1;
+uint8_t nextAttrByte1;
+uint8_t nextScrByte2;
+uint8_t nextAttrByte2;
+uint8_t* ulaScreenPtr;
+uint8_t* ulaAttrPtr;
+uint32_t pixelAddress;
+int hClock=0;
+int vClock=0;
 
 uint32_t GetColour(uint8_t attr,uint8_t pixSet)
 {
@@ -145,68 +155,160 @@ uint32_t GetColour(uint8_t attr,uint8_t pixSet)
 	return colour;
 }
 
-void ClearBorderColour(int y)
+uint8_t *GetScreenPtr(uint32_t pixelAddress)
+{
+	uint32_t offset = pixelAddress&0x181F;
+	offset|=(pixelAddress&0x700)>>3;
+	offset|=(pixelAddress&0xE0)<<3;
+
+	return &Ram[offset];
+}
+
+uint8_t *GetAttrPtr(uint32_t pixelAddress)
+{
+	uint32_t offset = 0x1800 | (pixelAddress&0x001F);
+	offset|=(pixelAddress&0x1F00)>>3;
+
+	return &Ram[offset];
+}
+
+int intClocks=0;
+void ResetScreen()
+{
+	hClock=0;
+	vClock=0;
+	pixelAddress=0;
+	flashTimer++;
+	ulaScreenPtr = GetScreenPtr(pixelAddress);
+	ulaAttrPtr = GetAttrPtr(pixelAddress);
+	intClocks=32;		// Signal Interrupt
+}
+
+uint8_t scrXMask;
+uint8_t floatingBus;
+//NB byte fetch must occur BEFORE the first pixel - since we do 2 pixels per tstate (the earliest we can start outputing a pixel is hclock2/3 (since attrib
+//only becomes known at hclock2 - suspect display fetch is 8 pixels into left border.
+//
+
+int isDisplayFetch()
+{
+	if (vClock<63 || vClock>=64+192)
+		return 0;
+	if (vClock==63 && hClock<448-8)
+		return 0;
+	if (vClock==255 && hClock>=256-8)
+		return 0;
+	if (hClock>=256-8 && hClock<448-8)
+		return 0;
+	return 1;
+}
+
+void UpdateScreen(int numclocks)
 {
 	uint32_t* outputTexture = (uint32_t*)(videoMemory[MAIN_WINDOW]);
-	int x;
-
-	uint32_t BGRA;
-
-	if (y==ROWS_PER_VBLANK-1)
-		flashTimer++;
-	if (y>=HEIGHT)
-		return;
-
-	BGRA=GetColour(borderCol,1);
-
-	for (x=0;x<WIDTH;x++)
+	numclocks<<=1;
+	while (numclocks)
 	{
-		outputTexture[x+y*WIDTH]=BGRA;
-	}
-}
-
-uint8_t *GetScreenPtr()
-{
-	return Ram;
-}
-
-uint8_t *GetAttrPtr()
-{
-	return GetScreenPtr()+24*32*8;
-}
-
-void VID_DrawScreenRow(int y)
-{
-	uint32_t* outputTexture = (uint32_t*)(videoMemory[MAIN_WINDOW]);
-	uint8_t *screenPtr = GetScreenPtr();
-	uint8_t *attrPtr = GetAttrPtr();
-	int x,sx;
-
-	ClearBorderColour(y);
-
-	if (y<BORDERWIDTH || y>=HEIGHT-BORDERWIDTH)
-		return;
-
-	y-=BORDERWIDTH;
-	{
-		uint8_t *rowPtr = &screenPtr[(y/64)*(8*8*32) + (y&7)*32*8 + ((y&63)>>3)*32];
-
-		for (x=0;x<(WIDTH-2*BORDERWIDTH)/8;x++)
+		outputTexture[hClock+vClock*WIDTH]=GetColour(curAttrByte,curScrByte&scrXMask);
+		scrXMask>>=1;
+		
+		// Handle fetch/prefetch
+		//Check if we are reading this frame (sequence is 1 cpu clock : pixel byte , attribute byte, pixel byte, attribute byte, idle,idle,idle,idle)
+		switch (hClock&15)
 		{
-			uint8_t scrPixel = rowPtr[x];
-			uint8_t xMask=0x80;
-			uint8_t attr = attrPtr[x+(y/8)*32];
-			uint32_t BGRA;
-
-			for (sx=0;sx<8;sx++)
-			{
-				BGRA = GetColour(attr,scrPixel&xMask);
-
-				outputTexture[x*8+sx+BORDERWIDTH+(y+BORDERWIDTH)*WIDTH]=BGRA;
-
-				xMask>>=1;
-			}
+			case 0:
+				floatingBus=0xFF;
+			case 1:
+			case 2:
+			case 3:
+			case 4:
+			case 5:
+			case 6:
+				break;
+			case 7:
+				curScrByte=nextScrByte2;
+				curAttrByte=nextAttrByte2;
+				scrXMask=0x80;
+				break;
+			case 8:
+				if (isDisplayFetch())
+				{
+					nextScrByte1=*ulaScreenPtr;
+					floatingBus=nextScrByte1;
+				}
+				else
+				{
+					nextScrByte1=0xFF;
+					floatingBus=0xFF;
+				}
+				break;
+			case 9:
+				if (isDisplayFetch())
+				{
+					pixelAddress++;
+				}
+				ulaScreenPtr=GetScreenPtr(pixelAddress);
+				break;
+			case 10:
+				if (isDisplayFetch())
+				{
+					nextAttrByte1=*ulaAttrPtr;
+					floatingBus=nextAttrByte1;
+				}
+				else
+				{
+					nextAttrByte1=borderCol;
+					floatingBus=0xFF;
+				}
+				break;
+			case 11:
+				ulaAttrPtr=GetAttrPtr(pixelAddress);
+				break;
+			case 12:
+				if (isDisplayFetch())
+				{
+					nextScrByte2=*ulaScreenPtr;
+					floatingBus=nextScrByte2;
+				}
+				else
+				{
+					nextScrByte2=0xFF;
+					floatingBus=0xFF;
+				}
+				break;
+			case 13:
+				if (isDisplayFetch())
+				{
+					pixelAddress++;
+				}
+				ulaScreenPtr=GetScreenPtr(pixelAddress);
+				break;
+			case 14:
+				if (isDisplayFetch())
+				{
+					nextAttrByte2=*ulaAttrPtr;
+					floatingBus=nextAttrByte2;
+				}
+				else
+				{
+					nextAttrByte2=borderCol;
+					floatingBus=0xFF;
+				}
+				break;
+			case 15:
+				ulaAttrPtr=GetAttrPtr(pixelAddress);
+				scrXMask=0x80;
+				curScrByte=nextScrByte1;
+				curAttrByte=nextAttrByte1;
+				break;
 		}
+		hClock++;
+		if (hClock>=448)
+		{
+			hClock=0;
+			vClock++;
+		}
+		numclocks--;
 	}
 }
 
@@ -219,16 +321,29 @@ void ShowScreen(int windowNum,int w,int h)
 	glBegin(GL_QUADS);
 
 	glTexCoord2f(0.0f, 0.0f);
-	glVertex2f(-1.0f,1.0f);
+	glVertex2f(-1.0f+(96.f/WIDTH)*2,1.0f);
 
 	glTexCoord2f(0.0f, h);
-	glVertex2f(-1.0f,-1.0f);
+	glVertex2f(-1.0f+(96.f/WIDTH)*2,-1.0f);
 
-	glTexCoord2f(w, h);
+	glTexCoord2f(w-96, h);
 	glVertex2f(1.0f,-1.0f);
 
-	glTexCoord2f(w, 0.0f);
+	glTexCoord2f(w-96, 0.0f);
 	glVertex2f(1.0f,1.0f);
+	
+	glTexCoord2f(w-96, 0.0f-1);
+	glVertex2f(-1.0f,1.0f);
+
+	glTexCoord2f(w-96, h-1);
+	glVertex2f(-1.0f,-1.0f);
+
+	glTexCoord2f(w, h-1);
+	glVertex2f(-1.0f+(96.f/WIDTH)*2,-1.0f);
+
+	glTexCoord2f(w, 0.0f-1);
+	glVertex2f(-1.0f+(96.f/WIDTH)*2,1.0f);
+
 	glEnd();
 	
 	glFlush();
@@ -258,8 +373,8 @@ void setupGL(int windowNum,int w, int h)
 
 	glTexParameteri(GL_TEXTURE_RECTANGLE_NV, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_RECTANGLE_NV, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_RECTANGLE_NV, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_RECTANGLE_NV, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+//	glTexParameteri(GL_TEXTURE_RECTANGLE_NV, GL_TEXTURE_WRAP_S, GL_REPEAT);
+//	glTexParameteri(GL_TEXTURE_RECTANGLE_NV, GL_TEXTURE_WRAP_T, GL_REPEAT);
 	glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
 
 	glTexImage2D(GL_TEXTURE_RECTANGLE_NV, 0, GL_RGBA, w,
@@ -393,7 +508,7 @@ uint8_t GetPort(uint16_t port)
 		return retVal;
 	}
 
-	return 0xFF;
+	return floatingBus;
 }
 
 void SetPort(uint16_t port,uint8_t byte)
@@ -590,6 +705,7 @@ int Disassemble(unsigned int address,int registers)
 		printf("\n");
 		exit(-1);
 	}
+
 	if (registers)
 	{
 		DUMP_REGISTERS();
@@ -605,6 +721,7 @@ int Disassemble(unsigned int address,int registers)
 		printf("   ");
 	}
 	printf("%s\n",retVal);
+
 	return numBytes+1;
 }
 
@@ -623,8 +740,6 @@ int main(int argc,char**argv)
 {
 	double	atStart,now,remain;
 	int a;
-	int intClocks=0;
-	int curRow=0;
 	int numClocks;
 
 	/// Initialize GLFW 
@@ -656,6 +771,7 @@ int main(int argc,char**argv)
 		return -1;
 	
 	CPU_RESET();
+	ResetScreen();
 	
 //	DisassembleRange(0x0000,0x4000);
 
@@ -680,20 +796,12 @@ int main(int argc,char**argv)
 		UpdateTape(numClocks);
 		UpdateAudio(numClocks);
 		
-		if (masterClock>=TSTATES_PER_ROW)
-		{	
-			pixelClock+=1;
-			VID_DrawScreenRow(curRow);
-			curRow++;
+		UpdateScreen(numClocks);
 
-			masterClock-=TSTATES_PER_ROW;
-		}
-		if (pixelClock>=ROWS_PER_VBLANK)
+		if (masterClock>=ROWS_PER_VBLANK*TSTATES_PER_ROW)
 		{	
-			curRow=0;
-			pixelClock-=ROWS_PER_VBLANK;
-
-			intClocks=32;
+			ResetScreen();
+			masterClock-=ROWS_PER_VBLANK*TSTATES_PER_ROW;
 
             		glfwMakeContextCurrent(windows[MAIN_WINDOW]);
 			ShowScreen(MAIN_WINDOW,WIDTH,HEIGHT);
@@ -715,11 +823,11 @@ int main(int argc,char**argv)
 				syncOff=!syncOff;
 				ClearKey(GLFW_KEY_PAGEDOWN);
 			}
-/*			if (CheckKey(GLFW_KEY_END))
+			if (CheckKey(GLFW_KEY_END))
 			{
 				doDebug=1;
 				ClearKey(GLFW_KEY_END);
-			}*/
+			}
 			now=glfwGetTime();
 
 			remain = now-atStart;
