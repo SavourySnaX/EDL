@@ -467,12 +467,20 @@ void DUMP_REGISTERS()
 	printf("--------\n");
 }
 
-const char* decodeDisasm(uint8_t *table[256],unsigned int address,int *count)
+const char* decodeDisasm(uint8_t *table[256],unsigned int address,int *count,int realLength)
 {
 	static char temporaryBuffer[2048];
 	char sprintBuffer[256];
 
-       	const char* mnemonic=table[GetByte(address)];
+	uint8_t byte = GetByte(address);
+	if (byte>realLength)
+	{
+		sprintf(temporaryBuffer,"UNKNOWN OPCODE");
+		return temporaryBuffer;
+	}
+	else
+	{
+       	const char* mnemonic=table[byte];
 	const char* sPtr=mnemonic;
 	char* dPtr=temporaryBuffer;
 	int counting = 0;
@@ -487,42 +495,42 @@ const char* decodeDisasm(uint8_t *table[256],unsigned int address,int *count)
 	if (strcmp(mnemonic,"CB")==0)
 	{
 		int tmpCount=0;
-		decodeDisasm(DIS_CB,address+1,&tmpCount);
+		decodeDisasm(DIS_CB,address+1,&tmpCount,256);
 		*count=tmpCount+1;
 		return temporaryBuffer;
 	}
 	if (strcmp(mnemonic,"DD")==0)
 	{
 		int tmpCount=0;
-		decodeDisasm(DIS_DD,address+1,&tmpCount);
+		decodeDisasm(DIS_DD,address+1,&tmpCount,250);
 		*count=tmpCount+1;
 		return temporaryBuffer;
 	}
 	if (strcmp(mnemonic,"DDCB")==0)
 	{
 		int tmpCount=0;
-		decodeDisasm(DIS_DDCB,address+2,&tmpCount);
+		decodeDisasm(DIS_DDCB,address+2,&tmpCount,256);
 		*count=tmpCount+1;
 		return temporaryBuffer;
 	}
 	if (strcmp(mnemonic,"FDCB")==0)
 	{
 		int tmpCount=0;
-		decodeDisasm(DIS_FDCB,address+2,&tmpCount);
+		decodeDisasm(DIS_FDCB,address+2,&tmpCount,256);
 		*count=tmpCount+1;
 		return temporaryBuffer;
 	}
 	if (strcmp(mnemonic,"ED")==0)
 	{
 		int tmpCount=0;
-		decodeDisasm(DIS_ED,address+1,&tmpCount);
+		decodeDisasm(DIS_ED,address+1,&tmpCount,256);
 		*count=tmpCount+1;
 		return temporaryBuffer;
 	}
 	if (strcmp(mnemonic,"FD")==0)
 	{
 		int tmpCount=0;
-		decodeDisasm(DIS_FD,address+1,&tmpCount);
+		decodeDisasm(DIS_FD,address+1,&tmpCount,250);
 		*count=tmpCount+1;
 		return temporaryBuffer;
 	}
@@ -561,8 +569,8 @@ const char* decodeDisasm(uint8_t *table[256],unsigned int address,int *count)
 		sPtr++;
 	}
 	*dPtr=0;
-
 	*count=counting;
+	}
 	return temporaryBuffer;
 }
 
@@ -570,7 +578,7 @@ int Disassemble(unsigned int address,int registers)
 {
 	int a;
 	int numBytes=0;
-	const char* retVal = decodeDisasm(DIS_,address,&numBytes);
+	const char* retVal = decodeDisasm(DIS_,address,&numBytes,256);
 
 	if (strcmp(retVal,"UNKNOWN OPCODE")==0)
 	{
