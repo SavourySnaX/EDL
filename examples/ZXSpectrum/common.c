@@ -1049,6 +1049,15 @@ int CheckTZX()
 				blockLength|=tapeFile[curPos++]<<8;
 				curPos+=blockLength;
 				break;
+			case 0x35:
+				printf("Custom Info\n");
+				curPos+=10;
+				blockLength=tapeFile[curPos++];
+				blockLength|=tapeFile[curPos++]<<8;
+				blockLength|=tapeFile[curPos++]<<16;
+				blockLength|=tapeFile[curPos++]<<24;
+				curPos+=blockLength;
+				break;
 			default:
 				printf("Unhandled ID%02X\n",blockId);
 				exit(-1);
@@ -1231,6 +1240,15 @@ uint8_t GetNextBlockTZX()
 				printf("Archive Info\n");
 				blockLength=tapeFile[tapePos++];
 				blockLength|=tapeFile[tapePos++]<<8;
+				tapePos+=blockLength;
+				break;
+			case 0x35:
+				printf("Custom Info\n");
+				tapePos+=10;
+				blockLength=tapeFile[tapePos++];
+				blockLength|=tapeFile[tapePos++]<<8;
+				blockLength|=tapeFile[tapePos++]<<16;
+				blockLength|=tapeFile[tapePos++]<<24;
 				tapePos+=blockLength;
 				break;
 			default:
