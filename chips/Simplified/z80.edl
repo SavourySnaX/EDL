@@ -137,8 +137,8 @@ FUNCTION INTERRUPT opcode[8]
 
 			CALL PushWord(PC);
 
-			PCH <- CALL GetByte(Vector);
-			PCL <- CALL GetByte(Vector+1);
+			PCL <- CALL GetByte(Vector);
+			PCH <- CALL GetByte(Vector+1);
 
 			CYCLES<-19;
 		}
