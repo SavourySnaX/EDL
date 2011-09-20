@@ -2723,9 +2723,9 @@ Value* CAffector::codeGen(CodeGenContext& context)
 
 	if (containsCarryOverflow)
 	{
-		if (expr.IsLeaf() || (!expr.IsCarryExpression()))
+		if (expr.IsLeaf() /*|| (!expr.IsCarryExpression())*/)
 		{
-			std::cerr << "OVERFLOW/CARRY is not supported for non carry/overflow expressions" << std::endl;
+			std::cerr << "OVERFLOW/CARRY is not supported for non carry/overflow expressions" << expr.IsLeaf() << std::endl;
 			context.errorFlagged=true;
 			return NULL;
 		}
