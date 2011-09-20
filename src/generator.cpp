@@ -204,7 +204,7 @@ void CodeGenContext::generateCode(CBlock& root)
 
 		for (int a=0;a<2;a++)		// We add things twice, as the statereferencesquasher will make more improvements once inlining has happened
 		{
-			pm.add(new StateReferenceSquasher(this));		// Custom pass designed to remove redundant loads of the current state (since it can only be modified in one place)
+//			pm.add(new StateReferenceSquasher(this));		// Custom pass designed to remove redundant loads of the current state (since it can only be modified in one place)
 
 			pm.add(createLowerSetJmpPass());          // Lower llvm.setjmp/.longjmp
 
