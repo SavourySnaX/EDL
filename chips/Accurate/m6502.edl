@@ -1,0 +1,3393 @@
+# MOS 6502 - Accurate Version 
+#
+# This should be used like the real CPU, ie interact with the PIN_'s
+#
+#
+#  At present the O1&O2 clocks are not connected to output  & O0 is always used to clock the chip directly
+#  RDY is ignored
+#
+#  TODO: obey decimal flag!!!
+
+# PINS - Most are labelled with PIN_ to avoid clashes, only the pins tied to handlers have had the PIN_ removed at present 
+
+PIN IN			PIN_RDY[1];			# ReaDY signal for external devices
+PIN OUT			PIN_O1[1];			# O1 Phase Clock Output
+PIN IN			PIN__IRQ[1];			# Interrupt ReQuest
+PIN IN			PIN__NMI[1];			# Non Maskable Interrupt request
+PIN OUT			PIN_SYNC[1];			# Fetching Opcode
+PIN OUT			PIN_AB[16];			# Address Bus
+PIN IN			PIN__RES[1];			# RESet
+PIN OUT			PIN_O2[1];			# O2 Phase Clock Output
+PIN IN			PIN_SO[1];			# Set Overflow
+PIN IN			PIN_O0[1];			# O0 Clock control - currently used as clock signal
+PIN OUT			PIN_RW[1];			# Read/Write indicator - 0 is write
+PIN BIDIRECTIONAL	PIN_DB[8];			# Data Bus
+
+
+# REAL REGISTERS FROM HARDWARE
+DECLARE	A[8];
+DECLARE X[8];
+DECLARE Y[8];
+
+DECLARE SP[8]		ALIAS	%00000001:S[8];
+
+DECLARE	PC[16] 		ALIAS PCH[8]:PCL[8];
+
+DECLARE	P[8]		ALIAS n[1]:v[1]:%1:b[1]:d[1]:i[1]:z[1]:c[1];
+										# n negative : v overflow : b break : d decimal : i interrupt disable : z zero : c carry
+
+# INTERNAL REGISTERS - NOT NEEDED OUTSIDE CPU 
+
+DECLARE	INTERNAL AD[16]		ALIAS	ADH[8]:ADL[8];				# Used as temporary store for address generation
+DECLARE INTERNAL BA[16]		ALIAS	BAH[8]:BAL[8];				# Used as temporary store for base address in inde
+DECLARE	INTERNAL IA[16]		ALIAS	IAH[8]:IAL[8];
+DECLARE INTERNAL IAc[1];
+
+DECLARE INTERNAL MEMSTORE[8];
+DECLARE INTERNAL IR[8];
+
+DECLARE TMP[8];
+
+#
+# For now we don't implement the internal clock generator - we rely on a single phase clock on O0 
+#
+#
+
+
+HANDLER		PIN_O0	TRANSITION(0,1)
+{
+#Will be doing memory request/writes
+
+	STATES	FETCH|IMM|BA|IA|ADR|ADW|MW|DUMMY
+	{
+		STATE FETCH
+		{
+			PIN_AB<-PC;
+			PIN_SYNC<-1;
+			PIN_RW<-0;
+		}
+
+		STATE IMM			# allows for a 1 byte or 2 byte immediate read
+		{
+			STATES LO,HI		# operation is the same regardless of LO or HI
+			{
+			}
+			PIN_AB<-PC;
+			PIN_SYNC<-0;
+			PIN_RW<-0;
+		}
+
+		STATE IA
+		{
+			STATES T0,T1
+			{
+			}
+			PIN_AB<-IA;
+			PIN_SYNC<-0;
+			PIN_RW<-0;
+		}
+
+		STATE BA
+		{
+			STATES T0,T1,T2
+			{
+			}
+			PIN_AB<-BA;
+			PIN_SYNC<-0;
+			PIN_RW<-0;
+		}
+
+		STATE ADR
+		{
+			PIN_AB<-AD;
+			PIN_SYNC<-0;
+			PIN_RW<-0;
+		}
+		
+		STATE ADW
+		{
+			PIN_AB<-AD;
+			PIN_SYNC<-0;
+			PIN_RW<-1;
+			PIN_DB<-MEMSTORE;
+		}
+
+		STATE MW
+		{
+			STATES MODIFY,WRITE
+			{
+			}
+			PIN_AB<-AD;
+			PIN_SYNC<-0;
+			PIN_RW<-1;
+			PIN_DB<-MEMSTORE;
+		}
+
+		STATE DUMMY
+		{
+			STATES T0,T1
+			{
+			}
+			PIN_AB<-PC;
+			PIN_SYNC<-0;
+			PIN_RW<-0;
+		}
+	}
+
+}
+
+HANDLER		PIN_O0	TRANSITION(1,0)
+{
+	IF PIN_O0.FETCH@
+	{
+		PIN_DB->IR;
+		PC<-PC+1;
+	}
+
+	IF PIN_O0.IMM@
+	{
+		PC<-PC+1;
+	}
+
+	EXECUTE IR;
+}
+
+
+FUNCTION INTERNAL	tmpRdy[1]	Immediate
+{
+	IF PIN_O0.FETCH@
+	{
+		NEXT PIN_O0.IMM;
+	}
+
+	IF PIN_O0.IMM@
+	{
+		PIN_DB->TMP;
+		tmpRdy<-1;
+		NEXT PIN_O0.FETCH;
+	}
+}
+
+FUNCTION INTERNAL	tmpRdy[1]	ZeroPage	store[1]
+{
+	IF PIN_O0.FETCH@
+	{
+		NEXT PIN_O0.IMM.LO;
+	}
+
+	IF PIN_O0.IMM.LO@
+	{
+		PIN_DB->ADL;
+		0->ADH;
+		NEXT PIN_O0.ADR;
+		IF store
+		{
+			tmpRdy<-1;
+			NEXT PIN_O0.ADW;
+		}
+	}
+
+	IF PIN_O0.ADR@
+	{
+		PIN_DB->TMP;
+		tmpRdy<-1;
+		NEXT PIN_O0.FETCH;
+	}
+	
+	IF PIN_O0.ADW@
+	{
+		NEXT PIN_O0.FETCH;
+	}
+}
+
+FUNCTION INTERNAL	tmpRdy[1]	Absolute	store[1]
+{
+	IF PIN_O0.FETCH@
+	{
+		NEXT PIN_O0.IMM.LO;
+	}
+
+	IF PIN_O0.IMM.LO@
+	{
+		PIN_DB->ADL;
+	}
+
+	IF PIN_O0.IMM.HI@
+	{
+		PIN_DB->ADH;
+		NEXT PIN_O0.ADR;
+		IF store
+		{
+			tmpRdy<-1;
+			NEXT PIN_O0.ADW;
+		}
+	}
+
+	IF PIN_O0.ADR@
+	{
+		PIN_DB->TMP;
+		tmpRdy<-1;
+		NEXT PIN_O0.FETCH;
+	}
+	
+	IF PIN_O0.ADW@
+	{
+		NEXT PIN_O0.FETCH;
+	}
+}
+
+FUNCTION INTERNAL	tmpRdy[1]	IndirectX	store[1]
+{
+	IF PIN_O0.FETCH@
+	{
+		NEXT PIN_O0.IMM.LO;
+	}
+
+	IF PIN_O0.IMM.LO@
+	{
+		PIN_DB->BAL;
+		0->BAH;
+		NEXT PIN_O0.BA.T0;
+	}
+
+	IF PIN_O0.BA.T0@
+	{
+		BAL<-BAL+X;
+	}
+
+	IF PIN_O0.BA.T1@
+	{
+		PIN_DB->ADL;
+		BAL<-BAL+1;
+	}
+
+	IF PIN_O0.BA.T2@
+	{
+		PIN_DB->ADH;
+		NEXT PIN_O0.ADR;
+		IF store
+		{
+			tmpRdy<-1;
+			NEXT PIN_O0.ADW;
+		}
+	}
+
+	IF PIN_O0.ADR@
+	{
+		PIN_DB->TMP;
+		tmpRdy<-1;
+		NEXT PIN_O0.FETCH;
+	}
+	
+	IF PIN_O0.ADW@
+	{
+		NEXT PIN_O0.FETCH;
+	}
+}
+
+FUNCTION INTERNAL	tmpRdy[1]	IndirectY	store[1]
+{
+	IF PIN_O0.FETCH@
+	{
+		NEXT PIN_O0.IMM.LO;
+	}
+
+	IF PIN_O0.IMM.LO@
+	{
+		PIN_DB->IAL;
+		$00->IAH;
+		NEXT PIN_O0.IA.T0;
+	}
+
+	IF PIN_O0.IA.T0@
+	{
+		PIN_DB->BAL;
+		IAL<-IAL+1;
+	}
+
+	IF PIN_O0.IA.T1@
+	{
+		PIN_DB->BAH;
+		AFFECT IAc AS CARRY(7)
+		{
+			BAL+Y
+		}->BAL;
+		AD<-BA;
+		NEXT PIN_O0.ADR;
+		IF IAc | store
+		{
+			NEXT PIN_O0.BA.T2;
+		}
+	}
+
+	IF PIN_O0.BA.T2@
+	{
+		ADH<-BAH+IAc;
+		NEXT PIN_O0.ADR;
+		IF store
+		{
+			tmpRdy<-1;
+			NEXT PIN_O0.ADW;
+		}
+	}
+
+	IF PIN_O0.ADR@
+	{
+		PIN_DB->TMP;
+		tmpRdy<-1;
+		NEXT PIN_O0.FETCH;
+	}
+	
+	IF PIN_O0.ADW@
+	{
+		NEXT PIN_O0.FETCH;
+	}
+}
+
+FUNCTION INTERNAL	tmpRdy[1]	ZeroPageIndexed	store[1],index[8]
+{
+	IF PIN_O0.FETCH@
+	{
+		NEXT PIN_O0.IMM.LO;
+	}
+
+	IF PIN_O0.IMM.LO@
+	{
+		PIN_DB->BAL;
+		0->BAH;
+		NEXT PIN_O0.BA.T1;
+	}
+
+	IF PIN_O0.BA.T1@
+	{
+		BAL<-BAL+index;
+		AD<-BA;
+		NEXT PIN_O0.ADR;
+		IF store
+		{
+			tmpRdy<-1;
+			NEXT PIN_O0.ADW;
+		}
+	}
+
+	IF PIN_O0.ADR@
+	{
+		PIN_DB->TMP;
+		tmpRdy<-1;
+		NEXT PIN_O0.FETCH;
+	}
+	
+	IF PIN_O0.ADW@
+	{
+		NEXT PIN_O0.FETCH;
+	}
+}
+
+FUNCTION INTERNAL	tmpRdy[1]	AbsoluteIndexed	store[1],index[8]
+{
+	IF PIN_O0.FETCH@
+	{
+		NEXT PIN_O0.IMM.LO;
+	}
+
+	IF PIN_O0.IMM.LO@
+	{
+		PIN_DB->BAL;
+	}
+
+	IF PIN_O0.IMM.HI@
+	{
+		PIN_DB->BAH;
+		AFFECT IAc AS CARRY(7)
+		{
+			BAL + index
+		}->BAL;
+		AD<-BA;
+		NEXT PIN_O0.ADR;
+		IF IAc | store
+		{
+			NEXT PIN_O0.BA.T2;
+		}
+	}
+
+	IF PIN_O0.BA.T2@
+	{
+		ADH<-BAH+IAc;
+		NEXT PIN_O0.ADR;
+		IF store
+		{
+			tmpRdy<-1;
+			NEXT PIN_O0.ADW;
+		}
+	}
+
+	IF PIN_O0.ADR@
+	{
+		PIN_DB->TMP;
+		tmpRdy<-1;
+		NEXT PIN_O0.FETCH;
+	}
+	
+	IF PIN_O0.ADW@
+	{
+		NEXT PIN_O0.FETCH;
+	}
+}
+
+MAPPING addressing01[3]
+{
+	%000	"(%$1,X)"	CALL IndirectX(0);
+	%001	"%$1"		CALL ZeroPage(0);
+	%010	"#%$1"		CALL Immediate();
+	%011	"%$2%$1"	CALL Absolute(0);
+	%100	"(%$1),Y"	CALL IndirectY(0);
+	%101	"%$1,X"		CALL ZeroPageIndexed(0,X);
+	%110	"%$2%$1,Y"	CALL AbsoluteIndexed(0,Y);
+	%111	"%$2%$1,X"	CALL AbsoluteIndexed(0,X);
+}
+
+MAPPING operation01[3]
+{
+	%000	"ORA"	AFFECT z AS ZERO, n AS SIGN { A | TMP }->A;
+	%001	"AND"	AFFECT z AS ZERO, n AS SIGN { A & TMP }->A;
+	%010	"EOR"	AFFECT z AS ZERO, n AS SIGN { A ^ TMP }->A;
+	%011	"ADC"	AFFECT z AS ZERO, n AS SIGN, v AS OVERFLOW(A,TMP,7),c AS CARRY(7) { (A + TMP) + c }->A;
+	%101	"LDA"	TMP->A;
+	%110	"CMP"	AFFECT z AS ZERO, n AS SIGN, c AS NOCARRY(7) { A - TMP};
+	%111	"SBC"	AFFECT z AS ZERO, n AS SIGN, v AS OVERFLOW(A,TMP,7),c AS CARRY(7) { A + ((~TMP) + c) }->A;
+}
+
+
+MAPPING addressing01_sta[3]
+{
+	%000	"(%$1,X)"	CALL IndirectX(1);
+	%001	"%$1"		CALL ZeroPage(1);
+	%011	"%$2%$1"	CALL Absolute(1);
+	%100	"(%$1),Y"	CALL IndirectY(1);
+	%101	"%$1,X"		CALL ZeroPageIndexed(1,X);
+	%110	"%$2%$1,Y"	CALL AbsoluteIndexed(1,Y);
+	%111	"%$2%$1,X"	CALL AbsoluteIndexed(1,X);
+}
+
+INSTRUCTION	"%M0 %M1"	operation01:addressing01:%01
+{
+	IF addressing01
+	{
+		operation01;
+	}
+}
+
+INSTRUCTION	"STA %M0"	%100:addressing01_sta:%01
+{
+	IF addressing01_sta
+	{
+		MEMSTORE<-A;
+	}
+}
+
+MAPPING addressing10[3]
+{
+#	%000	"#%$1"		CALL Immediate();	# Handled seperately
+	%001	"%$1"		CALL ZeroPage(0);
+#	%010	"#%$1"		A;			# Handled seperately
+	%011	"%$2%$1"	CALL Absolute(0);
+	%101	"%$1,X"		CALL ZeroPageIndexed(0,X);
+	%111	"%$2%$1,X"	CALL AbsoluteIndexed(0,X);
+}
+
+MAPPING operation10[3]
+{
+	%000	"ASL"	AFFECT z AS ZERO, n AS SIGN { ROL(TMP,c,0,1) }->TMP;
+	%001	"ROL"	AFFECT z AS ZERO, n AS SIGN { ROL(TMP,c,c,1) }->TMP;
+	%010	"LSR"	AFFECT z AS ZERO, n AS SIGN { ROR(TMP,c,0,1) }->TMP;
+	%011	"ROR"	AFFECT z AS ZERO, n AS SIGN { ROR(TMP,c,c,1) }->TMP;
+#	%100	"STX"	;		# Handled seperately
+#	%101	"LDX"	;		# Handled seperately
+	%110	"DEC"	AFFECT z AS ZERO, n AS SIGN { TMP - 1}->TMP;
+	%111	"INC"	AFFECT z AS ZERO, n AS SIGN { TMP + 1}->TMP;
+}
+
+INSTRUCTION	"%M0 %M1"	operation10:addressing10:%10
+{
+	IF addressing10
+	{
+		MEMSTORE<-TMP;
+		NEXT PIN_O0.MW.MODIFY;
+	}
+
+	IF PIN_O0.MW.MODIFY@
+	{
+		operation10
+		MEMSTORE<-TMP;
+	}
+
+	IF PIN_O0.MW.WRITE@
+	{
+		NEXT PIN_O0.FETCH;
+	}
+}
+
+MAPPING operation10_A[3]
+{
+	%000	"ASL A"	AFFECT z AS ZERO, n AS SIGN { ROL(A,c,0,1) }->A;
+	%001	"ROL A"	AFFECT z AS ZERO, n AS SIGN { ROL(A,c,c,1) }->A;
+	%010	"LSR A"	AFFECT z AS ZERO, n AS SIGN { ROR(A,c,0,1) }->A;
+	%011	"ROR A"	AFFECT z AS ZERO, n AS SIGN { ROR(A,c,c,1) }->A;
+}
+
+INSTRUCTION	"%M0"		operation10_A:%010:%10
+{
+	IF PIN_O0.FETCH@
+	{
+		NEXT PIN_O0.DUMMY.T0;
+	}
+
+	IF PIN_O0.DUMMY.T0@
+	{
+		operation10_A;
+		NEXT PIN_O0.FETCH;
+	}
+}
+
+MAPPING addressing10_LDX[3]
+{
+	%000	"#%$1"		CALL Immediate();
+	%001	"%$1"		CALL ZeroPage(0);
+	%011	"%$2%$1"	CALL Absolute(0);
+	%101	"%$1,Y"		CALL ZeroPageIndexed(0,Y);
+	%111	"%$2%$1,Y"	CALL AbsoluteIndexed(0,Y);
+}
+
+INSTRUCTION	"LDX %M0"	%101:addressing10_LDX:%10
+{
+	IF addressing10_LDX
+	{
+		TMP->X;
+	}
+}
+
+MAPPING addressing10_STX[3]
+{
+	%001	"%$1"		CALL ZeroPage(1);
+	%011	"%$2%$1"	CALL Absolute(1);
+	%101	"%$1,Y"		CALL ZeroPageIndexed(1,Y);
+}
+
+INSTRUCTION	"STX %M0"	%100:addressing10_STX:%10
+{
+	IF addressing10_STX
+	{
+		MEMSTORE<-X;
+	}
+}
+
+MAPPING addressing00_LDY[3]
+{
+	%000	"#%$1"		CALL Immediate();
+	%001	"%$1"		CALL ZeroPage(0);
+	%011	"%$2%$1"	CALL Absolute(0);
+	%101	"%$1,X"		CALL ZeroPageIndexed(0,X);
+	%111	"%$2%$1,X"	CALL AbsoluteIndexed(0,X);
+}
+
+INSTRUCTION	"LDY %M0"	%101:addressing00_LDY:%00
+{
+	IF addressing00_LDY
+	{
+		TMP->Y;
+	}
+}
+
+MAPPING addressing00_STY[3]
+{
+	%001	"%$1"		CALL ZeroPage(1);
+	%011	"%$2%$1"	CALL Absolute(1);
+	%101	"%$1,X"		CALL ZeroPageIndexed(1,X);
+}
+
+INSTRUCTION	"STY %M0"	%100:addressing00_STY:%00
+{
+	IF addressing00_STY
+	{
+		MEMSTORE<-Y;
+	}
+}
+
+MAPPING addressing00_CP[3]
+{
+	%000	"#%$1"		CALL Immediate();
+	%001	"%$1"		CALL ZeroPage(0);
+	%011	"%$2%$1"	CALL Absolute(0);
+}
+
+MAPPING operation00_CP[3]
+{
+	%110	"CPY"	AFFECT z AS ZERO, n AS SIGN, c AS NOCARRY(7) { Y - TMP};
+	%111	"CPX"	AFFECT z AS ZERO, n AS SIGN, c AS NOCARRY(7) { X - TMP};
+}
+
+INSTRUCTION	"%M0 %M1"	operation00_CP:addressing00_CP:%00
+{
+	IF addressing00_CP
+	{
+		operation00_CP;
+	}	
+}
+
+MAPPING addressing00_BIT[3]
+{
+	%001	"%$1"		CALL ZeroPage(0);
+	%011	"%$2%$1"	CALL Absolute(0);
+}
+
+INSTRUCTION	"BIT %M0"	%001:addressing00_BIT:%00
+{
+	IF addressing00_BIT
+	{
+		AFFECT z AS ZERO
+		{
+			A & TMP
+		};
+		AFFECT n AS BIT(7), v AS BIT(6)
+		{
+			TMP
+		};
+	}
+}
+
+INSTRUCTION	"JMP %$2%$1"	%01001100
+{
+	IF PIN_O0.FETCH@
+	{
+		NEXT PIN_O0.IMM.LO;
+	}
+
+	IF PIN_O0.IMM.LO@
+	{
+		PIN_DB->ADL;
+	}
+
+	IF PIN_O0.IMM.HI@
+	{
+		PIN_DB->ADH;
+		PC<-AD;
+		NEXT PIN_O0.FETCH;
+	}
+}
+
+INSTRUCTION	"JMP (%$2%$1)"	%01101100
+{
+	IF PIN_O0.FETCH@
+	{
+		NEXT PIN_O0.IMM.LO;
+	}
+
+	IF PIN_O0.IMM.LO@
+	{
+		PIN_DB->IAL;
+	}
+
+	IF PIN_O0.IMM.HI@
+	{
+		PIN_DB->IAH;
+		NEXT PIN_O0.IA.T0;
+	}
+
+	IF PIN_O0.IA.T0@
+	{
+		PIN_DB->ADL;
+		IAL<-IAL+1;
+	}
+
+	IF PIN_O0.IA.T1@
+	{
+		PIN_DB->ADH;
+		PC<-AD;
+		NEXT PIN_O0.FETCH;
+	}
+}
+
+MAPPING	ccc[3]
+{
+	%000	"PL"	n==0;
+	%001	"MI"	n==1;
+	%010	"VC"	v==0;
+	%011	"VS"	v==1;
+	%100	"CC"	c==0;
+	%101	"CS"	c==1;
+	%110	"NE"	z==0;
+	%111	"EQ"	z==1;
+}
+
+INSTRUCTION	"B%M0 %$1"	ccc:%10000			# TODO CHECK THIS.. SEEMS TO BE 1 CYCLE TOO LONG TO ME
+{
+	IF PIN_O0.FETCH@
+	{
+		NEXT PIN_O0.IMM.LO;
+	}
+
+	IF PIN_O0.IMM.LO@
+	{
+		PIN_DB->TMP;
+		NEXT PIN_O0.FETCH;
+		IF ccc
+		{
+			AFFECT IAc AS CARRY(7)
+			{
+				PCL ++ TMP
+			}->PCL;
+			NEXT PIN_O0.DUMMY.T1;
+			IF IAc
+			{
+				NEXT PIN_O0.DUMMY.T0;
+			}
+		}
+	}
+
+	IF PIN_O0.DUMMY.T0@
+	{
+		PCH<-PCH+1;
+	}
+
+	IF PIN_O0.DUMMY.T1@
+	{
+		NEXT PIN_O0.FETCH;
+	}
+
+}
+#
+#
+#
+#
+#
+#
+#
+#HANDLER		O1	TRANSITION(0,1)
+#{
+## Each clock in here is one state in the cpu machine. The first 3 states for all instructions are identical, and these are the instruction fetch / decode part
+## Still need to do HOLD/INT proessing
+#
+#	STATES FETCH|MEMIN|MEMOUT|PORTIN|PORTOUT|SPREAD|SPWRITE|DADCYCLE|TW|TWH|RESET
+#	{
+#		STATE FETCH
+#		{
+#			STATES T1,T2,T3,T4,T5
+#			{
+#				STATE T1
+#				{
+#					PIN__WR <- 1;
+#					IF (INT_LATCH==1)
+#					{
+#						DATA_BUFF <- SYNC_INT_ACK;
+#					}
+#					IF (INT_LATCH==0)
+#					{
+#						DATA_BUFF <- SYNC_FETCH;		# We load the values into the latches, since they don't actually appear on the Buses until the o2 clock
+#					}
+#					ADDR_BUFF <- PC;
+#				}
+#
+#				STATE T2
+#				{
+#					IF (INT_LATCH==0)
+#					{
+#						PC <- PC+1;
+#					}
+#					IF (PIN_READY == 0)
+#					{
+#						PUSH O1.TW;
+#					}
+#				}
+#
+#				STATE T3
+#				{
+#					INT_LATCH <- 0;
+#					IF (INT_REQ==1)
+#					{
+#						IF (PIN_INTE)
+#						{
+#							INT_LATCH<-1;
+#						}
+#						INT_REQ<-0;
+#					}
+#					PIN_WAIT <- 0;
+#					PIN_D -> DATA_BUFF;	# Latch data at start of T3
+#
+#					DATA_BUFF -> IR;		# Transfer latched data into IR
+#				}
+#
+#				STATE T4
+#				{
+#					PIN__WR <- 1;		## TODO : CHECK DOCUMENTATION - WE NEED TO CLEAR THIS BACK DUE TO XTHL INSTRUCTION
+#				}
+#			}
+#		}
+#
+#		STATE MEMIN
+#		{
+#			STATES T1,T2,T3
+#			{
+#				STATE T1
+#				{
+#					PIN__WR <- 1;
+#					DATA_BUFF <- SYNC_MEM_READ;
+#				}
+#
+#				STATE T2
+#				{
+#					IF (PIN_READY == 0)
+#					{
+#						PUSH O1.TW;
+#					}
+#				}
+#
+#				STATE T3
+#				{
+#					PIN_WAIT <- 0;
+#					PIN_D -> DATA_BUFF;
+#				}
+#			}
+#		}
+#
+#		STATE MEMOUT
+#		{
+#			STATES T1,T2,T3
+#			{
+#				STATE T1
+#				{
+#					PIN__WR <- 1;
+#					DATA_BUFF <- SYNC_MEM_WRITE;
+#				}
+#
+#				STATE T2
+#				{
+#					IF (PIN_READY == 0)
+#					{
+#						PUSH O1.TW;
+#					}
+#				}
+#
+#				STATE T3
+#				{
+#					PIN__WR <- 0;
+#					PIN_WAIT <- 0;
+#				}
+#			}
+#		}
+#
+#		STATE PORTIN
+#		{
+#			STATES T1,T2,T3
+#			{
+#				STATE T1
+#				{
+#					PIN__WR <- 1;
+#					ADDR_BUFF <- WZ;
+#					DATA_BUFF <- SYNC_INPUT;
+#				}
+#
+#				STATE T2
+#				{
+#					IF (PIN_READY == 0)
+#					{
+#						PUSH O1.TW;
+#					}
+#				}
+#
+#				STATE T3
+#				{
+#					PIN_WAIT <- 0;
+#					PIN_D -> DATA_BUFF;
+#				}
+#			}
+#		}
+#
+#		STATE PORTOUT
+#		{
+#			STATES T1,T2,T3
+#			{
+#				STATE T1
+#				{
+#					PIN__WR <- 1;
+#					ADDR_BUFF <- WZ;
+#					DATA_BUFF <- SYNC_OUTPUT;
+#				}
+#
+#				STATE T2
+#				{
+#					IF (PIN_READY == 0)
+#					{
+#						PUSH O1.TW;
+#					}
+#				}
+#
+#				STATE T3
+#				{
+#					PIN__WR <- 0;
+#					PIN_WAIT <- 0;
+#				}
+#			}
+#		}
+#
+#		STATE SPREAD
+#		{
+#			STATES T1,T2,T3
+#			{
+#				STATE T1
+#				{
+#					PIN__WR <- 1;
+#					ADDR_BUFF <- SP;
+#					DATA_BUFF <- SYNC_STACK_READ;
+#				}
+#
+#				STATE T2
+#				{
+#					IF (PIN_READY == 0)
+#					{
+#						PUSH O1.TW;
+#					}
+#				}
+#
+#				STATE T3
+#				{
+#					PIN_WAIT <- 0;
+#					PIN_D -> DATA_BUFF;
+#				}
+#			}
+#		}
+#
+#		STATE SPWRITE
+#		{
+#			STATES T1,T2,T3
+#			{
+#				STATE T1
+#				{
+#					PIN__WR <- 1;
+#					ADDR_BUFF <- SP;
+#					DATA_BUFF <- SYNC_STACK_WRITE;
+#				}
+#
+#				STATE T2
+#				{
+#					IF (PIN_READY == 0)
+#					{
+#						PUSH O1.TW;
+#					}
+#				}
+#
+#				STATE T3
+#				{
+#					PIN__WR <- 0;
+#					PIN_WAIT <- 0;
+#				}
+#			}
+#		}
+#
+#		STATE DADCYCLE				# This is a special case cycle - does not require ready signal testing - Does process hold 
+#		{
+#			STATES T1,T2,T3
+#			{
+#			}
+#		}
+#
+#		STATE TW
+#		{
+#			PIN_WAIT <- 1;
+#			IF (PIN_READY == 1)
+#			{
+#				POP O1;
+#			}
+#		}
+#
+#		STATE TWH
+#		{
+#			STATES T1,T2,TWH
+#			{
+#				STATE T1
+#				{
+#					DATA_BUFF <- SYNC_HALT_ACK;
+#				}
+#
+#				STATE TWH
+#				{
+## Test HLD_LATCH these will get us out of this state...
+#					PIN_WAIT <- 1;
+#					IF (INT_LATCH == 0)
+#					{
+#						NEXT O1.TWH.TWH;
+#					}
+#					IF (INT_LATCH == 1)
+#					{
+#						NEXT O1.FETCH;
+#					}
+#				}
+#			}
+#		}
+#
+#		STATE RESET				# State is forced by reset pin going high, and cleared by reset pin going low
+#		{
+#			STATES T1,T2,T3,TREST
+#			{
+#				STATE T1
+#				{
+#					0 -> INT_REQ;
+#					0 -> INT_LATCH;
+#				}
+#				STATE T2
+#				{
+#					0 -> PCL;
+#				}
+#				STATE T3
+#				{
+#					0 -> PCH;
+#				}
+#				STATE TREST
+#				{
+#					NEXT O1.RESET.TREST;
+#				}
+#			}
+#		}
+#	}
+#
+#
+#	EXECUTE	IR;		# Execute states via this instruction, during reset we should point IR to a SAFE value (NOP will do)
+#}
+#
+#HANDLER		O2	TRANSITION(0,1)
+#{
+## Each clock here determines update to the external state of the pins (e.g. making address/data available etc)
+#
+#	IF O1.FETCH.T1@  |
+#	   O1.MEMIN.T1@  |
+#	   O1.SPREAD.T1@ |
+#	   O1.PORTIN.T1@
+#	{
+#		PIN_D <- DATA_BUFF;
+#		PIN_A <- ADDR_BUFF;
+#		PIN_SYNC <- 1;
+#		IF (INT_LATCH==1)
+#		{
+#			PIN_INTE <- 0;
+#		}
+#	}
+#	
+#	IF O1.FETCH.T2@  |
+#	   O1.MEMIN.T2@  |
+#	   O1.SPREAD.T2@ |
+#	   O1.PORTIN.T2@
+#	{
+#		PIN_SYNC <-0;
+##		PIN_D <- FLOATING;
+#		PIN_DBIN <- 1;
+#	}
+#
+#	IF O1.FETCH.T3@  |
+#	   O1.MEMIN.T3@  |
+#	   O1.SPREAD.T3@ |
+#	   O1.PORTIN.T3@
+#	{
+#		PIN_DBIN <- 0;
+#	}
+#
+#	IF O1.FETCH.T4@
+#	{
+##		PIN_A <- FLOATING;
+#	}
+#
+#	IF O1.MEMOUT.T1@  |
+#	   O1.SPWRITE.T1@ |
+#	   O1.PORTOUT.T1@
+#	{
+#		PIN_D <- DATA_BUFF;
+#		PIN_A <- ADDR_BUFF;
+#		PIN_SYNC <- 1;
+#	}
+#
+#	IF O1.MEMOUT.T2@  |
+#	   O1.SPWRITE.T2@ |
+#	   O1.PORTOUT.T2@
+#	{
+#		PIN_SYNC <- 0;
+#		PIN_D <- DATA_BUFF;
+#	}
+#
+#	IF O1.TWH.T1@
+#	{
+##		PIN_A <- FLOATING;
+#		PIN_D <- DATA_BUFF;
+#		PIN_SYNC <- 1;
+#	}
+#
+#	IF O1.TWH.T2@
+#	{
+#		PIN_SYNC <- 0;
+##		PIN_D <- FLOATING;
+#	}
+#
+#	IF O1.RESET@
+#	{
+##		PIN_D <- FLOATING;		# If we are in a reseting state, reset outputs - does not matter which sub cycle we are in
+##		PIN_A <- FLOATING;
+#		PIN_SYNC <- 0;
+#		PIN_DBIN <- 0;
+#		PIN__WR <- 0;
+#	}
+#}
+#
+#HANDLER		RESET	CHANGED
+#{
+#	IF RESET==0
+#	{
+#		NEXT O1.FETCH.T1;
+#	}
+#	IF RESET==1
+#	{
+#		NEXT O1.RESET.T1;
+#	}
+#}
+#
+#HANDLER		INT	CHANGED
+#{
+#	IF PIN_INTE == 1
+#	{
+#		INT_REQ <- INT;
+#	}
+#}
+#
+#MAPPING	SSS[3]
+#{
+#	%000	"B"	B;
+#	%001	"C"	C;
+#	%010	"D"	D;
+#	%011	"E"	E;
+#	%100	"H"	H;
+#	%101	"L"	L;
+##	%110			Not used
+#	%111	"A"	A;
+#}
+#
+#MAPPING DDD[3]
+#{
+#	%000	"B"	B;
+#	%001	"C"	C;
+#	%010	"D"	D;
+#	%011	"E"	E;
+#	%100	"H"	H;
+#	%101	"L"	L;
+##	%110			Not used
+#	%111	"A"	A;
+#}
+#
+#MAPPING	RP[2]
+#{
+#	%00	"BC"	BC;
+#	%01	"DE"	DE;
+#	%10	"HL"	HL;
+#	%11	"SP"	SP;
+#}
+#
+#MAPPING	PRP[2]
+#{
+#	%00	"BC"	BC;
+#	%01	"DE"	DE;
+#	%10	"HL"	HL;
+##	%11	"SP"	SP;	Not valid for push/pop operation
+#}
+#
+#MAPPING	BCDE[2]
+#{
+#	%00	"BC"	BC;
+#	%01	"DE"	DE;
+#}
+#
+#MAPPING CCC[3]
+#{
+#	%000	"NZ"	z == 0;
+#	%001	"Z"	z == 1;
+#	%010	"NC"	cy == 0;
+#	%011	"C"	cy == 1;
+#	%100	"PO"	p == 0;
+#	%101	"PE"	p == 1;
+#	%110	"P"	s == 0;
+#	%111	"M"	s == 1;
+#}
+#
+#MAPPING NNN[3]
+#{
+#	%000	"$00"	$00;
+#	%001	"$08"	$08;
+#	%010	"$10"	$10;
+#	%011	"$18"	$18;
+#	%100	"$20"	$20;
+#	%101	"$28"	$28;
+#	%110	"$30"	$30;
+#	%111	"$38"	$38;
+#}
+#
+##
+## define the instructions based on variable bit patterns
+##
+## INSTRUCTION dissasm bitPattern	- defines an instruction
+##
+##		dissasm can use %xn to take values from the decode stream - for instance "MOV %M0,%M1" for 0:1:DDD[3]:SSS[3] - would give "MOV A,B" if opcode was %01111000
+##			where x can be :
+##						M - decode mapping value (from opcode - never from additional operands)
+##						$ - memory reference, e.g. %$1 means opcode + 1 - at present it ignores the size of types following opcode!
+##			where n can be :
+##						0 - 9 (representing which input value to take... it ignores constants as in example above.
+##
+##		bitpattern can be specified with MAPPING helpers (these will be expanded correctly)
+##
+##
+##
+##	Quick note on operators :
+##
+##		a -> b  assign contents of a into b
+##		a <- b  assign contents of b into a
+##
+##	Note on status flag behaviour
+##
+##		AFFECT	allows the capturing of standard ALU style flags e.g. carry - but how
+##
+##	
+#
+#INSTRUCTION	"MOV %M0,%M1"	%01:DDD:SSS
+#{
+#	IF O1.FETCH.T4@
+#	{
+#		SSS -> TMP;
+#	}
+#
+#	IF O1.FETCH.T5@
+#	{
+#		TMP -> DDD;
+#	}
+#}
+#
+#INSTRUCTION	"MOV %M0,M"	%01:DDD:%110
+#{
+#	IF O1.FETCH.T4@
+#	{
+#		NEXT O1.FETCH.T1;
+#		PUSH O1.MEMIN.T1;
+#	}
+#
+#	IF O1.MEMIN.T1@
+#	{
+#		ADDR_BUFF <- HL;
+#	}
+#
+#	IF O1.MEMIN.T3@
+#	{
+#		DATA_BUFF -> DDD;
+#		POP O1;
+#	}
+#}
+#
+#INSTRUCTION	"MOV M,%M0"	%01110:SSS
+#{
+#	IF O1.FETCH.T4@
+#	{
+#		SSS -> TMP;
+#		NEXT O1.FETCH.T1;
+#		PUSH O1.MEMOUT.T1;
+#	}
+#
+#	IF O1.MEMOUT.T1@
+#	{
+#		ADDR_BUFF <- HL;
+#	}
+#		
+#	IF O1.MEMOUT.T2@
+#	{
+#		TMP -> DATA_BUFF;
+#	}
+#	
+#	IF O1.MEMOUT.T3@
+#	{
+#		POP O1;
+#	}
+#}
+#
+#INSTRUCTION	"SPHL"		%11111001
+#{
+#	IF O1.FETCH.T4@
+#	{
+#		L -> SPL;
+#	}
+#	
+#	IF O1.FETCH.T5@
+#	{
+#		H -> SPH;
+#	}
+#}
+#
+#INSTRUCTION	"MVI %M0,%$1"	%00:DDD:%110,B2[8]
+#{
+#	IF O1.FETCH.T4@
+#	{
+#		NEXT O1.FETCH.T1;
+#		PUSH O1.MEMIN.T1;
+#	}
+#
+#	IF O1.MEMIN.T1@
+#	{
+#		ADDR_BUFF <- PC;
+#	}
+#	
+#	IF O1.MEMIN.T2@
+#	{
+#		PC <- PC+1;
+#	}
+#
+#	IF O1.MEMIN.T3@
+#	{
+#		DATA_BUFF -> DDD;
+#		POP O1;
+#	}
+#}
+#
+#INSTRUCTION	"MVI M,%$1"	%00110110,B2[8]
+#{
+#	IF O1.FETCH.T4@
+#	{
+#		NEXT O1.FETCH.T1;
+#		PUSH O1.MEMOUT.T1;
+#		PUSH O1.MEMIN.T1;
+#	}
+#
+#	IF O1.MEMIN.T1@
+#	{
+#		ADDR_BUFF <- PC;
+#	}
+#
+#	IF O1.MEMIN.T2@
+#	{
+#		PC <- PC+1;
+#	}
+#	
+#	IF O1.MEMIN.T3@
+#	{
+#		DATA_BUFF -> TMP;
+#		POP O1;
+#	}
+#
+#	IF O1.MEMOUT.T1@
+#	{
+#		ADDR_BUFF <- HL;
+#	}
+#	
+#	IF O1.MEMOUT.T2@
+#	{
+#		TMP -> DATA_BUFF;
+#	}
+#
+#	IF O1.MEMOUT.T3@
+#	{
+#		POP O1;
+#	}
+#}
+#
+#INSTRUCTION	"LXI %M0,%$2%$1"	%00:RP:%0001,B2[8],B3[8]
+#{
+#	IF O1.FETCH.T4@
+#	{
+#		STAGECHECK<-0;
+#		NEXT O1.FETCH.T1;
+#		PUSH O1.MEMIN.T1;
+#		PUSH O1.MEMIN.T1;
+#	}
+#
+#	IF O1.MEMIN.T1@
+#	{
+#		ADDR_BUFF <- PC;
+#	}
+#	
+#	IF O1.MEMIN.T2@
+#	{
+#		PC <- PC+1;
+#	}
+#
+#	IF O1.MEMIN.T3@
+#	{
+#		IF STAGECHECK == 1
+#		{
+#			DATA_BUFF -> RP[8..15];
+#		}
+#		IF STAGECHECK == 0
+#		{
+#			DATA_BUFF -> RP[0..7];
+#			STAGECHECK<-1;
+#		}
+#		POP O1;
+#	}
+#}
+#
+#INSTRUCTION	"LDA %$2%$1"	%00111010,B2[8],B3[8]
+#{
+#	IF O1.FETCH.T4@
+#	{
+#		STAGECHECK<-0;
+#		NEXT O1.FETCH.T1;
+#		PUSH O1.MEMIN.T1;
+#		PUSH O1.MEMIN.T1;
+#		PUSH O1.MEMIN.T1;
+#	}
+#	
+#	IF O1.MEMIN.T1@
+#	{
+#		IF STAGECHECK == 2
+#		{
+#			ADDR_BUFF <- WZ;
+#		}
+#
+#		IF STAGECHECK != 2
+#		{
+#			ADDR_BUFF <- PC;
+#		}
+#	}
+#
+#	IF O1.MEMIN.T2@
+#	{
+#		IF STAGECHECK != 2
+#		{
+#			PC <- PC + 1;
+#		}
+#	}
+#
+#	IF O1.MEMIN.T3@
+#	{
+#		IF STAGECHECK == 2
+#		{
+#			DATA_BUFF -> A;
+#		}
+#		IF STAGECHECK == 1
+#		{
+#			DATA_BUFF -> W;
+#			STAGECHECK<-2;
+#		}
+#		IF STAGECHECK == 0
+#		{
+#			DATA_BUFF -> Z;
+#			STAGECHECK<-1;
+#		}
+#		POP O1;
+#	}
+#}
+#
+#INSTRUCTION	"STA %$2%$1"	%00110010,B2[8],B3[8]
+#{
+#	IF O1.FETCH.T4@
+#	{
+#		STAGECHECK<-0;
+#		NEXT O1.FETCH.T1;
+#		PUSH O1.MEMOUT.T1;
+#		PUSH O1.MEMIN.T1;
+#		PUSH O1.MEMIN.T1;
+#	}
+#	
+#	IF O1.MEMIN.T1@
+#	{
+#		ADDR_BUFF <- PC;
+#	}
+#	
+#	IF O1.MEMIN.T2@
+#	{
+#		PC <- PC+1;
+#	}
+#
+#	IF O1.MEMIN.T3@
+#	{
+#		IF STAGECHECK == 1
+#		{
+#			DATA_BUFF -> W;
+#		}
+#		IF STAGECHECK == 0
+#		{
+#			DATA_BUFF -> Z;
+#			STAGECHECK<-1;
+#		}
+#		POP O1;
+#	}
+#
+#	IF O1.MEMOUT.T1@
+#	{
+#		ADDR_BUFF <- WZ;
+#	}
+#
+#	IF O1.MEMOUT.T2@
+#	{
+#		A -> DATA_BUFF;
+#	}
+#
+#	IF O1.MEMOUT.T3@
+#	{
+#		POP O1;
+#	}
+#}
+#
+#INSTRUCTION	"LHLD %$2%$1"	%00101010,B2[8],B3[8]
+#{
+#	IF O1.FETCH.T4@
+#	{
+#		STAGECHECK<-0;
+#		NEXT O1.FETCH.T1;
+#		PUSH O1.MEMIN.T1;
+#		PUSH O1.MEMIN.T1;
+#		PUSH O1.MEMIN.T1;
+#		PUSH O1.MEMIN.T1;
+#	}
+#	
+#	IF O1.MEMIN.T1@
+#	{
+#		IF STAGECHECK == 2 | STAGECHECK == 3
+#		{
+#			ADDR_BUFF <- WZ;
+#		}
+#		IF STAGECHECK == 0 | STAGECHECK == 1
+#		{
+#			ADDR_BUFF <- PC;
+#		}
+#	}
+#
+#	IF O1.MEMIN.T2@
+#	{
+#		IF STAGECHECK == 2
+#		{
+#			WZ <- WZ + 1;
+#		}
+#		IF STAGECHECK == 0 | STAGECHECK == 1
+#		{
+#			PC <- PC+1;
+#		}
+#	}
+#
+#	IF O1.MEMIN.T3@
+#	{
+#		IF STAGECHECK == 3
+#		{
+#			DATA_BUFF -> H;
+#		}
+#		IF STAGECHECK == 2
+#		{
+#			DATA_BUFF -> L;
+#			STAGECHECK<-3;
+#		}
+#		IF STAGECHECK == 1
+#		{
+#			DATA_BUFF -> W;
+#			STAGECHECK<-2;
+#		}
+#		IF STAGECHECK == 0
+#		{
+#			DATA_BUFF -> Z;
+#			STAGECHECK<-1;
+#		}
+#		POP O1;
+#	}
+#
+#}
+#
+#INSTRUCTION	"SHLD %$2%$1"	%00100010,B2[8],B3[8]
+#{
+#	IF O1.FETCH.T4@
+#	{
+#		STAGECHECK<-0;
+#		NEXT O1.FETCH.T1;
+#		PUSH O1.MEMOUT.T1;
+#		PUSH O1.MEMOUT.T1;
+#		PUSH O1.MEMIN.T1;
+#		PUSH O1.MEMIN.T1;
+#	}
+#	
+#	IF O1.MEMIN.T1@
+#	{
+#		ADDR_BUFF <- PC;
+#	}
+#
+#	IF O1.MEMIN.T2@
+#	{
+#		PC <- PC+1;
+#	}
+#
+#	IF O1.MEMIN.T3@
+#	{
+#		IF STAGECHECK == 1
+#		{
+#			DATA_BUFF -> W;
+#		}
+#		IF STAGECHECK == 0
+#		{
+#			DATA_BUFF -> Z;
+#			STAGECHECK<-1;
+#		}
+#		POP O1;
+#	}
+#
+#	IF O1.MEMOUT.T1@
+#	{
+#		ADDR_BUFF <- WZ;
+#	}
+#
+#	IF O1.MEMOUT.T2@
+#	{
+#		IF STAGECHECK == 2
+#		{
+#			H -> DATA_BUFF;
+#		}
+#		IF STAGECHECK == 1
+#		{
+#			WZ <- WZ + 1;
+#			L -> DATA_BUFF;
+#			STAGECHECK<-2;
+#		}
+#	}
+#
+#	IF O1.MEMOUT.T3@
+#	{
+#		POP O1;
+#	}
+#}
+#
+#INSTRUCTION	"LDAX %M0"	%00:BCDE:%1010
+#{
+#	IF O1.FETCH.T4@
+#	{
+#		NEXT O1.FETCH.T1;
+#		PUSH O1.MEMIN.T1;
+#	}
+#
+#	IF O1.MEMIN.T1@
+#	{
+#		ADDR_BUFF <- BCDE;
+#	}
+#
+#	IF O1.MEMIN.T3@
+#	{
+#		DATA_BUFF -> A;
+#		POP O1;
+#	}
+#}
+#
+#INSTRUCTION	"STAX %M0"	%00:BCDE:%0010
+#{
+#	IF O1.FETCH.T4@
+#	{
+#		NEXT O1.FETCH.T1;
+#		PUSH O1.MEMOUT.T1;
+#	}
+#
+#	IF O1.MEMOUT.T1@
+#	{
+#		ADDR_BUFF <- BCDE;
+#	}
+#
+#	IF O1.MEMOUT.T2@
+#	{
+#		A -> DATA_BUFF;
+#	}
+#	
+#	IF O1.MEMOUT.T3@
+#	{
+#		POP O1;	
+#	}
+#}
+#
+#INSTRUCTION	"XCHG"		%11101011
+#{
+#	IF O1.FETCH.T4@
+#	{
+#		WZ <- DE;
+#		DE <- HL;
+#		HL <- WZ;
+#		NEXT O1.FETCH.T1;
+#	}
+#}
+#
+#INSTRUCTION	"ADD %M0"	%10000:SSS
+#{
+#	IF O1.FETCH.T2@
+#	{
+#		AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3),cy AS CARRY(7)
+#		{
+#			A_LATCH + TMP 
+#		} -> A;
+#	}
+#
+#	IF O1.FETCH.T4@
+#	{
+#		SSS -> TMP;
+#		A -> A_LATCH;
+#		NEXT O1.FETCH.T1;
+#	}
+#}
+#
+#INSTRUCTION	"ADD M"		%10000110
+#{
+#	IF O1.FETCH.T2@
+#	{
+#		AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3),cy AS CARRY(7)
+#		{
+#			A_LATCH + TMP 
+#		} -> A;
+#	}
+#
+#	IF O1.FETCH.T4@
+#	{
+#		A -> A_LATCH;
+#		NEXT O1.FETCH.T1;
+#		PUSH O1.MEMIN.T1;
+#	}
+#
+#	IF O1.MEMIN.T1@
+#	{
+#		ADDR_BUFF <- HL;
+#	}
+#
+#	IF O1.MEMIN.T3@
+#	{
+#		DATA_BUFF -> TMP;
+#		POP O1;
+#	}
+#}
+#
+#INSTRUCTION	"ADI %$1"		%11000110,B2[8]
+#{
+#	IF O1.FETCH.T2@
+#	{
+#		AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3),cy AS CARRY(7)
+#		{
+#			A_LATCH + TMP 
+#		} -> A;
+#	}
+#
+#	IF O1.FETCH.T4@
+#	{
+#		A -> A_LATCH;
+#		NEXT O1.FETCH.T1;
+#		PUSH O1.MEMIN.T1;
+#	}
+#
+#	IF O1.MEMIN.T1@
+#	{
+#		ADDR_BUFF <- PC;
+#	}
+#	
+#	IF O1.MEMIN.T2@
+#	{
+#		PC <- PC+1;
+#	}
+#		
+#	IF O1.MEMIN.T3@
+#	{
+#		DATA_BUFF -> TMP;
+#		POP O1;
+#	}
+#}
+#
+#INSTRUCTION	"ADC %M0"	%10001:SSS
+#{
+#	IF O1.FETCH.T2@
+#	{
+#		AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3),cy AS CARRY(7)
+#		{
+#			(A_LATCH + TMP) + cy
+#		} -> A;
+#	}
+#
+#	IF O1.FETCH.T4@
+#	{
+#		SSS -> TMP;
+#		A -> A_LATCH;
+#		NEXT O1.FETCH.T1;
+#	}
+#}
+#
+#INSTRUCTION	"ADC M"		%10001110
+#{
+#	IF O1.FETCH.T2@
+#	{
+#		AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3),cy AS CARRY(7)
+#		{
+#			(A_LATCH + TMP) + cy
+#		} -> A;
+#	}
+#
+#	IF O1.FETCH.T4@
+#	{
+#		A -> A_LATCH;
+#		NEXT O1.FETCH.T1;
+#		PUSH O1.MEMIN.T1;
+#	}
+#
+#	IF O1.MEMIN.T1@
+#	{
+#		ADDR_BUFF <- HL;
+#	}
+#
+#	IF O1.MEMIN.T3@
+#	{
+#		DATA_BUFF -> TMP;
+#		POP O1;
+#	}
+#}
+#
+#INSTRUCTION	"ACI %$1"	%11001110,B2[8]
+#{
+#	IF O1.FETCH.T2@
+#	{
+#		AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3),cy AS CARRY(7)
+#		{
+#			(A_LATCH + TMP) + cy
+#		} -> A;
+#	}
+#
+#	IF O1.FETCH.T4@
+#	{
+#		A -> A_LATCH;
+#		NEXT O1.FETCH.T1;
+#		PUSH O1.MEMIN.T1;
+#	}
+#
+#	IF O1.MEMIN.T1@
+#	{
+#		ADDR_BUFF <- PC;
+#	}
+#		
+#	IF O1.MEMIN.T2@
+#	{
+#		PC <- PC+1;
+#	}
+#	
+#	IF O1.MEMIN.T3@
+#	{
+#		DATA_BUFF -> TMP;
+#		POP O1;
+#	}
+#}
+#
+#INSTRUCTION	"SUB %M0"	%10010:SSS
+#{
+#	IF O1.FETCH.T2@
+#	{
+#		AFFECT z AS ZERO, s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3),cy AS CARRY(7)
+#		{
+#			A_LATCH - TMP
+#		} -> A;
+#	}
+#
+#	IF O1.FETCH.T4@
+#	{
+#		SSS -> TMP;
+#		A -> A_LATCH;
+#		NEXT O1.FETCH.T1;
+#	}
+#}
+#
+#INSTRUCTION	"SUB M"		%10010110
+#{
+#	IF O1.FETCH.T2@
+#	{
+#		AFFECT z AS ZERO, s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3),cy AS CARRY(7)
+#		{
+#			A_LATCH - TMP
+#		} -> A;
+#	}
+#
+#	IF O1.FETCH.T4@
+#	{
+#		A -> A_LATCH;
+#		NEXT O1.FETCH.T1;
+#		PUSH O1.MEMIN.T1;
+#	}
+#
+#	IF O1.MEMIN.T1@
+#	{
+#		ADDR_BUFF <- HL;
+#	}
+#
+#	IF O1.MEMIN.T3@
+#	{
+#		DATA_BUFF -> TMP;
+#		POP O1;
+#	}
+#}
+#
+#INSTRUCTION	"SUI %$1"	%11010110,B2[8]
+#{
+#	IF O1.FETCH.T2@
+#	{
+#		AFFECT z AS ZERO, s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3),cy AS CARRY(7)
+#		{
+#			A_LATCH - TMP
+#		} -> A;
+#	}
+#
+#	IF O1.FETCH.T4@
+#	{
+#		A -> A_LATCH;
+#		NEXT O1.FETCH.T1;
+#		PUSH O1.MEMIN.T1;
+#	}
+#
+#	IF O1.MEMIN.T1@
+#	{
+#		ADDR_BUFF <- PC;
+#	}
+#	
+#	IF O1.MEMIN.T2@
+#	{
+#		PC <- PC+1;
+#	}
+#	
+#	IF O1.MEMIN.T3@
+#	{
+#		DATA_BUFF -> TMP;
+#		POP O1;
+#	}
+#}
+#
+#INSTRUCTION	"SBB %M0"	%10011:SSS
+#{
+#	IF O1.FETCH.T2@
+#	{
+#		AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3),cy AS CARRY(7)
+#		{
+#			(A_LATCH - TMP) - cy
+#		} -> A;
+#	}
+#
+#	IF O1.FETCH.T4@
+#	{
+#		SSS -> TMP;
+#		A -> A_LATCH;
+#		NEXT O1.FETCH.T1;
+#	}
+#}
+#
+#INSTRUCTION	"SBB M"		%10011110
+#{
+#	IF O1.FETCH.T2@
+#	{
+#		AFFECT z AS ZERO, s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3),cy AS CARRY(7)
+#		{
+#			(A_LATCH - TMP) - cy
+#		} -> A;
+#	}
+#
+#	IF O1.FETCH.T4@
+#	{
+#		A -> A_LATCH;
+#		NEXT O1.FETCH.T1;
+#		PUSH O1.MEMIN.T1;
+#	}
+#
+#	IF O1.MEMIN.T1@
+#	{
+#		ADDR_BUFF <- HL;
+#	}
+#
+#	IF O1.MEMIN.T3@
+#	{
+#		DATA_BUFF -> TMP;
+#		POP O1;
+#	}
+#}
+#
+#INSTRUCTION	"SBI %$1"	%11011110,B2[8]
+#{
+#	IF O1.FETCH.T2@
+#	{
+#		AFFECT z AS ZERO, s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3),cy AS CARRY(7)
+#		{
+#			(A_LATCH - TMP) - cy
+#		} -> A;
+#	}
+#
+#	IF O1.FETCH.T4@
+#	{
+#		A -> A_LATCH;
+#		NEXT O1.FETCH.T1;
+#		PUSH O1.MEMIN.T1;
+#	}
+#
+#	IF O1.MEMIN.T1@
+#	{
+#		ADDR_BUFF <- PC;
+#	}
+#	
+#	IF O1.MEMIN.T2@
+#	{
+#		PC <- PC+1;
+#	}
+#	
+#	IF O1.MEMIN.T3@
+#	{
+#		DATA_BUFF -> TMP;
+#		POP O1;
+#	}
+#}
+#
+#INSTRUCTION	"INR %M0"	%00:DDD:%100
+#{
+#	IF O1.FETCH.T4@
+#	{
+#		AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3)
+#		{
+#			DDD + 1 
+#		} -> TMP;
+#	}
+#
+#	IF O1.FETCH.T5@
+#	{
+#		TMP -> DDD;
+#	}
+#}
+#
+#INSTRUCTION	"INR M"		%00110100
+#{
+#	IF O1.FETCH.T4@
+#	{
+#		NEXT O1.FETCH.T1;
+#		PUSH O1.MEMOUT.T1;
+#		PUSH O1.MEMIN.T1;
+#	}
+#	
+#	IF O1.MEMIN.T1@
+#	{
+#		ADDR_BUFF <- HL;
+#	}
+#		
+#	IF O1.MEMIN.T3@
+#	{
+#		AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3)
+#		{
+#			DATA_BUFF + 1 
+#		} -> TMP;
+#		POP O1;
+#	}
+#
+#	IF O1.MEMOUT.T1@
+#	{
+#		ADDR_BUFF <- HL;
+#	}
+#		
+#	IF O1.MEMOUT.T2@
+#	{
+#		TMP -> DATA_BUFF;
+#	}
+#
+#	IF O1.MEMOUT.T3@
+#	{
+#		POP O1;
+#	}
+#}
+#
+#INSTRUCTION	"DCR %M0"	%00:DDD:%101
+#{
+#	IF O1.FETCH.T4@
+#	{
+#		AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3)
+#		{
+#			DDD - 1 
+#		} -> TMP;
+#	}
+#
+#	IF O1.FETCH.T5@
+#	{
+#		TMP -> DDD;
+#	}
+#}
+#
+#INSTRUCTION	"DCR M"		%00110101
+#{
+#	IF O1.FETCH.T4@
+#	{
+#		NEXT O1.FETCH.T1;
+#		PUSH O1.MEMOUT.T1;
+#		PUSH O1.MEMIN.T1;
+#	}
+#	
+#	IF O1.MEMIN.T1@
+#	{
+#		ADDR_BUFF <- HL;
+#	}
+#	
+#	IF O1.MEMIN.T3@
+#	{
+#		AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3)
+#		{
+#			DATA_BUFF - 1 
+#		} -> TMP;
+#		POP O1;
+#	}
+#
+#	IF O1.MEMOUT.T1@
+#	{
+#		ADDR_BUFF <- HL;
+#	}
+#	
+#	IF O1.MEMOUT.T2@
+#	{
+#		TMP -> DATA_BUFF;
+#	}
+#
+#	IF O1.MEMOUT.T3@
+#	{
+#		POP O1;
+#	}
+#}
+#
+#INSTRUCTION	"INX %M0"	%00:RP:%0011
+#{
+#	IF O1.FETCH.T4@
+#	{
+#		AFFECT TMP AS CARRY(7)
+#		{
+#			RP[0..7] + 1 
+#		} -> RP[0..7];
+#	}
+#
+#	IF O1.FETCH.T5@
+#	{
+#		RP[8..15] + TMP -> RP[8..15];
+#	}
+#}
+#
+#INSTRUCTION	"DCX %M0"	%00:RP:%1011
+#{
+#	IF O1.FETCH.T4@
+#	{
+#		AFFECT TMP AS CARRY(7)
+#		{
+#			RP[0..7] - 1
+#		} -> RP[0..7];
+#	}
+#	
+#	IF O1.FETCH.T5@
+#	{
+#		RP[8..15] - TMP -> RP[8..15];
+#	}
+#}
+#
+#INSTRUCTION	"DAD %M0"	%00:RP:%1001
+#{
+#	IF O1.FETCH.T4@
+#	{
+#		STAGECHECK<-0;
+#		NEXT O1.FETCH.T1;
+#		PUSH O1.DADCYCLE.T1;
+#		PUSH O1.DADCYCLE.T1;
+#	}
+#
+#	IF O1.DADCYCLE.T1@
+#	{
+#		IF STAGECHECK == 1
+#		{
+#			RP[8..15]-> A_LATCH;
+#		}
+#		IF STAGECHECK == 0
+#		{
+#			RP[0..7] -> A_LATCH;
+#		}
+#	}
+#
+#	IF O1.DADCYCLE.T2@
+#	{
+#		IF STAGECHECK == 1
+#		{
+#			H -> TMP;
+#		}
+#		IF STAGECHECK == 0
+#		{
+#			L -> TMP;
+#		}
+#	}
+#
+#	IF O1.DADCYCLE.T3@
+#	{
+#		IF STAGECHECK == 1
+#		{
+#			AFFECT cy AS CARRY(7)
+#			{
+#				(A_LATCH + TMP) + cy
+#			} -> H;
+#		}
+#		IF STAGECHECK == 0
+#		{
+#			AFFECT cy AS CARRY(7)
+#			{
+#				A_LATCH + TMP 
+#			} -> L;
+#
+#			STAGECHECK<-1;
+#		}
+#		POP O1;
+#	}
+#}
+#
+#INSTRUCTION	"DAA"		%00100111
+#{
+#	IF O1.FETCH.T4@
+#	{
+#		IF ( (A[0..3] > 9) | (ac == 1) )
+#		{
+#			AFFECT ac AS CARRY(3)
+#			{
+#				A + 6
+#			} -> A;
+#		}
+#		IF ( (A[4..7] > 9) | (cy == 1) )
+#		{
+#			AFFECT cy AS CARRY(7)
+#			{
+#				A + $60
+#			} -> A;
+#		}
+#		AFFECT p AS PARITYEVEN,z AS ZERO,s AS SIGN
+#		{
+#			A
+#		};
+#		NEXT O1.FETCH.T1;
+#	}
+#}
+#
+#INSTRUCTION	"ANA %M0"	%10100:SSS
+#{
+#	IF O1.FETCH.T2@
+#	{
+#		AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN
+#		{
+#			A_LATCH & TMP
+#		} -> A;
+#		cy <- 0;
+#		AFFECT ac AS BIT(3)
+#		{
+#			A_LATCH | TMP
+#		};
+#	}
+#
+#	IF O1.FETCH.T4@
+#	{
+#		SSS -> TMP;
+#		A -> A_LATCH;
+#		NEXT O1.FETCH.T1;
+#	}
+#}
+#
+#INSTRUCTION	"ANA M"		%10100110
+#{
+#	IF O1.FETCH.T2@
+#	{
+#		AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN
+#		{
+#			A_LATCH & TMP
+#		} -> A;
+#		cy <- 0;
+#		AFFECT ac AS BIT(3)
+#		{
+#			A_LATCH | TMP
+#		};
+#	}
+#
+#	IF O1.FETCH.T4@
+#	{
+#		A -> A_LATCH;
+#		NEXT O1.FETCH.T1;
+#		PUSH O1.MEMIN.T1;
+#	}
+#
+#	IF O1.MEMIN.T1@
+#	{
+#		ADDR_BUFF <- HL;
+#	}
+#
+#	IF O1.MEMIN.T3@
+#	{
+#		DATA_BUFF -> TMP;
+#		POP O1;
+#	}
+#}
+#
+#INSTRUCTION	"ANI %$1"		%11100110,B2[8]
+#{
+#	IF O1.FETCH.T2@
+#	{
+#		AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN
+#		{
+#			A_LATCH & TMP
+#		} -> A;
+#		cy <- 0;
+#		ac <- 0;
+#	}
+#
+#	IF O1.FETCH.T4@
+#	{
+#		A -> A_LATCH;
+#		NEXT O1.FETCH.T1;
+#		PUSH O1.MEMIN.T1;
+#	}
+#
+#	IF O1.MEMIN.T1@
+#	{
+#		ADDR_BUFF <- PC;
+#	}
+#
+#	IF O1.MEMIN.T2@
+#	{
+#		PC <- PC+1;
+#	}
+#	
+#	IF O1.MEMIN.T3@
+#	{
+#		DATA_BUFF -> TMP;
+#		POP O1;
+#	}
+#}
+#
+#INSTRUCTION	"XRA %M0"	%10101:SSS
+#{
+#	IF O1.FETCH.T2@
+#	{
+#		AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN
+#		{
+#			A_LATCH ^ TMP
+#		} -> A;
+#		cy <- 0;
+#		ac <- 0;
+#	}
+#
+#	IF O1.FETCH.T4@
+#	{
+#		SSS -> TMP;
+#		A -> A_LATCH;
+#		NEXT O1.FETCH.T1;
+#	}
+#}
+#
+#INSTRUCTION	"XRA M"		%10101110
+#{
+#	IF O1.FETCH.T2@
+#	{
+#		AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN
+#		{
+#			A_LATCH ^ TMP
+#		} -> A;
+#		cy <- 0;
+#		ac <- 0;
+#	}
+#
+#	IF O1.FETCH.T4@
+#	{
+#		A -> A_LATCH;
+#		NEXT O1.FETCH.T1;
+#		PUSH O1.MEMIN.T1;
+#	}
+#
+#	IF O1.MEMIN.T1@
+#	{
+#		ADDR_BUFF <- HL;
+#	}
+#
+#	IF O1.MEMIN.T3@
+#	{
+#		DATA_BUFF -> TMP;
+#		POP O1;
+#	}
+#}
+#
+#INSTRUCTION	"XRI %$1"	%11101110,B2[8]
+#{
+#	IF O1.FETCH.T2@
+#	{
+#		AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN
+#		{
+#			A_LATCH ^ TMP
+#		} -> A;
+#		cy <- 0;
+#		ac <- 0;
+#	}
+#
+#	IF O1.FETCH.T4@
+#	{
+#		A -> A_LATCH;
+#		NEXT O1.FETCH.T1;
+#		PUSH O1.MEMIN.T1;
+#	}
+#
+#	IF O1.MEMIN.T1@
+#	{
+#		ADDR_BUFF <- PC;
+#	}
+#	
+#	IF O1.MEMIN.T2@
+#	{
+#		PC <- PC+1;
+#	}
+#	
+#	IF O1.MEMIN.T3@
+#	{
+#		DATA_BUFF -> TMP;
+#		POP O1;
+#	}
+#}
+#
+#INSTRUCTION	"ORA %M0"	%10110:SSS
+#{
+#	IF O1.FETCH.T2@
+#	{
+#		AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN
+#		{
+#			A_LATCH | TMP
+#		} -> A;
+#		cy <- 0;
+#		ac <- 0;
+#	}
+#
+#	IF O1.FETCH.T4@
+#	{
+#		SSS -> TMP;
+#		A -> A_LATCH;
+#		NEXT O1.FETCH.T1;
+#	}
+#}
+#
+#INSTRUCTION	"ORA M"		%10110110
+#{
+#	IF O1.FETCH.T2@
+#	{
+#		AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN
+#		{
+#			A_LATCH | TMP
+#		} -> A;
+#		cy <- 0;
+#		ac <- 0;
+#	}
+#
+#	IF O1.FETCH.T4@
+#	{
+#		A -> A_LATCH;
+#		NEXT O1.FETCH.T1;
+#		PUSH O1.MEMIN.T1;
+#	}
+#
+#	IF O1.MEMIN.T1@
+#	{
+#		ADDR_BUFF <- HL;
+#	}
+#
+#	IF O1.MEMIN.T3@
+#	{
+#		DATA_BUFF -> TMP;
+#		POP O1;
+#	}
+#}
+#
+#INSTRUCTION	"ORI %$1"	%11110110,B2[8]
+#{
+#	IF O1.FETCH.T2@
+#	{
+#		AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN
+#		{
+#			A_LATCH | TMP
+#		} -> A;
+#		cy <- 0;
+#		ac <- 0;
+#	}
+#
+#	IF O1.FETCH.T4@
+#	{
+#		A -> A_LATCH;
+#		NEXT O1.FETCH.T1;
+#		PUSH O1.MEMIN.T1;
+#	}
+#
+#	IF O1.MEMIN.T1@
+#	{
+#		ADDR_BUFF <- PC;
+#	}
+#	
+#	IF O1.MEMIN.T2@
+#	{
+#		PC <- PC+1;
+#	}
+#	
+#	IF O1.MEMIN.T3@
+#	{
+#		DATA_BUFF -> TMP;
+#		POP O1;
+#	}
+#}
+#
+#INSTRUCTION	"CMP %M0"	%10111:SSS
+#{
+#	IF O1.FETCH.T2@
+#	{
+#		AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3),cy AS CARRY(7)
+#		{
+#			A_LATCH - TMP
+#		};
+#	}
+#
+#	IF O1.FETCH.T4@
+#	{
+#		SSS -> TMP;
+#		A -> A_LATCH;
+#		NEXT O1.FETCH.T1;
+#	}
+#}
+#
+#INSTRUCTION	"CMP M"		%10111110
+#{
+#	IF O1.FETCH.T2@
+#	{
+#		AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3),cy AS CARRY(7)
+#		{
+#			A_LATCH - TMP
+#		};
+#	}
+#
+#	IF O1.FETCH.T4@
+#	{
+#		A -> A_LATCH;
+#		NEXT O1.FETCH.T1;
+#		PUSH O1.MEMIN.T1;
+#	}
+#
+#	IF O1.MEMIN.T1@
+#	{
+#		ADDR_BUFF <- HL;
+#	}
+#
+#	IF O1.MEMIN.T3@
+#	{
+#		DATA_BUFF -> TMP;
+#		POP O1;
+#	}
+#}
+#
+#INSTRUCTION	"CPI %$1"	%11111110,B2[8]
+#{
+#	IF O1.FETCH.T2@
+#	{
+#		AFFECT z AS ZERO,s AS SIGN,p AS PARITYEVEN,ac AS CARRY(3),cy AS CARRY(7)
+#		{
+#			A_LATCH - TMP
+#		};
+#	}
+#
+#	IF O1.FETCH.T4@
+#	{
+#		A -> A_LATCH;
+#		NEXT O1.FETCH.T1;
+#		PUSH O1.MEMIN.T1;
+#	}
+#
+#	IF O1.MEMIN.T1@
+#	{
+#		ADDR_BUFF <- PC;
+#	}
+#	
+#	IF O1.MEMIN.T2@
+#	{
+#		PC <- PC+1;
+#	}
+#	
+#	IF O1.MEMIN.T3@
+#	{
+#		DATA_BUFF -> TMP;
+#		POP O1;
+#	}
+#}
+#
+#INSTRUCTION	"RLC"		%00000111
+#{
+#	IF O1.FETCH.T2@
+#	{
+#		ROL(A_LATCH,cy,A_LATCH[7..7],1) -> A;	# ROL is ROL(value,bitsOut,bitsIn,amount) e.g. can handle shifts/rotates (may provide NULL in future)
+#	}
+#
+#	IF O1.FETCH.T4@
+#	{
+#		A -> A_LATCH;
+#		NEXT O1.FETCH.T1;
+#	}
+#}
+#
+#INSTRUCTION	"RRC"		%00001111
+#{
+#	IF O1.FETCH.T2@
+#	{
+#		ROR(A_LATCH,cy,A_LATCH[0..0],1) -> A;
+#	}
+#
+#	IF O1.FETCH.T4@
+#	{
+#		A -> A_LATCH;
+#		NEXT O1.FETCH.T1;
+#	}
+#}
+#
+#INSTRUCTION	"RAL"		%00010111
+#{
+#	IF O1.FETCH.T2@
+#	{
+#		ROL(A_LATCH,cy,cy,1) -> A;
+#	}
+#
+#	IF O1.FETCH.T4@
+#	{
+#		A -> A_LATCH;
+#		NEXT O1.FETCH.T1;
+#	}
+#}
+#
+#INSTRUCTION	"RAR"		%00011111
+#{
+#	IF O1.FETCH.T2@
+#	{
+#		ROR(A_LATCH,cy,cy,1) -> A;
+#	}
+#
+#	IF O1.FETCH.T4@
+#	{
+#		A -> A_LATCH;
+#		NEXT O1.FETCH.T1;
+#	}
+#}
+#
+#INSTRUCTION	"CMA"		%00101111
+#{
+#	IF O1.FETCH.T4@
+#	{
+#		~A -> A;
+#		NEXT O1.FETCH.T1;
+#	}
+#}
+#
+#INSTRUCTION	"CMC"		%00111111
+#{
+#	IF O1.FETCH.T4@
+#	{
+#		~cy -> cy;
+#		NEXT O1.FETCH.T1;
+#	}
+#}
+#
+#INSTRUCTION	"STC"		%00110111
+#{
+#	IF O1.FETCH.T4@
+#	{
+#		1 -> cy;
+#		NEXT O1.FETCH.T1;
+#	}
+#}
+#
+#INSTRUCTION	"JMP %$2%$1"	%1100:UNOFFICIAL[1]:%011,B2[8],B3[8]	# %11000011 is the official opcode for JMP, this also generates unofficial permutations
+#{
+#	IF O1.FETCH.T1@
+#	{
+#		ADDR_BUFF <- WZ;
+#	}
+#
+#	IF O1.FETCH.T2@
+#	{
+#		TMP<- ~INT_LATCH;
+#		WZ + TMP -> PC;
+#	}
+#
+#	IF O1.FETCH.T4@
+#	{
+#		STAGECHECK<-0;
+#		NEXT O1.FETCH.T1;
+#		PUSH O1.MEMIN.T1;
+#		PUSH O1.MEMIN.T1;
+#	}
+#
+#	IF O1.MEMIN.T1@
+#	{
+#		ADDR_BUFF <- PC;
+#	}
+#	
+#	IF O1.MEMIN.T2@
+#	{
+#		PC <- PC+1;
+#	}
+#
+#	IF O1.MEMIN.T3@
+#	{
+#		IF STAGECHECK == 1
+#		{
+#			DATA_BUFF -> W;
+#		}
+#		IF STAGECHECK == 0
+#		{
+#			DATA_BUFF -> Z;
+#			STAGECHECK<-1;
+#		}
+#		POP O1;
+#	}
+#}
+#
+#INSTRUCTION	"J%M0 %$2%$1"		%11:CCC:%010,B2[8],B3[8]
+#{
+#	IF O1.FETCH.T1@
+#	{
+#		IF (JMP == 1)
+#		{
+#			ADDR_BUFF <- WZ;
+#		}
+#	}
+#
+#	IF O1.FETCH.T2@
+#	{
+#		IF (JMP == 1)
+#		{
+#			TMP<- ~INT_LATCH;
+#			WZ + TMP -> PC;
+#		}
+#	}
+#
+#	IF O1.FETCH.T4@
+#	{
+#		STAGECHECK<-0;
+#		JMP <- CCC;
+#		NEXT O1.FETCH.T1;
+#		PUSH O1.MEMIN.T1;
+#		PUSH O1.MEMIN.T1;
+#	}
+#	
+#
+#	IF O1.MEMIN.T1@
+#	{
+#		ADDR_BUFF <- PC;
+#	}
+#	
+#	IF O1.MEMIN.T2@
+#	{
+#		PC <- PC+1;
+#	}
+#	
+#	IF O1.MEMIN.T3@
+#	{
+#		IF STAGECHECK == 1
+#		{
+#			DATA_BUFF -> W;
+#		}
+#		IF STAGECHECK == 0
+#		{
+#			DATA_BUFF -> Z;
+#			STAGECHECK<-1;
+#		}
+#		POP O1;
+#	}
+#}
+#
+#INSTRUCTION	"CALL %$2%$1"	%11:UNOFFICIAL[2]:%1101,B2[8],B3[8]	# %11001101 is official opcode for CALL, this also generates unofficial permutations
+#{
+#	IF O1.FETCH.T1@
+#	{
+#		ADDR_BUFF <- WZ;
+#	}
+#
+#	IF O1.FETCH.T2@
+#	{
+#		TMP<- ~INT_LATCH;
+#		WZ + TMP -> PC;
+#	}
+#
+#	IF O1.FETCH.T5@
+#	{
+#		SP <- SP - 1;
+#		STAGECHECK<-0;
+#		PUSH O1.SPWRITE.T1;
+#		PUSH O1.SPWRITE.T1;
+#		PUSH O1.MEMIN.T1;
+#		PUSH O1.MEMIN.T1;
+#	}
+#
+#	IF O1.MEMIN.T1@
+#	{
+#		ADDR_BUFF <- PC;
+#	}
+#	
+#	IF O1.MEMIN.T2@
+#	{
+#		PC <- PC+1;
+#	}
+#
+#	IF O1.MEMIN.T3@
+#	{
+#		IF STAGECHECK == 1
+#		{
+#			DATA_BUFF -> W;
+#		}
+#		IF STAGECHECK == 0
+#		{
+#			DATA_BUFF -> Z;
+#			STAGECHECK<-1;
+#		}
+#		POP O1;
+#	}
+#	
+#	IF O1.SPWRITE.T2@
+#	{
+#		IF STAGECHECK == 2
+#		{
+#			PCL -> DATA_BUFF;
+#		}
+#		IF STAGECHECK == 1
+#		{
+#			SP <- SP-1;
+#			PCH -> DATA_BUFF;
+#			STAGECHECK<-2;
+#		}
+#	}
+#	
+#	IF O1.SPWRITE.T3@
+#	{
+#		POP O1;
+#	}
+#}
+#
+#INSTRUCTION	"C%M0 %$2%$1"	%11:CCC:%100,B2[8],B3[8]
+#{
+#	IF O1.FETCH.T1@
+#	{
+#		IF (JMP == 1)
+#		{
+#			ADDR_BUFF <- WZ;
+#		}
+#	}
+#
+#	IF O1.FETCH.T2@
+#	{
+#		IF (JMP == 1)
+#		{
+#			TMP<- ~INT_LATCH;
+#			WZ + TMP -> PC;
+#		}
+#	}
+#
+#	IF O1.FETCH.T5@
+#	{
+#		JMP <- CCC;
+#		STAGECHECK<-0;
+#		IF (JMP == 1)
+#		{
+#			SP <- SP -1;
+#			PUSH O1.SPWRITE.T1;
+#			PUSH O1.SPWRITE.T1;
+#		}
+#		PUSH O1.MEMIN.T1;
+#		PUSH O1.MEMIN.T1;
+#	}
+#
+#	IF O1.MEMIN.T1@
+#	{
+#		ADDR_BUFF <- PC;
+#	}
+#
+#	IF O1.MEMIN.T2@
+#	{
+#		PC <- PC+1;
+#	}
+#	
+#	IF O1.MEMIN.T3@
+#	{
+#		IF STAGECHECK == 1
+#		{
+#			DATA_BUFF -> W;
+#		}
+#		IF STAGECHECK == 0
+#		{
+#			DATA_BUFF -> Z;
+#			STAGECHECK<-1;
+#		}
+#		POP O1;
+#	}
+#	
+#	IF O1.SPWRITE.T2@
+#	{
+#		IF STAGECHECK == 2
+#		{
+#			PCL -> DATA_BUFF;
+#		}
+#		IF STAGECHECK == 1
+#		{
+#			SP <- SP-1;
+#			PCH -> DATA_BUFF;
+#			STAGECHECK<-2;
+#		}
+#		
+#	}
+#	
+#	IF O1.SPWRITE.T3@
+#	{
+#		POP O1;
+#	}
+#}
+#
+#INSTRUCTION	"RET"		%110:UNOFFICIAL[1]:%1001	# %11001001 is the official opcode for RET, this also generates unofficial permutations
+#{
+#	IF O1.FETCH.T1@
+#	{
+#		ADDR_BUFF <- WZ;
+#	}
+#
+#	IF O1.FETCH.T2@
+#	{
+#		TMP<- ~INT_LATCH;
+#		WZ + TMP -> PC;
+#	}
+#
+#	IF O1.FETCH.T4@
+#	{
+#		STAGECHECK<-0;
+#		NEXT O1.FETCH.T1;
+#		PUSH O1.SPREAD.T1;
+#		PUSH O1.SPREAD.T1;
+#	}
+#
+#	IF O1.SPREAD.T2@
+#	{
+#		SP <- SP+1;
+#	}
+#
+#	IF O1.SPREAD.T3@
+#	{
+#		IF STAGECHECK==1
+#		{
+#			DATA_BUFF -> W;
+#		}
+#		IF STAGECHECK==0
+#		{
+#			DATA_BUFF -> Z;
+#			STAGECHECK<-1;
+#		}
+#		POP O1;
+#	}
+#}
+#
+#INSTRUCTION	"R%M0"		%11:CCC:%000
+#{
+#	IF O1.FETCH.T1@
+#	{
+#		IF (JMP == 1)
+#		{
+#			ADDR_BUFF <- WZ;
+#		}
+#	}
+#
+#	IF O1.FETCH.T2@
+#	{
+#		IF (JMP == 1)
+#		{
+#			TMP<- ~INT_LATCH;
+#			WZ + TMP -> PC;
+#		}
+#	}
+#
+#	IF O1.FETCH.T4@
+#	{
+#		JMP <- CCC;
+#	}
+#
+#	IF O1.FETCH.T5@
+#	{
+#		IF (JMP == 1)
+#		{
+#			STAGECHECK<-0;
+#			PUSH O1.SPREAD.T1;
+#			PUSH O1.SPREAD.T1;
+#		}
+#	}
+#	
+#
+#	IF O1.SPREAD.T2@
+#	{
+#		SP <- SP+1;
+#	}
+#	
+#	IF O1.SPREAD.T3@
+#	{
+#		IF STAGECHECK == 1
+#		{
+#			DATA_BUFF -> W;
+#		}
+#		IF STAGECHECK == 0
+#		{
+#			DATA_BUFF -> Z;
+#			STAGECHECK<-1;
+#		}
+#		POP O1;
+#	}
+#}
+#
+#INSTRUCTION	"RST %M0"	%11:NNN:%111
+#{
+#	IF O1.FETCH.T1@
+#	{
+#		ADDR_BUFF <- WZ;
+#	}
+#
+#	IF O1.FETCH.T2@
+#	{
+#		TMP<- ~INT_LATCH;
+#		WZ + TMP -> PC;
+#	}
+#
+#	IF O1.FETCH.T4@
+#	{
+#		0 -> W;
+#	}
+#
+#	IF O1.FETCH.T5@
+#	{
+#		STAGECHECK<-0;
+#		SP <- SP - 1;
+#		PUSH O1.SPWRITE.T1;
+#		PUSH O1.SPWRITE.T1;
+#	}
+#
+#	IF O1.SPWRITE.T2@
+#	{
+#		IF STAGECHECK == 1
+#		{
+#			NNN -> Z;
+#			PCL -> DATA_BUFF;
+#		}
+#
+#		IF STAGECHECK == 0
+#		{
+#			SP <- SP-1;
+#			PCH -> DATA_BUFF;
+#			STAGECHECK<-1;
+#		}
+#		
+#	}
+#	
+#	IF O1.SPWRITE.T3@
+#	{
+#		POP O1;
+#	}
+#}
+#
+#INSTRUCTION	"PCHL"		%11101001
+#{
+#	IF O1.FETCH.T4@
+#	{
+#		L -> PCL;
+#	}
+#
+#	IF O1.FETCH.T5@
+#	{
+#		H -> PCH;
+#	}
+#}
+#
+#INSTRUCTION	"PUSH %M0"	%11:PRP:%0101
+#{
+#	IF O1.FETCH.T5@
+#	{
+#		STAGECHECK<-0;
+#		SP <- SP-1;
+#		PUSH O1.SPWRITE.T1;
+#		PUSH O1.SPWRITE.T1;
+#	}
+#
+#	IF O1.SPWRITE.T2@
+#	{
+#		IF STAGECHECK == 1
+#		{
+#			PRP[0..7]->DATA_BUFF;
+#		}
+#		IF STAGECHECK == 0
+#		{
+#			SP <- SP-1;
+#			PRP[8..15] ->DATA_BUFF;
+#			STAGECHECK<-1;
+#		}
+#	}
+#	
+#	IF O1.SPWRITE.T3@
+#	{
+#		POP O1;
+#	}
+#}
+#
+#INSTRUCTION	"PUSH PSW"	%11110101
+#{
+#	IF O1.FETCH.T4@
+#	{
+#		STAGECHECK<-0;
+#	}
+#
+#	IF O1.FETCH.T5@
+#	{
+#		SP <- SP-1;
+#		PUSH O1.SPWRITE.T1;
+#		PUSH O1.SPWRITE.T1;
+#	}
+#
+#	IF O1.SPWRITE.T2@
+#	{
+#		IF STAGECHECK==1
+#		{
+#			FLAGS -> DATA_BUFF;
+#		}
+#		IF STAGECHECK==0
+#		{
+#			SP <- SP-1;
+#			A -> DATA_BUFF;
+#			STAGECHECK<-1;
+#		}
+#		
+#	}
+#
+#	IF O1.SPWRITE.T3@
+#	{
+#		POP O1;
+#	}
+#}
+#
+#INSTRUCTION	"POP %M0"	%11:PRP:%0001
+#{
+#	IF O1.FETCH.T4@
+#	{
+#		STAGECHECK<-0;
+#		NEXT O1.FETCH.T1;
+#		PUSH O1.SPREAD.T1;
+#		PUSH O1.SPREAD.T1;
+#	}
+#
+#	IF O1.SPREAD.T2@
+#	{
+#		SP <- SP+1;
+#	}
+#		
+#	IF O1.SPREAD.T3@
+#	{
+#		IF STAGECHECK == 1
+#		{
+#			DATA_BUFF -> PRP[8..15];
+#		}
+#		IF STAGECHECK == 0
+#		{
+#			DATA_BUFF -> PRP[0..7];
+#			STAGECHECK<-1;
+#		}
+#		POP O1;
+#	}
+#}
+#
+#INSTRUCTION	"POP PSW"	%11110001
+#{
+#	IF O1.FETCH.T4@
+#	{
+#		STAGECHECK<-0;
+#		NEXT O1.FETCH.T1;
+#		PUSH O1.SPREAD.T1;
+#		PUSH O1.SPREAD.T1;
+#	}
+#
+#	IF O1.SPREAD.T2@
+#	{
+#		SP <- SP+1;
+#	}
+#
+#	IF O1.SPREAD.T3@
+#	{
+#		IF STAGECHECK == 1
+#		{
+#			DATA_BUFF -> A;
+#		}
+#		IF STAGECHECK == 0
+#		{
+#			DATA_BUFF -> FLAGS;
+#			STAGECHECK <- 1;
+#		}
+#		POP O1;
+#	}
+#}
+#
+#INSTRUCTION	"XTHL"		%11100011
+#{
+#	IF O1.FETCH.T3@
+#	{
+#		STAGECHECK<-0;
+#	}
+#
+#	IF O1.FETCH.T4@
+#	{
+#		IF STAGECHECK == 2
+#		{
+#			W -> H;
+#		}
+#		IF STAGECHECK == 0
+#		{
+#			NEXT O1.FETCH.T4;
+#			PUSH O1.SPWRITE.T1;
+#			PUSH O1.SPWRITE.T1;
+#			PUSH O1.SPREAD.T1;
+#			PUSH O1.SPREAD.T1;
+#		}
+#	}
+#
+#	IF O1.FETCH.T5@
+#	{
+#		Z -> L;
+#	}
+#
+#	IF O1.SPREAD.T2@
+#	{
+#		IF STAGECHECK == 0
+#		{
+#
+#			SP <- SP+1;
+#		}
+#	}
+#
+#	IF O1.SPREAD.T3@
+#	{
+#		IF STAGECHECK == 1
+#		{
+#			DATA_BUFF -> W;
+#		}
+#		IF STAGECHECK == 0
+#		{
+#			DATA_BUFF -> Z;
+#			STAGECHECK<-1;
+#		}
+#		POP O1;
+#	}
+#	
+#	IF O1.SPWRITE.T2@
+#	{
+#		IF STAGECHECK == 2
+#		{
+#			L -> DATA_BUFF;
+#		}
+#		IF STAGECHECK == 1
+#		{
+#			SP <- SP-1;
+#			H -> DATA_BUFF;
+#			STAGECHECK<-2;
+#		}
+#	}
+#
+#	IF O1.SPWRITE.T3@
+#	{
+#		POP O1;
+#	}
+#	
+#}
+#
+#INSTRUCTION	"IN %$1"	%11011011,B2[8]
+#{
+#	IF O1.FETCH.T4@
+#	{
+#		NEXT O1.FETCH.T1;
+#		PUSH O1.PORTIN.T1;
+#		PUSH O1.MEMIN.T1;
+#	}
+#
+#	IF O1.MEMIN.T1@
+#	{
+#		ADDR_BUFF <- PC;
+#	}
+#
+#	IF O1.MEMIN.T2@
+#	{
+#		PC <- PC+1;
+#	}
+#	
+#	IF O1.MEMIN.T3@
+#	{
+#		DATA_BUFF -> W;
+#		DATA_BUFF -> Z;
+#		POP O1;
+#	}
+#	
+#	IF O1.PORTIN.T3@
+#	{
+#		DATA_BUFF -> A;
+#		POP O1;
+#	}
+#}
+#
+#INSTRUCTION	"OUT %$1"	%11010011,B2[8]
+#{
+#	IF O1.FETCH.T4@
+#	{
+#		NEXT O1.FETCH.T1;
+#		PUSH O1.PORTOUT.T1;
+#		PUSH O1.MEMIN.T1;
+#	}
+#
+#	IF O1.MEMIN.T1@
+#	{
+#		ADDR_BUFF <- PC;
+#	}
+#	
+#	IF O1.MEMIN.T2@
+#	{
+#		PC <- PC+1;
+#	}
+#	
+#	IF O1.MEMIN.T3@
+#	{
+#		DATA_BUFF -> W;
+#		DATA_BUFF -> Z;
+#		POP O1;
+#	}
+#	
+#	IF O1.PORTOUT.T2@
+#	{
+#		A -> DATA_BUFF;
+#	}
+#
+#	IF O1.PORTOUT.T3@
+#	{
+#		POP O1;
+#	}
+#}
+#
+#
+#INSTRUCTION	"EI"		%11111011
+#{
+#	IF O1.FETCH.T4@
+#	{
+#		PIN_INTE <- 1;
+#		NEXT O1.FETCH.T1;
+#	}
+#}
+#
+#INSTRUCTION	"DI"		%11110011
+#{
+#	IF O1.FETCH.T4@
+#	{
+#		PIN_INTE <- 0;
+#		NEXT O1.FETCH.T1;
+#	}
+#}
+#
+#INSTRUCTION	"HLT"		%01110110
+#{
+#	IF O1.FETCH.T4@
+#	{
+#		DEBUG_TRACE "HALTED";
+#		NEXT O1.TWH.T1;
+#	}
+#}
+#
+#INSTRUCTION	"NOP"		%00:UNOFFICIAL[3]:%000		# %00000000 is the official opcode for NOP, this also generates unofficial permutations
+#{
+#	IF O1.FETCH.T4@
+#	{
+#		NEXT O1.FETCH.T1;
+#	}
+#}
+#
+#
+#
