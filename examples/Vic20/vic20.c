@@ -64,6 +64,14 @@ int InitialiseMemory()
 	return 0;
 }
 
+uint8_t VIAGetByte(int chipNo,int regNo);
+void VIASetByte(int chipNo,int regNo,uint8_t byte);
+void VIATick(int chipNo);
+
+uint8_t GetByte6561(int regNo);
+void SetByte6561(int regNo,uint8_t byte);
+void Tick6561();
+
 uint8_t GetByte(uint16_t addr)
 {
 	if (addr<1024)
@@ -80,6 +88,14 @@ uint8_t GetByte(uint16_t addr)
 		return CRom[addr-32768];
 	if (addr<38400)
 	{
+		if (addr>=0x9000 && addr<=0x900F)
+		{
+			return GetByte6561(addr&0x0F);
+		}
+		if (addr>=0x9110 && addr<=0x912F)
+		{
+			return VIAGetByte(((addr-0x10)>>4)&1,addr&0x0F);
+		}
 		// Various expansions
 		printf("Attempt to acccess : %04X\n",addr);
 		return 0xFF;
@@ -109,6 +125,16 @@ void SetByte(uint16_t addr,uint8_t byte)
 		return;
 	if (addr<38400)
 	{
+		if (addr>=0x9000 && addr<=0x900F)
+		{
+			SetByte6561(addr&0x0F,byte);
+			return;
+		}
+		if (addr>=0x9110 && addr<=0x912F)
+		{
+			VIASetByte(((addr-0x10)>>4)&1,addr&0x0F,byte);
+			return;
+		}
 		// Various expansions
 		printf("WRITE Attempt to acccess :%02X %04X\n",byte,addr);
 		return;
@@ -140,6 +166,29 @@ extern uint16_t	SP;
 extern uint16_t	PC;
 extern uint8_t	P;
 
+struct via6522
+{
+	uint8_t	ORB;
+	uint8_t IRB;
+	uint8_t ORA;
+	uint8_t IRA;
+	uint8_t	DDRB;
+	uint8_t DDRA;
+	uint16_t	T1C;
+	uint8_t T1LL;
+	uint8_t T1LH;
+	uint8_t	T2LL;
+	uint16_t	T2C;
+	uint8_t SR;
+	uint8_t ACR;
+	uint8_t PCR;
+	uint8_t IFR;
+	uint8_t IER;
+	uint8_t T2TimerOff;
+};
+
+struct via6522	via[2];
+
 void DUMP_REGISTERS()
 {
 	printf("--------\n");
@@ -157,6 +206,8 @@ void DUMP_REGISTERS()
 	printf("X = %02X\n",X);
 	printf("Y = %02X\n",Y);
 	printf("SP= %04X\n",SP);
+	printf("VIA1 IFR/IER/ACR/PCR/T1C/T2C = %02X/%02X/%02X/%02X/%04X/%04X\n",via[0].IFR,via[0].IER,via[0].ACR,via[0].PCR,via[0].T1C,via[0].T2C);
+	printf("VIA2 IFR/IER/ACR/PCR/T1C/T2C = %02X/%02X/%02X/%02X/%04X/%04X\n",via[1].IFR,via[1].IER,via[1].ACR,via[1].PCR,via[1].T1C,via[1].T2C);
 	printf("--------\n");
 }
 
@@ -276,7 +327,7 @@ int g_traceStep=0;
 #define TIMING_WIDTH	680
 #define TIMING_HEIGHT	400
 
-#define HEIGHT	22*8
+#define HEIGHT	23*8
 #define	WIDTH	22*8
 
 #define MAX_WINDOWS		(8)
@@ -445,6 +496,8 @@ void kbHandler( GLFWwindow window, int key, int action )		/* At present ignores 
 	keyArray[key*3 + 2]|=(keyArray[key*3+0]==GLFW_RELEASE)&&(keyArray[key*3+1]==GLFW_PRESS);
 }
 
+static int doDebug=0;
+
 int main(int argc,char**argv)
 {
 	double	atStart,now,remain;
@@ -493,6 +546,8 @@ int main(int argc,char**argv)
 	PinSetRESET(0);			// RESET CPU
 	PIN_BUFFER_RESET=0;
 #endif
+	PinSetPIN__IRQ(1);
+
 	//dumpInstruction=100000;
 
 	PC=GetByte(0xFFFC);
@@ -500,19 +555,22 @@ int main(int argc,char**argv)
 
 	bp = GetByte(0xc000);
 	bp|=GetByte(0xC001)<<8;
+	bp = GetByte(0xFFFE);
+	bp|=GetByte(0xFFFF)<<8;
 
 	printf("%04X\n",bp);
 
 	while (!glfwGetKey(windows[MAIN_WINDOW],GLFW_KEY_ESC))
 	{
-		static int doDebug=0;
-
 		PinSetPIN_O0(1);
 		if (PinGetPIN_SYNC())
 		{
-			if (PinGetPIN_AB()==bp)
-				doDebug=1;
-			
+//			if (PinGetPIN_AB()==bp)
+//				doDebug=1;
+		
+//			if (PinGetPIN_AB()==0xFF72)
+//				doDebug=1;
+
 			if (doDebug)
 			{
 				Disassemble(PinGetPIN_AB(),1);
@@ -535,6 +593,10 @@ int main(int argc,char**argv)
 		}
 
 		PinSetPIN_O0(0);
+
+		Tick6561();
+		VIATick(0);
+		VIATick(1);
 
 		pixelClock++;
 
@@ -610,11 +672,11 @@ int main(int argc,char**argv)
 		{
 			if (pixelClock>=83200)
 				pixelClock=0;
-
+/*
             		glfwMakeContextCurrent(windows[MAIN_WINDOW]);
 			ShowScreen(MAIN_WINDOW,WIDTH,HEIGHT);
 			glfwSwapBuffers();
-				
+*/				
 			glfwPollEvents();
 			
 			g_traceStep=0;
@@ -637,3 +699,325 @@ int main(int argc,char**argv)
 
 }
 
+
+///////////////////
+//
+
+
+//	VIA 1	9110-911F			VIA 2	9120-912F
+//	NMI					IRQ
+//	CA1 - ~RESTORE				CA1	CASSETTE READ
+// 	PA0 - SERIAL CLK(IN)			PA0	ROW INPUT
+//	PA1 - SERIAL DATA(IN)			PA1	ROW INPUT
+//	PA2 - JOY0				PA2	ROW INPUT
+//	PA3 - JOY1				PA3	ROW INPUT
+//	PA4 - JOY2				PA4	ROW INPUT
+//	PA5 - LIGHT PEN				PA5	ROW INPUT
+//	PA6 - CASETTE SWITCH			PA6	ROW INPUT
+//	PA7 - SERIAL ATN(OUT)			PA7	ROW INPUT
+//	CA2 - CASETTE MOTOR			CA2	SERIAL CLK (OUT)
+//
+//	CB1 - USER PORT				CB1	SERIAL SRQ(IN)
+//	PB0 - USER PORT				PB0	COLUMN OUTPUT
+//	PB1 - USER PORT				PB1	COLUMN OUTPUT
+//	PB2 - USER PORT				PB2	COLUMN OUTPUT
+//	PB3 - USER PORT				PB3	COLUMN OUTPUT
+//	PB4 - USER PORT				PB4	COLUMN OUTPUT
+//	PB5 - USER PORT				PB5	COLUMN OUTPUT
+//	PB6 - USER PORT				PB6	COLUMN OUTPUT
+//	PB7 - USER PORT				PB7	COLUMN OUTPUT  JOY3
+//	CB2 - USER PORT				CB2	SERIAL DATA (OUT)
+//
+//
+//
+
+uint8_t VIAGetByte(int chipNo,int regNo)
+{
+//	printf("R VIA%d %02X\n",chipNo,regNo);
+	switch (regNo)
+	{
+		case 0:			//IRB
+			via[chipNo].IFR&=~0x18;
+			return (via[chipNo].IRB & (~via[chipNo].DDRB)) | (via[chipNo].ORB & via[chipNo].DDRB);
+		case 1:			//IRA
+			via[chipNo].IFR&=~0x03;
+			//FALL through intended
+		case 15:
+			return (via[chipNo].IRA & (~via[chipNo].DDRA));
+		case 2:
+			return via[chipNo].DDRB;
+		case 3:
+			return via[chipNo].DDRA;
+		case 4:
+			via[chipNo].IFR&=~0x40;
+			return (via[chipNo].T1C&0xFF);
+		case 5:
+			return (via[chipNo].T1C>>8);
+		case 6:
+			return via[chipNo].T1LL;
+		case 7:
+			return via[chipNo].T1LH;
+		case 8:
+			via[chipNo].IFR&=~0x20;
+			return (via[chipNo].T2C&0xFF);
+		case 9:
+			return (via[chipNo].T2C>>8);
+		case 10:
+			via[chipNo].IFR&=~0x04;
+			return via[chipNo].SR;
+		case 11:
+			return via[chipNo].ACR;
+		case 12:
+			return via[chipNo].PCR;
+		case 13:
+			return via[chipNo].IFR;
+		case 14:
+			return via[chipNo].IER & 0x7F;
+	}
+}
+
+void VIASetByte(int chipNo,int regNo,uint8_t byte)
+{
+//	printf("W VIA%d %02X,%02X\n",chipNo,regNo,byte);
+	switch (regNo)
+	{
+		case 0:
+			via[chipNo].IFR&=~0x18;
+			via[chipNo].ORB=byte&via[chipNo].DDRB;
+			break;
+		case 1:
+			via[chipNo].IFR&=~0x03;
+			//FALL through intended
+		case 15:
+			via[chipNo].ORA=byte&via[chipNo].DDRA;
+			break;
+		case 2:
+			via[chipNo].DDRB=byte;
+			break;
+		case 3:
+			via[chipNo].DDRA=byte;
+			break;
+		case 4:
+			via[chipNo].T1LL=byte;
+			break;
+		case 5:
+			via[chipNo].T1LH=byte;
+			via[chipNo].T1C=byte<<8;
+			via[chipNo].T1C|=via[chipNo].T1LL;
+			via[chipNo].IFR&=~0x40;
+			break;
+		case 6:
+			via[chipNo].T1LL=byte;
+			break;
+		case 7:
+			via[chipNo].T1LH=byte;
+			via[chipNo].IFR&=~0x40;
+			break;
+		case 8:
+			via[chipNo].T2LL=byte;
+			break;
+		case 9:
+			via[chipNo].T2TimerOff=0;
+			via[chipNo].T2C=byte<<8;
+			via[chipNo].T2C|=via[chipNo].T2LL;
+			via[chipNo].IFR&=~0x20;
+			break;
+		case 10:
+			via[chipNo].IFR&=~0x04;
+			via[chipNo].SR=byte;
+			break;
+		case 11:
+			via[chipNo].ACR=byte;
+			break;
+		case 12:
+			via[chipNo].PCR=byte;
+			break;
+		case 13:
+			if (byte&0x80)
+			{
+				via[chipNo].IFR|=byte&0x7F;
+			}
+			else
+			{
+				via[chipNo].IFR&=~(byte&0x7F);
+			}
+			break;
+		case 14:
+			if (byte&0x80)
+			{
+				via[chipNo].IER|=byte&0x7F;
+			}
+			else
+			{
+				via[chipNo].IER&=~(byte&0x7F);
+			}
+			break;
+	}
+}
+
+void VIATick(int chipNo)
+{
+	via[chipNo].IRA=0x00;
+	via[chipNo].IRB=0x00;
+
+	if (via[chipNo].T1C)
+	{
+		via[chipNo].T1C--;
+		if (via[chipNo].T1C==0)
+		{
+			via[chipNo].IFR|=0x40;
+			if (via[chipNo].ACR&0x40)
+			{
+				via[chipNo].T1C=via[chipNo].T1LH<<8;
+				via[chipNo].T1C|=via[chipNo].T1LL;
+			}
+//			printf("T1 Counter Underflow On VIA %d\n",chipNo);
+		}
+	}
+	via[chipNo].T2C--;
+	if ((via[chipNo].T2C==0) && (via[chipNo].T2TimerOff==0))
+	{
+		via[chipNo].IFR|=0x20;
+		via[chipNo].T2TimerOff=1;
+//		printf("T2 Counter Underflow On VIA %d\n",chipNo);
+	}
+
+	via[chipNo].IFR&=0x7F;
+	if ((via[chipNo].IFR&0x7F)&(via[chipNo].IER&0x7F))
+	{
+		via[chipNo].IFR|=0x80;
+		if (chipNo==1)
+		{
+//			if ((P&0x4)==0)
+//				doDebug=1;
+			PinSetPIN__IRQ(0);
+		}
+	}
+	else
+	{
+		via[chipNo].IFR|=0x00;
+		if (chipNo==1)
+		{
+			PinSetPIN__IRQ(1);
+		}
+	}
+}
+
+
+////////////6561////////////////////
+
+uint8_t CTRL_1=0;
+uint8_t CTRL_2=0;
+uint8_t CTRL_3=0;
+uint8_t CTRL_4=0;
+uint8_t CTRL_5=0;
+uint8_t CTRL_6=0;
+uint8_t CTRL_7=0;
+uint8_t CTRL_8=0;
+uint8_t CTRL_9=0;
+uint8_t CTRL_10=0;
+uint8_t CTRL_11=0;
+uint8_t CTRL_12=0;
+uint8_t CTRL_13=0;
+uint8_t CTRL_14=0;
+uint8_t CTRL_15=0;
+uint8_t CTRL_16=0;
+
+uint16_t RASTER_CNT;
+
+uint8_t GetByte6561(int regNo)
+{
+	switch(regNo)
+	{
+		case 0:
+			return CTRL_1;
+		case 1:
+			return CTRL_2;
+		case 2:
+			return CTRL_3;
+		case 3:
+			return CTRL_4;
+		case 4:
+			return CTRL_5;
+		case 5:
+			return CTRL_6;
+		case 6:
+			return CTRL_7;
+		case 7:
+			return CTRL_8;
+		case 8:
+			return CTRL_9;
+		case 9:
+			return CTRL_10;
+		case 10:
+			return CTRL_11;
+		case 11:
+			return CTRL_12;
+		case 12:
+			return CTRL_13;
+		case 13:
+			return CTRL_14;
+		case 14:
+			return CTRL_15;
+		case 15:
+			return CTRL_16;
+	}
+}
+
+void SetByte6561(int regNo,uint8_t byte)
+{
+	switch(regNo)
+	{
+		case 0:
+			CTRL_1=byte;
+			break;
+		case 1:
+			CTRL_2=byte;
+			break;
+		case 2:
+			CTRL_3=byte;
+			break;
+		case 3:
+			CTRL_4|=byte&0x7F;
+			break;
+		case 4:
+			break;
+		case 5:
+			CTRL_6=byte;
+			break;
+		case 6:
+			break;
+		case 7:
+			break;
+		case 8:
+			break;
+		case 9:
+			break;
+		case 10:
+			CTRL_11=byte;
+			break;
+		case 11:
+			CTRL_12=byte;
+			break;
+		case 12:
+			CTRL_13=byte;
+			break;
+		case 13:
+			CTRL_14=byte;
+			break;
+		case 14:
+			CTRL_15=byte;
+			break;
+		case 15:
+			CTRL_16=byte;
+			break;
+	}
+}
+
+void Tick6561()
+{
+	RASTER_CNT++;
+	CTRL_5=(RASTER_CNT>>1)&0xFF;
+	CTRL_4&=0x7F;
+	CTRL_4|=(RASTER_CNT&0x01)<<7;
+}

@@ -1,4 +1,4 @@
-# MOS 6502 - Accurate Version 
+# MOS 6502 (NMOS) - Accurate Version 
 #
 # This should be used like the real CPU, ie interact with the PIN_'s
 #
@@ -42,6 +42,7 @@ DECLARE	INTERNAL AD[16]		ALIAS	ADH[8]:ADL[8];				# Used as temporary store for a
 DECLARE INTERNAL BA[16]		ALIAS	BAH[8]:BAL[8];				# Used as temporary store for base address in index
 DECLARE	INTERNAL IA[16]		ALIAS	IAH[8]:IAL[8];
 DECLARE INTERNAL IAc[1];
+DECLARE INTERNAL irq[1];
 
 DECLARE INTERNAL MEMSTORE[8];
 DECLARE INTERNAL IR[8];
@@ -176,10 +177,16 @@ HANDLER		PIN_O0	TRANSITION(0,1)
 
 HANDLER		PIN_O0	TRANSITION(1,0)
 {
-	IF PIN_O0.FETCH@
+	IF PIN_O0.FETCH@ & (PIN__IRQ | i)
 	{
 		PIN_DB->IR;
 		PC<-PC+1;
+	}
+	IF PIN_O0.FETCH@ & (~PIN__IRQ) & (~i)
+	{
+		irq<-1;
+		DEBUG_TRACE "IIIIIIIIIIIRRRRRRRRRRRRRRRRRRQQQQQQQQQQQQQQQQQQQQQ";
+		$00->IR;
 	}
 
 	IF PIN_O0.IMM@
@@ -891,13 +898,7 @@ INSTRUCTION	"%M0"		operation00_DI:%01000
 	}
 }
 
-MAPPING operation00_PP[3]
-{
-	%000	"P"		P;
-	%010	"A"		A;
-}
-
-INSTRUCTION	"PH%M0"		operation00_PP:%01000
+INSTRUCTION	"PHP"		%00001000
 {
 	IF PIN_O0.FETCH@
 	{
@@ -906,7 +907,26 @@ INSTRUCTION	"PH%M0"		operation00_PP:%01000
 
 	IF PIN_O0.DUMMY.T0@
 	{
-		MEMSTORE<-operation00_PP;
+		MEMSTORE<-(P|$10);			# B is seen as set when pushed
+		NEXT PIN_O0.PH.T0;
+	}
+
+	IF PIN_O0.PH.T0@
+	{
+		NEXT PIN_O0.FETCH;
+	}
+}
+
+INSTRUCTION	"PHA"		%01001000
+{
+	IF PIN_O0.FETCH@
+	{
+		NEXT PIN_O0.DUMMY.T0;
+	}
+
+	IF PIN_O0.DUMMY.T0@
+	{
+		MEMSTORE<-A;
 		NEXT PIN_O0.PH.T0;
 	}
 
@@ -962,10 +982,14 @@ INSTRUCTION	"BRK"		%00000000
 {
 	IF PIN_O0.FETCH@
 	{
-		NEXT PIN_O0.DUMMY.T0;
+		NEXT PIN_O0.IMM.LO;
+		IF irq
+		{
+			NEXT PIN_O0.DUMMY.T0;
+		}
 	}
 
-	IF PIN_O0.DUMMY.T0@
+	IF PIN_O0.DUMMY.T0@ | PIN_O0.IMM.LO@
 	{
 		MEMSTORE<-PCH;
 		NEXT PIN_O0.PH.T0;
@@ -978,12 +1002,19 @@ INSTRUCTION	"BRK"		%00000000
 
 	IF PIN_O0.PH.T1@
 	{
-		MEMSTORE<-P;
+		IF irq
+		{
+			MEMSTORE<-P&$10;
+		}
+		IF ~irq
+		{
+			MEMSTORE<-P|$10;
+		}
 	}
 
 	IF PIN_O0.PH.T2@
 	{
-		$FFFE->AD;
+		$FFFE->IA;
 		NEXT PIN_O0.IA.T0;
 	}
 
@@ -997,6 +1028,8 @@ INSTRUCTION	"BRK"		%00000000
 	{
 		PIN_DB->ADH;
 		PC<-AD;
+		i<-1;
+		irq<-0;
 		NEXT PIN_O0.FETCH;
 	}
 }
