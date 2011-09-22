@@ -16,4 +16,4 @@ out/m6502.lls.s: out/m6502.lls
 	llc out/m6502.lls
 
 vic20: vic20.c out/m6502.lls.s
-	gcc -O3 vic20.c out/m6502.lls.s $(GLLIBS) -o vic20.exe
+	gcc -O3 -g vic20.c out/m6502.lls.s $(GLLIBS) -o vic20.exe

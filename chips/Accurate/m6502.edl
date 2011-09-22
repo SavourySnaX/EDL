@@ -185,7 +185,6 @@ HANDLER		PIN_O0	TRANSITION(1,0)
 	IF PIN_O0.FETCH@ & (~PIN__IRQ) & (~i)
 	{
 		irq<-1;
-		DEBUG_TRACE "IIIIIIIIIIIRRRRRRRRRRRRRRRRRRQQQQQQQQQQQQQQQQQQQQQ";
 		$00->IR;
 	}
 
@@ -907,7 +906,8 @@ INSTRUCTION	"PHP"		%00001000
 
 	IF PIN_O0.DUMMY.T0@
 	{
-		MEMSTORE<-(P|$10);			# B is seen as set when pushed
+		b<-1;
+		MEMSTORE<-P;			# B is seen as set when pushed
 		NEXT PIN_O0.PH.T0;
 	}
 
@@ -1004,11 +1004,13 @@ INSTRUCTION	"BRK"		%00000000
 	{
 		IF irq
 		{
-			MEMSTORE<-P&$10;
+			b<-0;
+			MEMSTORE<-P;
 		}
 		IF ~irq
 		{
-			MEMSTORE<-P|$10;
+			b<-1;
+			MEMSTORE<-P;
 		}
 	}
 

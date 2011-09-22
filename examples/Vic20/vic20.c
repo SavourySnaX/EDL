@@ -28,6 +28,9 @@ void PinSetPIN__RES(uint8_t);
 
 // Step 1. Memory
 
+unsigned char DLo[0x2002];
+unsigned char DHi[0x2002];
+
 unsigned char CRom[0x1000];
 unsigned char BRom[0x2000];
 unsigned char KRom[0x2000];
@@ -37,6 +40,8 @@ unsigned char RamHi[0xE00];
 
 unsigned char CRam[0x200];
 unsigned char SRam[0x200];
+
+#define USE_CART		1
 
 int LoadRom(unsigned char* rom,unsigned int size,const char* fname)
 {
@@ -61,6 +66,11 @@ int InitialiseMemory()
 	if (LoadRom(KRom,0x2000,"roms/901486-07.ue12"))
 		return 1;
 
+	if (LoadRom(DLo,0x2002,"roms/Donkey Kong-2000.prg"))
+		return 1;
+	if (LoadRom(DHi,0x2002,"roms/Donkey Kong-A000.prg"))
+		return 1;
+
 	return 0;
 }
 
@@ -74,19 +84,39 @@ void Tick6561();
 
 uint8_t GetByte(uint16_t addr)
 {
-	if (addr<1024)
+	if (addr<0x0400)
+	{
 		return RamLo[addr];
-	if (addr<4096)
+	}
+	if (addr<0x1000)
+	{
 		return 0xFF;
-	if (addr<7680)
-		return RamHi[addr-4096];
-	if (addr<8192)
-		return SRam[addr-7680];
-	if (addr<32768)
+	}
+	if (addr<0x1E00)
+	{
+		return RamHi[addr-0x1000];
+	}
+	if (addr<0x2000)
+	{
+		return SRam[addr-0x1E00];
+	}
+	if (addr<0x4000)
+	{
+#if USE_CART
+		return DLo[2+(addr-0x2000)];
+#else
 		return 0xFF;
-	if (addr<36864)
-		return CRom[addr-32768];
-	if (addr<38400)
+#endif
+	}
+	if (addr<0x8000)
+	{
+		return 0xFF;
+	}
+	if (addr<0x9000)
+	{
+		return CRom[addr-0x8000];
+	}
+	if (addr<0x9600)
 	{
 		if (addr>=0x9000 && addr<=0x900F)
 		{
@@ -100,30 +130,59 @@ uint8_t GetByte(uint16_t addr)
 		printf("Attempt to acccess : %04X\n",addr);
 		return 0xFF;
 	}
-	if (addr<38912)
-		return CRam[addr-38400]&0x0F;
-	if (addr<49152)
+	if (addr<0x9800)
+	{
+		return CRam[addr-0x9600]&0x0F;
+	}
+	if (addr<0xA000)
+	{
 		return 0xFF;
-	if (addr<57344)
-		return BRom[addr-49152];
-	return KRom[addr-57344];
+	}
+	if (addr<0xC000)
+	{
+#if USE_CART
+		return DHi[2+(addr-0xA000)];
+#else
+		return 0xFF;
+#endif
+	}
+	if (addr<0xE000)
+	{
+		return BRom[addr-0xC000];
+	}
+	return KRom[addr-0xE000];
 }
 
 void SetByte(uint16_t addr,uint8_t byte)
 {
-	if (addr<1024)
+	if (addr<0x0400)
+	{
 		RamLo[addr]=byte;
-	if (addr<4096)
 		return;
-	if (addr<7680)
-		RamHi[addr-4096]=byte;
-	if (addr<8192)
-		SRam[addr-7680]=byte;
-	if (addr<32768)
+	}
+	if (addr<0x1000)
+	{
 		return;
-	if (addr<36864)
+	}
+	if (addr<0x1E00)
+	{
+		RamHi[addr-0x1000]=byte;
 		return;
-	if (addr<38400)
+	}
+	if (addr<0x2000)
+	{
+		SRam[addr-0x1E00]=byte;
+		return;
+	}
+	if (addr<0x8000)
+	{
+		return;
+	}
+	if (addr<0x9000)
+	{
+		return;
+	}
+	if (addr<0x9600)
 	{
 		if (addr>=0x9000 && addr<=0x900F)
 		{
@@ -139,12 +198,19 @@ void SetByte(uint16_t addr,uint8_t byte)
 		printf("WRITE Attempt to acccess :%02X %04X\n",byte,addr);
 		return;
 	}
-	if (addr<38912)
-		CRam[addr-38400]=byte&0x0F;
-	if (addr<49152)
+	if (addr<0x9800)
+	{
+		CRam[addr-0x9600]=byte&0x0F;
 		return;
-	if (addr<57344)
+	}
+	if (addr<0xC000)
+	{
 		return;
+	}
+	if (addr<0xE000)
+	{
+		return;
+	}
 	return;
 }
 
@@ -340,73 +406,98 @@ GLFWwindow windows[MAX_WINDOWS];
 unsigned char *videoMemory[MAX_WINDOWS];
 GLint videoTexture[MAX_WINDOWS];
 
+uint8_t CTRL_1=0;
+uint8_t CTRL_2=0;
+uint8_t CTRL_3=0;
+uint8_t CTRL_4=0;
+uint8_t CTRL_5=0;
+uint8_t CTRL_6=0;
+uint8_t CTRL_7=0;
+uint8_t CTRL_8=0;
+uint8_t CTRL_9=0;
+uint8_t CTRL_10=0;
+uint8_t CTRL_11=0;
+uint8_t CTRL_12=0;
+uint8_t CTRL_13=0;
+uint8_t CTRL_14=0;
+uint8_t CTRL_15=0;
+uint8_t CTRL_16=0;
+
+
 void ShowScreen(int windowNum,int w,int h)
 {
-#if 0
 	if (windowNum==MAIN_WINDOW)
 	{
-		int x,y,b;
+		int x,y,xx,yy;
 		unsigned char* outputTexture = videoMemory[windowNum];
-		for (y=0;y<22;y++)
+		uint16_t addr,addr1,addr2;
+		uint16_t caddr;
+
+		addr1=CTRL_6&0x70;
+		addr2=CTRL_3&0x80;
+		addr=(addr1<<6)|(addr2<<2);
+		if ((CTRL_6&0x80)==0)
+		{
+			addr|=0x8000;
+		}
+		
+		caddr=CTRL_6&0x07;
+		caddr<<=10;
+		if ((CTRL_6&0x08)==0)
+		{
+			caddr|=0x8000;
+		}
+
+//		printf("addr : %04X\n",addr);
+		for (y=0;y<23;y++)
 		{
 			for (x=0;x<22;x++)
 			{
-				unsigned char index = SRam[x+y*22];
+				uint16_t index;
 				
-				if (index<0)
+				index=GetByte(addr+x+y*22);
+				index<<=3;
+				index+=caddr;
+
+				for (yy=0;yy<8;yy++)
 				{
-					if (Ram[y*32 + x]&mask)
+					uint8_t byte = GetByte(index++);
+					for (xx=7;xx>=0;xx--)
 					{
-						outputTexture[(x*8+b+y*256)*4+0]=0xFF;
-						outputTexture[(x*8+b+y*256)*4+1]=0xFF;
-						outputTexture[(x*8+b+y*256)*4+2]=0xFF;
+						if (byte&(1<<xx))
+						{
+							outputTexture[(x*8+(7-xx)+(y*8+yy)*22*8)*4+0]=0xFF;
+							outputTexture[(x*8+(7-xx)+(y*8+yy)*22*8)*4+1]=0xFF;
+							outputTexture[(x*8+(7-xx)+(y*8+yy)*22*8)*4+2]=0xFF;
+						}
+						else
+						{
+							outputTexture[(x*8+(7-xx)+(y*8+yy)*22*8)*4+0]=0x0;
+							outputTexture[(x*8+(7-xx)+(y*8+yy)*22*8)*4+1]=0x0;
+							outputTexture[(x*8+(7-xx)+(y*8+yy)*22*8)*4+2]=0x0;
+						}
 					}
-					else
-					{
-						outputTexture[(x*8+b+y*256)*4+0]=0x0;
-						outputTexture[(x*8+b+y*256)*4+1]=0x0;
-						outputTexture[(x*8+b+y*256)*4+2]=0x0;
-					}
-					mask<<=1;
 				}
 			}
 		}
 	}
-#endif
 	glBindTexture(GL_TEXTURE_RECTANGLE_NV, videoTexture[windowNum]);
 	
 	// glTexSubImage2D is faster when not using a texture range
 	glTexSubImage2D(GL_TEXTURE_RECTANGLE_NV, 0, 0, 0, w, h, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, videoMemory[windowNum]);
 	glBegin(GL_QUADS);
 
-	if (windowNum==MAIN_WINDOW)		// Invaders needs rotating
-	{
-		glTexCoord2f(0.0f, 0.0f);
-		glVertex2f((-1.0f * 0) - (1.0f*1.f), (1.0f*0) + (-1.f*1.0f));
+	glTexCoord2f(0.0f, 0.0f);
+	glVertex2f(-1.0f,1.0f);
 
-		glTexCoord2f(0.0f, h);
-		glVertex2f((-1.0f * 0) - (-1.0f*1.f), (-1.0f*0) + (-1.f*1.0f));
+	glTexCoord2f(0.0f, h);
+	glVertex2f(-1.0f, -1.0f);
 
-		glTexCoord2f(w, h);
-		glVertex2f((1.0f * 0) - (-1.0f*1.f), (-1.0f*0) + (1.f*1.0f));
+	glTexCoord2f(w, h);
+	glVertex2f(1.0f, -1.0f);
 
-		glTexCoord2f(w, 0.0f);
-		glVertex2f((1.0f * 0) - (1.0f*1.f), (1.0f*0) + (1.f*1.0f));
-	}
-	else
-	{
-		glTexCoord2f(0.0f, 0.0f);
-		glVertex2f(-1.0f,1.0f);
-
-		glTexCoord2f(0.0f, h);
-		glVertex2f(-1.0f, -1.0f);
-
-		glTexCoord2f(w, h);
-		glVertex2f(1.0f, -1.0f);
-
-		glTexCoord2f(w, 0.0f);
-		glVertex2f(1.0f, 1.0f);
-	}
+	glTexCoord2f(w, 0.0f);
+	glVertex2f(1.0f, 1.0f);
 	glEnd();
 	
 	glFlush();
@@ -507,7 +598,7 @@ int main(int argc,char**argv)
 	glfwInit(); 
 
 	// Open screen OpenGL window 
-	if( !(windows[MAIN_WINDOW]=glfwOpenWindow( WIDTH, HEIGHT, GLFW_WINDOWED,"invaders",NULL)) ) 
+	if( !(windows[MAIN_WINDOW]=glfwOpenWindow( WIDTH, HEIGHT, GLFW_WINDOWED,"vic",NULL)) ) 
 	{ 
 		glfwTerminate(); 
 		return 1; 
@@ -560,16 +651,24 @@ int main(int argc,char**argv)
 
 	printf("%04X\n",bp);
 
+	printf("%02X != %02X\n",BRom[0xD487-0xC000],GetByte(0xD487));
+
 	while (!glfwGetKey(windows[MAIN_WINDOW],GLFW_KEY_ESC))
 	{
+		if (BRom[0xD487-0xC000]!=0xA2)
+			exit(-1);
+
 		PinSetPIN_O0(1);
 		if (PinGetPIN_SYNC())
 		{
 //			if (PinGetPIN_AB()==bp)
 //				doDebug=1;
 		
-//			if (PinGetPIN_AB()==0xFF72)
+			if ((PinGetPIN_AB()&0xE000)==0x2000)
+			{
+//				exit(1);
 //				doDebug=1;
+			}
 
 			if (doDebug)
 			{
@@ -599,22 +698,6 @@ int main(int argc,char**argv)
 		VIATick(1);
 
 		pixelClock++;
-
-		if (CheckKey(' '))
-		{
-			ClearKey(' ');
-			{
-				int x,y;
-				for (y=0;y<22;y++)
-				{
-					for (x=0;x<22;x++)
-					{
-						printf("%02X ",SRam[x+y*22]);
-					}
-					printf("\n");
-				}
-			}
-		}
 
 #if 0
 		if (!stopTheClock)
@@ -672,11 +755,11 @@ int main(int argc,char**argv)
 		{
 			if (pixelClock>=83200)
 				pixelClock=0;
-/*
+
             		glfwMakeContextCurrent(windows[MAIN_WINDOW]);
 			ShowScreen(MAIN_WINDOW,WIDTH,HEIGHT);
 			glfwSwapBuffers();
-*/				
+				
 			glfwPollEvents();
 			
 			g_traceStep=0;
@@ -733,7 +816,7 @@ int main(int argc,char**argv)
 
 uint8_t VIAGetByte(int chipNo,int regNo)
 {
-//	printf("R VIA%d %02X\n",chipNo,regNo);
+//	printf("R VIA%d %02X\n",chipNo+1,regNo);
 	switch (regNo)
 	{
 		case 0:			//IRB
@@ -778,7 +861,7 @@ uint8_t VIAGetByte(int chipNo,int regNo)
 
 void VIASetByte(int chipNo,int regNo,uint8_t byte)
 {
-//	printf("W VIA%d %02X,%02X\n",chipNo,regNo,byte);
+//	printf("W VIA%d %02X,%02X\n",chipNo+1,regNo,byte);
 	switch (regNo)
 	{
 		case 0:
@@ -855,6 +938,49 @@ void VIASetByte(int chipNo,int regNo,uint8_t byte)
 	}
 }
 
+uint8_t CheckKeys(uint8_t scan,int key0,int key1,int key2,int key3,int key4,int key5,int key6,int key7)
+{
+	uint8_t keyVal=0xFF;
+
+	if ((via[1].ORB&scan)==0)
+	{
+		if (KeyDown(key0))
+		{
+			keyVal&=~0x01;
+		}
+		if (KeyDown(key1))
+		{
+			keyVal&=~0x02;
+		}
+		if (KeyDown(key2))
+		{
+			keyVal&=~0x04;
+		}
+		if (KeyDown(key3))
+		{
+			keyVal&=~0x08;
+		}
+		if (KeyDown(key4))
+		{
+			keyVal&=~0x10;
+		}
+		if (KeyDown(key5))
+		{
+			keyVal&=~0x20;
+		}
+		if (KeyDown(key6))
+		{
+			keyVal&=~0x40;
+		}
+		if (KeyDown(key7))
+		{
+			keyVal&=~0x80;
+		}
+	}
+
+	return keyVal;
+}
+
 void VIATick(int chipNo)
 {
 	via[chipNo].IRA=0x00;
@@ -882,14 +1008,28 @@ void VIATick(int chipNo)
 //		printf("T2 Counter Underflow On VIA %d\n",chipNo);
 	}
 
+	if (chipNo==1)
+	{
+		// TODO : some keys require that shift is held down - F2,F4,CURSOR LEFT etc
+		uint8_t keyVal=0xFF;
+		keyVal&=CheckKeys(0x01,'1','3','5','7','9','-','=',GLFW_KEY_BACKSPACE);
+		keyVal&=CheckKeys(0x02,'`','W','R','Y','I','P',']',GLFW_KEY_ENTER);
+		keyVal&=CheckKeys(0x04,GLFW_KEY_LCTRL,'A','D','G','J','L','\'',GLFW_KEY_RIGHT);
+		keyVal&=CheckKeys(0x08,GLFW_KEY_TAB,GLFW_KEY_LSHIFT,'X','V','N',',','/',GLFW_KEY_DOWN);
+		keyVal&=CheckKeys(0x10,GLFW_KEY_SPACE,'Z','C','B','M','.',GLFW_KEY_RSHIFT,GLFW_KEY_F1);
+		keyVal&=CheckKeys(0x20,GLFW_KEY_RCTRL,'S','F','H','K',';','#',GLFW_KEY_F3);
+		keyVal&=CheckKeys(0x40,'Q','E','T','U','O','[','/',GLFW_KEY_F5);
+		keyVal&=CheckKeys(0x80,'2','4','6','8','0','\\',GLFW_KEY_HOME,GLFW_KEY_F7);
+		via[chipNo].IRA=keyVal;
+
+	}
+
 	via[chipNo].IFR&=0x7F;
 	if ((via[chipNo].IFR&0x7F)&(via[chipNo].IER&0x7F))
 	{
 		via[chipNo].IFR|=0x80;
 		if (chipNo==1)
 		{
-//			if ((P&0x4)==0)
-//				doDebug=1;
 			PinSetPIN__IRQ(0);
 		}
 	}
@@ -905,23 +1045,6 @@ void VIATick(int chipNo)
 
 
 ////////////6561////////////////////
-
-uint8_t CTRL_1=0;
-uint8_t CTRL_2=0;
-uint8_t CTRL_3=0;
-uint8_t CTRL_4=0;
-uint8_t CTRL_5=0;
-uint8_t CTRL_6=0;
-uint8_t CTRL_7=0;
-uint8_t CTRL_8=0;
-uint8_t CTRL_9=0;
-uint8_t CTRL_10=0;
-uint8_t CTRL_11=0;
-uint8_t CTRL_12=0;
-uint8_t CTRL_13=0;
-uint8_t CTRL_14=0;
-uint8_t CTRL_15=0;
-uint8_t CTRL_16=0;
 
 uint16_t RASTER_CNT;
 
@@ -966,6 +1089,7 @@ uint8_t GetByte6561(int regNo)
 
 void SetByte6561(int regNo,uint8_t byte)
 {
+	printf("W 6561 %02X,%02X\n",regNo,byte);
 	switch(regNo)
 	{
 		case 0:
