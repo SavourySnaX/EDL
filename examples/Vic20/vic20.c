@@ -38,10 +38,11 @@ unsigned char KRom[0x2000];
 unsigned char RamLo[0x400];
 unsigned char RamHi[0xE00];
 
-unsigned char CRam[0x200];
+unsigned char CRam[0x400];
 unsigned char SRam[0x200];
 
-#define USE_CART		1
+#define USE_CART_A0		1
+#define USE_CART_20		0
 
 int LoadRom(unsigned char* rom,unsigned int size,const char* fname)
 {
@@ -66,11 +67,19 @@ int InitialiseMemory()
 	if (LoadRom(KRom,0x2000,"roms/901486-07.ue12"))
 		return 1;
 
+#if 0
 	if (LoadRom(DLo,0x2002,"roms/Donkey Kong-2000.prg"))
 		return 1;
 	if (LoadRom(DHi,0x2002,"roms/Donkey Kong-A000.prg"))
 		return 1;
-
+#else
+//	if (LoadRom(DHi,0x2002,"roms/Cosmic Cruncher (1982)(Commodore).a0"))
+//		return 1;
+	if (LoadRom(DHi,0x2002,"roms/Omega Race (1982)(Commodore).a0"))
+		return 1;
+//	if (LoadRom(DHi,0x2002,"roms/Arcadia (19xx)(-).a0"))
+//		return 1;
+#endif
 	return 0;
 }
 
@@ -102,7 +111,7 @@ uint8_t GetByte(uint16_t addr)
 	}
 	if (addr<0x4000)
 	{
-#if USE_CART
+#if USE_CART_20
 		return DLo[2+(addr-0x2000)];
 #else
 		return 0xFF;
@@ -116,7 +125,7 @@ uint8_t GetByte(uint16_t addr)
 	{
 		return CRom[addr-0x8000];
 	}
-	if (addr<0x9600)
+	if (addr<0x9400)
 	{
 		if (addr>=0x9000 && addr<=0x900F)
 		{
@@ -132,7 +141,7 @@ uint8_t GetByte(uint16_t addr)
 	}
 	if (addr<0x9800)
 	{
-		return CRam[addr-0x9600]&0x0F;
+		return CRam[addr-0x9400]&0x0F;
 	}
 	if (addr<0xA000)
 	{
@@ -140,7 +149,7 @@ uint8_t GetByte(uint16_t addr)
 	}
 	if (addr<0xC000)
 	{
-#if USE_CART
+#if USE_CART_A0
 		return DHi[2+(addr-0xA000)];
 #else
 		return 0xFF;
@@ -182,7 +191,7 @@ void SetByte(uint16_t addr,uint8_t byte)
 	{
 		return;
 	}
-	if (addr<0x9600)
+	if (addr<0x9400)
 	{
 		if (addr>=0x9000 && addr<=0x900F)
 		{
@@ -200,7 +209,7 @@ void SetByte(uint16_t addr,uint8_t byte)
 	}
 	if (addr<0x9800)
 	{
-		CRam[addr-0x9600]=byte&0x0F;
+		CRam[addr-0x9400]=byte&0x0F;
 		return;
 	}
 	if (addr<0xC000)
@@ -423,15 +432,22 @@ uint8_t CTRL_14=0;
 uint8_t CTRL_15=0;
 uint8_t CTRL_16=0;
 
+uint32_t	cTable[16]={
+	0x00000000,0x00ffffff,0x00782922,0x0087d6dd,0x00aa5fb6,0x0055a049,0x0040318d,0x00bfce72,
+	0x00aa7449,0x00eab489,0x00b86962,0x00c7ffff,0x00eaf9f6,0x0094e089,0x008071cc,0x00ffffb2,
+			};
 
 void ShowScreen(int windowNum,int w,int h)
 {
 	if (windowNum==MAIN_WINDOW)
 	{
 		int x,y,xx,yy;
-		unsigned char* outputTexture = videoMemory[windowNum];
+		uint32_t* outputTexture = (uint32_t*)videoMemory[windowNum];
 		uint16_t addr,addr1,addr2;
+		uint16_t chaddr;
 		uint16_t caddr;
+		uint32_t paper;
+		uint32_t auxcol;
 
 		addr1=CTRL_6&0x70;
 		addr2=CTRL_3&0x80;
@@ -441,40 +457,50 @@ void ShowScreen(int windowNum,int w,int h)
 			addr|=0x8000;
 		}
 		
-		caddr=CTRL_6&0x07;
-		caddr<<=10;
+		chaddr=CTRL_6&0x07;
+		chaddr<<=10;
 		if ((CTRL_6&0x08)==0)
 		{
-			caddr|=0x8000;
+			chaddr|=0x8000;
 		}
 
-//		printf("addr : %04X\n",addr);
+		caddr=CTRL_3&0x80;
+		caddr<<=2;
+		caddr|=0x9400;
+
+		paper=(CTRL_16&0xF0)>>4;
+		paper=cTable[paper];
+
+		auxcol=(CTRL_15&0xF0)>>4;
+		auxcol=cTable[auxcol];
+
+		printf("addr : %04X\n",chaddr);
+
 		for (y=0;y<23;y++)
 		{
 			for (x=0;x<22;x++)
 			{
 				uint16_t index;
-				
+				uint32_t col = GetByte(caddr+x+y*22);
+				if (col&0x80)
+					printf("MULTICOLOR\n");
+				col=cTable[col&7];
 				index=GetByte(addr+x+y*22);
 				index<<=3;
-				index+=caddr;
 
 				for (yy=0;yy<8;yy++)
 				{
-					uint8_t byte = GetByte(index++);
+					uint8_t byte = GetByte((chaddr+index));
+					index++;
 					for (xx=7;xx>=0;xx--)
 					{
 						if (byte&(1<<xx))
 						{
-							outputTexture[(x*8+(7-xx)+(y*8+yy)*22*8)*4+0]=0xFF;
-							outputTexture[(x*8+(7-xx)+(y*8+yy)*22*8)*4+1]=0xFF;
-							outputTexture[(x*8+(7-xx)+(y*8+yy)*22*8)*4+2]=0xFF;
+							outputTexture[(x*8+(7-xx)+(y*8+yy)*22*8)]=col;
 						}
 						else
 						{
-							outputTexture[(x*8+(7-xx)+(y*8+yy)*22*8)*4+0]=0x0;
-							outputTexture[(x*8+(7-xx)+(y*8+yy)*22*8)*4+1]=0x0;
-							outputTexture[(x*8+(7-xx)+(y*8+yy)*22*8)*4+2]=0x0;
+							outputTexture[(x*8+(7-xx)+(y*8+yy)*22*8)]=paper;
 						}
 					}
 				}
