@@ -402,8 +402,8 @@ int g_traceStep=0;
 #define TIMING_WIDTH	680
 #define TIMING_HEIGHT	400
 
-#define HEIGHT	23*8
-#define	WIDTH	22*8
+#define HEIGHT	312
+#define	WIDTH	284
 
 #define MAX_WINDOWS		(8)
 
@@ -439,74 +439,6 @@ uint32_t	cTable[16]={
 
 void ShowScreen(int windowNum,int w,int h)
 {
-	if (windowNum==MAIN_WINDOW)
-	{
-		int x,y,xx,yy;
-		uint32_t* outputTexture = (uint32_t*)videoMemory[windowNum];
-		uint16_t addr,addr1,addr2;
-		uint16_t chaddr;
-		uint16_t caddr;
-		uint32_t paper;
-		uint32_t auxcol;
-
-		addr1=CTRL_6&0x70;
-		addr2=CTRL_3&0x80;
-		addr=(addr1<<6)|(addr2<<2);
-		if ((CTRL_6&0x80)==0)
-		{
-			addr|=0x8000;
-		}
-		
-		chaddr=CTRL_6&0x07;
-		chaddr<<=10;
-		if ((CTRL_6&0x08)==0)
-		{
-			chaddr|=0x8000;
-		}
-
-		caddr=CTRL_3&0x80;
-		caddr<<=2;
-		caddr|=0x9400;
-
-		paper=(CTRL_16&0xF0)>>4;
-		paper=cTable[paper];
-
-		auxcol=(CTRL_15&0xF0)>>4;
-		auxcol=cTable[auxcol];
-
-		printf("addr : %04X\n",chaddr);
-
-		for (y=0;y<23;y++)
-		{
-			for (x=0;x<22;x++)
-			{
-				uint16_t index;
-				uint32_t col = GetByte(caddr+x+y*22);
-				if (col&0x80)
-					printf("MULTICOLOR\n");
-				col=cTable[col&7];
-				index=GetByte(addr+x+y*22);
-				index<<=3;
-
-				for (yy=0;yy<8;yy++)
-				{
-					uint8_t byte = GetByte((chaddr+index));
-					index++;
-					for (xx=7;xx>=0;xx--)
-					{
-						if (byte&(1<<xx))
-						{
-							outputTexture[(x*8+(7-xx)+(y*8+yy)*22*8)]=col;
-						}
-						else
-						{
-							outputTexture[(x*8+(7-xx)+(y*8+yy)*22*8)]=paper;
-						}
-					}
-				}
-			}
-		}
-	}
 	glBindTexture(GL_TEXTURE_RECTANGLE_NV, videoTexture[windowNum]);
 	
 	// glTexSubImage2D is faster when not using a texture range
@@ -777,10 +709,9 @@ int main(int argc,char**argv)
 			}
 		}
 #endif
-		if (pixelClock>=83200/* || stopTheClock*/)
+		if (pixelClock>=22776/* || stopTheClock*/)
 		{
-			if (pixelClock>=83200)
-				pixelClock=0;
+			pixelClock-=22776;
 
             		glfwMakeContextCurrent(windows[MAIN_WINDOW]);
 			ShowScreen(MAIN_WINDOW,WIDTH,HEIGHT);
@@ -1072,7 +1003,7 @@ void VIATick(int chipNo)
 
 ////////////6561////////////////////
 
-uint16_t RASTER_CNT;
+uint16_t RASTER_CNT=0;
 
 uint8_t GetByte6561(int regNo)
 {
@@ -1164,10 +1095,211 @@ void SetByte6561(int regNo,uint8_t byte)
 	}
 }
 
+uint8_t xCnt=0;
+
 void Tick6561()
 {
-	RASTER_CNT++;
-	CTRL_5=(RASTER_CNT>>1)&0xFF;
-	CTRL_4&=0x7F;
-	CTRL_4|=(RASTER_CNT&0x01)<<7;
+	uint32_t* outputTexture = (uint32_t*)videoMemory[MAIN_WINDOW];
+	uint32_t originX;
+	uint32_t originY;
+	uint32_t length;
+	uint32_t height;
+	uint32_t borderCol;
+
+
+	// 4 pixels per clock		71 clocks per line (PAL)		312 lines per frame		vblank 0-27
+
+	if (RASTER_CNT>=28)
+	{
+		uint8_t doubleHeight=0;
+
+		originX=CTRL_1&0x7F;		// *4 pixels
+		length=CTRL_3&0x7F;		// num 8 pixel columns
+		length<<=1;
+		originY=CTRL_2;
+		originY<<=1;
+		height=CTRL_4&0x7E;
+
+		if (CTRL_4&0x01)
+		{
+			doubleHeight=1;
+		}
+
+		height<<=2+doubleHeight;
+
+		if ((xCnt<originX) || (xCnt>=(originX+length)) || (RASTER_CNT<originY) || (RASTER_CNT>=(originY+height)))
+		{
+			// Border
+			borderCol=CTRL_16&0x07;
+			borderCol=cTable[borderCol];
+			outputTexture[xCnt*4 + 0 + (RASTER_CNT*WIDTH)]=borderCol;
+			outputTexture[xCnt*4 + 1 + (RASTER_CNT*WIDTH)]=borderCol;
+			outputTexture[xCnt*4 + 2 + (RASTER_CNT*WIDTH)]=borderCol;
+			outputTexture[xCnt*4 + 3 + (RASTER_CNT*WIDTH)]=borderCol;
+		}
+		else
+		{
+			int xx;
+			uint16_t addr,addr1,addr2;
+			uint16_t chaddr;
+			uint16_t caddr;
+			uint32_t paper;
+			uint32_t auxcol;
+
+			addr1=CTRL_6&0x70;
+			addr2=CTRL_3&0x80;
+			addr=(addr1<<6)|(addr2<<2);
+			if ((CTRL_6&0x80)==0)
+			{
+				addr|=0x8000;
+			}
+
+			chaddr=CTRL_6&0x07;
+			chaddr<<=10;
+			if ((CTRL_6&0x08)==0)
+			{
+				chaddr|=0x8000;
+			}
+
+			caddr=CTRL_3&0x80;
+			caddr<<=2;
+			caddr|=0x9400;
+
+			paper=(CTRL_16&0xF0)>>4;
+			paper=cTable[paper];
+
+			auxcol=(CTRL_15&0xF0)>>4;
+			auxcol=cTable[auxcol];
+
+			uint32_t x = xCnt-originX;
+			uint32_t y = RASTER_CNT-originY;
+
+			uint16_t index;
+			uint32_t screenAddress = x/2;
+			if (doubleHeight)
+				screenAddress+= (y/16)*(length/2);
+			else
+				screenAddress+= (y/8)*(length/2);
+
+			uint32_t rcol= GetByte(caddr+screenAddress);
+			uint32_t col;
+//			col=3;
+//			if (col&0x80)
+//				printf("MULTICOLOR\n");
+//			printf("%d:%d\n",x,y);
+			col=cTable[rcol&7];
+			index=GetByte(addr+screenAddress);
+			index<<=3+doubleHeight;
+			if (doubleHeight)
+				index+=y&15;
+			else
+				index+=y&7;
+
+			uint8_t byte = GetByte((chaddr+index));
+			
+			if (rcol&0x80)
+			{
+				uint8_t sMask = 0xC0;
+				if (x&1)
+					sMask=0x0C;
+				for (xx=0;xx<2;xx++)
+				{
+					switch (byte&sMask)
+					{
+						case 0x00:
+							outputTexture[xCnt*4 + (xx*2)+0 + (RASTER_CNT*WIDTH)]=paper;
+							outputTexture[xCnt*4 + (xx*2)+1 + (RASTER_CNT*WIDTH)]=paper;
+							break;
+						case 0x40:
+						case 0x10:
+						case 0x04:
+						case 0x01:
+							outputTexture[xCnt*4 + (xx*2)+0 + (RASTER_CNT*WIDTH)]=col;
+							outputTexture[xCnt*4 + (xx*2)+1 + (RASTER_CNT*WIDTH)]=col;
+							break;
+						case 0x80:
+						case 0x20:
+						case 0x08:
+						case 0x02:
+							outputTexture[xCnt*4 + (xx*2)+0 + (RASTER_CNT*WIDTH)]=borderCol;
+							outputTexture[xCnt*4 + (xx*2)+1 + (RASTER_CNT*WIDTH)]=borderCol;
+							break;
+						default:
+							outputTexture[xCnt*4 + (xx*2)+0 + (RASTER_CNT*WIDTH)]=auxcol;
+							outputTexture[xCnt*4 + (xx*2)+1 + (RASTER_CNT*WIDTH)]=auxcol;
+							break;
+					}
+					sMask>>=2;
+				}
+			}
+			else
+			{
+				uint8_t sMask = 0x80;
+				if (x&1)
+					sMask=0x08;
+				for (xx=0;xx<4;xx++)
+				{
+					if (byte&sMask)
+					{
+						outputTexture[xCnt*4 + xx + (RASTER_CNT*WIDTH)]=col;
+					}
+					else
+					{
+						outputTexture[xCnt*4 + xx + (RASTER_CNT*WIDTH)]=paper;
+					}
+					sMask>>=1;
+				}
+			}
+		}
+	}
+	xCnt++;
+	if (xCnt>=71)
+	{
+		xCnt=0;
+		RASTER_CNT++;
+		if (RASTER_CNT>=312)
+			RASTER_CNT=0;
+		CTRL_5=(RASTER_CNT>>1)&0xFF;
+		CTRL_4&=0x7F;
+		CTRL_4|=(RASTER_CNT&0x01)<<7;
+	}
 }
+
+/*
+	if (windowNum==MAIN_WINDOW)
+	{
+		int x,y,xx,yy;
+		printf("addr : %04X\n",chaddr);
+
+		for (y=0;y<23;y++)
+		{
+			for (x=0;x<22;x++)
+			{
+				uint16_t index;
+				uint32_t col = GetByte(caddr+x+y*22);
+				if (col&0x80)
+					printf("MULTICOLOR\n");
+				col=cTable[col&7];
+				index=GetByte(addr+x+y*22);
+				index<<=3;
+
+				for (yy=0;yy<8;yy++)
+				{
+					uint8_t byte = GetByte((chaddr+index));
+					index++;
+					for (xx=7;xx>=0;xx--)
+					{
+						if (byte&(1<<xx))
+						{
+							outputTexture[(x*8+(7-xx)+(y*8+yy)*WIDTH)]=col;
+						}
+						else
+						{
+							outputTexture[(x*8+(7-xx)+(y*8+yy)*WIDTH)]=paper;
+						}
+					}
+				}
+			}
+		}
+	}
+*/
