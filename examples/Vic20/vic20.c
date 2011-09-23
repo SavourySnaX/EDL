@@ -28,8 +28,9 @@ void PinSetPIN__RES(uint8_t);
 
 // Step 1. Memory
 
-unsigned char DLo[0x2002];
-unsigned char DHi[0x2002];
+unsigned char D20[0x2002];
+unsigned char D60[0x2002];
+unsigned char DA0[0x2002];
 
 unsigned char CRom[0x1000];
 unsigned char BRom[0x2000];
@@ -42,6 +43,7 @@ unsigned char CRam[0x400];
 unsigned char SRam[0x200];
 
 #define USE_CART_A0		1
+#define USE_CART_60		1
 #define USE_CART_20		0
 
 int LoadRom(unsigned char* rom,unsigned int size,const char* fname)
@@ -68,16 +70,21 @@ int InitialiseMemory()
 		return 1;
 
 #if 0
-	if (LoadRom(DLo,0x2002,"roms/Donkey Kong-2000.prg"))
+	if (LoadRom(D20,0x2002,"roms/Donkey Kong-2000.prg"))
 		return 1;
-	if (LoadRom(DHi,0x2002,"roms/Donkey Kong-A000.prg"))
+	if (LoadRom(DA0,0x2002,"roms/Donkey Kong-A000.prg"))
 		return 1;
 #else
-//	if (LoadRom(DHi,0x2002,"roms/Cosmic Cruncher (1982)(Commodore).a0"))
-//		return 1;
-	if (LoadRom(DHi,0x2002,"roms/Omega Race (1982)(Commodore).a0"))
+	if (LoadRom(D60,0x2002,"roms/Lode Runner.60"))
 		return 1;
-//	if (LoadRom(DHi,0x2002,"roms/Arcadia (19xx)(-).a0"))
+	if (LoadRom(DA0,0x2002,"roms/Lode Runner.a0"))
+		return 1;
+
+//	if (LoadRom(DA0,0x2002,"roms/Cosmic Cruncher (1982)(Commodore).a0"))
+//		return 1;
+//	if (LoadRom(DA0,0x2002,"roms/Omega Race (1982)(Commodore).a0"))
+//		return 1;
+//	if (LoadRom(DA0,0x2002,"roms/Arcadia (19xx)(-).a0"))
 //		return 1;
 #endif
 	return 0;
@@ -112,14 +119,22 @@ uint8_t GetByte(uint16_t addr)
 	if (addr<0x4000)
 	{
 #if USE_CART_20
-		return DLo[2+(addr-0x2000)];
+		return D20[2+(addr-0x2000)];
 #else
 		return 0xFF;
 #endif
 	}
-	if (addr<0x8000)
+	if (addr<0x6000)
 	{
 		return 0xFF;
+	}
+	if (addr<0x8000)
+	{
+#if USE_CART_60
+		return D60[2+(addr-0x6000)];
+#else
+		return 0xFF;
+#endif
 	}
 	if (addr<0x9000)
 	{
@@ -136,7 +151,7 @@ uint8_t GetByte(uint16_t addr)
 			return VIAGetByte(((addr-0x10)>>4)&1,addr&0x0F);
 		}
 		// Various expansions
-		printf("Attempt to acccess : %04X\n",addr);
+//		printf("Attempt to acccess : %04X\n",addr);
 		return 0xFF;
 	}
 	if (addr<0x9800)
@@ -150,7 +165,7 @@ uint8_t GetByte(uint16_t addr)
 	if (addr<0xC000)
 	{
 #if USE_CART_A0
-		return DHi[2+(addr-0xA000)];
+		return DA0[2+(addr-0xA000)];
 #else
 		return 0xFF;
 #endif
