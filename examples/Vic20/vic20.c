@@ -1098,6 +1098,8 @@ void Tick6561()
 	uint32_t height;
 	uint32_t borderCol;
 
+	borderCol=CTRL_16&0x07;
+	borderCol=cTable[borderCol];
 
 	// 4 pixels per clock		71 clocks per line (PAL)		312 lines per frame		vblank 0-27
 
@@ -1122,8 +1124,6 @@ void Tick6561()
 		if ((xCnt<originX) || (xCnt>=(originX+length)) || (RASTER_CNT<originY) || (RASTER_CNT>=(originY+height)))
 		{
 			// Border
-			borderCol=CTRL_16&0x07;
-			borderCol=cTable[borderCol];
 			outputTexture[xCnt*4 + 0 + (RASTER_CNT*WIDTH)]=borderCol;
 			outputTexture[xCnt*4 + 1 + (RASTER_CNT*WIDTH)]=borderCol;
 			outputTexture[xCnt*4 + 2 + (RASTER_CNT*WIDTH)]=borderCol;
@@ -1185,7 +1185,7 @@ void Tick6561()
 
 			uint8_t byte = GetByte((chaddr+index));
 			
-			if (rcol&0x80)
+			if (rcol&0x08)
 			{
 				uint8_t sMask = 0xC0;
 				if (x&1)
@@ -1202,15 +1202,15 @@ void Tick6561()
 						case 0x10:
 						case 0x04:
 						case 0x01:
-							outputTexture[xCnt*4 + (xx*2)+0 + (RASTER_CNT*WIDTH)]=col;
-							outputTexture[xCnt*4 + (xx*2)+1 + (RASTER_CNT*WIDTH)]=col;
+							outputTexture[xCnt*4 + (xx*2)+0 + (RASTER_CNT*WIDTH)]=borderCol;
+							outputTexture[xCnt*4 + (xx*2)+1 + (RASTER_CNT*WIDTH)]=borderCol;
 							break;
 						case 0x80:
 						case 0x20:
 						case 0x08:
 						case 0x02:
-							outputTexture[xCnt*4 + (xx*2)+0 + (RASTER_CNT*WIDTH)]=borderCol;
-							outputTexture[xCnt*4 + (xx*2)+1 + (RASTER_CNT*WIDTH)]=borderCol;
+							outputTexture[xCnt*4 + (xx*2)+0 + (RASTER_CNT*WIDTH)]=col;
+							outputTexture[xCnt*4 + (xx*2)+1 + (RASTER_CNT*WIDTH)]=col;
 							break;
 						default:
 							outputTexture[xCnt*4 + (xx*2)+0 + (RASTER_CNT*WIDTH)]=auxcol;
