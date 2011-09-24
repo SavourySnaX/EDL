@@ -83,13 +83,14 @@ int InitialiseMemory()
 	if (LoadRom(DA0,0x2002,"roms/Donkey Kong-A000.prg"))
 		return 1;
 #else
-	if (LoadRom(D60,0x2002,"roms/Lode Runner.60"))
-		return 1;
-	if (LoadRom(DA0,0x2002,"roms/Lode Runner.a0"))
-		return 1;
+//	if (LoadRom(D60,0x2002,"roms/Lode Runner.60"))
+//		return 1;
+//	if (LoadRom(DA0,0x2002,"roms/Lode Runner.a0"))
+//		return 1;
 
 //	if (LoadRom(DA0,0x2002,"roms/Cosmic Cruncher (1982)(Commodore).a0"))
 //		return 1;
+
 //	if (LoadRom(DA0,0x2002,"roms/Omega Race (1982)(Commodore).a0"))
 //		return 1;
 //	if (LoadRom(DA0,0x2002,"roms/Arcadia (19xx)(-).a0"))
@@ -159,7 +160,7 @@ uint8_t GetByte(uint16_t addr)
 			return VIAGetByte(((addr-0x10)>>4)&1,addr&0x0F);
 		}
 		// Various expansions
-//		printf("Attempt to acccess : %04X\n",addr);
+		printf("Attempt to acccess : %04X\n",addr);
 		return 0xFF;
 	}
 	if (addr<0x9800)
