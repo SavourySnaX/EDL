@@ -931,6 +931,15 @@ void VIATick(int chipNo)
 //		printf("T2 Counter Underflow On VIA %d\n",chipNo);
 	}
 
+	if (chipNo==0)
+	{
+		uint8_t joyVal=0xFF;
+		joyVal&=KeyDown(GLFW_KEY_KP_8)?0xFB:0xFF;
+		joyVal&=KeyDown(GLFW_KEY_KP_2)?0xF7:0xFF;
+		joyVal&=KeyDown(GLFW_KEY_KP_4)?0xEF:0xFF;
+		joyVal&=KeyDown(GLFW_KEY_KP_0)?0xDF:0xFF;
+		via[chipNo].IRA=joyVal;
+	}
 	if (chipNo==1)
 	{
 		// TODO : some keys require that shift is held down - F2,F4,CURSOR LEFT etc
@@ -944,7 +953,10 @@ void VIATick(int chipNo)
 		keyVal&=CheckKeys(0x40,'Q','E','T','U','O','[','/',GLFW_KEY_F5);
 		keyVal&=CheckKeys(0x80,'2','4','6','8','0','\\',GLFW_KEY_HOME,GLFW_KEY_F7);
 		via[chipNo].IRA=keyVal;
-
+		
+		uint8_t joyVal=0xFF;
+		joyVal&=KeyDown(GLFW_KEY_KP_6)?0x7F:0xFF;
+		via[chipNo].IRB=joyVal;
 	}
 
 	via[chipNo].IFR&=0x7F;
@@ -973,6 +985,7 @@ uint16_t RASTER_CNT=0;
 
 uint8_t GetByte6561(int regNo)
 {
+//	printf("R 6561 %02X\n",regNo);
 	switch(regNo)
 	{
 		case 0:
