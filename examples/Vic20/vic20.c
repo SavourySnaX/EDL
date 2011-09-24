@@ -12,10 +12,18 @@
 #include <GL/glfw3.h>
 #include <GL/glext.h>
 
+#include <al.h>
+#include <alc.h>
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
+
+void AudioKill();
+void AudioInitialise();
+void UpdateAudio();
+void _AudioAddData(int channel,int16_t dacValue);
 
 uint16_t PinGetPIN_AB();
 uint8_t PinGetPIN_DB();
@@ -588,6 +596,7 @@ int main(int argc,char**argv)
 
 	atStart=glfwGetTime();
 	//////////////////
+	AudioInitialise();
 
 	if (InitialiseMemory())
 		return -1;
@@ -628,20 +637,11 @@ int main(int argc,char**argv)
 
 	while (!glfwGetKey(windows[MAIN_WINDOW],GLFW_KEY_ESC))
 	{
-		if (BRom[0xD487-0xC000]!=0xA2)
-			exit(-1);
-
 		PinSetPIN_O0(1);
 		if (PinGetPIN_SYNC())
 		{
 //			if (PinGetPIN_AB()==bp)
 //				doDebug=1;
-		
-			if ((PinGetPIN_AB()&0xE000)==0x2000)
-			{
-//				exit(1);
-//				doDebug=1;
-			}
 
 			if (doDebug)
 			{
@@ -672,61 +672,9 @@ int main(int argc,char**argv)
 
 		pixelClock++;
 
-#if 0
-		if (!stopTheClock)
+		if (pixelClock>=22152/* || stopTheClock*/)
 		{
-			masterClock++;
-			if ((masterClock%4)==0)
-				pixelClock++;
-
-			if ((masterClock%10)==0)
-			{
-								// I8080 emulation works off positive edge trigger. So we need to supply the same sort of
-								// clock.
-				PIN_BUFFER_O2=0;
-				PIN_BUFFER_O1=1;
-				PinSetO1(1);		// Execute a cpu step
-				if (bTimingEnabled)
-					RecordPins();
-				PIN_BUFFER_O1=0;
-				PinSetO1(0);
-				if (bTimingEnabled)
-					RecordPins();
-				PIN_BUFFER_O2=1;
-				PinSetO2(1);
-				if (bTimingEnabled)
-					RecordPins();
-				PIN_BUFFER_O2=0;
-				PinSetO2(0);
-
-				if (!MEM_Handler())
-				{
-					stopTheClock=1;
-				}
-				if (bTimingEnabled)
-					RecordPins();
-
-				PinSetINT(0);		// clear interrupt state
-				PIN_BUFFER_INT=0;
-				cpuClock++;
-			}
-			if (pixelClock==30432+10161)		// Based on 19968000 Mhz master clock + mame notes
-			{
-				NEXTINT=0xCF;
-				PinSetINT(1);
-				PIN_BUFFER_INT=1;
-			}
-			if (pixelClock==71008+10161)
-			{
-				NEXTINT=0xD7;
-				PinSetINT(1);
-				PIN_BUFFER_INT=1;
-			}
-		}
-#endif
-		if (pixelClock>=22776/* || stopTheClock*/)
-		{
-			pixelClock-=22776;
+			pixelClock-=22152;
 
             		glfwMakeContextCurrent(windows[MAIN_WINDOW]);
 			ShowScreen(MAIN_WINDOW,WIDTH,HEIGHT);
@@ -750,6 +698,8 @@ int main(int argc,char**argv)
 		}
 	}
 	
+	AudioKill();
+
 	return 0;
 
 }
@@ -1058,10 +1008,15 @@ uint8_t GetByte6561(int regNo)
 			return CTRL_16;
 	}
 }
+uint16_t	channel1Cnt=0;
+uint16_t	channel2Cnt=0;
+uint16_t	channel3Cnt=0;
+uint16_t	channel4Cnt=0;
+uint16_t	noiseShift=1;
 
 void SetByte6561(int regNo,uint8_t byte)
 {
-	printf("W 6561 %02X,%02X\n",regNo,byte);
+//	printf("W 6561 %02X,%02X\n",regNo,byte);
 	switch(regNo)
 	{
 		case 0:
@@ -1091,15 +1046,19 @@ void SetByte6561(int regNo,uint8_t byte)
 			break;
 		case 10:
 			CTRL_11=byte;
+			channel1Cnt=(255-byte)<<8;
 			break;
 		case 11:
 			CTRL_12=byte;
+			channel2Cnt=(255-byte)<<7;
 			break;
 		case 12:
 			CTRL_13=byte;
+			channel3Cnt=(255-byte)<<6;
 			break;
 		case 13:
 			CTRL_14=byte;
+			channel4Cnt=(255-byte)<<5;
 			break;
 		case 14:
 			CTRL_15=byte;
@@ -1111,6 +1070,11 @@ void SetByte6561(int regNo,uint8_t byte)
 }
 
 uint8_t xCnt=0;
+
+int16_t	channel1Level=0;
+int16_t channel2Level=0;
+int16_t	channel3Level=0;
+int16_t channel4Level=0;
 
 void Tick6561()
 {
@@ -1198,10 +1162,6 @@ void Tick6561()
 
 			uint32_t rcol= GetByte(caddr+screenAddress);
 			uint32_t col;
-//			col=3;
-//			if (col&0x80)
-//				printf("MULTICOLOR\n");
-//			printf("%d:%d\n",x,y);
 			col=cTable[rcol&7];
 			index=GetByte(addr+screenAddress);
 			index<<=3+doubleHeight;
@@ -1278,43 +1238,229 @@ void Tick6561()
 		CTRL_4&=0x7F;
 		CTRL_4|=(RASTER_CNT&0x01)<<7;
 	}
-}
 
-/*
-	if (windowNum==MAIN_WINDOW)
+	if (CTRL_11&0x80)
 	{
-		int x,y,xx,yy;
-		printf("addr : %04X\n",chaddr);
-
-		for (y=0;y<23;y++)
+		channel1Cnt--;
+		if (channel1Cnt==0xFFFF)
 		{
-			for (x=0;x<22;x++)
-			{
-				uint16_t index;
-				uint32_t col = GetByte(caddr+x+y*22);
-				if (col&0x80)
-					printf("MULTICOLOR\n");
-				col=cTable[col&7];
-				index=GetByte(addr+x+y*22);
-				index<<=3;
-
-				for (yy=0;yy<8;yy++)
-				{
-					uint8_t byte = GetByte((chaddr+index));
-					index++;
-					for (xx=7;xx>=0;xx--)
-					{
-						if (byte&(1<<xx))
-						{
-							outputTexture[(x*8+(7-xx)+(y*8+yy)*WIDTH)]=col;
-						}
-						else
-						{
-							outputTexture[(x*8+(7-xx)+(y*8+yy)*WIDTH)]=paper;
-						}
-					}
-				}
-			}
+			channel1Cnt=(255-CTRL_11)<<8;
+			channel1Level^=1;
 		}
 	}
-*/
+	else
+	{
+		channel1Cnt=0;
+	}
+	if (CTRL_12&0x80)
+	{
+		channel2Cnt--;
+		if (channel2Cnt==0xFFFF)
+		{
+			channel2Cnt=(255-CTRL_12)<<7;
+			channel2Level^=1;
+		}
+	}
+	else
+	{
+		channel2Cnt=0;
+	}
+	if (CTRL_13&0x80)
+	{
+		channel3Cnt--;
+		if (channel3Cnt==0xFFFF)//(channel3Cnt/*>>6*/)>=CTRL_13&0x7F)
+		{
+			channel3Cnt=(255-CTRL_13)<<6;
+			channel3Level^=1;
+		}
+	}
+	else
+	{
+		channel3Cnt=0;
+	}
+	if (CTRL_14&0x80)
+	{
+		channel4Cnt--;
+		if (channel4Cnt==0xFFFF)//(channel3Cnt/*>>6*/)>=CTRL_13&0x7F)
+		{
+			uint16_t newBit;
+			channel4Cnt=(255-CTRL_14)<<5;
+			channel4Level^=noiseShift&1;
+			newBit=((noiseShift&0x80)>>7) ^ (noiseShift&1);
+			noiseShift>>=1;
+			noiseShift|=newBit<<15;
+			printf("%04X\n",noiseShift);
+		}
+	}
+	else
+	{
+		channel4Cnt=0;
+	}
+
+	_AudioAddData(0,channel1Level*256*(CTRL_15&0x0F));
+	_AudioAddData(1,channel2Level*256*(CTRL_15&0x0F));
+	_AudioAddData(2,channel3Level*256*(CTRL_15&0x0F));
+	_AudioAddData(3,channel4Level*256*(CTRL_15&0x0F));
+
+	UpdateAudio();
+
+}
+
+//////////////////////// NOISES //////////////////////////
+
+#define NUMBUFFERS            (3)				/* living dangerously*/
+
+ALuint		  uiBuffers[NUMBUFFERS];
+ALuint		  uiSource;
+
+ALboolean ALFWInitOpenAL()
+{
+	ALCcontext *pContext = NULL;
+	ALCdevice *pDevice = NULL;
+	ALboolean bReturn = AL_FALSE;
+	
+	pDevice = alcOpenDevice(NULL);				/* Request default device*/
+	if (pDevice)
+	{
+		pContext = alcCreateContext(pDevice, NULL);
+		if (pContext)
+		{
+			printf("\nOpened %s Device\n", alcGetString(pDevice, ALC_DEVICE_SPECIFIER));
+			alcMakeContextCurrent(pContext);
+			bReturn = AL_TRUE;
+		}
+		else
+		{
+			alcCloseDevice(pDevice);
+		}
+	}
+
+	return bReturn;
+}
+
+ALboolean ALFWShutdownOpenAL()
+{
+	ALCcontext *pContext;
+	ALCdevice *pDevice;
+
+	pContext = alcGetCurrentContext();
+	pDevice = alcGetContextsDevice(pContext);
+	
+	alcMakeContextCurrent(NULL);
+	alcDestroyContext(pContext);
+	alcCloseDevice(pDevice);
+
+	return AL_TRUE;
+}
+
+#if 0/*USE_8BIT_OUTPUT*/
+
+#define AL_FORMAT						(AL_FORMAT_MONO8)
+#define BUFFER_FORMAT				U8
+#define BUFFER_FORMAT_SIZE	(1)
+#define BUFFER_FORMAT_SHIFT	(8)
+
+#else
+
+#define AL_FORMAT						(AL_FORMAT_MONO16)
+#define BUFFER_FORMAT				int16_t
+#define BUFFER_FORMAT_SIZE	(2)
+#define BUFFER_FORMAT_SHIFT	(0)
+
+#endif
+
+int curPlayBuffer=0;
+
+#define BUFFER_LEN		(44100/50)
+
+BUFFER_FORMAT audioBuffer[BUFFER_LEN];
+int amountAdded=0;
+
+void AudioInitialise()
+{
+	int a=0;
+	for (a=0;a<BUFFER_LEN;a++)
+	{
+		audioBuffer[a]=0;
+	}
+
+	ALFWInitOpenAL();
+
+  /* Generate some AL Buffers for streaming */
+	alGenBuffers( NUMBUFFERS, uiBuffers );
+
+	/* Generate a Source to playback the Buffers */
+  alGenSources( 1, &uiSource );
+
+	for (a=0;a<NUMBUFFERS;a++)
+	{
+		alBufferData(uiBuffers[a], AL_FORMAT, audioBuffer, BUFFER_LEN*BUFFER_FORMAT_SIZE, 44100);
+		alSourceQueueBuffers(uiSource, 1, &uiBuffers[a]);
+	}
+
+	alSourcePlay(uiSource);
+}
+
+
+void AudioKill()
+{
+	ALFWShutdownOpenAL();
+}
+
+int16_t currentDAC[4] = {0,0,0,0};
+
+void _AudioAddData(int channel,int16_t dacValue)
+{
+	currentDAC[channel]=dacValue;
+}
+
+uint32_t tickCnt=0;
+uint32_t tickRate=((22152*4096)/(44100/50));
+
+/* audio ticked at same clock as everything else... so need a step down */
+void UpdateAudio()
+{
+	tickCnt+=1*4096;
+	
+	if (tickCnt>=tickRate*50)
+	{
+		tickCnt-=tickRate;
+
+		if (amountAdded!=BUFFER_LEN)
+		{
+			int32_t res=0;
+			res+=currentDAC[0];
+			res+=currentDAC[1];
+			res+=currentDAC[2];
+			res+=currentDAC[3];
+
+			audioBuffer[amountAdded]=res>>BUFFER_FORMAT_SHIFT;
+			amountAdded++;
+		}
+	}
+
+	if (amountAdded==BUFFER_LEN)
+	{
+		/* 1 second has passed by */
+
+		ALint processed;
+		ALint state;
+		alGetSourcei(uiSource, AL_SOURCE_STATE, &state);
+		alGetSourcei(uiSource, AL_BUFFERS_PROCESSED, &processed);
+		if (processed>0)
+		{
+			ALuint buffer;
+
+			amountAdded=0;
+			alSourceUnqueueBuffers(uiSource,1, &buffer);
+			alBufferData(buffer, AL_FORMAT, audioBuffer, BUFFER_LEN*BUFFER_FORMAT_SIZE, 44100);
+			alSourceQueueBuffers(uiSource, 1, &buffer);
+		}
+
+		if (state!=AL_PLAYING)
+		{
+			alSourcePlay(uiSource);
+		}
+	}
+}
+
