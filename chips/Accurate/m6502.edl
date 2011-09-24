@@ -6,9 +6,6 @@
 #  At present the O1&O2 clocks are not connected to output  & O0 is always used to clock the chip directly
 #  RDY is ignored
 #
-#  TODO: obey decimal flag!!!
-
-# PINS - Most are labelled with PIN_ to avoid clashes, only the pins tied to handlers have had the PIN_ removed at present 
 
 PIN IN			PIN_RDY[1];			# ReaDY signal for external devices
 PIN OUT			PIN_O1[1];			# O1 Phase Clock Output
@@ -504,15 +501,83 @@ MAPPING addressing01[3]
 	%111	"%$2%$1,X"	CALL AbsoluteIndexed(0,X);
 }
 
+FUNCTION INTERNAL	res[8]	ADC	src1[8],src2[8]
+{
+	DECLARE ALUTmp[8] ALIAS ALUH[4]:ALUL[4];
+	DECLARE s1[8] ALIAS s1H[4]:s1L[4];
+	DECLARE s2[8] ALIAS s2H[4]:s2L[4];
+	DECLARE hc[1];
+
+	s1<-src1;
+	s2<-src2;
+
+	AFFECT hc AS CARRY(3) {(s1L + s2L) + c}->ALUL;
+
+	IF d
+	{	
+		IF (ALUL>9)
+		{
+			hc<-1;
+		}
+	}
+
+	AFFECT n AS SIGN,v AS OVERFLOW(s1H,s2H,3), c AS CARRY(3) {(s1H + s2H) + hc}->ALUH;
+	AFFECT z AS ZERO { ALUTmp };
+
+	IF d
+	{
+		IF hc
+		{
+			ALUL+6->ALUL;
+		}
+		IF c | (ALUH>9)
+		{
+			ALUH+6->ALUH;
+			c<-1;
+		}
+	}
+
+	ALUTmp->res;
+}
+
+FUNCTION INTERNAL	res[8]	SBC	src1[8],src2[8]
+{
+	DECLARE ALUTmp[8] ALIAS ALUH[4]:ALUL[4];
+	DECLARE s1[8] ALIAS s1H[4]:s1L[4];
+	DECLARE s2[8] ALIAS s2H[4]:s2L[4];
+	DECLARE hc[1];
+
+	s1<-src1;
+	s2<-src2;
+
+	AFFECT hc AS NOCARRY(3) {(s1L - s2L) - (~c)}->ALUL;
+	AFFECT n AS SIGN,v AS OVERFLOW(s1H,s2H,3), c AS NOCARRY(3) {(s1H - s2H) - (~hc)}->ALUH;
+	AFFECT z AS ZERO { ALUTmp };
+
+	IF d
+	{
+		IF ~hc
+		{
+			ALUL-6->ALUL;
+		}
+		IF ~c
+		{
+			ALUH-6->ALUH;
+		}
+	}
+
+	ALUTmp->res;
+}
+
 MAPPING operation01[3]
 {
 	%000	"ORA"	AFFECT z AS ZERO, n AS SIGN { A | TMP }->A;
 	%001	"AND"	AFFECT z AS ZERO, n AS SIGN { A & TMP }->A;
 	%010	"EOR"	AFFECT z AS ZERO, n AS SIGN { A ^ TMP }->A;
-	%011	"ADC"	AFFECT z AS ZERO, n AS SIGN, v AS OVERFLOW(A,TMP,7),c AS CARRY(7) { (A + TMP) + c }->A;
+	%011	"ADC"	CALL ADC(A,TMP)->A;
 	%101	"LDA"	AFFECT z AS ZERO, n AS SIGN { TMP }->A;
 	%110	"CMP"	AFFECT z AS ZERO, n AS SIGN, c AS NOCARRY(7) { A - TMP};
-	%111	"SBC"	AFFECT z AS ZERO, n AS SIGN, v AS OVERFLOW(A,TMP,7),c AS CARRY(7) { A + ((~TMP) + c) }->A;
+	%111	"SBC"	CALL SBC(A,TMP)->A;
 }
 
 
