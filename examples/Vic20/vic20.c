@@ -739,7 +739,6 @@ int main(int argc,char**argv)
 
 uint8_t VIAGetByte(int chipNo,int regNo)
 {
-//	printf("R VIA%d %02X\n",chipNo+1,regNo);
 	switch (regNo)
 	{
 		case 0:			//IRB
@@ -1303,7 +1302,6 @@ void Tick6561()
 			newBit=((noiseShift&0x80)>>7) ^ (noiseShift&1);
 			noiseShift>>=1;
 			noiseShift|=newBit<<15;
-			printf("%04X\n",noiseShift);
 		}
 	}
 	else
