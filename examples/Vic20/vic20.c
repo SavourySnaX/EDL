@@ -1223,17 +1223,19 @@ void Tick6561()
 			else
 			{
 				uint8_t sMask = 0x80;
+				if (CTRL_16&0x08)
+					byte^=0xFF;
 				if (x&1)
 					sMask=0x08;
 				for (xx=0;xx<4;xx++)
 				{
 					if (byte&sMask)
 					{
-						outputTexture[xCnt*4 + xx + (RASTER_CNT*WIDTH)]=col;
+						outputTexture[xCnt*4 + xx + (RASTER_CNT*WIDTH)]=paper;
 					}
 					else
 					{
-						outputTexture[xCnt*4 + xx + (RASTER_CNT*WIDTH)]=paper;
+						outputTexture[xCnt*4 + xx + (RASTER_CNT*WIDTH)]=col;
 					}
 					sMask>>=1;
 				}
