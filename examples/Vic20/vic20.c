@@ -37,6 +37,7 @@ void PinSetPIN__RES(uint8_t);
 // Step 1. Memory
 
 unsigned char D20[0x2002];
+unsigned char D40[0x2002];
 unsigned char D60[0x2002];
 unsigned char DA0[0x2002];
 
@@ -50,9 +51,14 @@ unsigned char RamHi[0xE00];
 unsigned char CRam[0x400];
 unsigned char SRam[0x200];
 
-#define USE_CART_A0		1
-#define USE_CART_60		1
+#define USE_CART_A0		0
+#define USE_CART_60		0
+#define USE_CART_40		0
 #define USE_CART_20		0
+#define ALLOW_WRITE_A0		0
+#define ALLOW_WRITE_60		0
+#define ALLOW_WRITE_40		0
+#define ALLOW_WRITE_20		0
 
 int playDown=0;
 int recDown=0;
@@ -91,9 +97,10 @@ int InitialiseMemory()
 //	if (LoadRom(DA0,0x2002,"roms/Lode Runner.a0"))
 //		return 1;
 
+//	if (LoadRom(DA0,0x2002,"roms/solarsystem.a0"))
+//		return 1;
 //	if (LoadRom(DA0,0x2002,"roms/Cosmic Cruncher (1982)(Commodore).a0"))
 //		return 1;
-
 //	if (LoadRom(DA0,0x2002,"roms/Omega Race (1982)(Commodore).a0"))
 //		return 1;
 //	if (LoadRom(DA0,0x2002,"roms/Arcadia (19xx)(-).a0"))
@@ -138,6 +145,11 @@ uint8_t GetByte(uint16_t addr)
 	}
 	if (addr<0x6000)
 	{
+#if USE_CART_20
+		return D40[2+(addr-0x4000)];
+#else
+		return 0xFF;
+#endif
 		return 0xFF;
 	}
 	if (addr<0x8000)
@@ -210,8 +222,25 @@ void SetByte(uint16_t addr,uint8_t byte)
 		SRam[addr-0x1E00]=byte;
 		return;
 	}
+	if (addr<0x4000)
+	{
+#if ALLOW_WRITE_20
+		D20[2+(addr-0x2000)]=byte;
+#endif
+		return;
+	}
+	if (addr<0x6000)
+	{
+#if ALLOW_WRITE_40
+		D40[2+(addr-0x4000)]=byte;
+#endif
+		return;
+	}
 	if (addr<0x8000)
 	{
+#if ALLOW_WRITE_60
+		D60[2+(addr-0x6000)]=byte;
+#endif
 		return;
 	}
 	if (addr<0x9000)
@@ -239,8 +268,15 @@ void SetByte(uint16_t addr,uint8_t byte)
 		CRam[addr-0x9400]=byte&0x0F;
 		return;
 	}
+	if (addr<0xA000)
+	{
+		return;
+	}
 	if (addr<0xC000)
 	{
+#if ALLOW_WRITE_A0
+		DA0[2+(addr-0xA000)]=byte;
+#endif
 		return;
 	}
 	if (addr<0xE000)
