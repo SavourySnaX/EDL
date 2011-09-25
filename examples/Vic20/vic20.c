@@ -726,6 +726,8 @@ int main(int argc,char**argv)
 
 		if (pixelClock>=22152/* || stopTheClock*/)
 		{
+			static int normalSpeed=1;
+
 			pixelClock-=22152;
 
             		glfwMakeContextCurrent(windows[MAIN_WINDOW]);
@@ -734,13 +736,19 @@ int main(int argc,char**argv)
 				
 			glfwPollEvents();
 			
+			if (CheckKey(GLFW_KEY_INSERT))
+			{
+				ClearKey(GLFW_KEY_INSERT);
+				normalSpeed^=1;
+			}
+
 			g_traceStep=0;
 			
 			now=glfwGetTime();
 
 			remain = now-atStart;
 
-			while ((remain<0.02f))
+			while ((remain<0.02f) && normalSpeed)
 			{
 				now=glfwGetTime();
 
