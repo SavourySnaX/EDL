@@ -1616,10 +1616,12 @@ void UpdateAudio()
 		if (amountAdded!=BUFFER_LEN)
 		{
 			int32_t res=0;
+
 			res+=currentDAC[0];
 			res+=currentDAC[1];
 			res+=currentDAC[2];
 			res+=currentDAC[3];
+			res+=casLevel?1024:-1024;
 
 			audioBuffer[amountAdded]=res>>BUFFER_FORMAT_SHIFT;
 			amountAdded++;
