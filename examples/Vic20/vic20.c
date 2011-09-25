@@ -54,6 +54,9 @@ unsigned char SRam[0x200];
 #define USE_CART_60		1
 #define USE_CART_20		0
 
+int playDown=0;
+int recDown=0;
+
 int LoadRom(unsigned char* rom,unsigned int size,const char* fname)
 {
 	unsigned int readFileSize=0;
@@ -267,6 +270,10 @@ extern uint8_t	P;
 
 struct via6522
 {
+	uint8_t CA1;
+	uint8_t CA2;
+	uint8_t CB1;
+	uint8_t CB2;
 	uint8_t	ORB;
 	uint8_t IRB;
 	uint8_t ORA;
@@ -571,6 +578,8 @@ void kbHandler( GLFWwindow window, int key, int action )		/* At present ignores 
 
 static int doDebug=0;
 
+void LoadTAP(const char* fileName);
+
 int main(int argc,char**argv)
 {
 	double	atStart,now,remain;
@@ -602,6 +611,12 @@ int main(int argc,char**argv)
 	if (InitialiseMemory())
 		return -1;
 	
+	
+	if (argc==2)
+	{
+		LoadTAP(argv[1]);
+	}
+
 #if 0
 	PinSetRESET(1);
 	PIN_BUFFER_RESET=1;
@@ -739,6 +754,7 @@ int main(int argc,char**argv)
 
 uint8_t VIAGetByte(int chipNo,int regNo)
 {
+//	printf("R VIA%d %02X\n",chipNo+1,regNo);
 	switch (regNo)
 	{
 		case 0:			//IRB
@@ -797,9 +813,13 @@ void VIASetByte(int chipNo,int regNo,uint8_t byte)
 			via[chipNo].ORA=byte&via[chipNo].DDRA;
 			break;
 		case 2:
+//			if (via[chipNo].DDRB!=byte)
+//				printf("W VIA%d %02X,%02X\n",chipNo+1,regNo,byte);
 			via[chipNo].DDRB=byte;
 			break;
 		case 3:
+//			if (via[chipNo].DDRA!=byte)
+//				printf("W VIA%d %02X,%02X\n",chipNo+1,regNo,byte);
 			via[chipNo].DDRA=byte;
 			break;
 		case 4:
@@ -832,9 +852,13 @@ void VIASetByte(int chipNo,int regNo,uint8_t byte)
 			via[chipNo].SR=byte;
 			break;
 		case 11:
+//			if (via[chipNo].ACR!=byte)
+//				printf("W VIA%d %02X,%02X\n",chipNo+1,regNo,byte);
 			via[chipNo].ACR=byte;
 			break;
 		case 12:
+//			if (via[chipNo].PCR!=byte)
+//				printf("W VIA%d %02X,%02X\n",chipNo+1,regNo,byte);
 			via[chipNo].PCR=byte;
 			break;
 		case 13:
@@ -903,6 +927,14 @@ uint8_t CheckKeys(uint8_t scan,int key0,int key1,int key2,int key3,int key4,int 
 	return keyVal;
 }
 
+int casLevel=0;
+uint32_t casCount;
+
+#define INTERNAL_TAPE_BUFFER_SIZE		(1024*1024*10)
+
+uint32_t cntBuffer[INTERNAL_TAPE_BUFFER_SIZE];
+uint32_t cntPos=0;
+
 void VIATick(int chipNo)
 {
 	via[chipNo].IRA=0x00;
@@ -930,6 +962,46 @@ void VIATick(int chipNo)
 //		printf("T2 Counter Underflow On VIA %d\n",chipNo);
 	}
 
+	switch (via[chipNo].PCR&0x0E)
+	{
+		case 0x0:
+			//Input Mode - 
+			via[chipNo].CA2=0;
+			break;
+		case 0x2:
+		case 0x4:
+		case 0x6:
+		case 0x8:
+		case 0xA:
+			printf("Warning Unsupported PCR CA2 mode (%d)%d\n",chipNo+1,(via[chipNo].PCR&0xE)>>1);
+			break;
+		case 0xC:
+			via[chipNo].CA2=0x0;
+			break;
+		case 0xE:
+			via[chipNo].CA2=0x1;
+			break;
+	}
+	switch (via[chipNo].PCR&0xE0)
+	{
+		case 0x00:
+			//Input Mode -
+			break;
+		case 0x20:
+		case 0x40:
+		case 0x60:
+		case 0x80:
+		case 0xA0:
+			printf("Warning Unsupported PCR CB2 mode (%d)%d\n",chipNo+1,(via[chipNo].PCR&0xE)>>1);
+			break;
+		case 0xC0:
+			via[chipNo].CB2=0x0;
+			break;
+		case 0xE0:
+			via[chipNo].CB2=0x1;
+			break;
+	}
+
 	if (chipNo==0)
 	{
 		uint8_t joyVal=0xFF;
@@ -938,6 +1010,42 @@ void VIATick(int chipNo)
 		joyVal&=KeyDown(GLFW_KEY_KP_4)?0xEF:0xFF;
 		joyVal&=KeyDown(GLFW_KEY_KP_0)?0xDF:0xFF;
 		via[chipNo].IRA=joyVal;
+
+#if 0
+		if (CheckKey(GLFW_KEY_PAGEUP))
+		{
+			playDown=1;
+			recDown=playDown;
+			ClearKey(GLFW_KEY_PAGEUP);
+			cntPos=0;
+			casCount=0;
+			casLevel=0;		
+		}
+#endif
+		if (CheckKey(GLFW_KEY_PAGEDOWN))
+		{
+			playDown=1;
+			recDown=0;
+			ClearKey(GLFW_KEY_PAGEDOWN);
+			cntPos=0;
+			casCount=0;
+			casLevel=0;		
+		}
+		if (CheckKey(GLFW_KEY_END))
+		{
+			playDown=0;
+			recDown=0;
+			ClearKey(GLFW_KEY_END);
+			cntPos=0;
+			casCount=0;
+			casLevel=0;		
+		}
+
+		// Cassette deck
+		if (playDown)
+		{
+			via[chipNo].IRA&=0xBF;
+		}
 	}
 	if (chipNo==1)
 	{
@@ -956,6 +1064,35 @@ void VIATick(int chipNo)
 		uint8_t joyVal=0xFF;
 		joyVal&=KeyDown(GLFW_KEY_KP_6)?0x7F:0xFF;
 		via[chipNo].IRB=joyVal;
+		
+		if (playDown && recDown && (!via[0].CA2)) // SAVING
+		{
+			casCount++;
+			if ((via[chipNo].ORB&0x08)!=casLevel)
+			{
+				cntBuffer[cntPos++]=casCount;
+				casCount=0;
+				casLevel=(via[chipNo].ORB&0x08);
+			}
+		}
+		if (playDown && (!recDown) && (!via[0].CA2)) // LOADING
+		{
+			casCount++;
+			if (casCount>=cntBuffer[cntPos])
+			{
+				if (casLevel==0 && (via[chipNo].PCR&0x01))
+				{
+					via[chipNo].IFR|=0x02;
+				}
+				if (casLevel==1 && ((via[chipNo].PCR&0x01)==0))
+				{
+					via[chipNo].IFR|=0x02;
+				}
+				casLevel^=1;
+				cntPos++;
+				casCount=0;
+			}
+		}
 	}
 
 	via[chipNo].IFR&=0x7F;
@@ -1478,3 +1615,106 @@ void UpdateAudio()
 	}
 }
 
+
+///// TAP SUPPORT //////
+
+unsigned char *qLoad(const char *romName,uint32_t *length)
+{
+	FILE *inRom;
+	unsigned char *romData;
+	*length=0;
+
+	inRom = fopen(romName,"rb");
+	if (!inRom)
+	{
+		return 0;
+	}
+	fseek(inRom,0,SEEK_END);
+	*length = ftell(inRom);
+
+	fseek(inRom,0,SEEK_SET);
+	romData = (unsigned char *)malloc(*length);
+	if (romData)
+	{
+		if ( *length != fread(romData,1,*length,inRom))
+		{
+			free(romData);
+			*length=0;
+			romData=0;
+		}
+	}
+	fclose(inRom);
+
+	return romData;
+}
+
+void LoadTAP(const char* fileName)
+{
+	uint32_t tapeLength;
+	uint32_t length;
+	uint32_t tapePos;
+	uint8_t *tapeBuffer;
+
+	tapeBuffer=qLoad(fileName,&length);
+	if (tapeBuffer==NULL)
+	{
+		printf("Failed to load %s\n",fileName);
+		return;
+	}
+
+	if (strncmp(tapeBuffer,"C64-TAPE-RAW",12)!=0)
+	{
+		printf("Not a RAW TAP file\n");
+		return;
+	}
+
+	if (tapeBuffer[12]!=1)
+	{
+		printf("Version Mismatch\n");
+		return;
+	}
+
+	tapeLength=tapeBuffer[16];
+	tapeLength|=tapeBuffer[17]<<8;
+	tapeLength|=tapeBuffer[18]<<16;
+	tapeLength|=tapeBuffer[19]<<24;
+	
+	if (tapeLength!=length-0x14)
+	{
+		printf("Tape Length Mismatch\n");
+		return;
+	}
+
+	tapePos=0;
+	cntPos=0;
+	while (tapePos<tapeLength)
+	{
+		if (tapeBuffer[0x14+tapePos]==0)
+		{
+			cntBuffer[cntPos]=tapeBuffer[0x14+tapePos+1];
+			cntBuffer[cntPos]|=tapeBuffer[0x14+tapePos+2]<<8;
+			cntBuffer[cntPos]|=tapeBuffer[0x14+tapePos+3]<<16;
+			cntBuffer[cntPos]>>=1;
+			cntPos++;
+			cntBuffer[cntPos]=cntBuffer[cntPos-1];
+			printf("Pulse Length : %d\n",cntBuffer[cntPos]);
+			tapePos+=4;
+		}
+		else
+		{
+			cntBuffer[cntPos]=tapeBuffer[0x14+tapePos]*4;
+			cntPos++;
+			cntBuffer[cntPos]=tapeBuffer[0x14+tapePos]*4;
+			tapePos++;
+		}
+
+		cntPos++;
+		if (cntPos>INTERNAL_TAPE_BUFFER_SIZE)
+		{
+			printf("Internal Tape Buffer Overrun\n");
+			return;
+		}
+	}
+
+	cntPos=0;
+}
