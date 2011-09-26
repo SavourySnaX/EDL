@@ -612,12 +612,18 @@ void kbHandler( GLFWwindow window, int key, int action )		/* At present ignores 
 	keyArray[key*3 + 2]|=(keyArray[key*3+0]==GLFW_RELEASE)&&(keyArray[key*3+1]==GLFW_PRESS);
 }
 
+void sizeHandler(GLFWwindow window,int xs,int ys)
+{
+	glViewport(0, 0, xs, ys);
+}
+
 static int doDebug=0;
 
 void LoadTAP(const char* fileName);
 
 int main(int argc,char**argv)
 {
+	int w,h;
 	double	atStart,now,remain;
 	uint16_t bp;
 
@@ -638,7 +644,11 @@ int main(int argc,char**argv)
 
 	glfwSwapInterval(0);			// Disable VSYNC
 
+	glfwGetWindowSize(windows[MAIN_WINDOW],&w,&h);
+
+	printf("width : %d (%d) , height : %d (%d)\n", w,WIDTH,h,HEIGHT);
 	glfwSetKeyCallback(kbHandler);
+	glfwSetWindowSizeCallback(sizeHandler);
 
 	atStart=glfwGetTime();
 	//////////////////
