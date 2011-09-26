@@ -117,6 +117,8 @@ uint8_t GetByte6561(int regNo);
 void SetByte6561(int regNo,uint8_t byte);
 void Tick6561();
 
+uint8_t lastBus=0xFF;
+
 uint8_t GetByte(uint16_t addr)
 {
 	if (addr<0x0400)
@@ -125,7 +127,7 @@ uint8_t GetByte(uint16_t addr)
 	}
 	if (addr<0x1000)
 	{
-		return 0xFF;
+		return lastBus;
 	}
 	if (addr<0x1E00)
 	{
@@ -140,7 +142,7 @@ uint8_t GetByte(uint16_t addr)
 #if USE_CART_20
 		return D20[2+(addr-0x2000)];
 #else
-		return 0xFF;
+		return lastBus;
 #endif
 	}
 	if (addr<0x6000)
@@ -148,16 +150,15 @@ uint8_t GetByte(uint16_t addr)
 #if USE_CART_20
 		return D40[2+(addr-0x4000)];
 #else
-		return 0xFF;
+		return lastBus;
 #endif
-		return 0xFF;
 	}
 	if (addr<0x8000)
 	{
 #if USE_CART_60
 		return D60[2+(addr-0x6000)];
 #else
-		return 0xFF;
+		return lastBus;
 #endif
 	}
 	if (addr<0x9000)
@@ -176,7 +177,7 @@ uint8_t GetByte(uint16_t addr)
 		}
 		// Various expansions
 		printf("Attempt to acccess : %04X\n",addr);
-		return 0xFF;
+		return lastBus;
 	}
 	if (addr<0x9800)
 	{
@@ -184,14 +185,14 @@ uint8_t GetByte(uint16_t addr)
 	}
 	if (addr<0xA000)
 	{
-		return 0xFF;
+		return lastBus;
 	}
 	if (addr<0xC000)
 	{
 #if USE_CART_A0
 		return DA0[2+(addr-0xA000)];
 #else
-		return 0xFF;
+		return lastBus;
 #endif
 	}
 	if (addr<0xE000)
@@ -732,6 +733,8 @@ int main(int argc,char**argv)
 				printf("Storing : %02X @ %04X\n", PinGetPIN_DB(),PinGetPIN_AB());
 			SetByte(PinGetPIN_AB(),PinGetPIN_DB());
 		}
+
+		lastBus=PinGetPIN_DB();
 
 		PinSetPIN_O0(0);
 
