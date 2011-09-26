@@ -621,6 +621,7 @@ static int doDebug=0;
 
 void LoadTAP(const char* fileName);
 void LoadPRG(const char* fileName,const char* fileName2);
+void SaveTAP(const char* filename);
 
 int main(int argc,char**argv)
 {
@@ -778,6 +779,8 @@ int main(int argc,char**argv)
 			atStart=glfwGetTime();
 		}
 	}
+
+	SaveTAP("test.tap");
 	
 	AudioKill();
 
@@ -1790,6 +1793,83 @@ void LoadTAP(const char* fileName)
 	cntPos=0;
 }
 
+void SaveTAP(const char* filename)
+{
+	uint32_t tapeLength;
+	uint32_t length;
+	uint32_t tapePos;
+	uint8_t *tapeBuffer;
+
+	tapeBuffer=malloc(0x14);//qLoad(fileName,&length);
+	if (tapeBuffer==NULL)
+	{
+		printf("Failed to save %s\n",filename);
+		return;
+	}
+
+	memcpy(tapeBuffer,"C64-TAPE-RAW",12);
+	tapeBuffer[12]=1;
+
+	tapeLength=0;
+	cntPos=0;
+	while (cntPos<cntMax)
+	{
+		length=cntBuffer[cntPos++];
+		length+=cntBuffer[cntPos++];
+		length/=8;
+		if (length>255)
+		{
+			tapeLength+=4;
+		}
+		else
+		{
+			tapeLength+=1;
+		}
+	}
+
+	tapeBuffer[16]=tapeLength&0xFF;
+	tapeBuffer[17]=(tapeLength>>8)&0xFF;
+	tapeBuffer[18]=(tapeLength>>16)&0xFF;
+	tapeBuffer[19]=(tapeLength>>24)&0xFF;
+	
+	//WRITE OUT HEADER
+	FILE *out;
+
+	out = fopen(filename,"wb");
+	if (!out)
+	{
+		return;
+	}
+
+	fwrite(tapeBuffer,1,0x14,out);
+	
+	cntPos=0;
+	while (cntPos<cntMax)
+	{
+		length=cntBuffer[cntPos++];
+		length+=cntBuffer[cntPos++];
+		length/=8;
+		if (length>255)
+		{
+			tapeBuffer[0]=0;
+			tapeBuffer[1]=length&0xFF;
+			tapeBuffer[2]=(length>>8)&0xFF;
+			tapeBuffer[3]=(length>>16)&0xFF;
+			fwrite(tapeBuffer,1,4,out);
+		}
+		else
+		{
+			tapeBuffer[0]=length&0xFF;
+			fwrite(tapeBuffer,1,1,out);
+		}
+	}
+
+	fclose(out);
+
+	cntPos=0;
+
+
+}
 
 uint8_t bytechecksum=0;
 
