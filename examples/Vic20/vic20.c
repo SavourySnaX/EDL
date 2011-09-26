@@ -1317,7 +1317,7 @@ void Tick6561()
 
 	// 4 pixels per clock		71 clocks per line (PAL)		312 lines per frame		vblank 0-27
 
-	if (RASTER_CNT>=28 && xCnt>=10)		// !Blanking area
+	if (RASTER_CNT>=28 && xCnt>=5 && xCnt<=71-5)		// !Blanking area
 	{
 		uint8_t doubleHeight=0;
 
@@ -1337,10 +1337,10 @@ void Tick6561()
 		if ((xCnt<originX) || (xCnt>=(originX+length)) || (RASTER_CNT<originY) || (RASTER_CNT>=(originY+height)))
 		{
 			// Border
-			outputTexture[(xCnt-10)*4 + 0 + ((RASTER_CNT-28)*WIDTH)]=borderCol;
-			outputTexture[(xCnt-10)*4 + 1 + ((RASTER_CNT-28)*WIDTH)]=borderCol;
-			outputTexture[(xCnt-10)*4 + 2 + ((RASTER_CNT-28)*WIDTH)]=borderCol;
-			outputTexture[(xCnt-10)*4 + 3 + ((RASTER_CNT-28)*WIDTH)]=borderCol;
+			outputTexture[(xCnt-5)*4 + 0 + ((RASTER_CNT-28)*WIDTH)]=borderCol;
+			outputTexture[(xCnt-5)*4 + 1 + ((RASTER_CNT-28)*WIDTH)]=borderCol;
+			outputTexture[(xCnt-5)*4 + 2 + ((RASTER_CNT-28)*WIDTH)]=borderCol;
+			outputTexture[(xCnt-5)*4 + 3 + ((RASTER_CNT-28)*WIDTH)]=borderCol;
 		}
 		else
 		{
@@ -1400,26 +1400,26 @@ void Tick6561()
 					switch (byte&sMask)
 					{
 						case 0x00:
-							outputTexture[(xCnt-10)*4 + (xx*2)+0 + ((RASTER_CNT-28)*WIDTH)]=paper;
-							outputTexture[(xCnt-10)*4 + (xx*2)+1 + ((RASTER_CNT-28)*WIDTH)]=paper;
+							outputTexture[(xCnt-5)*4 + (xx*2)+0 + ((RASTER_CNT-28)*WIDTH)]=paper;
+							outputTexture[(xCnt-5)*4 + (xx*2)+1 + ((RASTER_CNT-28)*WIDTH)]=paper;
 							break;
 						case 0x40:
 						case 0x10:
 						case 0x04:
 						case 0x01:
-							outputTexture[(xCnt-10)*4 + (xx*2)+0 + ((RASTER_CNT-28)*WIDTH)]=borderCol;
-							outputTexture[(xCnt-10)*4 + (xx*2)+1 + ((RASTER_CNT-28)*WIDTH)]=borderCol;
+							outputTexture[(xCnt-5)*4 + (xx*2)+0 + ((RASTER_CNT-28)*WIDTH)]=borderCol;
+							outputTexture[(xCnt-5)*4 + (xx*2)+1 + ((RASTER_CNT-28)*WIDTH)]=borderCol;
 							break;
 						case 0x80:
 						case 0x20:
 						case 0x08:
 						case 0x02:
-							outputTexture[(xCnt-10)*4 + (xx*2)+0 + ((RASTER_CNT-28)*WIDTH)]=col;
-							outputTexture[(xCnt-10)*4 + (xx*2)+1 + ((RASTER_CNT-28)*WIDTH)]=col;
+							outputTexture[(xCnt-5)*4 + (xx*2)+0 + ((RASTER_CNT-28)*WIDTH)]=col;
+							outputTexture[(xCnt-5)*4 + (xx*2)+1 + ((RASTER_CNT-28)*WIDTH)]=col;
 							break;
 						default:
-							outputTexture[(xCnt-10)*4 + (xx*2)+0 + ((RASTER_CNT-28)*WIDTH)]=auxcol;
-							outputTexture[(xCnt-10)*4 + (xx*2)+1 + ((RASTER_CNT-28)*WIDTH)]=auxcol;
+							outputTexture[(xCnt-5)*4 + (xx*2)+0 + ((RASTER_CNT-28)*WIDTH)]=auxcol;
+							outputTexture[(xCnt-5)*4 + (xx*2)+1 + ((RASTER_CNT-28)*WIDTH)]=auxcol;
 							break;
 					}
 					sMask>>=2;
@@ -1436,11 +1436,11 @@ void Tick6561()
 				{
 					if (byte&sMask)
 					{
-						outputTexture[(xCnt-10)*4 + xx + ((RASTER_CNT-28)*WIDTH)]=paper;
+						outputTexture[(xCnt-5)*4 + xx + ((RASTER_CNT-28)*WIDTH)]=paper;
 					}
 					else
 					{
-						outputTexture[(xCnt-10)*4 + xx + ((RASTER_CNT-28)*WIDTH)]=col;
+						outputTexture[(xCnt-5)*4 + xx + ((RASTER_CNT-28)*WIDTH)]=col;
 					}
 					sMask>>=1;
 				}
