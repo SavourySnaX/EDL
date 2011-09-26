@@ -707,8 +707,8 @@ int main(int argc,char**argv)
 
 			if (doDebug)
 			{
-				Disassemble(PinGetPIN_AB(),1);
-				getch();
+//				Disassemble(PinGetPIN_AB(),1);
+//				getch();
 			}
 		}
 		if (PinGetPIN_RW())
@@ -750,6 +750,11 @@ int main(int argc,char**argv)
 			{
 				ClearKey(GLFW_KEY_INSERT);
 				normalSpeed^=1;
+			}
+			if (CheckKey(GLFW_KEY_DELETE))
+			{
+				doDebug^=1;
+				ClearKey(GLFW_KEY_DELETE);
 			}
 
 			g_traceStep=0;
@@ -808,7 +813,8 @@ int main(int argc,char**argv)
 
 uint8_t VIAGetByte(int chipNo,int regNo)
 {
-//	printf("R VIA%d %02X\n",chipNo+1,regNo);
+	if (doDebug)
+		printf("R VIA%d %02X\n",chipNo+1,regNo);
 	switch (regNo)
 	{
 		case 0:			//IRB
@@ -853,7 +859,8 @@ uint8_t VIAGetByte(int chipNo,int regNo)
 
 void VIASetByte(int chipNo,int regNo,uint8_t byte)
 {
-//	printf("W VIA%d %02X,%02X\n",chipNo+1,regNo,byte);
+	if (doDebug)
+		printf("W VIA%d %02X,%02X\n",chipNo+1,regNo,byte);
 	switch (regNo)
 	{
 		case 0:
