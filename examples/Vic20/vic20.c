@@ -620,6 +620,7 @@ void sizeHandler(GLFWwindow window,int xs,int ys)
 static int doDebug=0;
 
 void LoadTAP(const char* fileName);
+void LoadPRG(const char* fileName,const char* fileName2);
 
 int main(int argc,char**argv)
 {
@@ -660,7 +661,12 @@ int main(int argc,char**argv)
 	
 	if (argc==2)
 	{
-		LoadTAP(argv[1]);
+		//LoadTAP(argv[1]);
+		LoadPRG(argv[1],NULL);
+	}
+	if (argc==3)
+	{
+		LoadPRG(argv[1],argv[2]);
 	}
 
 #if 0
@@ -995,6 +1001,7 @@ uint32_t casCount;
 
 uint32_t cntBuffer[INTERNAL_TAPE_BUFFER_SIZE];
 uint32_t cntPos=0;
+uint32_t cntMax=0;
 
 void VIATick(int chipNo)
 {
@@ -1779,5 +1786,323 @@ void LoadTAP(const char* fileName)
 		}
 	}
 
+	cntMax=cntPos;
+	cntPos=0;
+}
+
+
+uint8_t bytechecksum=0;
+
+void OutputByteCheckMarker()
+{
+	bytechecksum=0;
+}
+
+void OutputBytePulses(uint8_t byte)
+{
+	uint8_t bitMask=0x01;
+	int a;
+	int even=1;
+
+	bytechecksum^=byte;
+
+	for (a=0;a<8;a++)
+	{
+		if (byte&bitMask)
+		{
+			cntBuffer[cntPos++]=0x3f*4;
+			cntBuffer[cntPos++]=0x3f*4;
+			cntBuffer[cntPos++]=0x2b*4;
+			cntBuffer[cntPos++]=0x2b*4;
+			even^=1;
+		}
+		else
+		{
+			cntBuffer[cntPos++]=0x2b*4;
+			cntBuffer[cntPos++]=0x2b*4;
+			cntBuffer[cntPos++]=0x3f*4;
+			cntBuffer[cntPos++]=0x3f*4;
+			even^=0;
+		}
+		bitMask<<=1;
+	}
+
+	if (even)
+	{
+		cntBuffer[cntPos++]=0x3f*4;
+		cntBuffer[cntPos++]=0x3f*4;
+		cntBuffer[cntPos++]=0x2b*4;
+		cntBuffer[cntPos++]=0x2b*4;
+	}
+	else
+	{
+		cntBuffer[cntPos++]=0x2b*4;
+		cntBuffer[cntPos++]=0x2b*4;
+		cntBuffer[cntPos++]=0x3f*4;
+		cntBuffer[cntPos++]=0x3f*4;
+	}
+			
+	cntBuffer[cntPos++]=0x53*4;
+	cntBuffer[cntPos++]=0x53*4;
+	cntBuffer[cntPos++]=0x3f*4;
+	cntBuffer[cntPos++]=0x3f*4;
+}
+
+void OutputWordPulses(uint16_t word)
+{
+	OutputBytePulses(word&0xFF);
+	OutputBytePulses(word>>8);
+}
+
+void OutputCheckPulses()
+{
+	OutputBytePulses(bytechecksum);
+	cntPos-=4;
+	cntBuffer[cntPos++]=0x53*4;
+	cntBuffer[cntPos++]=0x53*4;
+	cntBuffer[cntPos++]=0x2b*4;
+	cntBuffer[cntPos++]=0x2b*4;
+}
+
+void OutputHeader(uint16_t startAddress,uint16_t length)
+{
+	uint32_t tapePos;
+
+// HEADER
+
+	for (tapePos=0;tapePos<0x6A00;tapePos++)		//PILOT
+	{
+		cntBuffer[cntPos++]=0x2b*4;
+		cntBuffer[cntPos++]=0x2b*4;
+	}
+
+	cntBuffer[cntPos++]=0x53*4;				//NEW DATA MARKER
+	cntBuffer[cntPos++]=0x53*4;				//NEW DATA MARKER
+	cntBuffer[cntPos++]=0x3f*4;
+	cntBuffer[cntPos++]=0x3f*4;
+	
+	OutputBytePulses(0x89);
+	OutputBytePulses(0x88);
+	OutputBytePulses(0x87);
+	OutputBytePulses(0x86);
+	OutputBytePulses(0x85);
+	OutputBytePulses(0x84);
+	OutputBytePulses(0x83);
+	OutputBytePulses(0x82);
+	OutputBytePulses(0x81);
+
+	OutputByteCheckMarker();
+
+	OutputBytePulses(0x03);		// PRG BLOCK
+
+	OutputWordPulses(startAddress);			// Start Address
+	OutputWordPulses(startAddress+(length-2));	// End Address
+
+	OutputBytePulses('H');		// Filename
+	OutputBytePulses('E');
+	OutputBytePulses('L');
+	OutputBytePulses('L');
+	OutputBytePulses('O');
+	OutputBytePulses(' ');
+	OutputBytePulses(' ');
+	OutputBytePulses(' ');
+	OutputBytePulses(' ');
+	OutputBytePulses(' ');
+	OutputBytePulses(' ');
+	OutputBytePulses(' ');
+	OutputBytePulses(' ');
+	OutputBytePulses(' ');
+	OutputBytePulses(' ');
+	OutputBytePulses(' ');
+
+	for (tapePos=0;tapePos<171;tapePos++)
+	{
+		OutputBytePulses(' ');
+	}
+
+	OutputCheckPulses();
+
+// HEADER REPEATED
+
+	for (tapePos=0;tapePos<0x4F;tapePos++)			//PILOT
+	{
+		cntBuffer[cntPos++]=0x2b*4;
+		cntBuffer[cntPos++]=0x2b*4;
+	}
+
+	cntBuffer[cntPos++]=0x53*4;				//NEW DATA MARKER
+	cntBuffer[cntPos++]=0x53*4;				//NEW DATA MARKER
+	cntBuffer[cntPos++]=0x3f*4;
+	cntBuffer[cntPos++]=0x3f*4;
+	
+	OutputBytePulses(0x09);
+	OutputBytePulses(0x08);
+	OutputBytePulses(0x07);
+	OutputBytePulses(0x06);
+	OutputBytePulses(0x05);
+	OutputBytePulses(0x04);
+	OutputBytePulses(0x03);
+	OutputBytePulses(0x02);
+	OutputBytePulses(0x01);
+
+	OutputByteCheckMarker();
+
+	OutputBytePulses(0x03);		// PRG BLOCK
+
+	OutputWordPulses(startAddress);			// Start Address
+	OutputWordPulses(startAddress+(length-2));	// End Address
+
+	OutputBytePulses('H');		// Filename
+	OutputBytePulses('E');
+	OutputBytePulses('L');
+	OutputBytePulses('L');
+	OutputBytePulses('O');
+	OutputBytePulses(' ');
+	OutputBytePulses(' ');
+	OutputBytePulses(' ');
+	OutputBytePulses(' ');
+	OutputBytePulses(' ');
+	OutputBytePulses(' ');
+	OutputBytePulses(' ');
+	OutputBytePulses(' ');
+	OutputBytePulses(' ');
+	OutputBytePulses(' ');
+	OutputBytePulses(' ');
+
+	for (tapePos=0;tapePos<171;tapePos++)
+	{
+		OutputBytePulses(' ');
+	}
+
+	OutputCheckPulses();
+	
+	for (tapePos=0;tapePos<0x4e;tapePos++)			//TRAILER
+	{
+		cntBuffer[cntPos++]=0x2b*4;
+		cntBuffer[cntPos++]=0x2b*4;
+	}
+}
+
+void OutputSilence()
+{
+	cntBuffer[cntPos++]=0x4000;
+	cntBuffer[cntPos++]=0x4000;
+}
+
+void OutputData(uint8_t* tapeBuffer,uint16_t length)
+{
+	uint32_t tapePos;
+
+	// DATA
+	
+	for (tapePos=0;tapePos<0x1A00;tapePos++)		//PILOT
+	{
+		cntBuffer[cntPos++]=0x2b*4;
+		cntBuffer[cntPos++]=0x2b*4;
+	}
+
+	cntBuffer[cntPos++]=0x53*4;				//NEW DATA MARKER
+	cntBuffer[cntPos++]=0x53*4;				//NEW DATA MARKER
+	cntBuffer[cntPos++]=0x3f*4;
+	cntBuffer[cntPos++]=0x3f*4;
+	
+	OutputBytePulses(0x89);
+	OutputBytePulses(0x88);
+	OutputBytePulses(0x87);
+	OutputBytePulses(0x86);
+	OutputBytePulses(0x85);
+	OutputBytePulses(0x84);
+	OutputBytePulses(0x83);
+	OutputBytePulses(0x82);
+	OutputBytePulses(0x81);
+
+	OutputByteCheckMarker();
+
+	for (tapePos=0;tapePos<length;tapePos++)
+	{
+		OutputBytePulses(tapeBuffer[tapePos]);
+	}
+	
+	OutputCheckPulses();
+
+// DATA REPEAT
+	
+	for (tapePos=0;tapePos<0x4f;tapePos++)		//PILOT
+	{
+		cntBuffer[cntPos++]=0x2b*4;
+		cntBuffer[cntPos++]=0x2b*4;
+	}
+
+	cntBuffer[cntPos++]=0x53*4;				//NEW DATA MARKER
+	cntBuffer[cntPos++]=0x53*4;				//NEW DATA MARKER
+	cntBuffer[cntPos++]=0x3f*4;
+	cntBuffer[cntPos++]=0x3f*4;
+	
+	OutputBytePulses(0x09);
+	OutputBytePulses(0x08);
+	OutputBytePulses(0x07);
+	OutputBytePulses(0x06);
+	OutputBytePulses(0x05);
+	OutputBytePulses(0x04);
+	OutputBytePulses(0x03);
+	OutputBytePulses(0x02);
+	OutputBytePulses(0x01);
+
+	OutputByteCheckMarker();
+
+	for (tapePos=0;tapePos<length;tapePos++)
+	{
+		OutputBytePulses(tapeBuffer[tapePos]);
+	}
+	
+	OutputCheckPulses();
+	
+	for (tapePos=0;tapePos<0x4e;tapePos++)			//TRAILER
+	{
+		cntBuffer[cntPos++]=0x2b*4;
+		cntBuffer[cntPos++]=0x2b*4;
+	}
+}
+
+void LoadPRG(const char* fileName,const char* fileName2)
+{
+	uint16_t startAddress;
+	uint32_t tapeLength;
+	uint32_t length;
+	uint32_t tapePos;
+	uint8_t *tapeBuffer;
+
+	tapeBuffer=qLoad(fileName,&length);
+	if (tapeBuffer==NULL)
+	{
+		printf("Failed to load %s\n",fileName);
+		return;
+	}
+
+	startAddress=tapeBuffer[0];
+	startAddress|=tapeBuffer[1]<<8;
+
+	cntPos=0;
+	OutputHeader(startAddress,length);
+	OutputSilence();
+	OutputData(tapeBuffer+2,length-2);
+	OutputSilence();
+
+	free(tapeBuffer);
+	if (fileName2!=NULL)
+	{
+		tapeBuffer=qLoad(fileName,&length);
+		if (tapeBuffer==NULL)
+		{
+			printf("Failed to load %s\n",fileName);
+			return;
+		}
+
+		OutputData(tapeBuffer,length);
+
+		free(tapeBuffer);
+	}
+
+	cntMax=cntPos;
 	cntPos=0;
 }
