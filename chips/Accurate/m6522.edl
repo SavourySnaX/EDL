@@ -1,0 +1,507 @@
+# MOS 6522 (NMOS) - Accurate Version 
+#
+
+
+PIN BIDIRECTIONAL	PIN_PA[8];			# Port A Data
+PIN IN			PIN_CA1[1];			# Port A Ctrl
+PIN BIDIRECTIONAL	PIN_CA2[1];
+PIN BIDIRECTIONAL	PIN_PB[8];			# Port B Data
+PIN BIDIRECTIONAL	PIN_CB1[1];			# Port B Ctrl
+PIN BIDIRECTIONAL	PIN_CB2[1];
+PIN IN			PIN_RS[4];			# Register Select
+PIN IN			PIN_CS[2];			# Chip Select
+PIN BIDIRECTIONAL	PIN_D[8];
+PIN IN			PIN__RES[1];
+PIN IN			PIN_O2[1];
+PIN IN			PIN_RW[1];
+PIN OUT			PIN__IRQ[1];
+
+###
+
+DECLARE INTERNAL	PA_LATCH[8];
+DECLARE INTERNAL	PB_LATCH[8];
+
+DECLARE INTERNAL	ORA[8];
+DECLARE INTERNAL	ORB[8];
+
+DECLARE INTERNAL	DDRA[8];
+DECLARE INTERNAL	DDRB[8];
+
+DECLARE INTERNAL	T1C[16]	ALIAS	T1CH[8]:T1CL[8];
+DECLARE INTERNAL	T1L[16] ALIAS	T1LH[8]:T1LL[8];
+DECLARE INTERNAL	T2C[16]	ALIAS	T2CH[8]:T2CL[8];
+DECLARE INTERNAL	T2LL[8];
+
+DECLARE INTERNAL	SR[8];
+
+DECLARE INTERNAL	ACR[8]	ALIAS	T1PB7Enabled[1]:T1FreeRunning[1]:T2Control[1]:SRControl[3]:PBLatchEnable[1]:PALatchEnable[1];
+DECLARE INTERNAL	PCR[8]	ALIAS	CB2ControlOutput[1]:CB2ControlNegativeTransition[1]:CB2ControlIndependant[1]:CB1Control[1]:CA2ControlOutput[1]:CA2ControlNegativeTransition[1]:CA2ControlIndependant[1]:CA1Control[1];
+
+DECLARE INTERNAL	IFR[8]	ALIAS	IRQ[1]:FT1[1]:FT2[1]:FCB1[1]:FCB2[1]:FSR[1]:FCA1[1]:FCA2[1];
+DECLARE INTERNAL	IER[8]	ALIAS	%1:ET1[1]:ET2[1]:ECB1[1]:ECB2[1]:%0:ECA1[1]:ECA2[1];	#NB For now because SR is not implemented - ESR is forced to logic 0
+
+DECLARE INTERNAL	T1IE[1];
+DECLARE INTERNAL	T2IE[1];
+
+DECLARE INTERNAL	T1PB7[1];
+DECLARE INTERNAL	T2PB6[1];
+
+DECLARE INTERNAL	CA2[1];
+DECLARE INTERNAL	CB2[1];
+
+HANDLER PIN__RES	ALWAYS
+{
+	IF ~PIN__RES
+	{
+		PA_LATCH<-0;
+		PB_LATCH<-0;
+		ORA<-0;
+		ORB<-0;
+		DDRA<-0;
+		ACR<-0;
+		PCR<-0;
+		IFR<-0;
+		IER<-0;
+		T1IE<-0;
+		T2IE<-0;
+		T1PB7<-1;
+		T2PB6<-1;
+		CA2<-0;
+		CB2<-0;
+	}
+}
+
+FUNCTION INTERNAL UpdateIRQPin
+{
+	PIN__IRQ<-1;
+	0->IFR[7..7];
+	IF ((IFR[0..6]) & (IER[0..6])) != 0
+	{
+		1->IFR[7..7];
+		PIN__IRQ<-0;
+	}
+}
+
+FUNCTION INTERNAL UpdatePIN_PA
+{
+	PIN_PA<-PIN_PA & (~DDRA);
+	PIN_PA<-PIN_PA | (ORA & DDRA);
+}
+
+FUNCTION INTERNAL UpdatePIN_PB
+{
+	PIN_PB<-PIN_PB & (~DDRB);
+	PIN_PB<-PIN_PB | (ORB & DDRB);
+	IF T1PB7Enabled
+	{
+		T1PB7->PIN_PB[7..7];
+	}
+}
+
+HANDLER PIN_CA1		TRANSITION(0,1)
+{
+	IF CA1Control
+	{
+		DEBUG_TRACE "Interrupt should have been signalled!",IFR,IER;
+		FCA1<-1;
+		DEBUG_TRACE "Interrupt should have been signalled!",IFR;
+		IF CA2ControlOutput & (~CA2ControlNegativeTransition) & (~CA2ControlIndependant)
+		{
+			CA2<-1;
+		}
+	}
+}
+
+HANDLER PIN_CA1		TRANSITION(1,0)
+{
+	IF ~CA1Control
+	{
+		DEBUG_TRACE "Interrupt should have been signalled!",IFR,IER;
+		FCA1<-1;
+		DEBUG_TRACE "Interrupt should have been signalled!",IFR;
+		IF CA2ControlOutput & (~CA2ControlNegativeTransition) & (~CA2ControlIndependant)
+		{
+			CA2<-1;
+		}
+	}
+}
+
+HANDLER PIN_CA2		TRANSITION(0,1)
+{
+	IF ~CA2ControlOutput
+	{
+		IF ~CA2ControlNegativeTransition
+		{
+			FCA2<-1;
+		}
+	}
+	IF CA2ControlOutput
+	{
+		PIN_CA2<-CA2;
+	}
+}
+
+HANDLER PIN_CA2		TRANSITION(1,0)
+{
+	IF ~CA2ControlOutput
+	{
+		IF CA2ControlNegativeTransition
+		{
+			FCA2<-1;
+		}
+	}
+	IF CA2ControlOutput
+	{
+		PIN_CA2<-CA2;
+	}
+}
+
+HANDLER PIN_CB1		TRANSITION(0,1)
+{
+	IF CB1Control
+	{
+		FCB1<-1;
+		IF CB2ControlOutput & (~CB2ControlNegativeTransition) & (~CB2ControlIndependant)
+		{
+			CB2<-1;
+		}
+	}
+}
+
+HANDLER PIN_CB1		TRANSITION(1,0)
+{
+	IF ~CB1Control
+	{
+		FCB1<-1;
+		IF CB2ControlOutput & (~CB2ControlNegativeTransition) & (~CB2ControlIndependant)
+		{
+			CB2<-1;
+		}
+	}
+}
+
+HANDLER PIN_CB2		TRANSITION(0,1)
+{
+	IF ~CB2ControlOutput
+	{
+		IF ~CB2ControlNegativeTransition
+		{
+			FCB2<-1;
+		}
+	}
+	IF CB2ControlOutput
+	{
+		PIN_CB2<-CB2;
+	}
+}
+
+HANDLER PIN_CB2		TRANSITION(1,0)
+{
+	IF ~CB2ControlOutput
+	{
+		IF CB2ControlNegativeTransition
+		{
+			FCB2<-1;
+		}
+	}
+	IF CB2ControlOutput
+	{
+		PIN_CB2<-CB2;
+	}
+}
+
+HANDLER PIN_PA		CHANGED
+{
+	CALL UpdatePIN_PA();
+}
+
+HANDLER PIN_PB		CHANGED
+{
+	CALL UpdatePIN_PB();
+}
+
+FUNCTION INTERNAL UpdatePIN_D_Read
+{
+	IF PIN_RS == %0000
+	{
+		FCB1<-0;
+		PIN_D<-(PB_LATCH & (~DDRB)) | (ORB & DDRB);
+		IF (~CB2ControlOutput) & (~CB2ControlIndependant)
+		{
+			FCB2<-0;
+		}
+	}
+	IF (PIN_RS == %0001)
+	{
+		FCA1<-0;
+		PIN_D<-(PA_LATCH & (~DDRA)) | (PIN_PA & DDRA);
+		IF (~CA2ControlOutput) & (~CA2ControlIndependant)
+		{
+			FCA2<-0;
+		}
+		IF CA2ControlOutput & (~CA2ControlNegativeTransition) 
+		{
+			CA2<-0;
+		}
+	}
+	IF (PIN_RS == %1111)
+	{
+		PIN_D<-(PA_LATCH & (~DDRA)) | (PIN_PA & DDRA);
+	}
+	IF PIN_RS == %0010
+	{
+		PIN_D<-DDRB;
+	}
+	IF PIN_RS == %0011
+	{
+		PIN_D<-DDRA;
+	}
+	IF PIN_RS == %0100
+	{
+		PIN_D<-T1CL;
+		FT1<-0;
+	}
+	IF PIN_RS == %0101
+	{
+		PIN_D<-T1CH;
+	}
+	IF PIN_RS == %0110
+	{
+		PIN_D<-T1LL;
+	}
+	IF PIN_RS == %0111
+	{
+		PIN_D<-T1LH;
+	}
+	IF PIN_RS == %1000
+	{
+		PIN_D<-T2CL;
+		FT2<-0;
+	}
+	IF PIN_RS == %1001
+	{
+		PIN_D<-T2CH;
+	}
+	IF PIN_RS == %1010
+	{
+		PIN_D<-SR;
+	}
+	IF PIN_RS == %1011
+	{
+		PIN_D<-ACR;
+	}
+	IF PIN_RS == %1100
+	{
+		PIN_D<-PCR;
+	}
+	IF PIN_RS == %1101
+	{
+		PIN_D<-IFR;
+	}
+	IF PIN_RS == %1110
+	{
+		PIN_D<-IER;
+	}
+}
+
+FUNCTION INTERNAL UpdatePIN_D_Write
+{
+	IF PIN_RS == %0000
+	{
+		FCB1<-0;
+		ORB<-PIN_D;
+		IF (~CB2ControlOutput) & (~CB2ControlIndependant)
+		{
+			FCB2<-0;
+		}
+		IF CB2ControlOutput & (~CB2ControlNegativeTransition) 
+		{
+			CB2<-0;
+		}
+	}
+	IF (PIN_RS == %0001)
+	{
+		FCA1<-0;
+		ORA<-PIN_D;
+		IF (~CA2ControlOutput) & (~CA2ControlIndependant)
+		{
+			FCA2<-0;
+		}
+		IF CA2ControlOutput & (~CA2ControlNegativeTransition) 
+		{
+			CA2<-0;
+		}
+	}
+	IF (PIN_RS == %1111)
+	{
+		ORA<-PIN_D;
+	}
+	IF PIN_RS == %0010
+	{
+		DDRB<-PIN_D;
+	}
+	IF PIN_RS == %0011
+	{
+		DDRA<-PIN_D;
+	}
+	IF PIN_RS == %0100
+	{
+		T1LL<-PIN_D;
+	}
+	IF PIN_RS == %0101
+	{
+		T1LH<-PIN_D;
+		T1C<-T1L;
+		FT1<-0;
+		T1IE<-1;
+		T1PB7<-0;
+	}
+	IF PIN_RS == %0110
+	{
+		T1LL<-PIN_D;
+	}
+	IF PIN_RS == %0111
+	{
+		T1LH<-PIN_D;
+		FT1<-0;
+	}
+	IF PIN_RS == %1000
+	{
+		T2LL<-PIN_D;
+	}
+	IF PIN_RS == %1001
+	{
+		T2CH<-PIN_D;
+		T2CL<-T2LL;
+		FT2<-0;
+		T2IE<-1;
+	}
+	IF PIN_RS == %1010
+	{
+		SR<-PIN_D;
+	}
+	IF PIN_RS == %1011
+	{
+		IF ACR!=PIN_D
+		{
+			DEBUG_TRACE "NEW ACR->",ACR;
+		}
+		ACR<-PIN_D;
+	}
+	IF PIN_RS == %1100
+	{
+		PCR<-PIN_D;
+	}
+	IF PIN_RS == %1101
+	{
+		IFR<-IFR & (~PIN_D);
+	}
+	IF PIN_RS == %1110
+	{
+		IF PIN_D[7..7] == 1
+		{
+			IER<-IER | PIN_D;
+			DEBUG_TRACE "NEW IER",IER;
+		}
+		IF PIN_D[7..7] == 0
+		{
+			IER<-IER & (~PIN_D);
+		}
+	}
+}
+
+HANDLER		PIN_O2	TRANSITION(0,1)
+{
+	# Copy pins to input latches
+	IF ~PBLatchEnable
+	{
+		PB_LATCH <- PIN_PB;
+	}
+	IF ~PALatchEnable
+	{
+		PA_LATCH <- PIN_PA;
+	}
+
+	IF CA2ControlOutput & (~CA2ControlNegativeTransition) & CA2ControlIndependant
+	{
+		CA2<-1;
+	}
+	IF CB2ControlOutput & (~CB2ControlNegativeTransition) & CB2ControlIndependant
+	{
+		CB2<-1;
+	}
+
+	IF PIN_RW & (PIN_CS==%01)
+	{
+		CALL UpdatePIN_D_Read();
+	}
+
+	# Update Timers
+	T1C<-T1C-1;
+	IF T1C == 0
+	{
+		# T1 TimeOver..
+		IF T1IE
+		{
+			FT1<-1;
+			T1IE<-0;
+		}
+		IF T1FreeRunning
+		{
+			T1C<-T1L;
+			T1IE<-1;
+			T1PB7<-~T1PB7;
+		}
+		IF ~T1FreeRunning
+		{
+			T1PB7<-1;
+		}
+	}
+	IF ~T2Control
+	{
+		T2C<-T2C-1;
+	}
+	IF T2Control
+	{
+		IF (T2PB6==1) & ((PIN_PB[6..6]) == 0)
+		{
+			T2C<-T2C-1;
+		}
+	}
+	T2PB6<-PIN_PB[6..6];
+	IF T2C == 0
+	{
+		# T2 TimeOver..
+		IF T2IE
+		{
+			FT2<-1;
+			T2IE<-0;
+		}
+	}
+	# Update CA/CB pins
+	IF CA2ControlOutput & CA2ControlNegativeTransition
+	{
+		CA2<-CA2ControlIndependant;
+	}
+	IF CB2ControlOutput & CB2ControlNegativeTransition
+	{
+		CB2<-CB2ControlIndependant;
+	}
+
+	# Update State Of IRQ PIN
+	CALL UpdateIRQPin();
+
+	CALL UpdatePIN_PA();
+	CALL UpdatePIN_PB();
+	PIN_CB2<-CB2;
+	PIN_CA2<-CA2;
+}
+
+HANDLER PIN_O2	TRANSITION(1,0)
+{
+	IF (~PIN_RW) & (PIN_CS==%01)
+	{
+		CALL UpdatePIN_D_Write();
+	}
+	CALL UpdateIRQPin();
+}

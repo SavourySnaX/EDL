@@ -20,19 +20,89 @@
 #include <string.h>
 #include <stdint.h>
 
+int DISK_InitialiseMemory();
+void DISK_Reset();
+void DISK_Tick(uint8_t* clk,uint8_t* atn,uint8_t* data);
+
 void AudioKill();
 void AudioInitialise();
 void UpdateAudio();
 void _AudioAddData(int channel,int16_t dacValue);
 
-uint16_t PinGetPIN_AB();
-uint8_t PinGetPIN_DB();
-void PinSetPIN_DB(uint8_t);
-void PinSetPIN_O0(uint8_t);
-uint8_t PinGetPIN_SYNC();
-uint8_t PinGetPIN_RW();
-void PinSetPIN__IRQ(uint8_t);
-void PinSetPIN__RES(uint8_t);
+uint16_t MAIN_PinGetPIN_AB();
+uint8_t MAIN_PinGetPIN_DB();
+void MAIN_PinSetPIN_DB(uint8_t);
+void MAIN_PinSetPIN_O0(uint8_t);
+uint8_t MAIN_PinGetPIN_SYNC();
+uint8_t MAIN_PinGetPIN_RW();
+void MAIN_PinSetPIN__IRQ(uint8_t);
+void MAIN_PinSetPIN__RES(uint8_t);
+
+//	VIA 1	9110-911F			VIA 2	9120-912F
+//	NMI					IRQ
+//	CA1 - ~RESTORE				CA1	CASSETTE READ
+// 	PA0 - SERIAL CLK(IN)			PA0	ROW INPUT
+//	PA1 - SERIAL DATA(IN)			PA1	ROW INPUT
+//	PA2 - JOY0				PA2	ROW INPUT
+//	PA3 - JOY1				PA3	ROW INPUT
+//	PA4 - JOY2				PA4	ROW INPUT
+//	PA5 - LIGHT PEN				PA5	ROW INPUT
+//	PA6 - CASETTE SWITCH			PA6	ROW INPUT
+//	PA7 - SERIAL ATN(OUT)			PA7	ROW INPUT
+//	CA2 - CASETTE MOTOR			CA2	SERIAL CLK (OUT)
+//
+//	CB1 - USER PORT				CB1	SERIAL SRQ(IN)
+//	PB0 - USER PORT				PB0	COLUMN OUTPUT
+//	PB1 - USER PORT				PB1	COLUMN OUTPUT
+//	PB2 - USER PORT				PB2	COLUMN OUTPUT
+//	PB3 - USER PORT				PB3	COLUMN OUTPUT	RECORD
+//	PB4 - USER PORT				PB4	COLUMN OUTPUT
+//	PB5 - USER PORT				PB5	COLUMN OUTPUT
+//	PB6 - USER PORT				PB6	COLUMN OUTPUT
+//	PB7 - USER PORT				PB7	COLUMN OUTPUT  JOY3
+//	CB2 - USER PORT				CB2	SERIAL DATA (OUT)
+//
+//
+//
+void	VIA0_PinSetPIN_PA(uint8_t);
+uint8_t VIA0_PinGetPIN_PA();
+void	VIA0_PinSetPIN_CA1(uint8_t);
+void	VIA0_PinSetPIN_CA2(uint8_t);
+uint8_t VIA0_PinGetPIN_CA2();
+void	VIA0_PinSetPIN_PB(uint8_t);
+uint8_t VIA0_PinGetPIN_PB();
+void	VIA0_PinSetPIN_CB1(uint8_t);
+uint8_t VIA0_PinGetPIN_CB1();
+void	VIA0_PinSetPIN_CB2(uint8_t);
+uint8_t VIA0_PinGetPIN_CB2();
+void	VIA0_PinSetPIN_RS(uint8_t);
+void	VIA0_PinSetPIN_CS(uint8_t);
+void	VIA0_PinSetPIN_D(uint8_t);
+uint8_t VIA0_PinGetPIN_D();
+void	VIA0_PinSetPIN__RES(uint8_t);
+void	VIA0_PinSetPIN_O2(uint8_t);
+void	VIA0_PinSetPIN_RW(uint8_t);
+uint8_t VIA0_PinGetPIN__IRQ();
+
+void	VIA1_PinSetPIN_PA(uint8_t);
+uint8_t VIA1_PinGetPIN_PA();
+void	VIA1_PinSetPIN_CA1(uint8_t);
+void	VIA1_PinSetPIN_CA2(uint8_t);
+uint8_t VIA1_PinGetPIN_CA2();
+void	VIA1_PinSetPIN_PB(uint8_t);
+uint8_t VIA1_PinGetPIN_PB();
+void	VIA1_PinSetPIN_CB1(uint8_t);
+uint8_t VIA1_PinGetPIN_CB1();
+void	VIA1_PinSetPIN_CB2(uint8_t);
+uint8_t VIA1_PinGetPIN_CB2();
+void	VIA1_PinSetPIN_RS(uint8_t);
+void	VIA1_PinSetPIN_CS(uint8_t);
+void	VIA1_PinSetPIN_D(uint8_t);
+uint8_t VIA1_PinGetPIN_D();
+void	VIA1_PinSetPIN__RES(uint8_t);
+void	VIA1_PinSetPIN_O2(uint8_t);
+void	VIA1_PinSetPIN_RW(uint8_t);
+uint8_t VIA1_PinGetPIN__IRQ();
 
 // Step 1. Memory
 
@@ -86,7 +156,7 @@ int InitialiseMemory()
 	if (LoadRom(KRom,0x2000,"roms/901486-07.ue12"))
 		return 1;
 
-#if 0
+#if 1
 	if (LoadRom(D20,0x2002,"roms/Donkey Kong-2000.prg"))
 		return 1;
 	if (LoadRom(DA0,0x2002,"roms/Donkey Kong-A000.prg"))
@@ -99,8 +169,8 @@ int InitialiseMemory()
 
 //	if (LoadRom(DA0,0x2002,"roms/solarsystem.a0"))
 //		return 1;
-//	if (LoadRom(DA0,0x2002,"roms/Cosmic Cruncher (1982)(Commodore).a0"))
-//		return 1;
+	if (LoadRom(DA0,0x2002,"roms/Cosmic Cruncher (1982)(Commodore).a0"))
+		return 1;
 //	if (LoadRom(DA0,0x2002,"roms/Omega Race (1982)(Commodore).a0"))
 //		return 1;
 //	if (LoadRom(DA0,0x2002,"roms/Arcadia (19xx)(-).a0"))
@@ -109,15 +179,19 @@ int InitialiseMemory()
 	return 0;
 }
 
+#if 0
 uint8_t VIAGetByte(int chipNo,int regNo);
 void VIASetByte(int chipNo,int regNo,uint8_t byte);
-void VIATick(int chipNo);
+void VIATick(int chipNo,uint8_t PB0);
+#endif
 
 uint8_t GetByte6561(int regNo);
 void SetByte6561(int regNo,uint8_t byte);
 void Tick6561();
 
 uint8_t lastBus=0xFF;
+
+int doDebug=0;
 
 uint8_t GetByte(uint16_t addr)
 {
@@ -173,7 +247,22 @@ uint8_t GetByte(uint16_t addr)
 		}
 		if (addr>=0x9110 && addr<=0x912F)
 		{
-			return VIAGetByte(((addr-0x10)>>4)&1,addr&0x0F);
+			if (addr&0x0020)
+			{
+				if (doDebug)
+				{
+					printf("Getting PIN_D from VIA1\n");
+				}
+				return VIA1_PinGetPIN_D();		//TODO FIX.. according to the schematic via addressing is 1001 00xx xxBA RRRR
+			}
+			else
+			{
+				if (doDebug)
+				{
+					printf("Getting PIN_D from VIA0\n");
+				}
+				return VIA0_PinGetPIN_D();
+			}
 		}
 		// Various expansions
 		printf("Attempt to acccess : %04X\n",addr);
@@ -257,7 +346,14 @@ void SetByte(uint16_t addr,uint8_t byte)
 		}
 		if (addr>=0x9110 && addr<=0x912F)
 		{
-			VIASetByte(((addr-0x10)>>4)&1,addr&0x0F,byte);
+			if (addr&0x0020)
+			{
+				VIA1_PinSetPIN_D(byte);
+			}
+			else
+			{
+				VIA0_PinSetPIN_D(byte);
+			}
 			return;
 		}
 		// Various expansions
@@ -296,15 +392,16 @@ int KeyDown(int key);
 int CheckKey(int key);
 void ClearKey(int key);
 
-extern uint8_t *DIS_[256];
+extern uint8_t *MAIN_DIS_[256];
 
-extern uint8_t	A;
-extern uint8_t	X;
-extern uint8_t	Y;
-extern uint16_t	SP;
-extern uint16_t	PC;
-extern uint8_t	P;
+extern uint8_t	MAIN_A;
+extern uint8_t	MAIN_X;
+extern uint8_t	MAIN_Y;
+extern uint16_t	MAIN_SP;
+extern uint16_t	MAIN_PC;
+extern uint8_t	MAIN_P;
 
+#if 0
 struct via6522
 {
 	uint8_t CA1;
@@ -331,26 +428,29 @@ struct via6522
 };
 
 struct via6522	via[2];
+#endif
 
 void DUMP_REGISTERS()
 {
 	printf("--------\n");
 	printf("FLAGS = N  V  -  B  D  I  Z  C\n");
 	printf("        %s  %s  %s  %s  %s  %s  %s  %s\n",
-			P&0x80 ? "1" : "0",
-			P&0x40 ? "1" : "0",
-			P&0x20 ? "1" : "0",
-			P&0x10 ? "1" : "0",
-			P&0x08 ? "1" : "0",
-			P&0x04 ? "1" : "0",
-			P&0x02 ? "1" : "0",
-			P&0x01 ? "1" : "0");
-	printf("A = %02X\n",A);
-	printf("X = %02X\n",X);
-	printf("Y = %02X\n",Y);
-	printf("SP= %04X\n",SP);
+			MAIN_P&0x80 ? "1" : "0",
+			MAIN_P&0x40 ? "1" : "0",
+			MAIN_P&0x20 ? "1" : "0",
+			MAIN_P&0x10 ? "1" : "0",
+			MAIN_P&0x08 ? "1" : "0",
+			MAIN_P&0x04 ? "1" : "0",
+			MAIN_P&0x02 ? "1" : "0",
+			MAIN_P&0x01 ? "1" : "0");
+	printf("A = %02X\n",MAIN_A);
+	printf("X = %02X\n",MAIN_X);
+	printf("Y = %02X\n",MAIN_Y);
+	printf("SP= %04X\n",MAIN_SP);
+#if 0
 	printf("VIA1 IFR/IER/ACR/PCR/T1C/T2C = %02X/%02X/%02X/%02X/%04X/%04X\n",via[0].IFR,via[0].IER,via[0].ACR,via[0].PCR,via[0].T1C,via[0].T2C);
 	printf("VIA2 IFR/IER/ACR/PCR/T1C/T2C = %02X/%02X/%02X/%02X/%04X/%04X\n",via[1].IFR,via[1].IER,via[1].ACR,via[1].PCR,via[1].T1C,via[1].T2C);
+#endif
 	printf("--------\n");
 }
 
@@ -424,7 +524,7 @@ int Disassemble(unsigned int address,int registers)
 {
 	int a;
 	int numBytes=0;
-	const char* retVal = decodeDisasm(DIS_,address,&numBytes,255);
+	const char* retVal = decodeDisasm(MAIN_DIS_,address,&numBytes,255);
 
 	if (strcmp(retVal,"UNKNOWN OPCODE")==0)
 	{
@@ -618,11 +718,248 @@ void sizeHandler(GLFWwindow window,int xs,int ys)
 	glViewport(0, 0, xs, ys);
 }
 
-static int doDebug=0;
-
-void LoadTAP(const char* fileName);
-void LoadPRG(const char* fileName,const char* fileName2);
+void LoadTape(const char* fileName);
 void SaveTAP(const char* filename);
+
+uint8_t CheckKeys(int key0,int key1,int key2,int key3,int key4,int key5,int key6,int key7)
+{
+	uint8_t keyVal=0xFF;
+
+	if (KeyDown(key0))
+	{
+		keyVal&=~0x01;
+	}
+	if (KeyDown(key1))
+	{
+		keyVal&=~0x02;
+	}
+	if (KeyDown(key2))
+	{
+		keyVal&=~0x04;
+	}
+	if (KeyDown(key3))
+	{
+		keyVal&=~0x08;
+	}
+	if (KeyDown(key4))
+	{
+		keyVal&=~0x10;
+	}
+	if (KeyDown(key5))
+	{
+		keyVal&=~0x20;
+	}
+	if (KeyDown(key6))
+	{
+		keyVal&=~0x40;
+	}
+	if (KeyDown(key7))
+	{
+		keyVal&=~0x80;
+	}
+
+	return keyVal;
+}
+
+uint8_t kbuffer[8]={0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
+
+void UpdateKB()
+{
+	int colNum=0;
+	uint8_t keyval=0xFF;
+	uint8_t column=~VIA1_PinGetPIN_PB();
+
+	while (column)
+	{
+		if (column&1)
+		{
+			keyval&=kbuffer[colNum];
+		}
+		colNum++;
+		column>>=1;
+	}
+	
+	if (keyval!=0xFF)
+	{
+//		doDebug=1;
+	}
+
+	VIA1_PinSetPIN_PA(keyval);
+}
+
+void UpdateJoy()
+{
+	uint8_t joyVal=0xFF;
+	joyVal&=KeyDown(GLFW_KEY_KP_8)?0xFB:0xFF;
+	joyVal&=KeyDown(GLFW_KEY_KP_2)?0xF7:0xFF;
+	joyVal&=KeyDown(GLFW_KEY_KP_4)?0xEF:0xFF;
+	joyVal&=KeyDown(GLFW_KEY_KP_0)?0xDF:0xFF;
+	VIA0_PinSetPIN_PA(joyVal);
+
+	joyVal=0xFF;
+	joyVal&=KeyDown(GLFW_KEY_KP_6)?0x7F:0xFF;
+	VIA1_PinSetPIN_PB(joyVal);
+}
+
+int casLevel=0;
+uint32_t casCount;
+
+#define INTERNAL_TAPE_BUFFER_SIZE		(1024*1024*10)
+
+uint32_t cntBuffer[INTERNAL_TAPE_BUFFER_SIZE];
+uint32_t cntPos=0;
+uint32_t cntMax=0;
+
+
+void UpdateCassette()
+{
+#if 1
+	if (CheckKey(GLFW_KEY_PAGEUP))
+	{
+		playDown=1;
+		recDown=playDown;
+		ClearKey(GLFW_KEY_PAGEUP);
+		cntPos=0;
+		casCount=0;
+		casLevel=0;		
+	}
+#endif
+	if (CheckKey(GLFW_KEY_PAGEDOWN))
+	{
+		playDown=1;
+		recDown=0;
+		ClearKey(GLFW_KEY_PAGEDOWN);
+		cntPos=0;
+		casCount=0;
+		casLevel=0;
+	}
+	if (CheckKey(GLFW_KEY_END))
+	{
+		playDown=0;
+		recDown=0;
+		ClearKey(GLFW_KEY_END);
+		cntPos=0;
+		casCount=0;
+		casLevel=0;		
+	}
+
+	// Cassette deck
+	if (playDown)
+	{
+		VIA0_PinSetPIN_PA(VIA0_PinGetPIN_PA()&0xBF);
+	}
+	if (playDown && recDown && (!VIA0_PinGetPIN_CA2())) // SAVING
+	{
+		uint8_t newRecLevel = (VIA1_PinGetPIN_PB()&0x08)>>3;
+		casCount++;
+		if (newRecLevel!=casLevel)
+		{
+			printf("Level Changed %08X\n",casCount);
+			cntMax=cntPos;
+			cntBuffer[cntPos++]=casCount;
+			casCount=0;
+			casLevel=newRecLevel;
+		}
+	}
+	if (playDown && (!recDown) && (!VIA0_PinGetPIN_CA2())) // LOADING
+	{
+		casCount++;
+		if (casCount>=cntBuffer[cntPos])
+		{
+			casLevel^=1;
+			cntPos++;
+			casCount=0;
+		}
+	}
+	VIA1_PinSetPIN_CA1(casLevel);
+}
+
+uint8_t lastClk=12,lastDat=12;
+
+void UpdateDiskInterface()
+{
+	// PA7 - ATN OUT -> PB7,CA1
+	uint8_t tmp,newpa;
+	uint8_t clk,dat,atn;
+
+	clk=VIA1_PinGetPIN_CA2();
+	dat=VIA1_PinGetPIN_CB2();
+	atn=(VIA0_PinGetPIN_PA()&0x80)>>7;
+
+	if (lastClk!=clk)
+	{
+		printf("Clk %s  atn %d\n",clk?"hi":"lo",atn);
+		lastClk=clk;
+	}
+	if (lastDat!=dat)
+	{
+		printf("Dat %s  atn %d\n",dat?"hi":"lo",atn);
+		lastDat=dat;
+	}
+
+	clk^=1;
+	dat^=1;
+	atn^=1;
+
+	DISK_Tick(&clk,&atn,&dat);
+	
+	clk^=1;
+	dat^=1;
+	atn^=1;
+
+	tmp=VIA0_PinGetPIN_PA()&0x7C;
+	tmp|=clk;
+	tmp|=dat<<1;
+	tmp|=atn<<7;
+
+	VIA0_PinSetPIN_PA(tmp);
+#if 0
+	tmp&=0x0A;
+	newpa=VIA0_PinGetPIN_PA()&0xFC;
+	newpa|=(tmp&0x08)>>3;
+	newpa|=tmp&0x02;
+
+	VIA0_PinSetPIN_PA(newpa);
+#endif
+#if 0
+		if ((lastPb0&0x1A)!=(tmp&0x1A))
+		{
+			printf("Data From Disk Changed : %02X\n",tmp);
+		}
+		lastPb0=tmp;
+
+		pb0&=0xFC;
+		pb0|=(tmp&0x08)>>3;
+		pb0|=(tmp&0x02);
+
+		if (via[1].PCR&0x10)
+		{
+			if (via[1].CB1==0 && tmp&0x10)
+			{
+				printf("LH INT due to ATN ACK\n");
+				doDebug=1;
+				via[1].IFR=0x10;
+			}
+		}
+		else
+		{
+			if (via[1].CB1==1 && (tmp&0x10)==0)
+			{
+				printf("HL INT due to ATN ACK\n");
+				via[1].IFR=0x10;
+			}
+		}
+		via[1].CB1=(tmp&0x10)>>4;
+#endif
+}
+
+void UpdateHardware()
+{
+	UpdateKB();
+	UpdateJoy();
+	UpdateCassette();
+	UpdateDiskInterface();
+}
 
 int main(int argc,char**argv)
 {
@@ -659,16 +996,12 @@ int main(int argc,char**argv)
 
 	if (InitialiseMemory())
 		return -1;
-	
-	
+	if (DISK_InitialiseMemory())
+		return -1;
+
 	if (argc==2)
 	{
-		//LoadTAP(argv[1]);
-		LoadPRG(argv[1],NULL);
-	}
-	if (argc==3)
-	{
-		LoadPRG(argv[1],argv[2]);
+		LoadTape(argv[1]);
 	}
 
 #if 0
@@ -689,58 +1022,120 @@ int main(int argc,char**argv)
 	PinSetRESET(0);			// RESET CPU
 	PIN_BUFFER_RESET=0;
 #endif
-	PinSetPIN__IRQ(1);
+	MAIN_PinSetPIN__IRQ(1);
 
 	//dumpInstruction=100000;
 
-	PC=GetByte(0xFFFC);
-	PC|=GetByte(0xFFFD)<<8;
+	MAIN_PC=GetByte(0xFFFC);
+	MAIN_PC|=GetByte(0xFFFD)<<8;
 
 	bp = GetByte(0xc000);
 	bp|=GetByte(0xC001)<<8;
 	bp = GetByte(0xFFFE);
 	bp|=GetByte(0xFFFF)<<8;
 
+	bp=0xF7AF;
+
 	printf("%04X\n",bp);
 
 	printf("%02X != %02X\n",BRom[0xD487-0xC000],GetByte(0xD487));
+	
+	DISK_Reset();
+	
+#if 0
+	uint8_t pb0=0xFF;
+	via[0].CB1=1;
+#endif
+
+	VIA0_PinSetPIN__RES(0);
+	VIA0_PinSetPIN_O2(0);
+	VIA0_PinSetPIN_O2(1);
+	VIA0_PinSetPIN_O2(0);
+	VIA0_PinSetPIN_O2(1);
+	VIA0_PinSetPIN_O2(0);
+	VIA0_PinSetPIN__RES(1);
+
+	VIA1_PinSetPIN__RES(0);
+	VIA1_PinSetPIN_O2(0);
+	VIA1_PinSetPIN_O2(1);
+	VIA1_PinSetPIN_O2(0);
+	VIA1_PinSetPIN_O2(1);
+	VIA1_PinSetPIN_O2(0);
+	VIA1_PinSetPIN__RES(1);
 
 	while (!glfwGetKey(windows[MAIN_WINDOW],GLFW_KEY_ESC))
 	{
-		PinSetPIN_O0(1);
-		if (PinGetPIN_SYNC())
+		static uint8_t lastPb0=0xff;
+		uint16_t addr; 
+		
+
+		MAIN_PinSetPIN_O0(1);
+		addr = MAIN_PinGetPIN_AB();
+
+		if (MAIN_PinGetPIN_SYNC())
 		{
-//			if (PinGetPIN_AB()==bp)
+//			if (MAIN_PinGetPIN_AB()==bp)
 //				doDebug=1;
 
 			if (doDebug)
 			{
-//				Disassemble(PinGetPIN_AB(),1);
-//				getch();
+				Disassemble(addr,1);
+				getch();
 			}
 		}
-		if (PinGetPIN_RW())
+
+		VIA0_PinSetPIN_RW(MAIN_PinGetPIN_RW());
+		VIA1_PinSetPIN_RW(MAIN_PinGetPIN_RW());
+
+		VIA0_PinSetPIN_RS(addr&0xF);
+		VIA1_PinSetPIN_RS(addr&0xF);
+
+		if ((addr&0xFC00)==0x9000)
 		{
-			uint16_t addr = PinGetPIN_AB();
+			if (doDebug)
+				printf("%04X : CS SETTING\n",addr);
+			VIA0_PinSetPIN_CS((addr&0x0010)>>4);
+			VIA1_PinSetPIN_CS((addr&0x0020)>>5);
+		}
+		else
+		{
+			if (doDebug)
+				printf("%04X : CS CLEARING\n",addr);
+			VIA0_PinSetPIN_CS(0x02|((addr&0x0010)>>4));
+			VIA1_PinSetPIN_CS(0x02|((addr&0x0020)>>5));
+		}
+
+		VIA0_PinSetPIN_O2(1);
+		VIA1_PinSetPIN_O2(1);
+
+
+		if (MAIN_PinGetPIN_RW())
+		{
 			uint8_t  data = GetByte(addr);
 			if (doDebug)
-				printf("Getting : %02X @ %04X\n", data,PinGetPIN_AB());
-			PinSetPIN_DB(data);
+				printf("Getting : %02X @ %04X\n", data,addr);
+			MAIN_PinSetPIN_DB(data);
 		}
-		if (!PinGetPIN_RW())
+		if (!MAIN_PinGetPIN_RW())
 		{
 			if (doDebug)
-				printf("Storing : %02X @ %04X\n", PinGetPIN_DB(),PinGetPIN_AB());
-			SetByte(PinGetPIN_AB(),PinGetPIN_DB());
+				printf("Storing : %02X @ %04X\n", MAIN_PinGetPIN_DB(),addr);
+			SetByte(addr,MAIN_PinGetPIN_DB());
 		}
 
-		lastBus=PinGetPIN_DB();
 
-		PinSetPIN_O0(0);
+		VIA0_PinSetPIN_O2(0);
+		VIA1_PinSetPIN_O2(0);
+		
+		UpdateHardware();
+
+		MAIN_PinSetPIN__IRQ(VIA1_PinGetPIN__IRQ());
+
+		lastBus=MAIN_PinGetPIN_DB();
+
+		MAIN_PinSetPIN_O0(0);
 
 		Tick6561();
-		VIATick(0);
-		VIATick(1);
 
 		pixelClock++;
 
@@ -756,15 +1151,19 @@ int main(int argc,char**argv)
 				
 			glfwPollEvents();
 			
+			kbuffer[0]=CheckKeys('1','3','5','7','9','-','=',GLFW_KEY_BACKSPACE);
+			kbuffer[1]=CheckKeys('`','W','R','Y','I','P',']',GLFW_KEY_ENTER);
+			kbuffer[2]=CheckKeys(GLFW_KEY_LCTRL,'A','D','G','J','L','\'',GLFW_KEY_RIGHT);
+			kbuffer[3]=CheckKeys(GLFW_KEY_TAB,GLFW_KEY_LSHIFT,'X','V','N',',','/',GLFW_KEY_DOWN);
+			kbuffer[4]=CheckKeys(GLFW_KEY_SPACE,'Z','C','B','M','.',GLFW_KEY_RSHIFT,GLFW_KEY_F1);
+			kbuffer[5]=CheckKeys(GLFW_KEY_RCTRL,'S','F','H','K',';','#',GLFW_KEY_F3);
+			kbuffer[6]=CheckKeys('Q','E','T','U','O','[','/',GLFW_KEY_F5);
+			kbuffer[7]=CheckKeys('2','4','6','8','0','\\',GLFW_KEY_HOME,GLFW_KEY_F7);
+
 			if (CheckKey(GLFW_KEY_INSERT))
 			{
 				ClearKey(GLFW_KEY_INSERT);
 				normalSpeed^=1;
-			}
-			if (CheckKey(GLFW_KEY_DELETE))
-			{
-				doDebug^=1;
-				ClearKey(GLFW_KEY_DELETE);
 			}
 
 			g_traceStep=0;
@@ -791,37 +1190,11 @@ int main(int argc,char**argv)
 
 }
 
-
+#if 0
 ///////////////////
 //
 
 
-//	VIA 1	9110-911F			VIA 2	9120-912F
-//	NMI					IRQ
-//	CA1 - ~RESTORE				CA1	CASSETTE READ
-// 	PA0 - SERIAL CLK(IN)			PA0	ROW INPUT
-//	PA1 - SERIAL DATA(IN)			PA1	ROW INPUT
-//	PA2 - JOY0				PA2	ROW INPUT
-//	PA3 - JOY1				PA3	ROW INPUT
-//	PA4 - JOY2				PA4	ROW INPUT
-//	PA5 - LIGHT PEN				PA5	ROW INPUT
-//	PA6 - CASETTE SWITCH			PA6	ROW INPUT
-//	PA7 - SERIAL ATN(OUT)			PA7	ROW INPUT
-//	CA2 - CASETTE MOTOR			CA2	SERIAL CLK (OUT)
-//
-//	CB1 - USER PORT				CB1	SERIAL SRQ(IN)
-//	PB0 - USER PORT				PB0	COLUMN OUTPUT
-//	PB1 - USER PORT				PB1	COLUMN OUTPUT
-//	PB2 - USER PORT				PB2	COLUMN OUTPUT
-//	PB3 - USER PORT				PB3	COLUMN OUTPUT
-//	PB4 - USER PORT				PB4	COLUMN OUTPUT
-//	PB5 - USER PORT				PB5	COLUMN OUTPUT
-//	PB6 - USER PORT				PB6	COLUMN OUTPUT
-//	PB7 - USER PORT				PB7	COLUMN OUTPUT  JOY3
-//	CB2 - USER PORT				CB2	SERIAL DATA (OUT)
-//
-//
-//
 
 uint8_t VIAGetByte(int chipNo,int regNo)
 {
@@ -871,28 +1244,36 @@ uint8_t VIAGetByte(int chipNo,int regNo)
 
 void VIASetByte(int chipNo,int regNo,uint8_t byte)
 {
-	if (doDebug)
-		printf("W VIA%d %02X,%02X\n",chipNo+1,regNo,byte);
+//	if (doDebug)
+//		printf("W VIA%d %02X,%02X\n",chipNo+1,regNo,byte);
 	switch (regNo)
 	{
 		case 0:
 			via[chipNo].IFR&=~0x18;
+//			if (via[chipNo].ORB!=(byte&via[chipNo].DDRB))
+//				printf("W VIA%d %02X,%02X\n",chipNo+1,regNo,byte);
 			via[chipNo].ORB=byte&via[chipNo].DDRB;
 			break;
 		case 1:
 			via[chipNo].IFR&=~0x03;
 			//FALL through intended
 		case 15:
+//			if (via[chipNo].ORA!=(byte&via[chipNo].DDRA))
+			if (chipNo==0)
+			{
+				printf("CA2/CB2 %02X/%02X\n",via[1].CA2,via[1].CB2);
+				printf("W VIA%d %02X,%02X\n",chipNo+1,regNo,byte);
+			}
 			via[chipNo].ORA=byte&via[chipNo].DDRA;
 			break;
 		case 2:
-//			if (via[chipNo].DDRB!=byte)
-//				printf("W VIA%d %02X,%02X\n",chipNo+1,regNo,byte);
+			if (via[chipNo].DDRB!=byte)
+				printf("W VIA%d %02X,%02X\n",chipNo+1,regNo,byte);
 			via[chipNo].DDRB=byte;
 			break;
 		case 3:
-//			if (via[chipNo].DDRA!=byte)
-//				printf("W VIA%d %02X,%02X\n",chipNo+1,regNo,byte);
+			if (via[chipNo].DDRA!=byte)
+				printf("W VIA%d %02X,%02X\n",chipNo+1,regNo,byte);
 			via[chipNo].DDRA=byte;
 			break;
 		case 4:
@@ -925,24 +1306,19 @@ void VIASetByte(int chipNo,int regNo,uint8_t byte)
 			via[chipNo].SR=byte;
 			break;
 		case 11:
-//			if (via[chipNo].ACR!=byte)
-//				printf("W VIA%d %02X,%02X\n",chipNo+1,regNo,byte);
+			if (via[chipNo].ACR!=byte)
+				printf("W VIA%d %02X,%02X\n",chipNo+1,regNo,byte);
 			via[chipNo].ACR=byte;
 			break;
 		case 12:
-//			if (via[chipNo].PCR!=byte)
-//				printf("W VIA%d %02X,%02X\n",chipNo+1,regNo,byte);
+			if (via[chipNo].PCR!=byte)
+				printf("W VIA%d %02X,%02X\n",chipNo+1,regNo,byte);
 			via[chipNo].PCR=byte;
 			break;
 		case 13:
-			if (byte&0x80)
-			{
-				via[chipNo].IFR|=byte&0x7F;
-			}
-			else
-			{
-				via[chipNo].IFR&=~(byte&0x7F);
-			}
+			byte&=0x7F;
+			byte=~byte;
+			via[chipNo].IFR&=byte;
 			break;
 		case 14:
 			if (byte&0x80)
@@ -953,66 +1329,22 @@ void VIASetByte(int chipNo,int regNo,uint8_t byte)
 			{
 				via[chipNo].IER&=~(byte&0x7F);
 			}
+			printf("%d : byte %02X, IER %02X\n",chipNo+1,byte,via[chipNo].IER);
 			break;
 	}
 }
 
-uint8_t CheckKeys(uint8_t scan,int key0,int key1,int key2,int key3,int key4,int key5,int key6,int key7)
-{
-	uint8_t keyVal=0xFF;
-
-	if ((via[1].ORB&scan)==0)
-	{
-		if (KeyDown(key0))
-		{
-			keyVal&=~0x01;
-		}
-		if (KeyDown(key1))
-		{
-			keyVal&=~0x02;
-		}
-		if (KeyDown(key2))
-		{
-			keyVal&=~0x04;
-		}
-		if (KeyDown(key3))
-		{
-			keyVal&=~0x08;
-		}
-		if (KeyDown(key4))
-		{
-			keyVal&=~0x10;
-		}
-		if (KeyDown(key5))
-		{
-			keyVal&=~0x20;
-		}
-		if (KeyDown(key6))
-		{
-			keyVal&=~0x40;
-		}
-		if (KeyDown(key7))
-		{
-			keyVal&=~0x80;
-		}
-	}
-
-	return keyVal;
-}
-
-int casLevel=0;
-uint32_t casCount;
-
-#define INTERNAL_TAPE_BUFFER_SIZE		(1024*1024*10)
-
-uint32_t cntBuffer[INTERNAL_TAPE_BUFFER_SIZE];
-uint32_t cntPos=0;
-uint32_t cntMax=0;
-
-void VIATick(int chipNo)
+void VIATick(int chipNo,uint8_t PB0)
 {
 	via[chipNo].IRA=0x00;
-	via[chipNo].IRB=0x00;
+	if (chipNo==0)
+	{
+		via[chipNo].IRB=PB0;
+	}
+	else
+	{
+		via[chipNo].IRB=0x00;
+	}
 
 	if (via[chipNo].T1C)
 	{
@@ -1076,118 +1408,8 @@ void VIATick(int chipNo)
 			break;
 	}
 
-	if (chipNo==0)
-	{
-		uint8_t joyVal=0xFF;
-		joyVal&=KeyDown(GLFW_KEY_KP_8)?0xFB:0xFF;
-		joyVal&=KeyDown(GLFW_KEY_KP_2)?0xF7:0xFF;
-		joyVal&=KeyDown(GLFW_KEY_KP_4)?0xEF:0xFF;
-		joyVal&=KeyDown(GLFW_KEY_KP_0)?0xDF:0xFF;
-		via[chipNo].IRA=joyVal;
-
-#if 0
-		if (CheckKey(GLFW_KEY_PAGEUP))
-		{
-			playDown=1;
-			recDown=playDown;
-			ClearKey(GLFW_KEY_PAGEUP);
-			cntPos=0;
-			casCount=0;
-			casLevel=0;		
-		}
-#endif
-		if (CheckKey(GLFW_KEY_PAGEDOWN))
-		{
-			playDown=1;
-			recDown=0;
-			ClearKey(GLFW_KEY_PAGEDOWN);
-			cntPos=0;
-			casCount=0;
-			casLevel=0;		
-		}
-		if (CheckKey(GLFW_KEY_END))
-		{
-			playDown=0;
-			recDown=0;
-			ClearKey(GLFW_KEY_END);
-			cntPos=0;
-			casCount=0;
-			casLevel=0;		
-		}
-
-		// Cassette deck
-		if (playDown)
-		{
-			via[chipNo].IRA&=0xBF;
-		}
-	}
-	if (chipNo==1)
-	{
-		// TODO : some keys require that shift is held down - F2,F4,CURSOR LEFT etc
-		uint8_t keyVal=0xFF;
-		keyVal&=CheckKeys(0x01,'1','3','5','7','9','-','=',GLFW_KEY_BACKSPACE);
-		keyVal&=CheckKeys(0x02,'`','W','R','Y','I','P',']',GLFW_KEY_ENTER);
-		keyVal&=CheckKeys(0x04,GLFW_KEY_LCTRL,'A','D','G','J','L','\'',GLFW_KEY_RIGHT);
-		keyVal&=CheckKeys(0x08,GLFW_KEY_TAB,GLFW_KEY_LSHIFT,'X','V','N',',','/',GLFW_KEY_DOWN);
-		keyVal&=CheckKeys(0x10,GLFW_KEY_SPACE,'Z','C','B','M','.',GLFW_KEY_RSHIFT,GLFW_KEY_F1);
-		keyVal&=CheckKeys(0x20,GLFW_KEY_RCTRL,'S','F','H','K',';','#',GLFW_KEY_F3);
-		keyVal&=CheckKeys(0x40,'Q','E','T','U','O','[','/',GLFW_KEY_F5);
-		keyVal&=CheckKeys(0x80,'2','4','6','8','0','\\',GLFW_KEY_HOME,GLFW_KEY_F7);
-		via[chipNo].IRA=keyVal;
-		
-		uint8_t joyVal=0xFF;
-		joyVal&=KeyDown(GLFW_KEY_KP_6)?0x7F:0xFF;
-		via[chipNo].IRB=joyVal;
-		
-		if (playDown && recDown && (!via[0].CA2)) // SAVING
-		{
-			casCount++;
-			if ((via[chipNo].ORB&0x08)!=casLevel)
-			{
-				cntBuffer[cntPos++]=casCount;
-				casCount=0;
-				casLevel=(via[chipNo].ORB&0x08);
-			}
-		}
-		if (playDown && (!recDown) && (!via[0].CA2)) // LOADING
-		{
-			casCount++;
-			if (casCount>=cntBuffer[cntPos])
-			{
-				if (casLevel==0 && (via[chipNo].PCR&0x01))
-				{
-					via[chipNo].IFR|=0x02;
-				}
-				if (casLevel==1 && ((via[chipNo].PCR&0x01)==0))
-				{
-					via[chipNo].IFR|=0x02;
-				}
-				casLevel^=1;
-				cntPos++;
-				casCount=0;
-			}
-		}
-	}
-
-	via[chipNo].IFR&=0x7F;
-	if ((via[chipNo].IFR&0x7F)&(via[chipNo].IER&0x7F))
-	{
-		via[chipNo].IFR|=0x80;
-		if (chipNo==1)
-		{
-			PinSetPIN__IRQ(0);
-		}
-	}
-	else
-	{
-		via[chipNo].IFR|=0x00;
-		if (chipNo==1)
-		{
-			PinSetPIN__IRQ(1);
-		}
-	}
 }
-
+#endif
 
 ////////////6561////////////////////
 
@@ -1724,7 +1946,7 @@ unsigned char *qLoad(const char *romName,uint32_t *length)
 	return romData;
 }
 
-void LoadTAP(const char* fileName)
+int LoadTAP(const char* fileName)
 {
 	uint32_t tapeLength;
 	uint32_t length;
@@ -1735,19 +1957,21 @@ void LoadTAP(const char* fileName)
 	if (tapeBuffer==NULL)
 	{
 		printf("Failed to load %s\n",fileName);
-		return;
+		return 0;
 	}
 
 	if (strncmp(tapeBuffer,"C64-TAPE-RAW",12)!=0)
 	{
 		printf("Not a RAW TAP file\n");
-		return;
+		free(tapeBuffer);
+		return 0;
 	}
 
 	if (tapeBuffer[12]!=1)
 	{
 		printf("Version Mismatch\n");
-		return;
+		free(tapeBuffer);
+		return 0;
 	}
 
 	tapeLength=tapeBuffer[16];
@@ -1758,7 +1982,8 @@ void LoadTAP(const char* fileName)
 	if (tapeLength!=length-0x14)
 	{
 		printf("Tape Length Mismatch\n");
-		return;
+		free(tapeBuffer);
+		return 0;
 	}
 
 	tapePos=0;
@@ -1788,12 +2013,17 @@ void LoadTAP(const char* fileName)
 		if (cntPos>INTERNAL_TAPE_BUFFER_SIZE)
 		{
 			printf("Internal Tape Buffer Overrun\n");
-			return;
+			free(tapeBuffer);
+			return 0;
 		}
 	}
+	
+	free(tapeBuffer);
 
 	cntMax=cntPos;
 	cntPos=0;
+
+	return 1;
 }
 
 void SaveTAP(const char* filename)
@@ -2147,7 +2377,7 @@ void OutputData(uint8_t* tapeBuffer,uint16_t length)
 	}
 }
 
-void LoadPRG(const char* fileName,const char* fileName2)
+int LoadPRG(const char* fileName)
 {
 	uint16_t startAddress;
 	uint32_t tapeLength;
@@ -2159,7 +2389,7 @@ void LoadPRG(const char* fileName,const char* fileName2)
 	if (tapeBuffer==NULL)
 	{
 		printf("Failed to load %s\n",fileName);
-		return;
+		return 0;
 	}
 
 	startAddress=tapeBuffer[0];
@@ -2172,20 +2402,20 @@ void LoadPRG(const char* fileName,const char* fileName2)
 	OutputSilence();
 
 	free(tapeBuffer);
-	if (fileName2!=NULL)
-	{
-		tapeBuffer=qLoad(fileName,&length);
-		if (tapeBuffer==NULL)
-		{
-			printf("Failed to load %s\n",fileName);
-			return;
-		}
-
-		OutputData(tapeBuffer,length);
-
-		free(tapeBuffer);
-	}
 
 	cntMax=cntPos;
 	cntPos=0;
+
+	return 1;
 }
+
+void LoadTape(const char* fileName)
+{
+	if (LoadTAP(fileName))
+		return;
+	if (LoadPRG(fileName))
+		return;
+	cntPos=0;
+	cntMax=0;
+}
+
