@@ -76,6 +76,17 @@ public:
     std::map<std::string, BitVariable> locals;
 };
 
+class CompilerOptions
+{
+public:
+
+	CompilerOptions() { symbolModifier=NULL; inputFile=NULL; optimisationLevel=0; }
+	
+	char *symbolModifier;
+	char *inputFile;
+	int optimisationLevel;
+};
+
 class CodeGenContext 
 {
     std::stack<CodeGenBlock *> blocks;
@@ -96,6 +107,8 @@ public:
     CodeGenContext(CodeGenContext* parent);
     Function *debugTraceString;
     Function *debugTraceChar;
+
+    std::string	symbolPrepend;
 
     bool errorFlagged;
 
@@ -124,7 +137,7 @@ public:
     std::map<std::string, CHandlerDeclaration*> m_handlers;
     std::map<std::string, CMappingDeclaration*> m_mappings;
 
-    void generateCode(CBlock& root);
+    void generateCode(CBlock& root,CompilerOptions &opts);
     GenericValue runCode();
     std::map<std::string, BitVariable>& locals() { return blocks.top()->locals; }
     std::map<std::string, BitVariable>& globals() { return m_globals; }

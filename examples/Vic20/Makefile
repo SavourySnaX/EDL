@@ -11,7 +11,7 @@ clean:
 
 out/m6502.lls: ../../chips/Accurate/m6502.edl
 	mkdir -p out
-	$(EDL) ../../chips/Accurate/m6502.edl >out/m6502.lls
+	$(EDL) -O2 ../../chips/Accurate/m6502.edl >out/m6502.lls
 
 out/m6502.lls.s: out/m6502.lls
 	llc out/m6502.lls

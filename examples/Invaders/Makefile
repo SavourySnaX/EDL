@@ -10,7 +10,7 @@ clean:
 
 out/i8080.lls: ../../chips/Accurate/i8080.edl
 	mkdir -p out
-	$(EDL) ../../chips/Accurate/i8080.edl >out/i8080.lls
+	$(EDL) -O2 ../../chips/Accurate/i8080.edl >out/i8080.lls
 
 out/i8080.lls.s: out/i8080.lls
 	llc out/i8080.lls

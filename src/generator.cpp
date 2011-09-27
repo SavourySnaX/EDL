@@ -74,8 +74,6 @@ namespace
 
 using namespace std;
 
-extern bool JustCompiledOutput;
-
 #define USE_OPTIMISER	1
     
 CodeGenContext::CodeGenContext(CodeGenContext* parent) 
@@ -92,6 +90,7 @@ CodeGenContext::CodeGenContext(CodeGenContext* parent)
 		ee=parent->ee;
 		debugTraceChar=parent->debugTraceChar;
 		debugTraceString=parent->debugTraceString;
+		symbolPrepend=parent->symbolPrepend;
 		isRoot=false;
 	}
 }
@@ -107,7 +106,7 @@ void CodeGenContext::GenerateDisassmTables()
 		PointerType* PointerTy_5 = PointerType::get(IntegerType::get(getGlobalContext(), 8), 0);
 	       	ArrayType* ArrayTy_4 = ArrayType::get(PointerTy_5, tableSize.getLimitedValue()+1);
 		ConstantPointerNull* const_ptr_13 = ConstantPointerNull::get(PointerTy_5);	
-		GlobalVariable* gvar_array_table = new GlobalVariable(*module,ArrayTy_4,true,GlobalValue::ExternalLinkage,NULL, "DIS_"+tableIter->first);
+		GlobalVariable* gvar_array_table = new GlobalVariable(*module,ArrayTy_4,true,GlobalValue::ExternalLinkage,NULL, symbolPrepend+"DIS_"+tableIter->first);
 		std::vector<Constant*> const_array_9_elems;
 
 		std::map<APInt,std::string,myAPIntCompare>::iterator slot=tableIter->second.begin();
@@ -118,7 +117,7 @@ void CodeGenContext::GenerateDisassmTables()
 			if (slot->first == trackingSlot)
 			{
 				ArrayType* ArrayTy_0 = ArrayType::get(IntegerType::get(getGlobalContext(), 8), slot->second.length()-1);
-				GlobalVariable* gvar_array__str = new GlobalVariable(*module, ArrayTy_0,true,GlobalValue::PrivateLinkage,0,".str"+trackingSlot.toString(16,false));
+				GlobalVariable* gvar_array__str = new GlobalVariable(*module, ArrayTy_0,true,GlobalValue::PrivateLinkage,0,symbolPrepend+".str"+trackingSlot.toString(16,false));
 				gvar_array__str->setAlignment(1);
   
 				Constant* const_array_9 = ConstantArray::get(getGlobalContext(), slot->second.substr(1,slot->second.length()-2), true);
@@ -147,12 +146,17 @@ void CodeGenContext::GenerateDisassmTables()
 }
 
 /* Compile the AST into a module */
-void CodeGenContext::generateCode(CBlock& root)
+void CodeGenContext::generateCode(CBlock& root,CompilerOptions &opts)
 {
 	errorFlagged = false;
 
 	if (isRoot)
 	{
+		if (opts.symbolModifier)
+		{
+			symbolPrepend=opts.symbolModifier;
+		}
+
 		PointerType* PointerTy_4 = PointerType::get(IntegerType::get(getGlobalContext(), 8), 0);
 
 		std::vector<const Type*>FuncTy_8_args;
@@ -192,129 +196,130 @@ void CodeGenContext::generateCode(CBlock& root)
 		   */
 		PassManager pm;
 
-		if (!JustCompiledOutput)
-		{
-			pm.add(createPrintModulePass(&outs()));
-		}
 		pm.add(createVerifierPass());
 
-#if USE_OPTIMISER
-		// Add an appropriate TargetData instance for this module...
-		pm.add(new TargetData(*ee->getTargetData()));
-
-		for (int a=0;a<2;a++)		// We add things twice, as the statereferencesquasher will make more improvements once inlining has happened
+		if (opts.optimisationLevel>0)
 		{
-//			pm.add(new StateReferenceSquasher(this));		// Custom pass designed to remove redundant loads of the current state (since it can only be modified in one place)
+			// Add an appropriate TargetData instance for this module...
+			pm.add(new TargetData(*ee->getTargetData()));
 
-			pm.add(createLowerSetJmpPass());          // Lower llvm.setjmp/.longjmp
+			for (int a=0;a<2;a++)		// We add things twice, as the statereferencesquasher will make more improvements once inlining has happened
+			{
+				if (opts.optimisationLevel>1)
+				{
+					pm.add(new StateReferenceSquasher(this));		// Custom pass designed to remove redundant loads of the current state (since it can only be modified in one place)
+				}
 
-			// Propagate constants at call sites into the functions they call.  This
-			// opens opportunities for globalopt (and inlining) by substituting function
-			// pointers passed as arguments to direct uses of functions.  
-			pm.add(createIPSCCPPass());
+				pm.add(createLowerSetJmpPass());          // Lower llvm.setjmp/.longjmp
 
-			// Now that we internalized some globals, see if we can hack on them!
-			pm.add(createGlobalOptimizerPass());
+				// Propagate constants at call sites into the functions they call.  This
+				// opens opportunities for globalopt (and inlining) by substituting function
+				// pointers passed as arguments to direct uses of functions.  
+				pm.add(createIPSCCPPass());
 
-			// Linking modules together can lead to duplicated global constants, only
-			// keep one copy of each constant...
-			pm.add(createConstantMergePass());
+				// Now that we internalized some globals, see if we can hack on them!
+				pm.add(createGlobalOptimizerPass());
 
-			// Remove unused arguments from functions...
-			pm.add(createDeadArgEliminationPass());
+				// Linking modules together can lead to duplicated global constants, only
+				// keep one copy of each constant...
+				pm.add(createConstantMergePass());
 
-			// Reduce the code after globalopt and ipsccp.  Both can open up significant
-			// simplification opportunities, and both can propagate functions through
-			// function pointers.  When this happens, we often have to resolve varargs
-			// calls, etc, so let instcombine do this.
-			pm.add(createInstructionCombiningPass());
-			//pm.add(createFunctionInliningPass()); // Inline small functions
-			pm.add(createPruneEHPass());              // Remove dead EH info
-			pm.add(createGlobalDCEPass());            // Remove dead functions
+				// Remove unused arguments from functions...
+				pm.add(createDeadArgEliminationPass());
 
-			// If we didn't decide to inline a function, check to see if we can
-			// transform it to pass arguments by value instead of by reference.
-			pm.add(createArgumentPromotionPass());
+				// Reduce the code after globalopt and ipsccp.  Both can open up significant
+				// simplification opportunities, and both can propagate functions through
+				// function pointers.  When this happens, we often have to resolve varargs
+				// calls, etc, so let instcombine do this.
+				pm.add(createInstructionCombiningPass());
+				//pm.add(createFunctionInliningPass()); // Inline small functions
+				pm.add(createPruneEHPass());              // Remove dead EH info
+				pm.add(createGlobalDCEPass());            // Remove dead functions
 
-			// The IPO passes may leave cruft around.  Clean up after them.
-			pm.add(createInstructionCombiningPass());
-			pm.add(createJumpThreadingPass());        // Thread jumps.
-			pm.add(createScalarReplAggregatesPass()); // Break up allocas
+				// If we didn't decide to inline a function, check to see if we can
+				// transform it to pass arguments by value instead of by reference.
+				pm.add(createArgumentPromotionPass());
 
-			// Run a few AA driven optimizations here and now, to cleanup the code.
-			pm.add(createFunctionAttrsPass());        // Add nocapture
-			pm.add(createGlobalsModRefPass());        // IP alias analysis
-			pm.add(createLICMPass());                 // Hoist loop invariants
-			pm.add(createGVNPass());                  // Remove common subexprs
-			pm.add(createMemCpyOptPass());            // Remove dead memcpy's
-			pm.add(createDeadStoreEliminationPass()); // Nuke dead stores
+				// The IPO passes may leave cruft around.  Clean up after them.
+				pm.add(createInstructionCombiningPass());
+				pm.add(createJumpThreadingPass());        // Thread jumps.
+				pm.add(createScalarReplAggregatesPass()); // Break up allocas
 
-			// Cleanup and simplify the code after the scalar optimizations.
-			pm.add(createInstructionCombiningPass());
-			pm.add(createJumpThreadingPass());        // Thread jumps.
-			pm.add(createPromoteMemoryToRegisterPass()); // Cleanup after threading.
+				// Run a few AA driven optimizations here and now, to cleanup the code.
+				pm.add(createFunctionAttrsPass());        // Add nocapture
+				pm.add(createGlobalsModRefPass());        // IP alias analysis
+				pm.add(createLICMPass());                 // Hoist loop invariants
+				pm.add(createGVNPass());                  // Remove common subexprs
+				pm.add(createMemCpyOptPass());            // Remove dead memcpy's
+				pm.add(createDeadStoreEliminationPass()); // Nuke dead stores
+
+				// Cleanup and simplify the code after the scalar optimizations.
+				pm.add(createInstructionCombiningPass());
+				pm.add(createJumpThreadingPass());        // Thread jumps.
+				pm.add(createPromoteMemoryToRegisterPass()); // Cleanup after threading.
 
 
-			// Delete basic blocks, which optimization passes may have killed...
-			pm.add(createCFGSimplificationPass());
+				// Delete basic blocks, which optimization passes may have killed...
+				pm.add(createCFGSimplificationPass());
 
-			// Now that we have optimized the program, discard unreachable functions...
-			pm.add(createGlobalDCEPass());
-			pm.add(createCFGSimplificationPass());    // Clean up disgusting code
-			pm.add(createPromoteMemoryToRegisterPass());// Kill useless allocas
-			pm.add(createGlobalOptimizerPass());      // Optimize out global vars
-			pm.add(createGlobalDCEPass());            // Remove unused fns and globs
-			pm.add(createIPConstantPropagationPass());// IP Constant Propagation
-			pm.add(createDeadArgEliminationPass());   // Dead argument elimination
-			pm.add(createInstructionCombiningPass()); // Clean up after IPCP & DAE
-			pm.add(createCFGSimplificationPass());    // Clean up after IPCP & DAE
+				// Now that we have optimized the program, discard unreachable functions...
+				pm.add(createGlobalDCEPass());
+				pm.add(createCFGSimplificationPass());    // Clean up disgusting code
+				pm.add(createPromoteMemoryToRegisterPass());// Kill useless allocas
+				pm.add(createGlobalOptimizerPass());      // Optimize out global vars
+				pm.add(createGlobalDCEPass());            // Remove unused fns and globs
+				pm.add(createIPConstantPropagationPass());// IP Constant Propagation
+				pm.add(createDeadArgEliminationPass());   // Dead argument elimination
+				pm.add(createInstructionCombiningPass()); // Clean up after IPCP & DAE
+				pm.add(createCFGSimplificationPass());    // Clean up after IPCP & DAE
 
-			pm.add(createPruneEHPass());              // Remove dead EH info
-			pm.add(createFunctionAttrsPass());        // Deduce function attrs
+				pm.add(createPruneEHPass());              // Remove dead EH info
+				pm.add(createFunctionAttrsPass());        // Deduce function attrs
 
-			//  if (!DisableInline)
-			pm.add(createFunctionInliningPass());   // Inline small functions
-			pm.add(createArgumentPromotionPass());    // Scalarize uninlined fn args
+				//  if (!DisableInline)
+				pm.add(createFunctionInliningPass());   // Inline small functions
+				pm.add(createArgumentPromotionPass());    // Scalarize uninlined fn args
 
-			pm.add(createSimplifyLibCallsPass());     // Library Call Optimizations
-			pm.add(createInstructionCombiningPass()); // Cleanup for scalarrepl.
-			pm.add(createJumpThreadingPass());        // Thread jumps.
-			pm.add(createCFGSimplificationPass());    // Merge & remove BBs
-			pm.add(createScalarReplAggregatesPass()); // Break up aggregate allocas
-			pm.add(createInstructionCombiningPass()); // Combine silly seq's
+				pm.add(createSimplifyLibCallsPass());     // Library Call Optimizations
+				pm.add(createInstructionCombiningPass()); // Cleanup for scalarrepl.
+				pm.add(createJumpThreadingPass());        // Thread jumps.
+				pm.add(createCFGSimplificationPass());    // Merge & remove BBs
+				pm.add(createScalarReplAggregatesPass()); // Break up aggregate allocas
+				pm.add(createInstructionCombiningPass()); // Combine silly seq's
 
-			pm.add(createTailCallEliminationPass());  // Eliminate tail calls
-			pm.add(createCFGSimplificationPass());    // Merge & remove BBs
-			pm.add(createReassociatePass());          // Reassociate expressions
-			pm.add(createLoopRotatePass());
-			pm.add(createLICMPass());                 // Hoist loop invariants
-			pm.add(createLoopUnswitchPass());         // Unswitch loops.
-			// FIXME : Removing instcombine causes nestedloop regression.
-			pm.add(createInstructionCombiningPass());
-			pm.add(createIndVarSimplifyPass());       // Canonicalize indvars
-			pm.add(createLoopDeletionPass());         // Delete dead loops
-			pm.add(createLoopUnrollPass());           // Unroll small loops
-			pm.add(createInstructionCombiningPass()); // Clean up after the unroller
-			pm.add(createGVNPass());                  // Remove redundancies
-			pm.add(createMemCpyOptPass());            // Remove memcpy / form memset
-			pm.add(createSCCPPass());                 // Constant prop with SCCP
+				pm.add(createTailCallEliminationPass());  // Eliminate tail calls
+				pm.add(createCFGSimplificationPass());    // Merge & remove BBs
+				pm.add(createReassociatePass());          // Reassociate expressions
+				pm.add(createLoopRotatePass());
+				pm.add(createLICMPass());                 // Hoist loop invariants
+				pm.add(createLoopUnswitchPass());         // Unswitch loops.
+				// FIXME : Removing instcombine causes nestedloop regression.
+				pm.add(createInstructionCombiningPass());
+				pm.add(createIndVarSimplifyPass());       // Canonicalize indvars
+				pm.add(createLoopDeletionPass());         // Delete dead loops
+				pm.add(createLoopUnrollPass());           // Unroll small loops
+				pm.add(createInstructionCombiningPass()); // Clean up after the unroller
+				pm.add(createGVNPass());                  // Remove redundancies
+				pm.add(createMemCpyOptPass());            // Remove memcpy / form memset
+				pm.add(createSCCPPass());                 // Constant prop with SCCP
 
-			// Run instcombine after redundancy elimination to exploit opportunities
-			// opened up by them.
-			pm.add(createInstructionCombiningPass());
+				// Run instcombine after redundancy elimination to exploit opportunities
+				// opened up by them.
+				pm.add(createInstructionCombiningPass());
 
-			pm.add(createDeadStoreEliminationPass()); // Delete dead stores
-			pm.add(createAggressiveDCEPass());        // Delete dead instructions
-			pm.add(createCFGSimplificationPass());    // Merge & remove BBs
-			pm.add(createStripDeadPrototypesPass());  // Get rid of dead prototypes
-			pm.add(createDeadTypeEliminationPass());  // Eliminate dead types
-			pm.add(createConstantMergePass());        // Merge dup global constants
+				pm.add(createDeadStoreEliminationPass()); // Delete dead stores
+				pm.add(createAggressiveDCEPass());        // Delete dead instructions
+				pm.add(createCFGSimplificationPass());    // Merge & remove BBs
+				pm.add(createStripDeadPrototypesPass());  // Get rid of dead prototypes
+				pm.add(createDeadTypeEliminationPass());  // Eliminate dead types
+				pm.add(createConstantMergePass());        // Merge dup global constants
 
-			// Make sure everything is still good.
-			pm.add(createVerifierPass());
+				// Make sure everything is still good.
+				pm.add(createVerifierPass());
+			}
 		}
 		pm.add(createPrintModulePass(&outs()));
-#endif
+
 		pm.run(*module);
 	}
 }
@@ -342,7 +347,7 @@ Value* CString::codeGen(CodeGenContext& context)
 {
 	ArrayType* ArrayTy_0 = ArrayType::get(IntegerType::get(getGlobalContext(), 8), quoted.length()-1);
  
-       	GlobalVariable* gvar_array__str = new GlobalVariable(/*Module=*/*context.module,  /*Type=*/ArrayTy_0,  /*isConstant=*/true,  /*Linkage=*/GlobalValue::PrivateLinkage,  /*Initializer=*/0,  /*Name=*/".str");
+       	GlobalVariable* gvar_array__str = new GlobalVariable(/*Module=*/*context.module,  /*Type=*/ArrayTy_0,  /*isConstant=*/true,  /*Linkage=*/GlobalValue::PrivateLinkage,  /*Initializer=*/0,  /*Name=*/context.symbolPrepend+".str");
 	gvar_array__str->setAlignment(1);
   
 	// Constant Definitions
@@ -1239,15 +1244,15 @@ Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 		std::string idxStateLbl = "IDX" + context.stateLabelStack;
 		std::string stkStateLbl = "STACK" + context.stateLabelStack;
 
-		GlobalVariable* gcurState = new GlobalVariable(*context.module,Type::getIntNTy(getGlobalContext(),bitsNeeded), false, GlobalValue::PrivateLinkage,NULL,curStateLbl);
-		GlobalVariable* gnxtState = new GlobalVariable(*context.module,Type::getIntNTy(getGlobalContext(),bitsNeeded), false, GlobalValue::PrivateLinkage,NULL,nxtStateLbl);
+		GlobalVariable* gcurState = new GlobalVariable(*context.module,Type::getIntNTy(getGlobalContext(),bitsNeeded), false, GlobalValue::PrivateLinkage,NULL,context.symbolPrepend+curStateLbl);
+		GlobalVariable* gnxtState = new GlobalVariable(*context.module,Type::getIntNTy(getGlobalContext(),bitsNeeded), false, GlobalValue::PrivateLinkage,NULL,context.symbolPrepend+nxtStateLbl);
 
 		curState = gcurState;
 		nxtState = gnxtState;
 
 		ArrayType* ArrayTy_0 = ArrayType::get(IntegerType::get(getGlobalContext(), bitsNeeded), MAX_SUPPORTED_STACK_DEPTH);
-		GlobalVariable* stkState = new GlobalVariable(*context.module, ArrayTy_0, false,  GlobalValue::PrivateLinkage, NULL, stkStateLbl);
-		GlobalVariable *stkStateIdx = new GlobalVariable(*context.module,Type::getIntNTy(getGlobalContext(),MAX_SUPPORTED_STACK_BITS), false, GlobalValue::PrivateLinkage,NULL,idxStateLbl);
+		GlobalVariable* stkState = new GlobalVariable(*context.module, ArrayTy_0, false,  GlobalValue::PrivateLinkage, NULL, context.symbolPrepend+stkStateLbl);
+		GlobalVariable *stkStateIdx = new GlobalVariable(*context.module,Type::getIntNTy(getGlobalContext(),MAX_SUPPORTED_STACK_BITS), false, GlobalValue::PrivateLinkage,NULL,context.symbolPrepend+idxStateLbl);
 
 		StateVariable newStateVar;
 		newStateVar.currentState = curState;
@@ -1431,7 +1436,15 @@ void CVariableDeclaration::CreateWriteAccessor(CodeGenContext& context,BitVariab
 	vector<const Type*> argTypes;
 	argTypes.push_back(IntegerType::get(getGlobalContext(), var.size.getLimitedValue()));
 	FunctionType *ftype = FunctionType::get(Type::getVoidTy(getGlobalContext()),argTypes, false);
-	Function* function = Function::Create(ftype, context.isRoot ? GlobalValue::ExternalLinkage : GlobalValue::PrivateLinkage, "PinSet"+id.name, context.module);
+	Function* function;
+	if (context.isRoot)
+	{
+		function = Function::Create(ftype, GlobalValue::ExternalLinkage, context.symbolPrepend+"PinSet"+id.name, context.module);
+	}
+	else
+	{
+		function = Function::Create(ftype, GlobalValue::PrivateLinkage, context.symbolPrepend+"PinSet"+id.name, context.module);
+	}
 	BasicBlock *bblock = BasicBlock::Create(getGlobalContext(), "entry", function, 0);
 
 	context.pushBlock(bblock);
@@ -1455,7 +1468,16 @@ void CVariableDeclaration::CreateReadAccessor(CodeGenContext& context,BitVariabl
 {
 	vector<const Type*> argTypes;
 	FunctionType *ftype = FunctionType::get(IntegerType::get(getGlobalContext(), var.size.getLimitedValue()),argTypes, false);
-	Function* function = Function::Create(ftype, context.isRoot ? GlobalValue::ExternalLinkage : GlobalValue::PrivateLinkage, "PinGet"+id.name, context.module);
+	Function* function;
+       	if (context.isRoot)
+	{
+		function = Function::Create(ftype, GlobalValue::ExternalLinkage, context.symbolPrepend+"PinGet"+id.name, context.module);
+	}
+	else
+	{
+		function = Function::Create(ftype, GlobalValue::PrivateLinkage, context.symbolPrepend+"PinGet"+id.name, context.module);
+	}
+
 	BasicBlock *bblock = BasicBlock::Create(getGlobalContext(), "entry", function, 0);
 	function->setOnlyReadsMemory(true);
 
@@ -1506,16 +1528,16 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 		{
 			if (internal || !context.isRoot)
 			{
-				temp.value = new GlobalVariable(*context.module,Type::getIntNTy(getGlobalContext(),size.integer.getLimitedValue()), false, GlobalValue::PrivateLinkage,NULL,id.name.c_str());
+				temp.value = new GlobalVariable(*context.module,Type::getIntNTy(getGlobalContext(),size.integer.getLimitedValue()), false, GlobalValue::PrivateLinkage,NULL,context.symbolPrepend+id.name);
 			}
 			else
 			{
-				temp.value = new GlobalVariable(*context.module,Type::getIntNTy(getGlobalContext(),size.integer.getLimitedValue()), false, GlobalValue::ExternalLinkage,NULL,id.name.c_str());
+				temp.value = new GlobalVariable(*context.module,Type::getIntNTy(getGlobalContext(),size.integer.getLimitedValue()), false, GlobalValue::ExternalLinkage,NULL,context.symbolPrepend+id.name);
 			}
 		}
 		else
 		{
-			temp.value = new GlobalVariable(*context.module,Type::getIntNTy(getGlobalContext(),size.integer.getLimitedValue()), false, GlobalValue::PrivateLinkage,NULL,id.name.c_str());
+			temp.value = new GlobalVariable(*context.module,Type::getIntNTy(getGlobalContext(),size.integer.getLimitedValue()), false, GlobalValue::PrivateLinkage,NULL,context.symbolPrepend+id.name);
 			switch (pinType)
 			{
 				case TOK_IN:
@@ -1642,7 +1664,7 @@ Value* CHandlerDeclaration::codeGen(CodeGenContext& context)
 	}
 
 	FunctionType *ftype = FunctionType::get(Type::getVoidTy(getGlobalContext()),argTypes, false);
-	Function* function = Function::Create(ftype, GlobalValue::PrivateLinkage, "HANDLER."+id.name, context.module);
+	Function* function = Function::Create(ftype, GlobalValue::PrivateLinkage, context.symbolPrepend+"HANDLER."+id.name, context.module);
 	BasicBlock *bblock = BasicBlock::Create(getGlobalContext(), "entry", function, 0);
 	
 	context.m_handlers[id.name]=this;
@@ -1766,7 +1788,7 @@ Value* CInstruction::codeGen(CodeGenContext& context)
 		context.disassemblyTable[table.name][opcode]=disassembled.quoted;
 
 		FunctionType *ftype = FunctionType::get(Type::getVoidTy(getGlobalContext()),argTypes, false);
-		Function* function = Function::Create(ftype, GlobalValue::PrivateLinkage, "OPCODE_"+opcodeString.string.quoted.substr(1,mnemonic.quoted.length()-2) + "_" + table.name+opcode.toString(16,false),context.module);
+		Function* function = Function::Create(ftype, GlobalValue::PrivateLinkage, context.symbolPrepend+"OPCODE_"+opcodeString.string.quoted.substr(1,mnemonic.quoted.length()-2) + "_" + table.name+opcode.toString(16,false),context.module);
 		BasicBlock *bblock = BasicBlock::Create(getGlobalContext(), "entry", function, 0);
 
 		context.pushBlock(bblock);
@@ -2786,7 +2808,7 @@ Value* CExternDecl::codeGen(CodeGenContext& context)
 		FuncTy_8 = FunctionType::get(IntegerType::get(getGlobalContext(), size),FuncTy_8_args,false);
 	}
 
-	Function* func = Function::Create(FuncTy_8,GlobalValue::ExternalLinkage,name.name,context.module);
+	Function* func = Function::Create(FuncTy_8,GlobalValue::ExternalLinkage,context.symbolPrepend+name.name,context.module);
 	func->setCallingConv(CallingConv::C);
 	AttrListPtr func_attrs;
 	func->setAttributes(func_attrs);
@@ -2959,11 +2981,11 @@ Value* CFunctionDecl::codeGen(CodeGenContext& context)
 	Function* func = NULL;
 	if (internal || !context.isRoot)
 	{
-		func=Function::Create(FuncTy_8,GlobalValue::PrivateLinkage,name.name,context.module);
+		func=Function::Create(FuncTy_8,GlobalValue::PrivateLinkage,context.symbolPrepend+name.name,context.module);
 	}
 	else
 	{
-		func=Function::Create(FuncTy_8,GlobalValue::ExternalLinkage,name.name,context.module);
+		func=Function::Create(FuncTy_8,GlobalValue::ExternalLinkage,context.symbolPrepend+name.name,context.module);
 		func->setCallingConv(CallingConv::C);
 	}
 	AttrListPtr func_attrs;
@@ -3064,8 +3086,10 @@ void CInstance::prePass(CodeGenContext& context)
 	
 	CodeGenContext* includefile;
 
+	CompilerOptions dummy;
+
 	includefile = new CodeGenContext(&context);
-	includefile->generateCode(*g_ProgramBlock);
+	includefile->generateCode(*g_ProgramBlock,dummy);
 
 	context.m_includes[ident.name]=includefile;
 }

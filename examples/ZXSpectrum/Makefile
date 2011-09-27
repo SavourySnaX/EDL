@@ -12,11 +12,11 @@ clean:
 
 out/z80.lls: ../../chips/Accurate/z80.edl
 	mkdir -p out
-	$(EDL) ../../chips/Accurate/z80.edl >out/z80.lls
+	$(EDL) -O2 ../../chips/Accurate/z80.edl >out/z80.lls
 
 out/z80s.lls: ../../chips/Simplified/z80.edl
 	mkdir -p out
-	$(EDL) ../../chips/Simplified/z80.edl >out/z80s.lls
+	$(EDL) -O2 ../../chips/Simplified/z80.edl >out/z80s.lls
 
 out/z80.lls.s: out/z80.lls
 	llc out/z80.lls
