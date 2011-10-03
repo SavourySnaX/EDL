@@ -9,9 +9,9 @@
 
 unsigned short breakpoints[2][20]={
 	{0,0},
-	{0xE853,0}
+	{0xF556}
 	};		// first list main cpu, second is disk cpu
-unsigned int numBreakpoints[2]={0,1};
+unsigned int numBreakpoints[2]={0,0};
 
 int isBreakpoint(int chip,uint16_t address)
 {

@@ -12,6 +12,7 @@ uint16_t DISK_PinGetPIN_AB();
 uint8_t DISK_PinGetPIN_DB();
 void DISK_PinSetPIN_DB(uint8_t);
 void DISK_PinSetPIN_O0(uint8_t);
+void DISK_PinSetPIN_SO(uint8_t);
 uint8_t DISK_PinGetPIN_SYNC();
 uint8_t DISK_PinGetPIN_RW();
 void DISK_PinSetPIN__IRQ(uint8_t);
@@ -367,6 +368,7 @@ extern int stopTheClock;
 
 void DISK_Reset()
 {
+	DISK_PinSetPIN_SO(1);
 	DISK_PinSetPIN__IRQ(1);
 
 	DISK_PC=DISK_GetByte(0xFFFC);
@@ -392,6 +394,9 @@ void DISK_Reset()
 uint8_t lastPA1=0xFF;
 uint8_t lastDrvPB=0;
 static uint8_t lastClk=12;
+
+int hackTime=11;
+
 uint16_t DISK_Tick(uint8_t* clk,uint8_t* atn,uint8_t* dat)
 {
 	static uint16_t lastPC;
@@ -414,13 +419,34 @@ uint16_t DISK_Tick(uint8_t* clk,uint8_t* atn,uint8_t* dat)
 	if (lastClk!=*clk)
 	{
 		lastClk=*clk;
-//		doDebug=1;
 	}
 
 	DISK_VIA0_PinSetPIN_PB(pb);
 	DISK_VIA0_PinSetPIN_CA1(*atn);
+	
+	// We don't yet have a drive mechanism.. 
+	//
+	// CA2 pin is placed into a 3 input NAND gate.. it acts as enable for byte sync
+	// for now.. if CA2 goes low, we wait 256 cycles and then act as if the drive sync occured
+	
+	if (DISK_VIA1_PinGetPIN_CA2()==1)
+	{
+		if (hackTime==0)
+		{
+			hackTime=0x100;
+		}
+		else
+		{
+			hackTime--;
+		}
+	}
+	else
+	{
+		hackTime=0x100;
+	}
 
-	DISK_VIA1_PinSetPIN_CA1(1);		//~BYTE SYNC
+	DISK_VIA1_PinSetPIN_CA1(hackTime==0?0:1);
+	DISK_PinSetPIN_SO(hackTime==0?0:1);
 
 	// DISK/CPU UPDATE
 	DISK_PinSetPIN_O0(1);
@@ -436,34 +462,9 @@ uint16_t DISK_Tick(uint8_t* clk,uint8_t* atn,uint8_t* dat)
 			stopTheClock=1;
 		}
 
-//		if (DISK_PinGetPIN_AB()==0xEBE7)		//F2B0 - irq
-//			doDebug=1;
-//		if (DISK_PinGetPIN_AB()==0xE85B)		//ATN Ack
-//			doDebug=1;
-//		if (DISK_PinGetPIN_AB()==0xE9F0)		//CLOCK CHANGED
-//			doDebug=1;
-//		if (DISK_PinGetPIN_AB()==0xEA6B)		//EOI
-//			doDebug=1;
-//		if (DISK_PinGetPIN_AB()==0xF2B0)		//Timer interrupted
-//			doDebug=1;
-//		if (DISK_PinGetPIN_AB()==0xE853)		//ATN Interrupt
-//			doDebug=1;
-//		if (DISK_PinGetPIN_AB()==0xEB3A)		//Startup
-//			doDebug=1;
-//		if (DISK_PinGetPIN_AB()==0xE884)		//atn seen
-//			doDebug=1;
-
-/*
-		if (DISK_GetByte(addr)==0x50)
-			doDebug=1;
-*/
 		if (doDebug)
 		{
 			DISK_Disassemble(addr,1);
-/*			if (getch()==' ')
-			{
-				doDebug=0;
-			}*/
 		}
 	}
 
@@ -542,517 +543,5 @@ uint16_t DISK_Tick(uint8_t* clk,uint8_t* atn,uint8_t* dat)
 	*atn=(DISK_VIA0_PinGetPIN_PB()&0x10)>>4;
 
 	return lastPC;
-#if 0
-	DISK_via[0].IRB=0xFA;
-	DISK_via[0].IRB|=CA2<<2;
-	DISK_via[0].IRB|=CB2;
-
-	if ((lastPA1&0x80)==0 && (PA1&0x80)==0x80)
-	{
-		if ((DISK_via[0].PCR&0xE0)==0)
-		{
-			DISK_via[0].IFR|=0x02;
-		}
-	}
-	DISK_VIATick(0);
-	DISK_VIATick(1);
-
-
-#endif
-//	lastPA1=PA1;
-//	return DISK_VIA0_PinGetPIN_PB();
-
-
-
-
-
-
-
-
-
-#if 0
-
-	static uint8_t lastCA2=0xFF,lastCB2=0xFF,lastDrvPB=0xFF,lastIOPB=0xFF;
-	uint16_t addr; 
-
-	if (lastIOPB!=DISK_VIA0_PinGetPIN_PB())
-	{
-		lastIOPB=DISK_VIA0_PinGetPIN_PB();
-		printf("IO change %02X\n",lastIOPB);
-	}
-
-	if (lastCA2!=CA2)
-	{
-		printf("DISK Data Change %d\n",CA2);
-	}
-	if (lastCB2!=CB2)
-	{
-		printf("DISK Clock Change %d\n",CB2);
-	}
-/*
-	if ((lastPA1&0x83)!=(PA1&0x83))
-	{
-		printf("DISK Par Change %02X\n",PA1);
-	}*/
-	lastCB2=CB2;
-	lastCA2=CA2;
-
-	DISK_PinSetPIN_O0(1);
-
-	addr=DISK_PinGetPIN_AB();
-
-	if (DISK_PinGetPIN_SYNC())
-	{
-//		if (DISK_PinGetPIN_AB()==0xEBE7)		//F2B0 - irq
-//			doDebug=1;
-//		if (DISK_PinGetPIN_AB()==0xE85B)		//ATN Ack
-//			doDebug=1;
-//		if (DISK_PinGetPIN_AB()==0xF2B0)		//Timer interrupted
-//			doDebug=1;
-//		if (DISK_PinGetPIN_AB()==0xE853)		//ATN Interrupt
-//			doDebug=1;
-//		if (DISK_PinGetPIN_AB()==0xEB3A)		//Startup
-//			doDebug=1;
-
-
-		if (doDebug)
-		{
-			DISK_Disassemble(addr,1);
-			getch();
-		}
-	}
-//	PB0 - DATA IN				PB0	STEP MOTOR
-//	PB1 - DATA OUT				PB1	STEP MOTOR
-//	PB2 - CLOCK IN				PB2	MTR / drive motor (on/off)
-//	PB3 - CLOCK OUT				PB3	ACT / LED on drive
-//	PB4 - ATN ACK OUT			PB4	Write Protect Sense (1==on)
-//	PB5 - DEVICE ADDRESS			PB5	BIT RATE
-//	PB6 - DEVICE ADDRESS			PB6	BIT RATE
-//	PB7 - ATN IN				PB7	SYNC IN
-
-	if (lastDrvPB!=DISK_VIA1_PinGetPIN_PB())
-	{
-		lastDrvPB=DISK_VIA1_PinGetPIN_PB();
-		printf("Drive change %02X\n",lastDrvPB);
-		printf("Stepping %d\n",lastDrvPB&0x03);
-		printf("LED %s\n",lastDrvPB&0x08?"on":"off");
-		printf("Motor %s\n",lastDrvPB&0x04?"on":"off");
-		printf("WriteProt %s\n",lastDrvPB&0x10?"on":"off");
-		printf("BitRate %d\n",(lastDrvPB&0x60)>>5);
-		printf("Sync %d\n",(lastDrvPB&0x80)>>7);
-	}
-	
-
-	DISK_VIA0_PinSetPIN_RW(DISK_PinGetPIN_RW());
-	DISK_VIA1_PinSetPIN_RW(DISK_PinGetPIN_RW());
-
-	DISK_VIA0_PinSetPIN_RS(addr&0xF);
-	DISK_VIA1_PinSetPIN_RS(addr&0xF);
-
-	if ((addr&0x9C00)==0x1800)		// VIA0
-	{
-		if (doDebug)
-			printf("%04X : CS SETTING\n",addr);
-		DISK_VIA0_PinSetPIN_CS(0x01|0x00);
-		DISK_VIA1_PinSetPIN_CS(0x01|0x02);
-	}
-	else
-	{
-		if ((addr&0x9C00)==0x1C00)	// VIA1
-		{
-			if (doDebug)
-				printf("%04X : CS SETTING\n",addr);
-			DISK_VIA0_PinSetPIN_CS(0x01|0x02);
-			DISK_VIA1_PinSetPIN_CS(0x01|0x00);
-		}
-		else
-		{
-			if (doDebug)
-				printf("%04X : CS CLEARING\n",addr);
-			DISK_VIA0_PinSetPIN_CS(0x01|0x02);
-			DISK_VIA1_PinSetPIN_CS(0x01|0x02);
-		}
-	}
-
-	DISK_VIA0_PinSetPIN_O2(1);
-	DISK_VIA1_PinSetPIN_O2(1);
-
-	if (DISK_PinGetPIN_RW())
-	{
-		uint8_t  data = DISK_GetByte(addr);
-//		if (doDebug)
-//			printf("Getting : %02X @ %04X\n", data,DISK_PinGetPIN_AB());
-		DISK_PinSetPIN_DB(data);
-	}
-	if (!DISK_PinGetPIN_RW())
-	{
-//		if (doDebug)
-//			printf("Storing : %02X @ %04X\n", DISK_PinGetPIN_DB(),DISK_PinGetPIN_AB());
-		DISK_SetByte(addr,DISK_PinGetPIN_DB());
-	}
-
-	DISK_VIA0_PinSetPIN_O2(0);
-	DISK_VIA1_PinSetPIN_O2(0);
-		
-	DISK_PinSetPIN__IRQ(DISK_VIA0_PinGetPIN__IRQ()&DISK_VIA1_PinGetPIN__IRQ());
-
-	DISK_PinSetPIN_O0(0);
-#if 0
-	DISK_via[0].IRB=0xFA;
-	DISK_via[0].IRB|=CA2<<2;
-	DISK_via[0].IRB|=CB2;
-
-	if ((lastPA1&0x80)==0 && (PA1&0x80)==0x80)
-	{
-		if ((DISK_via[0].PCR&0xE0)==0)
-		{
-			DISK_via[0].IFR|=0x02;
-		}
-	}
-	DISK_VIATick(0);
-	DISK_VIATick(1);
-
-
-#endif
-	lastPA1=PA1;
-	return DISK_VIA0_PinGetPIN_PB();
-
-
-#endif
 }
 
-#if 0
-
-///////////////////
-//
-
-//	Serial BUS				Motor And READ/WRITE
-//	VIA 1	1800-180F			VIA 2	1C00-1C0F
-//	NMI??					IRQ??
-//	CA1 - ????				CA1	Byte Ready??
-// 	PA0 - 					PA0	DATA TO/FROM DISK HEAD
-//	PA1 - 					PA1	DATA TO/FROM DISK HEAD
-//	PA2 - 					PA2	DATA TO/FROM DISK HEAD
-//	PA3 - 					PA3	DATA TO/FROM DISK HEAD
-//	PA4 - 					PA4	DATA TO/FROM DISK HEAD
-//	PA5 - 					PA5	DATA TO/FROM DISK HEAD
-//	PA6 - 					PA6	DATA TO/FROM DISK HEAD
-//	PA7 - 					PA7	DATA TO/FROM DISK HEAD
-//	CA2 - ????				CA2	SOE - on DISK_6502
-//
-//	CB1 - ????				CB1	???
-//	PB0 - DATA IN				PB0	STEP MOTOR
-//	PB1 - DATA OUT				PB1	STEP MOTOR
-//	PB2 - CLOCK IN				PB2	MTR / drive motor (on/off)
-//	PB3 - CLOCK OUT				PB3	ACT / LED on drive
-//	PB4 - ATN ACK OUT			PB4	Write Protect Sense (1==on)
-//	PB5 - DEVICE ADDRESS			PB5	BIT RATE
-//	PB6 - DEVICE ADDRESS			PB6	BIT RATE
-//	PB7 - ATN IN				PB7	SYNC IN
-//	//CB2 - ATN IN				CB2	????
-//
-//
-//
-
-
-uint8_t DISK_VIAGetByte(int chipNo,int regNo)
-{
-	if (doDebug)
-		printf("R VIA%d %02X\n",chipNo+1,regNo);
-	switch (regNo)
-	{
-		case 0:			//IRB
-			DISK_via[chipNo].IFR&=~0x18;
-			return (DISK_via[chipNo].IRB & (~DISK_via[chipNo].DDRB)) | (DISK_via[chipNo].ORB & DISK_via[chipNo].DDRB);
-		case 1:			//IRA
-			DISK_via[chipNo].IFR&=~0x03;
-			//FALL through intended
-		case 15:
-			return (DISK_via[chipNo].IRA & (~DISK_via[chipNo].DDRA));
-		case 2:
-			return DISK_via[chipNo].DDRB;
-		case 3:
-			return DISK_via[chipNo].DDRA;
-		case 4:
-			DISK_via[chipNo].IFR&=~0x40;
-			return (DISK_via[chipNo].T1C&0xFF);
-		case 5:
-			return (DISK_via[chipNo].T1C>>8);
-		case 6:
-			return DISK_via[chipNo].T1LL;
-		case 7:
-			return DISK_via[chipNo].T1LH;
-		case 8:
-			DISK_via[chipNo].IFR&=~0x20;
-			return (DISK_via[chipNo].T2C&0xFF);
-		case 9:
-			return (DISK_via[chipNo].T2C>>8);
-		case 10:
-			DISK_via[chipNo].IFR&=~0x04;
-			return DISK_via[chipNo].SR;
-		case 11:
-			return DISK_via[chipNo].ACR;
-		case 12:
-			return DISK_via[chipNo].PCR;
-		case 13:
-			return DISK_via[chipNo].IFR;
-		case 14:
-			return DISK_via[chipNo].IER & 0x7F;
-	}
-}
-
-void DISK_VIASetByte(int chipNo,int regNo,uint8_t byte)
-{
-	if (doDebug)
-		printf("W VIA%d %02X,%02X\n",chipNo+1,regNo,byte);
-	switch (regNo)
-	{
-		case 0:
-			DISK_via[chipNo].IFR&=~0x18;
-			DISK_via[chipNo].ORB=byte&DISK_via[chipNo].DDRB;
-			break;
-		case 1:
-			DISK_via[chipNo].IFR&=~0x03;
-			//FALL through intended
-		case 15:
-			DISK_via[chipNo].ORA=byte&DISK_via[chipNo].DDRA;
-			break;
-		case 2:
-//			if (DISK_via[chipNo].DDRB!=byte)
-//				printf("W VIA%d %02X,%02X\n",chipNo+1,regNo,byte);
-			DISK_via[chipNo].DDRB=byte;
-			break;
-		case 3:
-//			if (DISK_via[chipNo].DDRA!=byte)
-//				printf("W VIA%d %02X,%02X\n",chipNo+1,regNo,byte);
-			DISK_via[chipNo].DDRA=byte;
-			break;
-		case 4:
-			DISK_via[chipNo].T1LL=byte;
-			break;
-		case 5:
-			DISK_via[chipNo].T1LH=byte;
-			DISK_via[chipNo].T1C=byte<<8;
-			DISK_via[chipNo].T1C|=DISK_via[chipNo].T1LL;
-			DISK_via[chipNo].IFR&=~0x40;
-			break;
-		case 6:
-			DISK_via[chipNo].T1LL=byte;
-			break;
-		case 7:
-			DISK_via[chipNo].T1LH=byte;
-			DISK_via[chipNo].IFR&=~0x40;
-			break;
-		case 8:
-			DISK_via[chipNo].T2LL=byte;
-			break;
-		case 9:
-			DISK_via[chipNo].T2TimerOff=0;
-			DISK_via[chipNo].T2C=byte<<8;
-			DISK_via[chipNo].T2C|=DISK_via[chipNo].T2LL;
-			DISK_via[chipNo].IFR&=~0x20;
-			break;
-		case 10:
-			DISK_via[chipNo].IFR&=~0x04;
-			DISK_via[chipNo].SR=byte;
-			break;
-		case 11:
-//			if (DISK_via[chipNo].ACR!=byte)
-//				printf("W VIA%d %02X,%02X\n",chipNo+1,regNo,byte);
-			DISK_via[chipNo].ACR=byte;
-			break;
-		case 12:
-			if (DISK_via[chipNo].PCR!=byte  && chipNo==0)
-				printf("W VIA%d %02X,%02X\n",chipNo+1,regNo,byte);
-			DISK_via[chipNo].PCR=byte;
-			break;
-		case 13:
-			byte&=0x7F;
-			byte=~byte;
-			DISK_via[chipNo].IFR&=byte;
-			break;
-		case 14:
-			if (byte&0x80)
-			{
-				DISK_via[chipNo].IER|=byte&0x7F;
-			}
-			else
-			{
-				DISK_via[chipNo].IER&=~(byte&0x7F);
-			}
-			break;
-	}
-}
-
-void DISK_VIATick(int chipNo)
-{
-	DISK_via[chipNo].IRA=0x00;
-	DISK_via[chipNo].IRB=0x00;
-
-	if (DISK_via[chipNo].T1C)
-	{
-		DISK_via[chipNo].T1C--;
-		if (DISK_via[chipNo].T1C==0)
-		{
-			DISK_via[chipNo].IFR|=0x40;
-			if (DISK_via[chipNo].ACR&0x40)
-			{
-				DISK_via[chipNo].T1C=DISK_via[chipNo].T1LH<<8;
-				DISK_via[chipNo].T1C|=DISK_via[chipNo].T1LL;
-			}
-//			printf("T1 Counter Underflow On VIA %d\n",chipNo);
-		}
-	}
-	DISK_via[chipNo].T2C--;
-	if ((DISK_via[chipNo].T2C==0) && (DISK_via[chipNo].T2TimerOff==0))
-	{
-		DISK_via[chipNo].IFR|=0x20;
-		DISK_via[chipNo].T2TimerOff=1;
-//		printf("T2 Counter Underflow On VIA %d\n",chipNo);
-	}
-
-	switch (DISK_via[chipNo].PCR&0x0E)
-	{
-		case 0x0:
-			//Input Mode - 
-			break;
-		case 0x2:
-		case 0x4:
-		case 0x6:
-		case 0x8:
-		case 0xA:
-			printf("Warning Unsupported PCR CA2 mode (%d)%d\n",chipNo+1,(DISK_via[chipNo].PCR&0xE)>>1);
-			break;
-		case 0xC:
-			DISK_via[chipNo].CA2=0x0;
-			break;
-		case 0xE:
-			DISK_via[chipNo].CA2=0x1;
-			break;
-	}
-	switch (DISK_via[chipNo].PCR&0xE0)
-	{
-		case 0x00:
-			//Input Mode -
-			break;
-		case 0x20:
-		case 0x40:
-		case 0x60:
-		case 0x80:
-		case 0xA0:
-			printf("Warning Unsupported PCR CB2 mode (%d)%d\n",chipNo+1,(DISK_via[chipNo].PCR&0xE)>>1);
-			break;
-		case 0xC0:
-			DISK_via[chipNo].CB2=0x0;
-			break;
-		case 0xE0:
-			DISK_via[chipNo].CB2=0x1;
-			break;
-	}
-#if 0
-	if (chipNo==0)
-	{
-		uint8_t joyVal=0xFF;
-		joyVal&=KeyDown(GLFW_KEY_KP_8)?0xFB:0xFF;
-		joyVal&=KeyDown(GLFW_KEY_KP_2)?0xF7:0xFF;
-		joyVal&=KeyDown(GLFW_KEY_KP_4)?0xEF:0xFF;
-		joyVal&=KeyDown(GLFW_KEY_KP_0)?0xDF:0xFF;
-		DISK_via[chipNo].IRA=joyVal;
-
-#if 0
-		if (CheckKey(GLFW_KEY_PAGEUP))
-		{
-			playDown=1;
-			recDown=playDown;
-			ClearKey(GLFW_KEY_PAGEUP);
-			cntPos=0;
-			casCount=0;
-			casLevel=0;		
-		}
-#endif
-		if (CheckKey(GLFW_KEY_PAGEDOWN))
-		{
-			playDown=1;
-			recDown=0;
-			ClearKey(GLFW_KEY_PAGEDOWN);
-			cntPos=0;
-			casCount=0;
-			casLevel=0;		
-		}
-		if (CheckKey(GLFW_KEY_END))
-		{
-			playDown=0;
-			recDown=0;
-			ClearKey(GLFW_KEY_END);
-			cntPos=0;
-			casCount=0;
-			casLevel=0;		
-		}
-
-		// Cassette deck
-		if (playDown)
-		{
-			DISK_via[chipNo].IRA&=0xBF;
-		}
-	}
-	if (chipNo==1)
-	{
-		// TODO : some keys require that shift is held down - F2,F4,CURSOR LEFT etc
-		uint8_t keyVal=0xFF;
-		keyVal&=CheckKeys(0x01,'1','3','5','7','9','-','=',GLFW_KEY_BACKSPACE);
-		keyVal&=CheckKeys(0x02,'`','W','R','Y','I','P',']',GLFW_KEY_ENTER);
-		keyVal&=CheckKeys(0x04,GLFW_KEY_LCTRL,'A','D','G','J','L','\'',GLFW_KEY_RIGHT);
-		keyVal&=CheckKeys(0x08,GLFW_KEY_TAB,GLFW_KEY_LSHIFT,'X','V','N',',','/',GLFW_KEY_DOWN);
-		keyVal&=CheckKeys(0x10,GLFW_KEY_SPACE,'Z','C','B','M','.',GLFW_KEY_RSHIFT,GLFW_KEY_F1);
-		keyVal&=CheckKeys(0x20,GLFW_KEY_RCTRL,'S','F','H','K',';','#',GLFW_KEY_F3);
-		keyVal&=CheckKeys(0x40,'Q','E','T','U','O','[','/',GLFW_KEY_F5);
-		keyVal&=CheckKeys(0x80,'2','4','6','8','0','\\',GLFW_KEY_HOME,GLFW_KEY_F7);
-		DISK_via[chipNo].IRA=keyVal;
-		
-		uint8_t joyVal=0xFF;
-		joyVal&=KeyDown(GLFW_KEY_KP_6)?0x7F:0xFF;
-		DISK_via[chipNo].IRB=joyVal;
-		
-		if (playDown && recDown && (!DISK_via[0].CA2)) // SAVING
-		{
-			casCount++;
-			if ((DISK_via[chipNo].ORB&0x08)!=casLevel)
-			{
-				cntBuffer[cntPos++]=casCount;
-				casCount=0;
-				casLevel=(DISK_via[chipNo].ORB&0x08);
-			}
-		}
-		if (playDown && (!recDown) && (!DISK_via[0].CA2)) // LOADING
-		{
-			casCount++;
-			if (casCount>=cntBuffer[cntPos])
-			{
-				if (casLevel==0 && (DISK_via[chipNo].PCR&0x01))
-				{
-					DISK_via[chipNo].IFR|=0x02;
-				}
-				if (casLevel==1 && ((DISK_via[chipNo].PCR&0x01)==0))
-				{
-					DISK_via[chipNo].IFR|=0x02;
-				}
-				casLevel^=1;
-				cntPos++;
-				casCount=0;
-			}
-		}
-	}
-#endif
-	DISK_via[chipNo].IFR&=0x7F;
-	if ((DISK_via[chipNo].IFR&0x7F)&(DISK_via[chipNo].IER&0x7F))
-	{
-		DISK_via[chipNo].IFR|=0x80;
-		DISK_PinSetPIN__IRQ(0);
-	}
-	else
-	{
-		DISK_PinSetPIN__IRQ(1);
-	}
-}
-
-#endif

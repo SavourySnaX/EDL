@@ -36,6 +36,7 @@ uint16_t MAIN_PinGetPIN_AB();
 uint8_t MAIN_PinGetPIN_DB();
 void MAIN_PinSetPIN_DB(uint8_t);
 void MAIN_PinSetPIN_O0(uint8_t);
+void MAIN_PinSetPIN_SO(uint8_t);
 uint8_t MAIN_PinGetPIN_SYNC();
 uint8_t MAIN_PinGetPIN_RW();
 void MAIN_PinSetPIN__IRQ(uint8_t);
@@ -573,8 +574,8 @@ int g_traceStep=0;
 #define REGISTER_WIDTH	256
 #define	REGISTER_HEIGHT	256
 
-#define TIMING_WIDTH	680
-#define TIMING_HEIGHT	400
+#define TIMING_WIDTH	640
+#define TIMING_HEIGHT	200
 
 #define HEIGHT	(312-28)
 #define	WIDTH	(284-(5*8))
@@ -999,7 +1000,7 @@ int main(int argc,char**argv)
 		return 1; 
 	} 
 
-	glfwSetWindowPos(windows[TIMING_WINDOW],0,0);
+	glfwSetWindowPos(windows[TIMING_WINDOW],0,640);
 
 	glfwMakeContextCurrent(windows[TIMING_WINDOW]);
 	setupGL(TIMING_WINDOW,TIMING_WIDTH,TIMING_HEIGHT);
@@ -1011,7 +1012,7 @@ int main(int argc,char**argv)
 		return 1; 
 	} 
 
-	glfwSetWindowPos(windows[VIA_WINDOW],700,0);
+	glfwSetWindowPos(windows[VIA_WINDOW],560,0);
 
 	glfwMakeContextCurrent(windows[VIA_WINDOW]);
 	setupGL(VIA_WINDOW,VIA_WIDTH,VIA_HEIGHT);
@@ -1023,7 +1024,7 @@ int main(int argc,char**argv)
 		return 1; 
 	} 
 
-	glfwSetWindowPos(windows[VIA_WINDOW_DISK],700,640);
+	glfwSetWindowPos(windows[VIA_WINDOW_DISK],560,640);
 
 	glfwMakeContextCurrent(windows[VIA_WINDOW_DISK]);
 	setupGL(VIA_WINDOW_DISK,VIA_WIDTH,VIA_HEIGHT);
@@ -1104,6 +1105,7 @@ int main(int argc,char**argv)
 	PinSetRESET(0);			// RESET CPU
 	PIN_BUFFER_RESET=0;
 #endif
+	MAIN_PinSetPIN_SO(1);
 	MAIN_PinSetPIN__IRQ(1);
 
 	//dumpInstruction=100000;
@@ -1128,6 +1130,7 @@ int main(int argc,char**argv)
 	uint8_t pb0=0xFF;
 	via[0].CB1=1;
 #endif
+
 
 	VIA0_PinSetPIN__RES(0);
 	VIA0_PinSetPIN_O2(0);
@@ -1292,6 +1295,11 @@ int main(int argc,char**argv)
 			g_traceStep=0;
 			if (KeyDown(GLFW_KEY_KP_DIVIDE))
 			{
+				g_traceStep=1;
+			}
+			if (CheckKey(GLFW_KEY_KP_MULTIPLY))
+			{
+				ClearKey(GLFW_KEY_KP_MULTIPLY);
 				g_traceStep=1;
 			}
 			
