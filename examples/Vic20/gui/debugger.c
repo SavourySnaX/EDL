@@ -7,16 +7,21 @@
 
 #include "font.h"
 
-unsigned short breakpoints[20]={0x0067};
-unsigned int numBreakpoints=0;
+unsigned short breakpoints[2][20]={
+	{0,0},
+	{0xE853,0}
+	};		// first list main cpu, second is disk cpu
+unsigned int numBreakpoints[2]={0,1};
 
-int isBreakpoint(unsigned int address)
+int isBreakpoint(int chip,uint16_t address)
 {
 	int a;
-	for (a=0;a<numBreakpoints;a++)
+	for (a=0;a<numBreakpoints[chip];a++)
 	{
-		if (address==breakpoints[a])
+		if (address==breakpoints[chip][a])
+		{
 			return 1;
+		}
 	}
 	return 0;
 }
@@ -80,7 +85,7 @@ extern uint16_t	DISK_SP;
 extern uint16_t	DISK_PC;
 extern uint8_t	DISK_P;
 
-void DrawRegister(uint8_t *table[256],unsigned char* buffer,unsigned int width,uint16_t address,uint8_t (*GetMem)(uint16_t),const char *(*decode)(uint8_t *table[256],unsigned int address,int *count,int realLength))
+void DrawRegister(int chip,uint8_t *table[256],unsigned char* buffer,unsigned int width,uint16_t address,uint8_t (*GetMem)(uint16_t),const char *(*decode)(uint8_t *table[256],unsigned int address,int *count,int realLength))
 {
 	unsigned int b;
 	int numBytes=0;
@@ -92,13 +97,10 @@ void DrawRegister(uint8_t *table[256],unsigned char* buffer,unsigned int width,u
 		int opcodeLength=numBytes+1;
 		unsigned char colR=255,colG=255,colB=255;
 
-		for (a=0;a<numBreakpoints;a++)
+		if (isBreakpoint(chip,address))
 		{
-			if (address==breakpoints[a])
-			{
-				colG=0;
-				colB=0;
-			}
+			colG=0;
+			colB=0;
 		}
 
 		PrintAt(buffer,width,colR,colG,colB,0,10+b,"%04X  ",address);
@@ -132,7 +134,7 @@ void DrawRegisterDisk(unsigned char* buffer,unsigned int width,uint16_t address,
 	PrintAt(buffer,width,255,255,255,0,4,"Y   %02X",DISK_Y);
 	PrintAt(buffer,width,255,255,255,0,5,"SP  %04X",DISK_SP);
 
-	DrawRegister(DISK_DIS_,buffer,width,address,GetMem,DISK_decodeDisasm);
+	DrawRegister(1,DISK_DIS_,buffer,width,address,GetMem,DISK_decodeDisasm);
 }
 
 void DrawRegisterMain(unsigned char* buffer,unsigned int width,uint16_t address,uint8_t (*GetMem)(uint16_t))
@@ -152,7 +154,7 @@ void DrawRegisterMain(unsigned char* buffer,unsigned int width,uint16_t address,
 	PrintAt(buffer,width,255,255,255,0,4,"Y   %02X",MAIN_Y);
 	PrintAt(buffer,width,255,255,255,0,5,"SP  %04X",MAIN_SP);
 
-	DrawRegister(MAIN_DIS_,buffer,width,address,GetMem,decodeDisasm);
+	DrawRegister(0,MAIN_DIS_,buffer,width,address,GetMem,decodeDisasm);
 }
 
 uint8_t DISK_VIA0_PinGetPIN_PA();
@@ -187,6 +189,62 @@ uint8_t VIA1_PinGetPIN_CB1();
 uint8_t VIA1_PinGetPIN_CB2();
 extern uint8_t VIA1_DDRA;
 extern uint8_t VIA1_DDRB;
+
+extern uint8_t	VIA0_PA_LATCH;
+extern uint8_t	VIA0_PB_LATCH;
+extern uint8_t	VIA0_ORA;
+extern uint8_t	VIA0_ORB;
+extern uint16_t VIA0_T1C;
+extern uint16_t VIA0_T1L;
+extern uint16_t VIA0_T2C;
+extern uint8_t	VIA0_T2LL;
+extern uint8_t	VIA0_SR;
+extern uint8_t	VIA0_ACR;
+extern uint8_t	VIA0_PCR;
+extern uint8_t	VIA0_IFR;
+extern uint8_t	VIA0_IER;
+
+extern uint8_t	VIA1_PA_LATCH;
+extern uint8_t	VIA1_PB_LATCH;
+extern uint8_t	VIA1_ORA;
+extern uint8_t	VIA1_ORB;
+extern uint16_t VIA1_T1C;
+extern uint16_t VIA1_T1L;
+extern uint16_t VIA1_T2C;
+extern uint8_t	VIA1_T2LL;
+extern uint8_t	VIA1_SR;
+extern uint8_t	VIA1_ACR;
+extern uint8_t	VIA1_PCR;
+extern uint8_t	VIA1_IFR;
+extern uint8_t	VIA1_IER;
+
+extern uint8_t	DISK_VIA0_PA_LATCH;
+extern uint8_t	DISK_VIA0_PB_LATCH;
+extern uint8_t	DISK_VIA0_ORA;
+extern uint8_t	DISK_VIA0_ORB;
+extern uint16_t DISK_VIA0_T1C;
+extern uint16_t DISK_VIA0_T1L;
+extern uint16_t DISK_VIA0_T2C;
+extern uint8_t	DISK_VIA0_T2LL;
+extern uint8_t	DISK_VIA0_SR;
+extern uint8_t	DISK_VIA0_ACR;
+extern uint8_t	DISK_VIA0_PCR;
+extern uint8_t	DISK_VIA0_IFR;
+extern uint8_t	DISK_VIA0_IER;
+
+extern uint8_t	DISK_VIA1_PA_LATCH;
+extern uint8_t	DISK_VIA1_PB_LATCH;
+extern uint8_t	DISK_VIA1_ORA;
+extern uint8_t	DISK_VIA1_ORB;
+extern uint16_t DISK_VIA1_T1C;
+extern uint16_t DISK_VIA1_T1L;
+extern uint16_t DISK_VIA1_T2C;
+extern uint8_t	DISK_VIA1_T2LL;
+extern uint8_t	DISK_VIA1_SR;
+extern uint8_t	DISK_VIA1_ACR;
+extern uint8_t	DISK_VIA1_PCR;
+extern uint8_t	DISK_VIA1_IFR;
+extern uint8_t	DISK_VIA1_IER;
 
 //	VIA 1	9110-911F			VIA 2	9120-912F
 //	NMI					IRQ
@@ -239,13 +297,13 @@ extern uint8_t VIA1_DDRB;
 //
 //
 
-void DrawVIA(unsigned char* buffer,unsigned int width)
+void DrawVIAMain(unsigned char* buffer,unsigned int width)
 {
-	PrintAt(buffer,width,255,255,255,0,0,"-----------------VIA 1(9110) (vic20)");
-	PrintAt(buffer,width,255,255,255,0,1,"PA = ATN OT  CSW IN  PEN IN  JY2 IN  JY1 IN  JY0 IN  DAT IN  CLK IN   CA1  !RST OT = %s",
+	PrintAt(buffer,width,255,255,255,0,0,"-----------------VIA 1(9110)");
+	PrintAt(buffer,width,255,255,255,0,2,"PA = ATN OT  CSW IN  PEN IN  JY2 IN  JY1 IN  JY0 IN  DAT IN  CLK IN   CA1  !RST OT = %s",
 		VIA0_PinGetPIN_CA1()&0x01 ? "1" : "0"
 		);
-	PrintAt(buffer,width,255,255,255,0,2,"     %s       %s       %s       %s        %s       %s       %s       %s",
+	PrintAt(buffer,width,255,255,255,0,3,"     %s       %s       %s       %s        %s       %s       %s       %s       CA2  MOTOR   = %s",
 		VIA0_PinGetPIN_PA()&0x80 ? "1" : "0",
 		VIA0_PinGetPIN_PA()&0x40 ? "1" : "0",
 		VIA0_PinGetPIN_PA()&0x20 ? "1" : "0",
@@ -253,9 +311,10 @@ void DrawVIA(unsigned char* buffer,unsigned int width)
 		VIA0_PinGetPIN_PA()&0x08 ? "1" : "0",
 		VIA0_PinGetPIN_PA()&0x04 ? "1" : "0",
 		VIA0_PinGetPIN_PA()&0x02 ? "1" : "0",
-		VIA0_PinGetPIN_PA()&0x01 ? "1" : "0"
+		VIA0_PinGetPIN_PA()&0x01 ? "1" : "0",
+		VIA0_PinGetPIN_CA2()&0x01 ? "1" : "0"
 		);
-	PrintAt(buffer,width,255,255,255,0,3,"DDR  %s       %s       %s       %s        %s       %s       %s       %s",
+	PrintAt(buffer,width,255,255,255,0,4,"DDR  %s       %s       %s       %s        %s       %s       %s       %s",
 		VIA0_DDRA&0x80 ? "1" : "0",
 		VIA0_DDRA&0x40 ? "1" : "0",
 		VIA0_DDRA&0x20 ? "1" : "0",
@@ -264,8 +323,10 @@ void DrawVIA(unsigned char* buffer,unsigned int width)
 		VIA0_DDRA&0x04 ? "1" : "0",
 		VIA0_DDRA&0x02 ? "1" : "0",
 		VIA0_DDRA&0x01 ? "1" : "0");
-	PrintAt(buffer,width,255,255,255,0,4,"PB = USR7    USR6    USR5    USR4    USR3    USR2    USR1    USR0   ");
-	PrintAt(buffer,width,255,255,255,0,5,"     %s       %s       %s       %s        %s       %s       %s       %s",
+	PrintAt(buffer,width,255,255,255,0,5,"PB = USR7    USR6    USR5    USR4    USR3    USR2    USR1    USR0     CB1  USR     = %s",
+		VIA0_PinGetPIN_CB1()&0x01 ? "1" : "0"
+		);
+	PrintAt(buffer,width,255,255,255,0,6,"     %s       %s       %s       %s        %s       %s       %s       %s       CB2  USR     = %s",
 		VIA0_PinGetPIN_PB()&0x80 ? "1" : "0",
 		VIA0_PinGetPIN_PB()&0x40 ? "1" : "0",
 		VIA0_PinGetPIN_PB()&0x20 ? "1" : "0",
@@ -273,8 +334,10 @@ void DrawVIA(unsigned char* buffer,unsigned int width)
 		VIA0_PinGetPIN_PB()&0x08 ? "1" : "0",
 		VIA0_PinGetPIN_PB()&0x04 ? "1" : "0",
 		VIA0_PinGetPIN_PB()&0x02 ? "1" : "0",
-		VIA0_PinGetPIN_PB()&0x01 ? "1" : "0");
-	PrintAt(buffer,width,255,255,255,0,6,"DDR  %s       %s       %s       %s        %s       %s       %s       %s",
+		VIA0_PinGetPIN_PB()&0x01 ? "1" : "0",
+		VIA0_PinGetPIN_CB2()&0x01 ? "1" : "0"
+		);
+	PrintAt(buffer,width,255,255,255,0,7,"DDR  %s       %s       %s       %s        %s       %s       %s       %s",
 		VIA0_DDRB&0x80 ? "1" : "0",
 		VIA0_DDRB&0x40 ? "1" : "0",
 		VIA0_DDRB&0x20 ? "1" : "0",
@@ -283,9 +346,30 @@ void DrawVIA(unsigned char* buffer,unsigned int width)
 		VIA0_DDRB&0x04 ? "1" : "0",
 		VIA0_DDRB&0x02 ? "1" : "0",
 		VIA0_DDRB&0x01 ? "1" : "0");
-	PrintAt(buffer,width,255,255,255,0,7,"-----------------VIA 2(9120) (vic20)");
-	PrintAt(buffer,width,255,255,255,0,8,"PA = RW7 IN  RW6 IN  RW5 IN  RW4 IN  RW3 IN  RW2 IN  RW1 IN  RW0 IN ");
-	PrintAt(buffer,width,255,255,255,0,9,"     %s       %s       %s       %s        %s       %s       %s       %s",
+
+	PrintAt(buffer,width,255,255,255,0,9,"PA_LAT  PB_LAT  ORA  ORB  T1C   T1L   T2C   T2L   SR   ACR  PCR  IFR  IER");
+	PrintAt(buffer,width,255,255,255,0,10,"%02X      %02X      %02X   %02X   %04X  %04X  %04X  %02X    %02X   %02X   %02X   %02X   %02X",
+		VIA0_PA_LATCH,
+		VIA0_PB_LATCH,
+		VIA0_ORA,
+		VIA0_ORB,
+		VIA0_T1C,
+		VIA0_T1L,
+		VIA0_T2C,
+		VIA0_T2LL,
+		VIA0_SR,
+		VIA0_ACR,
+		VIA0_PCR,
+		VIA0_IFR,
+		VIA0_IER
+	       );
+
+
+	PrintAt(buffer,width,255,255,255,0,12,"-----------------VIA 2(9120)");
+	PrintAt(buffer,width,255,255,255,0,14,"PA = RW7 IN  RW6 IN  RW5 IN  RW4 IN  RW3 IN  RW2 IN  RW1 IN  RW0 IN   CA1  CAS  IN = %s",
+		VIA1_PinGetPIN_CA1()&0x01 ? "1" : "0"
+		);
+	PrintAt(buffer,width,255,255,255,0,15,"     %s       %s       %s       %s        %s       %s       %s       %s       CA2  CLK  OT = %s",
 		VIA1_PinGetPIN_PA()&0x80 ? "1" : "0",
 		VIA1_PinGetPIN_PA()&0x40 ? "1" : "0",
 		VIA1_PinGetPIN_PA()&0x20 ? "1" : "0",
@@ -293,8 +377,10 @@ void DrawVIA(unsigned char* buffer,unsigned int width)
 		VIA1_PinGetPIN_PA()&0x08 ? "1" : "0",
 		VIA1_PinGetPIN_PA()&0x04 ? "1" : "0",
 		VIA1_PinGetPIN_PA()&0x02 ? "1" : "0",
-		VIA1_PinGetPIN_PA()&0x01 ? "1" : "0");
-	PrintAt(buffer,width,255,255,255,0,10,"DDR  %s       %s       %s       %s        %s       %s       %s       %s",
+		VIA1_PinGetPIN_PA()&0x01 ? "1" : "0",
+		VIA1_PinGetPIN_CA2()&0x01 ? "1" : "0"
+		);
+	PrintAt(buffer,width,255,255,255,0,16,"DDR  %s       %s       %s       %s        %s       %s       %s       %s",
 		VIA1_DDRA&0x80 ? "1" : "0",
 		VIA1_DDRA&0x40 ? "1" : "0",
 		VIA1_DDRA&0x20 ? "1" : "0",
@@ -303,8 +389,10 @@ void DrawVIA(unsigned char* buffer,unsigned int width)
 		VIA1_DDRA&0x04 ? "1" : "0",
 		VIA1_DDRA&0x02 ? "1" : "0",
 		VIA1_DDRA&0x01 ? "1" : "0");
-	PrintAt(buffer,width,255,255,255,0,11,"PB = CL7 OT  CL6 OT  CL5 OT  CL4 OT  CL3 OT  CL2 OT  CL1 OT  CL0 OT");
-	PrintAt(buffer,width,255,255,255,0,12,"     %s       %s       %s       %s        %s       %s       %s       %s",
+	PrintAt(buffer,width,255,255,255,0,17,"PB = CL7 OT  CL6 OT  CL5 OT  CL4 OT  CL3 OT  CL2 OT  CL1 OT  CL0 OT   CB1  SRQ  IN = %s",
+		VIA1_PinGetPIN_CB1()&0x01 ? "1" : "0"
+		);
+	PrintAt(buffer,width,255,255,255,0,18,"     %s       %s       %s       %s        %s       %s       %s       %s       CB2  DAT  OT = %s",
 		VIA1_PinGetPIN_PB()&0x80 ? "1" : "0",
 		VIA1_PinGetPIN_PB()&0x40 ? "1" : "0",
 		VIA1_PinGetPIN_PB()&0x20 ? "1" : "0",
@@ -312,8 +400,10 @@ void DrawVIA(unsigned char* buffer,unsigned int width)
 		VIA1_PinGetPIN_PB()&0x08 ? "1" : "0",
 		VIA1_PinGetPIN_PB()&0x04 ? "1" : "0",
 		VIA1_PinGetPIN_PB()&0x02 ? "1" : "0",
-		VIA1_PinGetPIN_PB()&0x01 ? "1" : "0");
-	PrintAt(buffer,width,255,255,255,0,13,"DDR  %s       %s       %s       %s        %s       %s       %s       %s",
+		VIA1_PinGetPIN_PB()&0x01 ? "1" : "0",
+		VIA1_PinGetPIN_CB2()&0x01 ? "1" : "0"
+		);
+	PrintAt(buffer,width,255,255,255,0,19,"DDR  %s       %s       %s       %s        %s       %s       %s       %s",
 		VIA1_DDRB&0x80 ? "1" : "0",
 		VIA1_DDRB&0x40 ? "1" : "0",
 		VIA1_DDRB&0x20 ? "1" : "0",
@@ -322,29 +412,55 @@ void DrawVIA(unsigned char* buffer,unsigned int width)
 		VIA1_DDRB&0x04 ? "1" : "0",
 		VIA1_DDRB&0x02 ? "1" : "0",
 		VIA1_DDRB&0x01 ? "1" : "0");
-	PrintAt(buffer,width,255,255,255,0,14,"-----------------VIA 1(1800) (disk)");
-//	PrintAt(buffer,width,255,255,255,0,1,"PA = ATN OT  CSW IN  PEN IN  JY2 IN  JY1 IN  JY0 IN  DAT IN  CLK IN ");
-//	PrintAt(buffer,width,255,255,255,0,2,"     %s       %s       %s       %s        %s       %s       %s       %s",
-//		VIA0_PinGetPIN_PA()&0x80 ? "1" : "0",
-//		VIA0_PinGetPIN_PA()&0x40 ? "1" : "0",
-//		VIA0_PinGetPIN_PA()&0x20 ? "1" : "0",
-//		VIA0_PinGetPIN_PA()&0x10 ? "1" : "0",
-//		VIA0_PinGetPIN_PA()&0x08 ? "1" : "0",
-//		VIA0_PinGetPIN_PA()&0x04 ? "1" : "0",
-//		VIA0_PinGetPIN_PA()&0x02 ? "1" : "0",
-//		VIA0_PinGetPIN_PA()&0x01 ? "1" : "0");
-//	PrintAt(buffer,width,255,255,255,0,3,"DDR  %s       %s       %s       %s        %s       %s       %s       %s",
-//		VIA0_DDRA&0x80 ? "1" : "0",
-//		VIA0_DDRA&0x40 ? "1" : "0",
-//		VIA0_DDRA&0x20 ? "1" : "0",
-//		VIA0_DDRA&0x10 ? "1" : "0",
-//		VIA0_DDRA&0x08 ? "1" : "0",
-//		VIA0_DDRA&0x04 ? "1" : "0",
-//		VIA0_DDRA&0x02 ? "1" : "0",
-//		VIA0_DDRA&0x01 ? "1" : "0");
-	PrintAt(buffer,width,255,255,255,0,15,"PB = DAT IN  DAT OT  CLK IN  CLK OT  ATN OT  DA0 IN  DA1 IN  ATN IN    "
+	
+	PrintAt(buffer,width,255,255,255,0,21,"PA_LAT  PB_LAT  ORA  ORB  T1C   T1L   T2C   T2L   SR   ACR  PCR  IFR  IER");
+	PrintAt(buffer,width,255,255,255,0,22,"%02X      %02X      %02X   %02X   %04X  %04X  %04X  %02X    %02X   %02X   %02X   %02X   %02X",
+		VIA1_PA_LATCH,
+		VIA1_PB_LATCH,
+		VIA1_ORA,
+		VIA1_ORB,
+		VIA1_T1C,
+		VIA1_T1L,
+		VIA1_T2C,
+		VIA1_T2LL,
+		VIA1_SR,
+		VIA1_ACR,
+		VIA1_PCR,
+		VIA1_IFR,
+		VIA1_IER
+	       );
+}
+
+void DrawVIADisk(unsigned char* buffer,unsigned int width)
+{
+	PrintAt(buffer,width,255,255,255,0,0,"-----------------VIA 1(1800)");
+	PrintAt(buffer,width,255,255,255,0,2,"PA = PA7     PA6     PA5     PA4     PA3     PA2     PA1     PA0      CA1  ???  ?? = %s ",
+		DISK_VIA0_PinGetPIN_CA1()&0x80 ? "1" : "0"
 		);
-	PrintAt(buffer,width,255,255,255,0,16,"     %s       %s       %s       %s        %s       %s       %s       %s       CB2  ATN IN = %s",
+	PrintAt(buffer,width,255,255,255,0,3,"     %s       %s       %s       %s        %s       %s       %s       %s       CA2  ???  ?? = %s",
+		DISK_VIA0_PinGetPIN_PA()&0x80 ? "1" : "0",
+		DISK_VIA0_PinGetPIN_PA()&0x40 ? "1" : "0",
+		DISK_VIA0_PinGetPIN_PA()&0x20 ? "1" : "0",
+		DISK_VIA0_PinGetPIN_PA()&0x10 ? "1" : "0",
+		DISK_VIA0_PinGetPIN_PA()&0x08 ? "1" : "0",
+		DISK_VIA0_PinGetPIN_PA()&0x04 ? "1" : "0",
+		DISK_VIA0_PinGetPIN_PA()&0x02 ? "1" : "0",
+		DISK_VIA0_PinGetPIN_PA()&0x01 ? "1" : "0",
+		DISK_VIA0_PinGetPIN_CA2()&0x80 ? "1" : "0"
+		);
+	PrintAt(buffer,width,255,255,255,0,4,"DDR  %s       %s       %s       %s        %s       %s       %s       %s",
+		DISK_VIA0_DDRA&0x80 ? "1" : "0",
+		DISK_VIA0_DDRA&0x40 ? "1" : "0",
+		DISK_VIA0_DDRA&0x20 ? "1" : "0",
+		DISK_VIA0_DDRA&0x10 ? "1" : "0",
+		DISK_VIA0_DDRA&0x08 ? "1" : "0",
+		DISK_VIA0_DDRA&0x04 ? "1" : "0",
+		DISK_VIA0_DDRA&0x02 ? "1" : "0",
+		DISK_VIA0_DDRA&0x01 ? "1" : "0");
+	PrintAt(buffer,width,255,255,255,0,5,"PB = ATN IN  DA1 IN  DA0 IN  ATN OT  CLK OT  CLK IN  DAT OT  DAT IN   CB1  ???  ?? = %s",
+		DISK_VIA0_PinGetPIN_CB1()&0x80 ? "1" : "0"
+		);
+	PrintAt(buffer,width,255,255,255,0,6,"     %s       %s       %s       %s        %s       %s       %s       %s       CB2  ATN  IN = %s",
 		DISK_VIA0_PinGetPIN_PB()&0x80 ? "1" : "0",
 		DISK_VIA0_PinGetPIN_PB()&0x40 ? "1" : "0",
 		DISK_VIA0_PinGetPIN_PB()&0x20 ? "1" : "0",
@@ -355,7 +471,7 @@ void DrawVIA(unsigned char* buffer,unsigned int width)
 		DISK_VIA0_PinGetPIN_PB()&0x01 ? "1" : "0",
 		DISK_VIA0_PinGetPIN_CB2()&0x80 ? "1" : "0"
 		);
-	PrintAt(buffer,width,255,255,255,0,17,"DDR  %s       %s       %s       %s        %s       %s       %s       %s",
+	PrintAt(buffer,width,255,255,255,0,7,"DDR  %s       %s       %s       %s        %s       %s       %s       %s",
 		DISK_VIA0_DDRB&0x80 ? "1" : "0",
 		DISK_VIA0_DDRB&0x40 ? "1" : "0",
 		DISK_VIA0_DDRB&0x20 ? "1" : "0",
@@ -364,9 +480,29 @@ void DrawVIA(unsigned char* buffer,unsigned int width)
 		DISK_VIA0_DDRB&0x04 ? "1" : "0",
 		DISK_VIA0_DDRB&0x02 ? "1" : "0",
 		DISK_VIA0_DDRB&0x01 ? "1" : "0");
-	PrintAt(buffer,width,255,255,255,0,18,"-----------------VIA 2(1C00) (disk)");
-	PrintAt(buffer,width,255,255,255,0,19,"PA = PA7     PA6     PA5     PA4     PA3     PA2     PA1     PA0    ");
-	PrintAt(buffer,width,255,255,255,0,20,"     %s       %s       %s       %s        %s       %s       %s       %s",
+	
+	PrintAt(buffer,width,255,255,255,0,9,"PA_LAT  PB_LAT  ORA  ORB  T1C   T1L   T2C   T2L   SR   ACR  PCR  IFR  IER");
+	PrintAt(buffer,width,255,255,255,0,10,"%02X      %02X      %02X   %02X   %04X  %04X  %04X  %02X    %02X   %02X   %02X   %02X   %02X",
+		DISK_VIA0_PA_LATCH,
+		DISK_VIA0_PB_LATCH,
+		DISK_VIA0_ORA,
+		DISK_VIA0_ORB,
+		DISK_VIA0_T1C,
+		DISK_VIA0_T1L,
+		DISK_VIA0_T2C,
+		DISK_VIA0_T2LL,
+		DISK_VIA0_SR,
+		DISK_VIA0_ACR,
+		DISK_VIA0_PCR,
+		DISK_VIA0_IFR,
+		DISK_VIA0_IER
+	       );
+
+	PrintAt(buffer,width,255,255,255,0,12,"-----------------VIA 2(1C00)");
+	PrintAt(buffer,width,255,255,255,0,14,"PA = PA7     PA6     PA5     PA4     PA3     PA2     PA1     PA0      CA1  BYT  IN = %s",
+		DISK_VIA1_PinGetPIN_CA1()&0x01 ? "1" : "0"
+		);
+	PrintAt(buffer,width,255,255,255,0,15,"     %s       %s       %s       %s        %s       %s       %s       %s       CA2  SOE  OT = %s",
 		DISK_VIA1_PinGetPIN_PA()&0x80 ? "1" : "0",
 		DISK_VIA1_PinGetPIN_PA()&0x40 ? "1" : "0",
 		DISK_VIA1_PinGetPIN_PA()&0x20 ? "1" : "0",
@@ -374,8 +510,10 @@ void DrawVIA(unsigned char* buffer,unsigned int width)
 		DISK_VIA1_PinGetPIN_PA()&0x08 ? "1" : "0",
 		DISK_VIA1_PinGetPIN_PA()&0x04 ? "1" : "0",
 		DISK_VIA1_PinGetPIN_PA()&0x02 ? "1" : "0",
-		DISK_VIA1_PinGetPIN_PA()&0x01 ? "1" : "0");
-	PrintAt(buffer,width,255,255,255,0,21,"DDR  %s       %s       %s       %s        %s       %s       %s       %s",
+		DISK_VIA1_PinGetPIN_PA()&0x01 ? "1" : "0",
+		DISK_VIA1_PinGetPIN_CA2()&0x01 ? "1" : "0"
+		);
+	PrintAt(buffer,width,255,255,255,0,16,"DDR  %s       %s       %s       %s        %s       %s       %s       %s",
 		DISK_VIA1_DDRA&0x80 ? "1" : "0",
 		DISK_VIA1_DDRA&0x40 ? "1" : "0",
 		DISK_VIA1_DDRA&0x20 ? "1" : "0",
@@ -384,8 +522,10 @@ void DrawVIA(unsigned char* buffer,unsigned int width)
 		DISK_VIA1_DDRA&0x04 ? "1" : "0",
 		DISK_VIA1_DDRA&0x02 ? "1" : "0",
 		DISK_VIA1_DDRA&0x01 ? "1" : "0");
-	PrintAt(buffer,width,255,255,255,0,22,"PB = !SY IN  CK1 OT  CK0 OT  !WP IN  LED OT  ON  OT  SL1 OT  SL0 OT");
-	PrintAt(buffer,width,255,255,255,0,23,"     %s       %s       %s       %s        %s       %s       %s       %s",
+	PrintAt(buffer,width,255,255,255,0,17,"PB = !SY IN  CK1 OT  CK0 OT  !WP IN  LED OT  ON  OT  SL1 OT  SL0 OT   CB1  ???  ?? = %s",
+		DISK_VIA1_PinGetPIN_CB1()&0x01 ? "1" : "0"
+		);
+	PrintAt(buffer,width,255,255,255,0,18,"     %s       %s       %s       %s        %s       %s       %s       %s       CB2  ???  ?? = %s",
 		DISK_VIA1_PinGetPIN_PB()&0x80 ? "1" : "0",
 		DISK_VIA1_PinGetPIN_PB()&0x40 ? "1" : "0",
 		DISK_VIA1_PinGetPIN_PB()&0x20 ? "1" : "0",
@@ -393,8 +533,10 @@ void DrawVIA(unsigned char* buffer,unsigned int width)
 		DISK_VIA1_PinGetPIN_PB()&0x08 ? "1" : "0",
 		DISK_VIA1_PinGetPIN_PB()&0x04 ? "1" : "0",
 		DISK_VIA1_PinGetPIN_PB()&0x02 ? "1" : "0",
-		DISK_VIA1_PinGetPIN_PB()&0x01 ? "1" : "0");
-	PrintAt(buffer,width,255,255,255,0,24,"DDR  %s       %s       %s       %s        %s       %s       %s       %s",
+		DISK_VIA1_PinGetPIN_PB()&0x01 ? "1" : "0",
+		DISK_VIA1_PinGetPIN_CB2()&0x01 ? "1" : "0"
+		);
+	PrintAt(buffer,width,255,255,255,0,19,"DDR  %s       %s       %s       %s        %s       %s       %s       %s",
 		DISK_VIA1_DDRB&0x80 ? "1" : "0",
 		DISK_VIA1_DDRB&0x40 ? "1" : "0",
 		DISK_VIA1_DDRB&0x20 ? "1" : "0",
@@ -404,6 +546,111 @@ void DrawVIA(unsigned char* buffer,unsigned int width)
 		DISK_VIA1_DDRB&0x02 ? "1" : "0",
 		DISK_VIA1_DDRB&0x01 ? "1" : "0");
 
+	PrintAt(buffer,width,255,255,255,0,21,"PA_LAT  PB_LAT  ORA  ORB  T1C   T1L   T2C   T2L   SR   ACR  PCR  IFR  IER");
+	PrintAt(buffer,width,255,255,255,0,22,"%02X      %02X      %02X   %02X   %04X  %04X  %04X  %02X    %02X   %02X   %02X   %02X   %02X",
+		DISK_VIA1_PA_LATCH,
+		DISK_VIA1_PB_LATCH,
+		DISK_VIA1_ORA,
+		DISK_VIA1_ORB,
+		DISK_VIA1_T1C,
+		DISK_VIA1_T1L,
+		DISK_VIA1_T2C,
+		DISK_VIA1_T2LL,
+		DISK_VIA1_SR,
+		DISK_VIA1_ACR,
+		DISK_VIA1_PCR,
+		DISK_VIA1_IFR,
+		DISK_VIA1_IER
+	       );
 
 }
+
+#define MAX_CAPTURE		(512)
+#define MAX_PINS		(6)
+
+unsigned char lohi[MAX_PINS][MAX_CAPTURE];
+int bufferPosition=0;
+int timeStretch=0x10000;
+void RecordPin(int pinPos,uint8_t pinVal)
+{
+	lohi[pinPos][bufferPosition]=pinVal&1;
+}
+
+void UpdatePinTick()
+{
+	bufferPosition++;
+	if (bufferPosition>=MAX_CAPTURE)
+		bufferPosition=0;
+}
+
+void DrawTiming(unsigned char* buffer,unsigned int width)
+{
+	int a,b;
+	unsigned int pulsepos;
+	unsigned int prevpulsepos;
+
+	PrintAt(buffer,width,255,255,255,0,0,"ATN (VIC)");
+	PrintAt(buffer,width,255,255,255,0,3,"CLK (VIC)");
+	PrintAt(buffer,width,255,255,255,0,6,"DAT (VIC)");
+	PrintAt(buffer,width,255,255,255,0,9,"CLK (DISK)");
+	PrintAt(buffer,width,255,255,255,0,12,"DAT (DISK)");
+	PrintAt(buffer,width,255,255,255,0,15,"CAS IN");
+
+	pulsepos=bufferPosition<<16;
+	prevpulsepos=bufferPosition<<16;
+
+	for (a=0;a<MAX_PINS;a++)
+	{
+		for (b=0;b<512;b++)
+		{
+			if (lohi[a][pulsepos>>16])
+			{
+				buffer[(80+b+(a*8*3+5)*width)*4+0]=0xFF;
+				buffer[(80+b+(a*8*3+5)*width)*4+1]=0xFF;
+				buffer[(80+b+(a*8*3+5)*width)*4+2]=0xFF;
+				buffer[(80+b+(a*8*3+8*2+1)*width)*4+0]=0x00;
+				buffer[(80+b+(a*8*3+8*2+1)*width)*4+1]=0x00;
+				buffer[(80+b+(a*8*3+8*2+1)*width)*4+2]=0x00;
+			}
+			else
+			{
+				buffer[(80+b+(a*8*3+5)*width)*4+0]=0x00;
+				buffer[(80+b+(a*8*3+5)*width)*4+1]=0x00;
+				buffer[(80+b+(a*8*3+5)*width)*4+2]=0x00;
+				buffer[(80+b+(a*8*3+8*2+1)*width)*4+0]=0xFF;
+				buffer[(80+b+(a*8*3+8*2+1)*width)*4+1]=0xFF;
+				buffer[(80+b+(a*8*3+8*2+1)*width)*4+2]=0xFF;
+			}
+
+			if (b!=0 && lohi[a][prevpulsepos>>16]!=lohi[a][pulsepos>>16])
+			{
+				int c;
+				for (c=6;c<8*2+1;c++)
+				{
+					buffer[(80+b+(a*8*3+c)*width)*4+0]=0xFF;
+					buffer[(80+b+(a*8*3+c)*width)*4+1]=0xFF;
+					buffer[(80+b+(a*8*3+c)*width)*4+2]=0xFF;
+				}
+			}
+			else
+			{
+				int c;
+				for (c=6;c<8*2+1;c++)
+				{
+					buffer[(80+b+(a*8*3+c)*width)*4+0]=0x00;
+					buffer[(80+b+(a*8*3+c)*width)*4+1]=0x00;
+					buffer[(80+b+(a*8*3+c)*width)*4+2]=0x00;
+				}
+			}
+
+			prevpulsepos=pulsepos;
+			pulsepos+=timeStretch;
+			if ((pulsepos>>16)>=MAX_CAPTURE)
+			{
+				pulsepos=0;
+			}
+		}
+	}
+}
+
 

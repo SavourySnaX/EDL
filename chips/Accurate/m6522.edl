@@ -18,27 +18,27 @@ PIN OUT			PIN__IRQ[1];
 
 ###
 
-DECLARE INTERNAL	PA_LATCH[8];
-DECLARE INTERNAL	PB_LATCH[8];
+DECLARE 		PA_LATCH[8];
+DECLARE 		PB_LATCH[8];
 
-DECLARE INTERNAL	ORA[8];
-DECLARE INTERNAL	ORB[8];
+DECLARE 		ORA[8];
+DECLARE 		ORB[8];
 
 DECLARE 		DDRA[8];
 DECLARE 		DDRB[8];
 
-DECLARE INTERNAL	T1C[16]	ALIAS	T1CH[8]:T1CL[8];
-DECLARE INTERNAL	T1L[16] ALIAS	T1LH[8]:T1LL[8];
-DECLARE INTERNAL	T2C[16]	ALIAS	T2CH[8]:T2CL[8];
-DECLARE INTERNAL	T2LL[8];
+DECLARE 		T1C[16]	ALIAS	T1CH[8]:T1CL[8];
+DECLARE 		T1L[16] ALIAS	T1LH[8]:T1LL[8];
+DECLARE 		T2C[16]	ALIAS	T2CH[8]:T2CL[8];
+DECLARE 		T2LL[8];
 
-DECLARE INTERNAL	SR[8];
+DECLARE 		SR[8];
 
-DECLARE INTERNAL	ACR[8]	ALIAS	T1PB7Enabled[1]:T1FreeRunning[1]:T2Control[1]:SRControl[3]:PBLatchEnable[1]:PALatchEnable[1];
-DECLARE INTERNAL	PCR[8]	ALIAS	CB2ControlOutput[1]:CB2ControlNegativeTransition[1]:CB2ControlIndependant[1]:CB1Control[1]:CA2ControlOutput[1]:CA2ControlNegativeTransition[1]:CA2ControlIndependant[1]:CA1Control[1];
+DECLARE 		ACR[8]	ALIAS	T1PB7Enabled[1]:T1FreeRunning[1]:T2Control[1]:SRControl[3]:PBLatchEnable[1]:PALatchEnable[1];
+DECLARE 		PCR[8]	ALIAS	CB2ControlOutput[1]:CB2ControlNegativeTransition[1]:CB2ControlIndependant[1]:CB1Control[1]:CA2ControlOutput[1]:CA2ControlNegativeTransition[1]:CA2ControlIndependant[1]:CA1Control[1];
 
-DECLARE INTERNAL	IFR[8]	ALIAS	IRQ[1]:FT1[1]:FT2[1]:FCB1[1]:FCB2[1]:FSR[1]:FCA1[1]:FCA2[1];
-DECLARE INTERNAL	IER[8]	ALIAS	%1:ET1[1]:ET2[1]:ECB1[1]:ECB2[1]:%0:ECA1[1]:ECA2[1];	#NB For now because SR is not implemented - ESR is forced to logic 0
+DECLARE 		IFR[8]	ALIAS	IRQ[1]:FT1[1]:FT2[1]:FCB1[1]:FCB2[1]:FSR[1]:FCA1[1]:FCA2[1];
+DECLARE 		IER[8]	ALIAS	%1:ET1[1]:ET2[1]:ECB1[1]:ECB2[1]:%0:ECA1[1]:ECA2[1];	#NB For now because SR is not implemented - ESR is forced to logic 0
 
 DECLARE INTERNAL	T1IE[1];
 DECLARE INTERNAL	T2IE[1];
@@ -102,9 +102,7 @@ HANDLER PIN_CA1		TRANSITION(0,1)
 {
 	IF CA1Control
 	{
-		DEBUG_TRACE "Interrupt should have been signalled!",IFR,IER;
 		FCA1<-1;
-		DEBUG_TRACE "Interrupt should have been signalled!",IFR;
 		IF CA2ControlOutput & (~CA2ControlNegativeTransition) & (~CA2ControlIndependant)
 		{
 			CA2<-1;
@@ -116,9 +114,7 @@ HANDLER PIN_CA1		TRANSITION(1,0)
 {
 	IF ~CA1Control
 	{
-		DEBUG_TRACE "Interrupt should have been signalled!",IFR,IER;
 		FCA1<-1;
-		DEBUG_TRACE "Interrupt should have been signalled!",IFR;
 		IF CA2ControlOutput & (~CA2ControlNegativeTransition) & (~CA2ControlIndependant)
 		{
 			CA2<-1;
@@ -382,10 +378,6 @@ FUNCTION INTERNAL UpdatePIN_D_Write
 	}
 	IF PIN_RS == %1011
 	{
-		IF ACR!=PIN_D
-		{
-			DEBUG_TRACE "NEW ACR->",ACR;
-		}
 		ACR<-PIN_D;
 	}
 	IF PIN_RS == %1100
@@ -401,7 +393,6 @@ FUNCTION INTERNAL UpdatePIN_D_Write
 		IF PIN_D[7..7] == 1
 		{
 			IER<-IER | PIN_D;
-			DEBUG_TRACE "NEW IER",IER;
 		}
 		IF PIN_D[7..7] == 0
 		{

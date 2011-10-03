@@ -363,6 +363,7 @@ int DISK_Disassemble(unsigned int address,int registers)
 }
 
 extern int doDebug;
+extern int stopTheClock;
 
 void DISK_Reset()
 {
@@ -429,14 +430,20 @@ uint16_t DISK_Tick(uint8_t* clk,uint8_t* atn,uint8_t* dat)
 	if (DISK_PinGetPIN_SYNC())
 	{
 		lastPC=addr;
+
+		if (isBreakpoint(1,lastPC))
+		{
+			stopTheClock=1;
+		}
+
 //		if (DISK_PinGetPIN_AB()==0xEBE7)		//F2B0 - irq
 //			doDebug=1;
-		if (DISK_PinGetPIN_AB()==0xE85B)		//ATN Ack
-			doDebug=1;
-		if (DISK_PinGetPIN_AB()==0xE9F0)		//CLOCK CHANGED
-			doDebug=1;
-		if (DISK_PinGetPIN_AB()==0xEA6B)		//EOI
-			doDebug=1;
+//		if (DISK_PinGetPIN_AB()==0xE85B)		//ATN Ack
+//			doDebug=1;
+//		if (DISK_PinGetPIN_AB()==0xE9F0)		//CLOCK CHANGED
+//			doDebug=1;
+//		if (DISK_PinGetPIN_AB()==0xEA6B)		//EOI
+//			doDebug=1;
 //		if (DISK_PinGetPIN_AB()==0xF2B0)		//Timer interrupted
 //			doDebug=1;
 //		if (DISK_PinGetPIN_AB()==0xE853)		//ATN Interrupt
