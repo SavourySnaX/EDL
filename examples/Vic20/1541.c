@@ -453,10 +453,10 @@ uint16_t DISK_Tick(uint8_t* clk,uint8_t* atn,uint8_t* dat)
 //		if (DISK_PinGetPIN_AB()==0xE884)		//atn seen
 //			doDebug=1;
 
-
+/*
 		if (DISK_GetByte(addr)==0x50)
 			doDebug=1;
-
+*/
 		if (doDebug)
 		{
 			DISK_Disassemble(addr,1);

@@ -891,7 +891,6 @@ uint16_t DISK_lastPC;
 
 void UpdateDiskInterface()
 {
-	// PA7 - ATN OUT -> PB7,CA1
 	uint8_t tmp,newpa;
 	uint8_t clk,dat,atn;
 
@@ -920,8 +919,8 @@ void UpdateDiskInterface()
 
 	DISK_lastPC=DISK_Tick(&clk,&atn,&dat);
 	
-//	clk^=1;
-//	dat^=1;
+	clk^=1;
+	dat^=1;
 //	atn^=1;
 
 	RecordPin(3,clk);
