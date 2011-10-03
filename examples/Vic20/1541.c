@@ -391,8 +391,9 @@ void DISK_Reset()
 uint8_t lastPA1=0xFF;
 uint8_t lastDrvPB=0;
 static uint8_t lastClk=12;
-void DISK_Tick(uint8_t* clk,uint8_t* atn,uint8_t* dat)
+uint16_t DISK_Tick(uint8_t* clk,uint8_t* atn,uint8_t* dat)
 {
+	static uint16_t lastPC;
 	uint16_t addr; 
 	uint8_t pb=DISK_VIA0_PinGetPIN_PB()&0x9F;			// Clear drive number pins
 	
@@ -400,8 +401,8 @@ void DISK_Tick(uint8_t* clk,uint8_t* atn,uint8_t* dat)
 	pb|=(*clk)<<2;
 	pb|=(*atn)<<7;
 	pb|=*dat;
-	if ( ((pb&0x10)>>4) ^ (*atn) )
-		pb|=1;
+//	if ( ((pb&0x10)>>4) ^ (*atn) )
+//		pb|=1;
 
 	if (lastPA1!=pb)
 	{
@@ -427,6 +428,7 @@ void DISK_Tick(uint8_t* clk,uint8_t* atn,uint8_t* dat)
 
 	if (DISK_PinGetPIN_SYNC())
 	{
+		lastPC=addr;
 //		if (DISK_PinGetPIN_AB()==0xEBE7)		//F2B0 - irq
 //			doDebug=1;
 		if (DISK_PinGetPIN_AB()==0xE85B)		//ATN Ack
@@ -445,13 +447,16 @@ void DISK_Tick(uint8_t* clk,uint8_t* atn,uint8_t* dat)
 //			doDebug=1;
 
 
+		if (DISK_GetByte(addr)==0x50)
+			doDebug=1;
+
 		if (doDebug)
 		{
 			DISK_Disassemble(addr,1);
-			if (getch()==' ')
+/*			if (getch()==' ')
 			{
 				doDebug=0;
-			}
+			}*/
 		}
 	}
 
@@ -528,6 +533,8 @@ void DISK_Tick(uint8_t* clk,uint8_t* atn,uint8_t* dat)
 	*clk=(DISK_VIA0_PinGetPIN_PB()&0x08)>>3;
 	*dat=(DISK_VIA0_PinGetPIN_PB()&0x02)>>1;
 	*atn=(DISK_VIA0_PinGetPIN_PB()&0x10)>>4;
+
+	return lastPC;
 #if 0
 	DISK_via[0].IRB=0xFA;
 	DISK_via[0].IRB|=CA2<<2;

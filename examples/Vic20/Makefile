@@ -51,5 +51,5 @@ out/m6502_disk.lls: ../../chips/Accurate/m6502.edl
 out/m6502_disk.lls.s: out/m6502_disk.lls
 	llc out/m6502_disk.lls
 
-vic20: vic20.c 1541.c out/m6502_disk.lls.s out/m6502_main.lls.s out/m6522_via0.lls.s out/m6522_via1.lls.s out/m6522_disk_via0.lls.s out/m6522_disk_via1.lls.s
-	gcc -O3 -g vic20.c 1541.c out/m6502_main.lls.s out/m6502_disk.lls.s out/m6522_via0.lls.s out/m6522_via1.lls.s out/m6522_disk_via0.lls.s out/m6522_disk_via1.lls.s $(ALLIBS) $(GLLIBS) -o vic20.exe
+vic20: vic20.c 1541.c gui/debugger.c gui/debugger.h out/m6502_disk.lls.s out/m6502_main.lls.s out/m6522_via0.lls.s out/m6522_via1.lls.s out/m6522_disk_via0.lls.s out/m6522_disk_via1.lls.s
+	gcc -O3 -g vic20.c gui/debugger.c 1541.c out/m6502_main.lls.s out/m6502_disk.lls.s out/m6522_via0.lls.s out/m6522_via1.lls.s out/m6522_disk_via0.lls.s out/m6522_disk_via1.lls.s $(ALLIBS) $(GLLIBS) -o vic20.exe

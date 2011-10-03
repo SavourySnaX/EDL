@@ -20,9 +20,12 @@
 #include <string.h>
 #include <stdint.h>
 
+#include "gui\debugger.h"
+
 int DISK_InitialiseMemory();
 void DISK_Reset();
-void DISK_Tick(uint8_t* clk,uint8_t* atn,uint8_t* data);
+uint16_t DISK_Tick(uint8_t* clk,uint8_t* atn,uint8_t* data);
+uint8_t DISK_GetByte(uint16_t addr);
 
 void AudioKill();
 void AudioInitialise();
@@ -564,6 +567,9 @@ int dumpInstruction=0;
 int g_instructionStep=0;
 int g_traceStep=0;
 
+#define VIA_WIDTH	700
+#define	VIA_HEIGHT	200
+
 #define REGISTER_WIDTH	256
 #define	REGISTER_HEIGHT	256
 
@@ -578,6 +584,8 @@ int g_traceStep=0;
 #define MAIN_WINDOW		0
 #define TIMING_WINDOW		1
 #define REGISTER_WINDOW		2
+#define REGISTER_WINDOW_DISK	3
+#define VIA_WINDOW		4
 
 GLFWwindow windows[MAX_WINDOWS];
 unsigned char *videoMemory[MAX_WINDOWS];
@@ -715,6 +723,7 @@ void kbHandler( GLFWwindow window, int key, int action )		/* At present ignores 
 
 void sizeHandler(GLFWwindow window,int xs,int ys)
 {
+	glfwMakeContextCurrent(window);
 	glViewport(0, 0, xs, ys);
 }
 
@@ -876,6 +885,8 @@ void UpdateCassette()
 
 uint8_t lastClk=12,lastDat=12;
 
+uint16_t DISK_lastPC;
+
 void UpdateDiskInterface()
 {
 	// PA7 - ATN OUT -> PB7,CA1
@@ -897,15 +908,15 @@ void UpdateDiskInterface()
 		lastDat=dat;
 	}
 
-	clk^=1;
-	dat^=1;
-	atn^=1;
+//	clk^=1;
+//	dat^=1;
+//	atn^=1;
 
-	DISK_Tick(&clk,&atn,&dat);
+	DISK_lastPC=DISK_Tick(&clk,&atn,&dat);
 	
-	clk^=1;
-	dat^=1;
-	atn^=1;
+//	clk^=1;
+//	dat^=1;
+//	atn^=1;
 
 	tmp=VIA0_PinGetPIN_PA()&0x7C;
 	tmp|=clk;
@@ -970,6 +981,42 @@ int main(int argc,char**argv)
 	/// Initialize GLFW 
 	glfwInit(); 
 
+	// Open via OpenGL window 
+	if( !(windows[VIA_WINDOW]=glfwOpenWindow( VIA_WIDTH, VIA_HEIGHT, GLFW_WINDOWED,"VIA Chips",NULL)) ) 
+	{ 
+		glfwTerminate(); 
+		return 1; 
+	} 
+
+	glfwSetWindowPos(windows[VIA_WINDOW],300,0);
+
+	glfwMakeContextCurrent(windows[VIA_WINDOW]);
+	setupGL(VIA_WINDOW,VIA_WIDTH,VIA_HEIGHT);
+	
+	// Open registers OpenGL window 
+	if( !(windows[REGISTER_WINDOW]=glfwOpenWindow( REGISTER_WIDTH, REGISTER_HEIGHT, GLFW_WINDOWED,"Main CPU",NULL)) ) 
+	{ 
+		glfwTerminate(); 
+		return 1; 
+	} 
+
+	glfwSetWindowPos(windows[REGISTER_WINDOW],600,640);
+
+	glfwMakeContextCurrent(windows[REGISTER_WINDOW]);
+	setupGL(REGISTER_WINDOW,REGISTER_WIDTH,REGISTER_HEIGHT);
+	
+	// Open registers OpenGL window 
+	if( !(windows[REGISTER_WINDOW_DISK]=glfwOpenWindow( REGISTER_WIDTH, REGISTER_HEIGHT, GLFW_WINDOWED,"Disk CPU",NULL)) ) 
+	{ 
+		glfwTerminate(); 
+		return 1; 
+	} 
+
+	glfwSetWindowPos(windows[REGISTER_WINDOW_DISK],600,300);
+
+	glfwMakeContextCurrent(windows[REGISTER_WINDOW_DISK]);
+	setupGL(REGISTER_WINDOW_DISK,REGISTER_WIDTH,REGISTER_HEIGHT);
+	
 	// Open screen OpenGL window 
 	if( !(windows[MAIN_WINDOW]=glfwOpenWindow( WIDTH, HEIGHT, GLFW_WINDOWED,"vic",NULL)) ) 
 	{ 
@@ -1065,90 +1112,111 @@ int main(int argc,char**argv)
 
 	while (!glfwGetKey(windows[MAIN_WINDOW],GLFW_KEY_ESC))
 	{
+		static uint16_t lastPC;
 		static uint8_t lastPb0=0xff;
 		uint16_t addr; 
+		static int stopTheClock=0;
 		
-
-		MAIN_PinSetPIN_O0(1);
-		addr = MAIN_PinGetPIN_AB();
-
-		if (MAIN_PinGetPIN_SYNC())
+		if ((!stopTheClock) || g_traceStep || g_instructionStep)
 		{
-//			if (MAIN_PinGetPIN_AB()==bp)
-//				doDebug=1;
+			MAIN_PinSetPIN_O0(1);
+			addr = MAIN_PinGetPIN_AB();
 
-			if (doDebug)
+			if (MAIN_PinGetPIN_SYNC())
 			{
-				Disassemble(addr,1);
-				getch();
+				lastPC=addr;
+				//			if (MAIN_PinGetPIN_AB()==bp)
+				//				doDebug=1;
+
+				if (doDebug)
+				{
+					Disassemble(addr,1);
+					getch();
+				}
 			}
+
+			VIA0_PinSetPIN_RW(MAIN_PinGetPIN_RW());
+			VIA1_PinSetPIN_RW(MAIN_PinGetPIN_RW());
+
+			VIA0_PinSetPIN_RS(addr&0xF);
+			VIA1_PinSetPIN_RS(addr&0xF);
+
+			if ((addr&0xFC00)==0x9000)
+			{
+				if (doDebug)
+					printf("%04X : CS SETTING\n",addr);
+				VIA0_PinSetPIN_CS((addr&0x0010)>>4);
+				VIA1_PinSetPIN_CS((addr&0x0020)>>5);
+			}
+			else
+			{
+				if (doDebug)
+					printf("%04X : CS CLEARING\n",addr);
+				VIA0_PinSetPIN_CS(0x02|((addr&0x0010)>>4));
+				VIA1_PinSetPIN_CS(0x02|((addr&0x0020)>>5));
+			}
+
+			VIA0_PinSetPIN_O2(1);
+			VIA1_PinSetPIN_O2(1);
+
+
+			if (MAIN_PinGetPIN_RW())
+			{
+				uint8_t  data = GetByte(addr);
+				if (doDebug)
+					printf("Getting : %02X @ %04X\n", data,addr);
+				MAIN_PinSetPIN_DB(data);
+			}
+			if (!MAIN_PinGetPIN_RW())
+			{
+				if (doDebug)
+					printf("Storing : %02X @ %04X\n", MAIN_PinGetPIN_DB(),addr);
+				SetByte(addr,MAIN_PinGetPIN_DB());
+			}
+
+
+			VIA0_PinSetPIN_O2(0);
+			VIA1_PinSetPIN_O2(0);
+
+			UpdateHardware();
+
+			MAIN_PinSetPIN__IRQ(VIA1_PinGetPIN__IRQ());
+
+			lastBus=MAIN_PinGetPIN_DB();
+
+			MAIN_PinSetPIN_O0(0);
+
+			Tick6561();
+
+			pixelClock++;
 		}
 
-		VIA0_PinSetPIN_RW(MAIN_PinGetPIN_RW());
-		VIA1_PinSetPIN_RW(MAIN_PinGetPIN_RW());
-
-		VIA0_PinSetPIN_RS(addr&0xF);
-		VIA1_PinSetPIN_RS(addr&0xF);
-
-		if ((addr&0xFC00)==0x9000)
-		{
-			if (doDebug)
-				printf("%04X : CS SETTING\n",addr);
-			VIA0_PinSetPIN_CS((addr&0x0010)>>4);
-			VIA1_PinSetPIN_CS((addr&0x0020)>>5);
-		}
-		else
-		{
-			if (doDebug)
-				printf("%04X : CS CLEARING\n",addr);
-			VIA0_PinSetPIN_CS(0x02|((addr&0x0010)>>4));
-			VIA1_PinSetPIN_CS(0x02|((addr&0x0020)>>5));
-		}
-
-		VIA0_PinSetPIN_O2(1);
-		VIA1_PinSetPIN_O2(1);
-
-
-		if (MAIN_PinGetPIN_RW())
-		{
-			uint8_t  data = GetByte(addr);
-			if (doDebug)
-				printf("Getting : %02X @ %04X\n", data,addr);
-			MAIN_PinSetPIN_DB(data);
-		}
-		if (!MAIN_PinGetPIN_RW())
-		{
-			if (doDebug)
-				printf("Storing : %02X @ %04X\n", MAIN_PinGetPIN_DB(),addr);
-			SetByte(addr,MAIN_PinGetPIN_DB());
-		}
-
-
-		VIA0_PinSetPIN_O2(0);
-		VIA1_PinSetPIN_O2(0);
-		
-		UpdateHardware();
-
-		MAIN_PinSetPIN__IRQ(VIA1_PinGetPIN__IRQ());
-
-		lastBus=MAIN_PinGetPIN_DB();
-
-		MAIN_PinSetPIN_O0(0);
-
-		Tick6561();
-
-		pixelClock++;
-
-		if (pixelClock>=22152/* || stopTheClock*/)
+		if (pixelClock>=22152 || stopTheClock)
 		{
 			static int normalSpeed=1;
 
-			pixelClock-=22152;
+			if (pixelClock>=22152)
+				pixelClock-=22152;
 
             		glfwMakeContextCurrent(windows[MAIN_WINDOW]);
 			ShowScreen(MAIN_WINDOW,WIDTH,HEIGHT);
 			glfwSwapBuffers();
 				
+			glfwMakeContextCurrent(windows[REGISTER_WINDOW]);
+			DrawRegisterMain(videoMemory[REGISTER_WINDOW],REGISTER_WIDTH,lastPC,GetByte);
+			ShowScreen(REGISTER_WINDOW,REGISTER_WIDTH,REGISTER_HEIGHT);
+			glfwSwapBuffers();
+			
+			glfwMakeContextCurrent(windows[REGISTER_WINDOW_DISK]);
+			DrawRegisterDisk(videoMemory[REGISTER_WINDOW_DISK],REGISTER_WIDTH,DISK_lastPC,DISK_GetByte);
+			ShowScreen(REGISTER_WINDOW_DISK,REGISTER_WIDTH,REGISTER_HEIGHT);
+			glfwSwapBuffers();
+				
+			glfwMakeContextCurrent(windows[VIA_WINDOW]);
+			DrawVIA(videoMemory[VIA_WINDOW],VIA_WIDTH);
+			ShowScreen(VIA_WINDOW,VIA_WIDTH,VIA_HEIGHT);
+			glfwSwapBuffers();
+			
 			glfwPollEvents();
 			
 			kbuffer[0]=CheckKeys('1','3','5','7','9','-','=',GLFW_KEY_BACKSPACE);
@@ -1165,14 +1233,23 @@ int main(int argc,char**argv)
 				ClearKey(GLFW_KEY_INSERT);
 				normalSpeed^=1;
 			}
-
+			if (CheckKey(GLFW_KEY_DELETE))
+			{
+				ClearKey(GLFW_KEY_DELETE);
+				stopTheClock^=1;
+			}
 			g_traceStep=0;
+			if (CheckKey(GLFW_KEY_KP_DIVIDE))
+			{
+				ClearKey(GLFW_KEY_KP_DIVIDE);
+				g_traceStep=1;
+			}
 			
 			now=glfwGetTime();
 
 			remain = now-atStart;
 
-			while ((remain<0.02f) && normalSpeed)
+			while ((remain<0.02f) && normalSpeed && !stopTheClock)
 			{
 				now=glfwGetTime();
 
