@@ -9,9 +9,33 @@
 
 unsigned short breakpoints[2][20]={
 	{0,0},
-	{0xF556}
+	{/*0xE853,*//*0xF556,*/0xfd27,0xfd86,0xfd58,0xF497,0xF3C0,0xF567}
 	};		// first list main cpu, second is disk cpu
-unsigned int numBreakpoints[2]={0,0};
+unsigned int numBreakpoints[2]={0,3};
+
+unsigned short curAddresses[2][16];
+int Offs[2]={0,0};
+
+void ToggleBreakPoint(int chip)
+{
+	int a,c;
+
+	for (a=0;a<numBreakpoints[chip];a++)
+	{
+		if (curAddresses[chip][Offs[chip]]==breakpoints[chip][a])
+		{
+			for (c=a;c<numBreakpoints[chip];c++)
+			{
+				breakpoints[chip][c]=breakpoints[chip][c+1];
+			}
+			numBreakpoints[chip]--;
+			return;
+		}
+	}
+
+	breakpoints[chip][numBreakpoints[chip]]=curAddresses[chip][Offs[chip]];
+	numBreakpoints[chip]++;
+}
 
 int isBreakpoint(int chip,uint16_t address)
 {
@@ -97,13 +121,21 @@ void DrawRegister(int chip,uint8_t *table[256],unsigned char* buffer,unsigned in
 		int opcodeLength=numBytes+1;
 		unsigned char colR=255,colG=255,colB=255;
 
+		curAddresses[chip][b]=address;
 		if (isBreakpoint(chip,address))
 		{
 			colG=0;
 			colB=0;
 		}
 
-		PrintAt(buffer,width,colR,colG,colB,0,10+b,"%04X  ",address);
+		if (Offs[chip]==b)
+		{
+			PrintAt(buffer,width,colR,colG,colB,0,10+b,"%04X >",address);
+		}
+		else
+		{
+			PrintAt(buffer,width,colR,colG,colB,0,10+b,"%04X  ",address);
+		}
 
 		PrintAt(buffer,width,255,255,255,8,10+b,"            ");
 		for (a=0;a<opcodeLength;a++)
@@ -114,6 +146,21 @@ void DrawRegister(int chip,uint8_t *table[256],unsigned char* buffer,unsigned in
 		PrintAt(buffer,width,colR,colG,colB,8+4*3,10+b,"%s",retVal);
 
 		address+=opcodeLength;
+	}
+}
+
+void DrawMemoryDisk(unsigned char* buffer,unsigned int width,uint16_t diskBaseAddress,uint8_t (*GetMem)(uint16_t))
+{
+	int b;
+	for (b=0;b<31;b++)
+	{
+		int a;
+		unsigned char colR=255,colG=255,colB=255;
+		PrintAt(buffer,width,colR,colG,colB,0,b,"%04X ",diskBaseAddress+b*16);
+		for (a=0;a<16;a++)
+		{
+			PrintAt(buffer,width,colR,colG,colB,6+a*3,b,"%02X ",GetMem(diskBaseAddress + b*16+a));
+		}
 	}
 }
 
@@ -135,6 +182,60 @@ void DrawRegisterDisk(unsigned char* buffer,unsigned int width,uint16_t address,
 	PrintAt(buffer,width,255,255,255,0,5,"SP  %04X",DISK_SP);
 
 	DrawRegister(1,DISK_DIS_,buffer,width,address,GetMem,DISK_decodeDisasm);
+}
+
+void UpdateRegisterMain(GLFWwindow window)
+{
+	if (CheckKeyWindow(GLFW_KEY_DOWN,window))
+	{
+		Offs[0]++;
+		if (Offs[0]>15)
+		{
+			Offs[0]=15;
+		}
+		ClearKey(GLFW_KEY_DOWN);
+	}
+	if (CheckKeyWindow(GLFW_KEY_UP,window))
+	{
+		Offs[0]--;
+		if (Offs[0]<0)
+		{
+			Offs[0]=0;
+		}
+		ClearKey(GLFW_KEY_UP);
+	}
+	if (CheckKeyWindow(GLFW_KEY_SPACE,window))
+	{
+		ToggleBreakPoint(0);
+		ClearKey(GLFW_KEY_SPACE);
+	}
+}
+
+void UpdateRegisterDisk(GLFWwindow window)
+{
+	if (CheckKeyWindow(GLFW_KEY_DOWN,window))
+	{
+		Offs[1]++;
+		if (Offs[1]>15)
+		{
+			Offs[1]=15;
+		}
+		ClearKey(GLFW_KEY_DOWN);
+	}
+	if (CheckKeyWindow(GLFW_KEY_UP,window))
+	{
+		Offs[1]--;
+		if (Offs[1]<0)
+		{
+			Offs[1]=0;
+		}
+		ClearKey(GLFW_KEY_UP);
+	}
+	if (CheckKeyWindow(GLFW_KEY_SPACE,window))
+	{
+		ToggleBreakPoint(1);
+		ClearKey(GLFW_KEY_SPACE);
+	}
 }
 
 void DrawRegisterMain(unsigned char* buffer,unsigned int width,uint16_t address,uint8_t (*GetMem)(uint16_t))
@@ -566,7 +667,7 @@ void DrawVIADisk(unsigned char* buffer,unsigned int width)
 }
 
 #define MAX_CAPTURE		(512)
-#define MAX_PINS		(6)
+#define MAX_PINS		(7)
 
 unsigned char lohi[MAX_PINS][MAX_CAPTURE];
 int bufferPosition=0;
@@ -589,12 +690,13 @@ void DrawTiming(unsigned char* buffer,unsigned int width)
 	unsigned int pulsepos;
 	unsigned int prevpulsepos;
 
-	PrintAt(buffer,width,255,255,255,0,0,"ATN (VIC)");
-	PrintAt(buffer,width,255,255,255,0,3,"CLK (VIC)");
-	PrintAt(buffer,width,255,255,255,0,6,"DAT (VIC)");
+	PrintAt(buffer,width,255,255,255,0,0,"ATN (BUS)");
+	PrintAt(buffer,width,255,255,255,0,3,"CLK (BUS)");
+	PrintAt(buffer,width,255,255,255,0,6,"DAT (BUS)");
 	PrintAt(buffer,width,255,255,255,0,9,"CLK (DISK)");
 	PrintAt(buffer,width,255,255,255,0,12,"DAT (DISK)");
-	PrintAt(buffer,width,255,255,255,0,15,"CAS IN");
+	PrintAt(buffer,width,255,255,255,0,15,"ATN (DISK)");
+	PrintAt(buffer,width,255,255,255,0,18,"DISK IN");
 
 	pulsepos=bufferPosition<<16;
 	prevpulsepos=bufferPosition<<16;

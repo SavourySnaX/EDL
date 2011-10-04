@@ -572,7 +572,10 @@ int g_traceStep=0;
 #define	VIA_HEIGHT	200
 
 #define REGISTER_WIDTH	256
-#define	REGISTER_HEIGHT	256
+#define	REGISTER_HEIGHT	(256+24)
+
+#define MEMORY_WIDTH	450
+#define	MEMORY_HEIGHT	256
 
 #define TIMING_WIDTH	640
 #define TIMING_HEIGHT	200
@@ -588,6 +591,7 @@ int g_traceStep=0;
 #define REGISTER_WINDOW_DISK	3
 #define VIA_WINDOW		4
 #define VIA_WINDOW_DISK		5
+#define MEMORY_WINDOW_DISK	6
 
 GLFWwindow windows[MAX_WINDOWS];
 unsigned char *videoMemory[MAX_WINDOWS];
@@ -699,28 +703,42 @@ void restoreGL(int windowNum,int w, int h)
 	glDisable(GL_DEPTH_TEST);
 }
 
-unsigned char keyArray[512*3];
+struct KeyArray
+{
+	unsigned char lastState;
+	unsigned char curState;
+	unsigned char debounced;
+	GLFWwindow    window;
+};
+
+struct KeyArray keyArray[512];
 
 int KeyDown(int key)
 {
-	return keyArray[key*3+1]==GLFW_PRESS;
+	return keyArray[key].curState==GLFW_PRESS;
 }
 
 int CheckKey(int key)
 {
-	return keyArray[key*3+2];
+	return keyArray[key].debounced;
+}
+
+int CheckKeyWindow(int key,GLFWwindow window)
+{
+	return keyArray[key].debounced && (keyArray[key].window==window);
 }
 
 void ClearKey(int key)
 {
-	keyArray[key*3+2]=0;
+	keyArray[key].debounced=0;
 }
 
-void kbHandler( GLFWwindow window, int key, int action )		/* At present ignores which window, will add per window keys later */
+void kbHandler( GLFWwindow window, int key, int action )
 {
-	keyArray[key*3 + 0]=keyArray[key*3+1];
-	keyArray[key*3 + 1]=action;
-	keyArray[key*3 + 2]|=(keyArray[key*3+0]==GLFW_RELEASE)&&(keyArray[key*3+1]==GLFW_PRESS);
+	keyArray[key].lastState=keyArray[key].curState;
+	keyArray[key].curState=action;
+	keyArray[key].debounced|=(keyArray[key].lastState==GLFW_RELEASE)&&(keyArray[key].curState==GLFW_PRESS);
+	keyArray[key].window=window;
 }
 
 void sizeHandler(GLFWwindow window,int xs,int ys)
@@ -865,7 +883,7 @@ void UpdateCassette()
 		casCount++;
 		if (newRecLevel!=casLevel)
 		{
-			printf("Level Changed %08X\n",casCount);
+			//printf("Level Changed %08X\n",casCount);
 			cntMax=cntPos;
 			cntBuffer[cntPos++]=casCount;
 			casCount=0;
@@ -882,7 +900,6 @@ void UpdateCassette()
 			casCount=0;
 		}
 	}
-	RecordPin(5,casLevel);
 	VIA1_PinSetPIN_CA1(casLevel);
 }
 
@@ -899,20 +916,9 @@ void UpdateDiskInterface()
 	dat=VIA1_PinGetPIN_CB2();
 	atn=(VIA0_PinGetPIN_PA()&0x80)>>7;
 
-	if (lastClk!=clk)
-	{
-		printf("Clk %s  atn %d\n",clk?"hi":"lo",atn);
-		lastClk=clk;
-	}
-	if (lastDat!=dat)
-	{
-		printf("Dat %s  atn %d\n",dat?"hi":"lo",atn);
-		lastDat=dat;
-	}
-
-//	clk^=1;
-//	dat^=1;
-//	atn^=1;
+	clk^=1;
+	dat^=1;
+	atn^=1;
 
 	RecordPin(0,atn);
 	RecordPin(1,clk);
@@ -920,18 +926,16 @@ void UpdateDiskInterface()
 
 	DISK_lastPC=DISK_Tick(&clk,&atn,&dat);
 	
-	clk^=1;
-	dat^=1;
-//	atn^=1;
-
 	RecordPin(3,clk);
 	RecordPin(4,dat);
+	RecordPin(5,atn);
+
 	UpdatePinTick();
 
-	tmp=VIA0_PinGetPIN_PA()&0x7C;
+	tmp=VIA0_PinGetPIN_PA()&0xFC;
 	tmp|=clk;
 	tmp|=dat<<1;
-	tmp|=atn<<7;
+//	tmp|=atn<<7;
 
 	VIA0_PinSetPIN_PA(tmp);
 #if 0
@@ -993,6 +997,18 @@ int main(int argc,char**argv)
 	/// Initialize GLFW 
 	glfwInit(); 
 
+	// Open memory OpenGL window 
+	if( !(windows[MEMORY_WINDOW_DISK]=glfwOpenWindow( MEMORY_WIDTH, MEMORY_HEIGHT, GLFW_WINDOWED,"Disk Memory",NULL)) ) 
+	{ 
+		glfwTerminate(); 
+		return 1; 
+	} 
+
+	glfwSetWindowPos(windows[MEMORY_WINDOW_DISK],0,0);
+
+	glfwMakeContextCurrent(windows[MEMORY_WINDOW_DISK]);
+	setupGL(MEMORY_WINDOW_DISK,MEMORY_WIDTH,MEMORY_HEIGHT);
+	
 	// Open timing OpenGL window 
 	if( !(windows[TIMING_WINDOW]=glfwOpenWindow( TIMING_WIDTH, TIMING_HEIGHT, GLFW_WINDOWED,"Serial Bus",NULL)) ) 
 	{ 
@@ -1253,11 +1269,13 @@ int main(int argc,char**argv)
 			
 			glfwMakeContextCurrent(windows[REGISTER_WINDOW]);
 			DrawRegisterMain(videoMemory[REGISTER_WINDOW],REGISTER_WIDTH,lastPC,GetByte);
+			UpdateRegisterMain(windows[REGISTER_WINDOW]);
 			ShowScreen(REGISTER_WINDOW,REGISTER_WIDTH,REGISTER_HEIGHT);
 			glfwSwapBuffers();
 			
 			glfwMakeContextCurrent(windows[REGISTER_WINDOW_DISK]);
 			DrawRegisterDisk(videoMemory[REGISTER_WINDOW_DISK],REGISTER_WIDTH,DISK_lastPC,DISK_GetByte);
+			UpdateRegisterDisk(windows[REGISTER_WINDOW_DISK]);
 			ShowScreen(REGISTER_WINDOW_DISK,REGISTER_WIDTH,REGISTER_HEIGHT);
 			glfwSwapBuffers();
 				
@@ -1269,6 +1287,11 @@ int main(int argc,char**argv)
 			glfwMakeContextCurrent(windows[VIA_WINDOW_DISK]);
 			DrawVIADisk(videoMemory[VIA_WINDOW_DISK],VIA_WIDTH);
 			ShowScreen(VIA_WINDOW_DISK,VIA_WIDTH,VIA_HEIGHT);
+			glfwSwapBuffers();
+			
+			glfwMakeContextCurrent(windows[MEMORY_WINDOW_DISK]);
+			DrawMemoryDisk(videoMemory[MEMORY_WINDOW_DISK],MEMORY_WIDTH,0x300,DISK_GetByte);
+			ShowScreen(MEMORY_WINDOW_DISK,MEMORY_WIDTH,MEMORY_HEIGHT);
 			glfwSwapBuffers();
 			
 			glfwPollEvents();

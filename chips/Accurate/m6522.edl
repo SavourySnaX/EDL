@@ -103,6 +103,7 @@ HANDLER PIN_CA1		TRANSITION(0,1)
 	IF CA1Control
 	{
 		FCA1<-1;
+		PA_LATCH <- PIN_PA;
 		IF CA2ControlOutput & (~CA2ControlNegativeTransition) & (~CA2ControlIndependant)
 		{
 			CA2<-1;
@@ -115,6 +116,7 @@ HANDLER PIN_CA1		TRANSITION(1,0)
 	IF ~CA1Control
 	{
 		FCA1<-1;
+		PA_LATCH <- PIN_PA;
 		IF CA2ControlOutput & (~CA2ControlNegativeTransition) & (~CA2ControlIndependant)
 		{
 			CA2<-1;
@@ -408,7 +410,7 @@ HANDLER		PIN_O2	TRANSITION(0,1)
 	{
 		PB_LATCH <- PIN_PB;
 	}
-	IF ~PALatchEnable
+	IF (~PALatchEnable) | (~FCA1)
 	{
 		PA_LATCH <- PIN_PA;
 	}

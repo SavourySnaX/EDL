@@ -26,6 +26,7 @@ THE SOFTWARE.
 
 void DrawRegisterDisk(unsigned char* buffer,unsigned int width,uint16_t address,uint8_t (*GetByte)(uint16_t));
 void DrawRegisterMain(unsigned char* buffer,unsigned int width,uint16_t address,uint8_t (*GetByte)(uint16_t));
+void DrawMemoryDisk(unsigned char* buffer,unsigned int width,uint16_t address,uint8_t (*GetByte)(uint16_t));
 void RecordPin(int pinPos,uint8_t pinVal);
 void UpdatePinTick();
 int isBreakpoint(int chip,uint16_t address);
