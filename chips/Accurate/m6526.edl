@@ -1,0 +1,546 @@
+# MOS 6526 (NMOS) - Accurate Version 
+#
+
+
+PIN BIDIRECTIONAL	PIN_PA[8];			# Port A Data
+PIN BIDIRECTIONAL	PIN_PB[8];			# Port B Data
+PIN OUT			PIN__PC[1];
+PIN IN			PIN_TOD[1];			# 50/60Hz clk signal	- relies on correct setting of bit 7 of CRA
+PIN BIDIRECTIONAL	PIN_CNT[1];
+PIN BIDIRECTIONAL	PIN_SP[1];
+PIN IN			PIN_RS[4];			# Register Select
+PIN IN			PIN__RES[1];
+PIN BIDIRECTIONAL	PIN_DB[8];			# Data Bus
+PIN IN			PIN_O2[1];			# Clock (1Mhz signal)
+PIN IN			PIN__FLAG[1];
+PIN IN			PIN__CS[1];			# Chip Select
+PIN IN			PIN_RW[1];
+PIN OUT			PIN__IRQ[1];
+
+###
+
+DECLARE 		PRA[8];
+DECLARE 		PRB[8];
+
+DECLARE 		DDRA[8];
+DECLARE 		DDRB[8];
+
+DECLARE 		TA[16]	ALIAS	TAHI[8]:TALO[8];
+DECLARE 		TB[16]	ALIAS	TBHI[8]:TBLO[8];
+DECLARE 		TA_LATCH[16]	ALIAS	TALHI[8]:TALLO[8];
+DECLARE 		TB_LATCH[16]	ALIAS	TBLHI[8]:TBLLO[8];
+
+DECLARE 		TOD_HR[8]	ALIAS	TOD_PM[1]:%00:TOD_HH[1]:TOD_HL[4];
+DECLARE			TOD_MIN[8]	ALIAS	%0:TOD_MH[3]:TOD_ML[4];
+DECLARE			TOD_SEC[8]	ALIAS	%0:TOD_SH[3]:TOD_SL[4];
+DECLARE			TOD_10TH[8]	ALIAS	%0000:TOD_T[4];
+
+DECLARE			TOD_LAT_HR[8];
+DECLARE			TOD_LAT_MIN[8];
+DECLARE			TOD_LAT_SEC[8];
+DECLARE			TOD_LAT_10TH[8];
+DECLARE			TOD_LATCHED[1];
+DECLARE			TOD_STOPPED[1];
+DECLARE			TOD_CNT[4];
+
+DECLARE 		ALARM_HR[8]	ALIAS	ALARM_PM[1]:%00:ALARM_HH[1]:ALARM_HL[4];
+DECLARE			ALARM_MIN[8]	ALIAS	%0:ALARM_MH[3]:ALARM_ML[4];
+DECLARE			ALARM_SEC[8]	ALIAS	%0:ALARM_SH[3]:ALARM_SL[4];
+DECLARE			ALARM_10TH[8]	ALIAS	%0000:ALARM_T[4];
+
+DECLARE			SDR[8];
+
+DECLARE			ICR[8];
+
+DECLARE			CRA[8]		ALIAS	HZ_50[1]:SP_OUTPUT[1]:TA_CNT[1]:TA_LOAD[1]:TA_ONESHOT[1]:TA_TOGGLE[1]:TA_PB6_OUT[1]:TA_START[1];
+DECLARE			CRB[8]		ALIAS	ALARM[1]:TB_MODE[2]:TB_LOAD[1]:TB_ONESHOT[1]:TB_TOGGLE[1]:TB_PB7_OUT[1]:TB_START[1];
+
+HANDLER PIN__RES	ALWAYS
+{
+	IF ~PIN__RES
+	{
+		PRA<-0;
+		PRB<-0;
+		DDRA<-0;
+		DDRB<-0;
+		TA<-0;
+		TB<-0;
+		TA_LATCH<-$FFFF;
+		TB_LATCH<-$FFFF;
+		TOD_CNT<-6;
+		TOD_HR<-0;
+		TOD_MIN<-0;
+		TOD_SEC<-0;
+		TOD_10TH<-0;
+		TOD_LATCHED<-0;
+		TOD_STOPPED<-0;
+		TOD_LAT_HR<-0;
+		TOD_LAT_MIN<-0;
+		TOD_LAT_SEC<-0;
+		TOD_LAT_10TH<-0;
+		ALARM_HR<-0;
+		ALARM_MIN<-0;
+		ALARM_SEC<-0;
+		ALARM_10TH<-0;
+		SDR<-0;
+		ICR<-0;
+		CRA<-0;
+		CRB<-0;
+	}
+}
+
+FUNCTION INTERNAL TickTOD
+{
+	IF ~TOD_STOPPED
+	{
+		TOD_T<-TOD_T+1;
+		IF TOD_T == 10
+		{
+			TOD_T<-0;
+			TOD_SL<-TOD_SL+1;
+			IF TOD_SL == 10
+			{
+				TOD_SL<-0;
+				TOD_SH<-TOD_SH+1;
+				IF TOD_SH == 6
+				{
+					TOD_SH<-0;
+					TOD_ML<-TOD_ML+1;
+					IF TOD_ML == 10
+					{
+						TOD_ML<-0;
+						TOD_MH<-TOD_MH+1;
+						IF TOD_MH == 6
+						{
+							TOD_MH<-0;
+							TOD_HL<-TOD_HL+1;
+							IF TOD_HH & (TOD_HL == 2)
+							{
+								TOD_HH<-0;
+								TOD_HL<-0;
+								TOD_PM<-~TOD_PM;
+							}
+							IF (~TOD_HH) & (TOD_HL == 9)
+							{
+								TOD_HH<-1;
+								TOD_HL<-0;
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+HANDLER PIN_TOD	TRANSITION(0,1)			# Its not documented whether it counts lo-hi or hi-lo edges, for now i`ll assume low-hi
+{
+	TOD_CNT<-TOD_CNT-1;
+	IF TOD_CNT==0
+	{
+		TOD_CNT<-6;
+		IF HZ_50
+		{
+			TOD_CNT<-5;
+		}
+		CALL TickTOD();
+	}
+}
+
+FUNCTION INTERNAL UpdateIRQPin
+{
+	PIN__IRQ<-1;
+	0->IFR[7..7];
+	IF ((IFR[0..6]) & (IER[0..6])) != 0
+	{
+		1->IFR[7..7];
+		PIN__IRQ<-0;
+	}
+}
+
+FUNCTION INTERNAL UpdatePIN_PA
+{
+	PIN_PA<-PIN_PA & (~DDRA);
+	PIN_PA<-PIN_PA | (ORA & DDRA);
+}
+
+FUNCTION INTERNAL UpdatePIN_PB
+{
+	PIN_PB<-PIN_PB & (~DDRB);
+	PIN_PB<-PIN_PB | (ORB & DDRB);
+	IF T1PB7Enabled
+	{
+		T1PB7->PIN_PB[7..7];
+	}
+}
+
+HANDLER PIN_CA1		TRANSITION(0,1)
+{
+	IF CA1Control
+	{
+		FCA1<-1;
+		PA_LATCH <- PIN_PA;
+		IF CA2ControlOutput & (~CA2ControlNegativeTransition) & (~CA2ControlIndependant)
+		{
+			CA2<-1;
+		}
+	}
+}
+
+HANDLER PIN_CA1		TRANSITION(1,0)
+{
+	IF ~CA1Control
+	{
+		FCA1<-1;
+		PA_LATCH <- PIN_PA;
+		IF CA2ControlOutput & (~CA2ControlNegativeTransition) & (~CA2ControlIndependant)
+		{
+			CA2<-1;
+		}
+	}
+}
+
+HANDLER PIN_CA2		TRANSITION(0,1)
+{
+	IF ~CA2ControlOutput
+	{
+		IF ~CA2ControlNegativeTransition
+		{
+			FCA2<-1;
+		}
+	}
+	IF CA2ControlOutput
+	{
+		PIN_CA2<-CA2;
+	}
+}
+
+HANDLER PIN_CA2		TRANSITION(1,0)
+{
+	IF ~CA2ControlOutput
+	{
+		IF CA2ControlNegativeTransition
+		{
+			FCA2<-1;
+		}
+	}
+	IF CA2ControlOutput
+	{
+		PIN_CA2<-CA2;
+	}
+}
+
+HANDLER PIN_CB1		TRANSITION(0,1)
+{
+	IF CB1Control
+	{
+		FCB1<-1;
+		IF CB2ControlOutput & (~CB2ControlNegativeTransition) & (~CB2ControlIndependant)
+		{
+			CB2<-1;
+		}
+	}
+}
+
+HANDLER PIN_CB1		TRANSITION(1,0)
+{
+	IF ~CB1Control
+	{
+		FCB1<-1;
+		IF CB2ControlOutput & (~CB2ControlNegativeTransition) & (~CB2ControlIndependant)
+		{
+			CB2<-1;
+		}
+	}
+}
+
+HANDLER PIN_CB2		TRANSITION(0,1)
+{
+	IF ~CB2ControlOutput
+	{
+		IF ~CB2ControlNegativeTransition
+		{
+			FCB2<-1;
+		}
+	}
+	IF CB2ControlOutput
+	{
+		PIN_CB2<-CB2;
+	}
+}
+
+HANDLER PIN_CB2		TRANSITION(1,0)
+{
+	IF ~CB2ControlOutput
+	{
+		IF CB2ControlNegativeTransition
+		{
+			FCB2<-1;
+		}
+	}
+	IF CB2ControlOutput
+	{
+		PIN_CB2<-CB2;
+	}
+}
+
+HANDLER PIN_PA		CHANGED
+{
+	CALL UpdatePIN_PA();
+}
+
+HANDLER PIN_PB		CHANGED
+{
+	CALL UpdatePIN_PB();
+}
+
+FUNCTION INTERNAL UpdatePIN_D_Read
+{
+	IF PIN_RS == %0000
+	{
+		PIN_D<-PIN_PA;
+	}
+	IF PIN_RS == %0001
+	{
+		PIN_D<-PIN_PB;
+	}
+	IF PIN_RS == %0010
+	{
+		PIN_D<-DDRA;
+	}
+	IF PIN_RS == %0011
+	{
+		PIN_D<-DDRB;
+	}
+	IF PIN_RS == %0100
+	{
+		PIN_D<-TALO;
+	}
+	IF PIN_RS == %0101
+	{
+		PIN_D<-TAHI;
+	}
+	IF PIN_RS == %0110
+	{
+		PIN_D<-TBLO;
+	}
+	IF PIN_RS == %0111
+	{
+		PIN_D<-TBHI;
+	}
+	IF PIN_RS == %1000
+	{
+		PIN_D<-TOD_10TH;
+	}
+	IF PIN_RS == %1001
+	{
+		PIN_D<-TOD_SEC;
+	}
+	IF PIN_RS == %1010
+	{
+		PIN_D<-TOD_MIN;
+	}
+	IF PIN_RS == %1011
+	{
+		PIN_D<-TOD_HR;
+	}
+	IF PIN_RS == %1100
+	{
+		PIN_D<-SDR;
+	}
+	IF PIN_RS == %1101
+	{
+		PIN_D<-ICR;
+	}
+	IF PIN_RS == %1110
+	{
+		PIN_D<-CRA;
+	}
+	IF PIN_RS == %1111
+	{
+		PIN_D<-CRB;
+	}
+}
+
+FUNCTION INTERNAL UpdatePIN_D_Write
+{
+	IF PIN_RS == %0000
+	{
+		PRA<-PIN_D;
+	}
+	IF PIN_RS == %0001
+	{
+		PRB<-PIN_D;
+	}
+	IF PIN_RS == %0010
+	{
+		DDRA<-PIN_D;
+	}
+	IF PIN_RS == %0011
+	{
+		DDRB<-PIN_D;
+	}
+	IF PIN_RS == %0100
+	{
+		TALLO<-PIN_D;
+	}
+	IF PIN_RS == %0101
+	{
+		TALHI<-PIN_D;
+	}
+	IF PIN_RS == %0110
+	{
+		TBLLO<-PIN_D;
+	}
+	IF PIN_RS == %0111
+	{
+		TBLHI<-PIN_D;
+	}
+	IF PIN_RS == %1000
+	{
+		IF ALARM
+		{
+			ALARM_10TH<-PIN_D;
+		}
+		IF ~ALARM
+		{
+			TOD_10TH<-PIN_D;
+		}
+	}
+	IF PIN_RS == %1001
+	{
+		IF ALARM
+		{
+			ALARM_SEC<-PIN_D;
+		}
+		IF ~ALARM
+		{
+			TOD_SEC<-PIN_D;
+		}
+	}
+	IF PIN_RS == %1010
+	{
+		IF ALARM
+		{
+			ALARM_MIN<-PIN_D;
+		}
+		IF ~ALARM
+		{
+			TOD_MIN<-PIN_D;
+		}
+	}
+	IF PIN_RS == %1011
+	{
+		IF ALARM
+		{
+			ALARM_HR<-PIN_D;
+		}
+		IF ~ALARM
+		{
+			TOD_HR<-PIN_D;
+		}
+	}
+	IF PIN_RS == %1100
+	{
+		SDR<-PIN_D;
+	}
+	IF PIN_RS == %1101
+	{
+		ICR<-PIN_D;
+#		IFR<-IFR & (~PIN_D);
+	}
+	IF PIN_RS == %1110
+	{
+		CRA<-PIN_D;
+#		IF PIN_D[7..7] == 1
+#		{
+#			IER<-IER | PIN_D;
+#		}
+#		IF PIN_D[7..7] == 0
+#		{
+#			IER<-IER & (~PIN_D);
+#		}
+	}
+	IF PIN_RS == %1111
+	{
+		CRB<-PIN_D;
+	}
+}
+
+HANDLER		PIN_O2	TRANSITION(0,1)
+{
+	# Copy pins to input latches
+	IF PIN_RW & (PIN__CS==%0)
+	{
+		CALL UpdatePIN_D_Read();
+	}
+
+	# Update Timers
+	T1C<-T1C-1;
+	IF T1C == 0
+	{
+		# T1 TimeOver..
+		IF T1IE
+		{
+			FT1<-1;
+			T1IE<-0;
+		}
+		IF T1FreeRunning
+		{
+			T1C<-T1L;
+			T1IE<-1;
+			T1PB7<-~T1PB7;
+		}
+		IF ~T1FreeRunning
+		{
+			T1PB7<-1;
+		}
+	}
+	IF ~T2Control
+	{
+		T2C<-T2C-1;
+	}
+	IF T2Control
+	{
+		IF (T2PB6==1) & ((PIN_PB[6..6]) == 0)
+		{
+			T2C<-T2C-1;
+		}
+	}
+	T2PB6<-PIN_PB[6..6];
+	IF T2C == 0
+	{
+		# T2 TimeOver..
+		IF T2IE
+		{
+			FT2<-1;
+			T2IE<-0;
+		}
+	}
+	# Update CA/CB pins
+	IF CA2ControlOutput & CA2ControlNegativeTransition
+	{
+		CA2<-CA2ControlIndependant;
+	}
+	IF CB2ControlOutput & CB2ControlNegativeTransition
+	{
+		CB2<-CB2ControlIndependant;
+	}
+
+	# Update State Of IRQ PIN
+	CALL UpdateIRQPin();
+
+	CALL UpdatePIN_PA();
+	CALL UpdatePIN_PB();
+	PIN_CB2<-CB2;
+	PIN_CA2<-CA2;
+}
+
+HANDLER PIN_O2	TRANSITION(1,0)
+{
+	IF (~PIN_RW) & (PIN__CS==%0)
+	{
+		CALL UpdatePIN_D_Write();
+	}
+	CALL UpdateIRQPin();
+}
