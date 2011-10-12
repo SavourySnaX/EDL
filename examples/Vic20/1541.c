@@ -91,7 +91,7 @@ int DISK_InitialiseMemory()
 	memcpy(DiskRomHi,combinedRom+0x2000,0x2000);
 #endif
 #if USE_DRW_IMAGE
-	if (LoadRom(DiskData,252004,"disks/1541-demo0.drw"))
+	if (LoadRom(DiskData,252004,"disks/vicdemos3b.drw"))
 		return 1;
 #else
 	if (LoadRom(DiskData,333744,"disks/party.g64"))

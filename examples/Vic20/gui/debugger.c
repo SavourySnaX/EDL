@@ -667,7 +667,7 @@ void DrawVIADisk(unsigned char* buffer,unsigned int width)
 }
 
 #define MAX_CAPTURE		(512)
-#define MAX_PINS		(7)
+#define MAX_PINS		(11)
 
 unsigned char lohi[MAX_PINS][MAX_CAPTURE];
 int bufferPosition=0;
@@ -697,6 +697,10 @@ void DrawTiming(unsigned char* buffer,unsigned int width)
 	PrintAt(buffer,width,255,255,255,0,12,"DAT (DISK)");
 	PrintAt(buffer,width,255,255,255,0,15,"ATN (DISK)");
 	PrintAt(buffer,width,255,255,255,0,18,"DISK IN");
+	PrintAt(buffer,width,255,255,255,0,21,"SND 0");
+	PrintAt(buffer,width,255,255,255,0,24,"SND 1");
+	PrintAt(buffer,width,255,255,255,0,27,"SND 2");
+	PrintAt(buffer,width,255,255,255,0,30,"SND 3");
 
 	pulsepos=bufferPosition<<16;
 	prevpulsepos=bufferPosition<<16;

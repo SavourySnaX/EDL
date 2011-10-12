@@ -161,10 +161,10 @@ int InitialiseMemory()
 		return 1;
 
 #if 1
-	if (LoadRom(D20,0x2002,"roms/Donkey Kong-2000.prg"))
-		return 1;
-	if (LoadRom(DA0,0x2002,"roms/Donkey Kong-A000.prg"))
-		return 1;
+//	if (LoadRom(D20,0x2002,"roms/Donkey Kong-2000.prg"))
+//		return 1;
+//	if (LoadRom(DA0,0x2002,"roms/Donkey Kong-A000.prg"))
+//		return 1;
 #else
 //	if (LoadRom(D60,0x2002,"roms/Lode Runner.60"))
 //		return 1;
@@ -578,7 +578,7 @@ int g_traceStep=0;
 #define	MEMORY_HEIGHT	256
 
 #define TIMING_WIDTH	640
-#define TIMING_HEIGHT	200
+#define TIMING_HEIGHT	280
 
 #define HEIGHT	(312-28)
 #define	WIDTH	(284-(5*8))
@@ -1901,6 +1901,11 @@ void Tick6561()
 	{
 		channel4Cnt=0;
 	}
+	
+	RecordPin(7 ,channel1Level);
+	RecordPin(8 ,channel2Level);
+	RecordPin(9 ,channel3Level);
+	RecordPin(10,channel4Level);
 
 	_AudioAddData(0,channel1Level*256*(CTRL_15&0x0F));
 	_AudioAddData(1,channel2Level*256*(CTRL_15&0x0F));
