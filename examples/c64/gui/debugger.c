@@ -8,10 +8,10 @@
 #include "font.h"
 
 unsigned short breakpoints[2][20]={
-	{0,0},
+	{0xFF48,0},
 	{/*0xE853,*//*0xF556,*/0xfd27,0xfd86,0xfd58,0xF497,0xF3C0,0xF567}
 	};		// first list main cpu, second is disk cpu
-unsigned int numBreakpoints[2]={0,3};
+unsigned int numBreakpoints[2]={1,3};
 
 unsigned short curAddresses[2][16];
 int Offs[2]={0,0};
@@ -274,50 +274,64 @@ uint8_t DISK_VIA1_PinGetPIN_CB1();
 uint8_t DISK_VIA1_PinGetPIN_CB2();
 extern uint8_t DISK_VIA1_DDRA;
 extern uint8_t DISK_VIA1_DDRB;
-uint8_t VIA0_PinGetPIN_PA();
-uint8_t VIA0_PinGetPIN_CA1();
-uint8_t VIA0_PinGetPIN_CA2();
-uint8_t VIA0_PinGetPIN_PB();
-uint8_t VIA0_PinGetPIN_CB1();
-uint8_t VIA0_PinGetPIN_CB2();
-extern uint8_t VIA0_DDRA;
-extern uint8_t VIA0_DDRB;
-uint8_t VIA1_PinGetPIN_PA();
-uint8_t VIA1_PinGetPIN_CA1();
-uint8_t VIA1_PinGetPIN_CA2();
-uint8_t VIA1_PinGetPIN_PB();
-uint8_t VIA1_PinGetPIN_CB1();
-uint8_t VIA1_PinGetPIN_CB2();
-extern uint8_t VIA1_DDRA;
-extern uint8_t VIA1_DDRB;
 
-extern uint8_t	VIA0_PA_LATCH;
-extern uint8_t	VIA0_PB_LATCH;
-extern uint8_t	VIA0_ORA;
-extern uint8_t	VIA0_ORB;
-extern uint16_t VIA0_T1C;
-extern uint16_t VIA0_T1L;
-extern uint16_t VIA0_T2C;
-extern uint8_t	VIA0_T2LL;
-extern uint8_t	VIA0_SR;
-extern uint8_t	VIA0_ACR;
-extern uint8_t	VIA0_PCR;
-extern uint8_t	VIA0_IFR;
-extern uint8_t	VIA0_IER;
+uint8_t CIA0_PinGetPIN_PA();
+uint8_t CIA0_PinGetPIN_PB();
+uint8_t CIA1_PinGetPIN_PA();
+uint8_t CIA1_PinGetPIN_PB();
 
-extern uint8_t	VIA1_PA_LATCH;
-extern uint8_t	VIA1_PB_LATCH;
-extern uint8_t	VIA1_ORA;
-extern uint8_t	VIA1_ORB;
-extern uint16_t VIA1_T1C;
-extern uint16_t VIA1_T1L;
-extern uint16_t VIA1_T2C;
-extern uint8_t	VIA1_T2LL;
-extern uint8_t	VIA1_SR;
-extern uint8_t	VIA1_ACR;
-extern uint8_t	VIA1_PCR;
-extern uint8_t	VIA1_IFR;
-extern uint8_t	VIA1_IER;
+extern uint8_t	CIA0_PRA;
+extern uint8_t	CIA0_PRB;
+extern uint8_t	CIA0_DDRA;
+extern uint8_t	CIA0_DDRB;
+extern uint16_t	CIA0_TA;
+extern uint16_t	CIA0_TB;
+extern uint16_t	CIA0_TA_LATCH;
+extern uint16_t	CIA0_TB_LATCH;
+extern uint8_t	CIA0_TOD_HR;
+extern uint8_t	CIA0_TOD_MIN;
+extern uint8_t	CIA0_TOD_SEC;
+extern uint8_t	CIA0_TOD_10TH;
+extern uint8_t	CIA0_TOD_LAT_HR;
+extern uint8_t	CIA0_TOD_LAT_MIN;
+extern uint8_t	CIA0_TOD_LAT_SEC;
+extern uint8_t	CIA0_TOD_LAT_10TH;
+extern uint8_t	CIA0_ALARM_HR;
+extern uint8_t	CIA0_ALARM_MIN;
+extern uint8_t	CIA0_ALARM_SEC;
+extern uint8_t	CIA0_ALARM_10TH;
+extern uint8_t	CIA0_SDR;
+extern uint8_t	CIA0_ICR_MASK;
+extern uint8_t	CIA0_ICR_DATA;
+extern uint8_t	CIA0_CRA;
+extern uint8_t	CIA0_CRB;
+
+extern uint8_t	CIA1_PRA;
+extern uint8_t	CIA1_PRB;
+extern uint8_t	CIA1_DDRA;
+extern uint8_t	CIA1_DDRB;
+extern uint16_t	CIA1_TA;
+extern uint16_t	CIA1_TB;
+extern uint16_t	CIA1_TA_LATCH;
+extern uint16_t	CIA1_TB_LATCH;
+extern uint8_t	CIA1_TOD_HR;
+extern uint8_t	CIA1_TOD_MIN;
+extern uint8_t	CIA1_TOD_SEC;
+extern uint8_t	CIA1_TOD_10TH;
+extern uint8_t	CIA1_TOD_LAT_HR;
+extern uint8_t	CIA1_TOD_LAT_MIN;
+extern uint8_t	CIA1_TOD_LAT_SEC;
+extern uint8_t	CIA1_TOD_LAT_10TH;
+extern uint8_t	CIA1_ALARM_HR;
+extern uint8_t	CIA1_ALARM_MIN;
+extern uint8_t	CIA1_ALARM_SEC;
+extern uint8_t	CIA1_ALARM_10TH;
+extern uint8_t	CIA1_SDR;
+extern uint8_t	CIA1_ICR_MASK;
+extern uint8_t	CIA1_ICR_DATA;
+extern uint8_t	CIA1_CRA;
+extern uint8_t	CIA1_CRB;
+
 
 extern uint8_t	DISK_VIA0_PA_LATCH;
 extern uint8_t	DISK_VIA0_PB_LATCH;
@@ -400,135 +414,125 @@ extern uint8_t	DISK_VIA1_IER;
 
 void DrawVIAMain(unsigned char* buffer,unsigned int width)
 {
-	PrintAt(buffer,width,255,255,255,0,0,"-----------------VIA 1(9110)");
-	PrintAt(buffer,width,255,255,255,0,2,"PA = ATN OT  CSW IN  PEN IN  JY2 IN  JY1 IN  JY0 IN  DAT IN  CLK IN   CA1  !RST OT = %s",
-		VIA0_PinGetPIN_CA1()&0x01 ? "1" : "0"
-		);
-	PrintAt(buffer,width,255,255,255,0,3,"     %s       %s       %s       %s        %s       %s       %s       %s       CA2  MOTOR   = %s",
-		VIA0_PinGetPIN_PA()&0x80 ? "1" : "0",
-		VIA0_PinGetPIN_PA()&0x40 ? "1" : "0",
-		VIA0_PinGetPIN_PA()&0x20 ? "1" : "0",
-		VIA0_PinGetPIN_PA()&0x10 ? "1" : "0",
-		VIA0_PinGetPIN_PA()&0x08 ? "1" : "0",
-		VIA0_PinGetPIN_PA()&0x04 ? "1" : "0",
-		VIA0_PinGetPIN_PA()&0x02 ? "1" : "0",
-		VIA0_PinGetPIN_PA()&0x01 ? "1" : "0",
-		VIA0_PinGetPIN_CA2()&0x01 ? "1" : "0"
+	PrintAt(buffer,width,255,255,255,0,0,"-----------------CIA#1 (DC00)");
+	PrintAt(buffer,width,255,255,255,0,2,"PA = ATN OT  CSW IN  PEN IN  JY2 IN  JY1 IN  JY0 IN  DAT IN  CLK IN");
+	PrintAt(buffer,width,255,255,255,0,3,"     %s       %s       %s       %s        %s       %s       %s       %s",
+		CIA0_PinGetPIN_PA()&0x80 ? "1" : "0",
+		CIA0_PinGetPIN_PA()&0x40 ? "1" : "0",
+		CIA0_PinGetPIN_PA()&0x20 ? "1" : "0",
+		CIA0_PinGetPIN_PA()&0x10 ? "1" : "0",
+		CIA0_PinGetPIN_PA()&0x08 ? "1" : "0",
+		CIA0_PinGetPIN_PA()&0x04 ? "1" : "0",
+		CIA0_PinGetPIN_PA()&0x02 ? "1" : "0",
+		CIA0_PinGetPIN_PA()&0x01 ? "1" : "0"
 		);
 	PrintAt(buffer,width,255,255,255,0,4,"DDR  %s       %s       %s       %s        %s       %s       %s       %s",
-		VIA0_DDRA&0x80 ? "1" : "0",
-		VIA0_DDRA&0x40 ? "1" : "0",
-		VIA0_DDRA&0x20 ? "1" : "0",
-		VIA0_DDRA&0x10 ? "1" : "0",
-		VIA0_DDRA&0x08 ? "1" : "0",
-		VIA0_DDRA&0x04 ? "1" : "0",
-		VIA0_DDRA&0x02 ? "1" : "0",
-		VIA0_DDRA&0x01 ? "1" : "0");
-	PrintAt(buffer,width,255,255,255,0,5,"PB = USR7    USR6    USR5    USR4    USR3    USR2    USR1    USR0     CB1  USR     = %s",
-		VIA0_PinGetPIN_CB1()&0x01 ? "1" : "0"
-		);
-	PrintAt(buffer,width,255,255,255,0,6,"     %s       %s       %s       %s        %s       %s       %s       %s       CB2  USR     = %s",
-		VIA0_PinGetPIN_PB()&0x80 ? "1" : "0",
-		VIA0_PinGetPIN_PB()&0x40 ? "1" : "0",
-		VIA0_PinGetPIN_PB()&0x20 ? "1" : "0",
-		VIA0_PinGetPIN_PB()&0x10 ? "1" : "0",
-		VIA0_PinGetPIN_PB()&0x08 ? "1" : "0",
-		VIA0_PinGetPIN_PB()&0x04 ? "1" : "0",
-		VIA0_PinGetPIN_PB()&0x02 ? "1" : "0",
-		VIA0_PinGetPIN_PB()&0x01 ? "1" : "0",
-		VIA0_PinGetPIN_CB2()&0x01 ? "1" : "0"
+		CIA0_DDRA&0x80 ? "1" : "0",
+		CIA0_DDRA&0x40 ? "1" : "0",
+		CIA0_DDRA&0x20 ? "1" : "0",
+		CIA0_DDRA&0x10 ? "1" : "0",
+		CIA0_DDRA&0x08 ? "1" : "0",
+		CIA0_DDRA&0x04 ? "1" : "0",
+		CIA0_DDRA&0x02 ? "1" : "0",
+		CIA0_DDRA&0x01 ? "1" : "0");
+	PrintAt(buffer,width,255,255,255,0,5,"PB = USR7    USR6    USR5    USR4    USR3    USR2    USR1    USR0");
+	PrintAt(buffer,width,255,255,255,0,6,"     %s       %s       %s       %s        %s       %s       %s       %s",
+		CIA0_PinGetPIN_PB()&0x80 ? "1" : "0",
+		CIA0_PinGetPIN_PB()&0x40 ? "1" : "0",
+		CIA0_PinGetPIN_PB()&0x20 ? "1" : "0",
+		CIA0_PinGetPIN_PB()&0x10 ? "1" : "0",
+		CIA0_PinGetPIN_PB()&0x08 ? "1" : "0",
+		CIA0_PinGetPIN_PB()&0x04 ? "1" : "0",
+		CIA0_PinGetPIN_PB()&0x02 ? "1" : "0",
+		CIA0_PinGetPIN_PB()&0x01 ? "1" : "0"
 		);
 	PrintAt(buffer,width,255,255,255,0,7,"DDR  %s       %s       %s       %s        %s       %s       %s       %s",
-		VIA0_DDRB&0x80 ? "1" : "0",
-		VIA0_DDRB&0x40 ? "1" : "0",
-		VIA0_DDRB&0x20 ? "1" : "0",
-		VIA0_DDRB&0x10 ? "1" : "0",
-		VIA0_DDRB&0x08 ? "1" : "0",
-		VIA0_DDRB&0x04 ? "1" : "0",
-		VIA0_DDRB&0x02 ? "1" : "0",
-		VIA0_DDRB&0x01 ? "1" : "0");
+		CIA0_DDRB&0x80 ? "1" : "0",
+		CIA0_DDRB&0x40 ? "1" : "0",
+		CIA0_DDRB&0x20 ? "1" : "0",
+		CIA0_DDRB&0x10 ? "1" : "0",
+		CIA0_DDRB&0x08 ? "1" : "0",
+		CIA0_DDRB&0x04 ? "1" : "0",
+		CIA0_DDRB&0x02 ? "1" : "0",
+		CIA0_DDRB&0x01 ? "1" : "0");
 
-	PrintAt(buffer,width,255,255,255,0,9,"PA_LAT  PB_LAT  ORA  ORB  T1C   T1L   T2C   T2L   SR   ACR  PCR  IFR  IER");
-	PrintAt(buffer,width,255,255,255,0,10,"%02X      %02X      %02X   %02X   %04X  %04X  %04X  %02X    %02X   %02X   %02X   %02X   %02X",
-		VIA0_PA_LATCH,
-		VIA0_PB_LATCH,
-		VIA0_ORA,
-		VIA0_ORB,
-		VIA0_T1C,
-		VIA0_T1L,
-		VIA0_T2C,
-		VIA0_T2LL,
-		VIA0_SR,
-		VIA0_ACR,
-		VIA0_PCR,
-		VIA0_IFR,
-		VIA0_IER
+	PrintAt(buffer,width,255,255,255,0,9,"PRA  PRB  TA    TB    TAL   TBL   TOD       IFR  IER  CRA  CRB");
+	PrintAt(buffer,width,255,255,255,0,10,"%02X   %02X   %04X  %04X  %04X  %04X  %02X%02X%02X%02X  %02X   %02X   %02X   %02X",
+		CIA0_PRA,
+		CIA0_PRB,
+		CIA0_TA,
+		CIA0_TB,
+		CIA0_TA_LATCH,
+		CIA0_TB_LATCH,
+		CIA0_TOD_HR,
+		CIA0_TOD_MIN,
+		CIA0_TOD_SEC,
+		CIA0_TOD_10TH,
+		CIA0_ICR_MASK,
+		CIA0_ICR_DATA,
+		CIA0_CRA,
+		CIA0_CRB
 	       );
 
 
-	PrintAt(buffer,width,255,255,255,0,12,"-----------------VIA 2(9120)");
-	PrintAt(buffer,width,255,255,255,0,14,"PA = RW7 IN  RW6 IN  RW5 IN  RW4 IN  RW3 IN  RW2 IN  RW1 IN  RW0 IN   CA1  CAS  IN = %s",
-		VIA1_PinGetPIN_CA1()&0x01 ? "1" : "0"
-		);
-	PrintAt(buffer,width,255,255,255,0,15,"     %s       %s       %s       %s        %s       %s       %s       %s       CA2  CLK  OT = %s",
-		VIA1_PinGetPIN_PA()&0x80 ? "1" : "0",
-		VIA1_PinGetPIN_PA()&0x40 ? "1" : "0",
-		VIA1_PinGetPIN_PA()&0x20 ? "1" : "0",
-		VIA1_PinGetPIN_PA()&0x10 ? "1" : "0",
-		VIA1_PinGetPIN_PA()&0x08 ? "1" : "0",
-		VIA1_PinGetPIN_PA()&0x04 ? "1" : "0",
-		VIA1_PinGetPIN_PA()&0x02 ? "1" : "0",
-		VIA1_PinGetPIN_PA()&0x01 ? "1" : "0",
-		VIA1_PinGetPIN_CA2()&0x01 ? "1" : "0"
+	PrintAt(buffer,width,255,255,255,0,12,"-----------------CIA#2(DD00)");
+	PrintAt(buffer,width,255,255,255,0,14,"PA = RW7 IN  RW6 IN  RW5 IN  RW4 IN  RW3 IN  RW2 IN  RW1 IN  RW0 IN");
+	PrintAt(buffer,width,255,255,255,0,15,"     %s       %s       %s       %s        %s       %s       %s       %s",
+		CIA1_PinGetPIN_PA()&0x80 ? "1" : "0",
+		CIA1_PinGetPIN_PA()&0x40 ? "1" : "0",
+		CIA1_PinGetPIN_PA()&0x20 ? "1" : "0",
+		CIA1_PinGetPIN_PA()&0x10 ? "1" : "0",
+		CIA1_PinGetPIN_PA()&0x08 ? "1" : "0",
+		CIA1_PinGetPIN_PA()&0x04 ? "1" : "0",
+		CIA1_PinGetPIN_PA()&0x02 ? "1" : "0",
+		CIA1_PinGetPIN_PA()&0x01 ? "1" : "0"
 		);
 	PrintAt(buffer,width,255,255,255,0,16,"DDR  %s       %s       %s       %s        %s       %s       %s       %s",
-		VIA1_DDRA&0x80 ? "1" : "0",
-		VIA1_DDRA&0x40 ? "1" : "0",
-		VIA1_DDRA&0x20 ? "1" : "0",
-		VIA1_DDRA&0x10 ? "1" : "0",
-		VIA1_DDRA&0x08 ? "1" : "0",
-		VIA1_DDRA&0x04 ? "1" : "0",
-		VIA1_DDRA&0x02 ? "1" : "0",
-		VIA1_DDRA&0x01 ? "1" : "0");
-	PrintAt(buffer,width,255,255,255,0,17,"PB = CL7 OT  CL6 OT  CL5 OT  CL4 OT  CL3 OT  CL2 OT  CL1 OT  CL0 OT   CB1  SRQ  IN = %s",
-		VIA1_PinGetPIN_CB1()&0x01 ? "1" : "0"
-		);
-	PrintAt(buffer,width,255,255,255,0,18,"     %s       %s       %s       %s        %s       %s       %s       %s       CB2  DAT  OT = %s",
-		VIA1_PinGetPIN_PB()&0x80 ? "1" : "0",
-		VIA1_PinGetPIN_PB()&0x40 ? "1" : "0",
-		VIA1_PinGetPIN_PB()&0x20 ? "1" : "0",
-		VIA1_PinGetPIN_PB()&0x10 ? "1" : "0",
-		VIA1_PinGetPIN_PB()&0x08 ? "1" : "0",
-		VIA1_PinGetPIN_PB()&0x04 ? "1" : "0",
-		VIA1_PinGetPIN_PB()&0x02 ? "1" : "0",
-		VIA1_PinGetPIN_PB()&0x01 ? "1" : "0",
-		VIA1_PinGetPIN_CB2()&0x01 ? "1" : "0"
+		CIA1_DDRA&0x80 ? "1" : "0",
+		CIA1_DDRA&0x40 ? "1" : "0",
+		CIA1_DDRA&0x20 ? "1" : "0",
+		CIA1_DDRA&0x10 ? "1" : "0",
+		CIA1_DDRA&0x08 ? "1" : "0",
+		CIA1_DDRA&0x04 ? "1" : "0",
+		CIA1_DDRA&0x02 ? "1" : "0",
+		CIA1_DDRA&0x01 ? "1" : "0");
+	PrintAt(buffer,width,255,255,255,0,17,"PB = CL7 OT  CL6 OT  CL5 OT  CL4 OT  CL3 OT  CL2 OT  CL1 OT  CL0 OT");
+	PrintAt(buffer,width,255,255,255,0,18,"     %s       %s       %s       %s        %s       %s       %s       %s",
+		CIA1_PinGetPIN_PB()&0x80 ? "1" : "0",
+		CIA1_PinGetPIN_PB()&0x40 ? "1" : "0",
+		CIA1_PinGetPIN_PB()&0x20 ? "1" : "0",
+		CIA1_PinGetPIN_PB()&0x10 ? "1" : "0",
+		CIA1_PinGetPIN_PB()&0x08 ? "1" : "0",
+		CIA1_PinGetPIN_PB()&0x04 ? "1" : "0",
+		CIA1_PinGetPIN_PB()&0x02 ? "1" : "0",
+		CIA1_PinGetPIN_PB()&0x01 ? "1" : "0"
 		);
 	PrintAt(buffer,width,255,255,255,0,19,"DDR  %s       %s       %s       %s        %s       %s       %s       %s",
-		VIA1_DDRB&0x80 ? "1" : "0",
-		VIA1_DDRB&0x40 ? "1" : "0",
-		VIA1_DDRB&0x20 ? "1" : "0",
-		VIA1_DDRB&0x10 ? "1" : "0",
-		VIA1_DDRB&0x08 ? "1" : "0",
-		VIA1_DDRB&0x04 ? "1" : "0",
-		VIA1_DDRB&0x02 ? "1" : "0",
-		VIA1_DDRB&0x01 ? "1" : "0");
+		CIA1_DDRB&0x80 ? "1" : "0",
+		CIA1_DDRB&0x40 ? "1" : "0",
+		CIA1_DDRB&0x20 ? "1" : "0",
+		CIA1_DDRB&0x10 ? "1" : "0",
+		CIA1_DDRB&0x08 ? "1" : "0",
+		CIA1_DDRB&0x04 ? "1" : "0",
+		CIA1_DDRB&0x02 ? "1" : "0",
+		CIA1_DDRB&0x01 ? "1" : "0");
 	
-	PrintAt(buffer,width,255,255,255,0,21,"PA_LAT  PB_LAT  ORA  ORB  T1C   T1L   T2C   T2L   SR   ACR  PCR  IFR  IER");
-	PrintAt(buffer,width,255,255,255,0,22,"%02X      %02X      %02X   %02X   %04X  %04X  %04X  %02X    %02X   %02X   %02X   %02X   %02X",
-		VIA1_PA_LATCH,
-		VIA1_PB_LATCH,
-		VIA1_ORA,
-		VIA1_ORB,
-		VIA1_T1C,
-		VIA1_T1L,
-		VIA1_T2C,
-		VIA1_T2LL,
-		VIA1_SR,
-		VIA1_ACR,
-		VIA1_PCR,
-		VIA1_IFR,
-		VIA1_IER
+	PrintAt(buffer,width,255,255,255,0,21,"PRA  PRB  TA    TB    TAL   TBL   TOD       IFR  IER  CRA  CRB");
+	PrintAt(buffer,width,255,255,255,0,22,"%02X   %02X   %04X  %04X  %04X  %04X  %02X%02X%02X%02X  %02X   %02X   %02X   %02X",
+		CIA1_PRA,
+		CIA1_PRB,
+		CIA1_TA,
+		CIA1_TB,
+		CIA1_TA_LATCH,
+		CIA1_TB_LATCH,
+		CIA1_TOD_HR,
+		CIA1_TOD_MIN,
+		CIA1_TOD_SEC,
+		CIA1_TOD_10TH,
+		CIA1_ICR_MASK,
+		CIA1_ICR_DATA,
+		CIA1_CRA,
+		CIA1_CRB
 	       );
 }
 

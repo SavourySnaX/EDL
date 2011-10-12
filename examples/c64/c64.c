@@ -1,8 +1,8 @@
 /*
- * VIC20 implementation
+ * C64 implementation
  *
  *
- *
+ *	Currently using pure 6502 - so port mappings are emulated in the memory mapper
  *
  *
  *
@@ -42,100 +42,21 @@ uint8_t MAIN_PinGetPIN_RW();
 void MAIN_PinSetPIN__IRQ(uint8_t);
 void MAIN_PinSetPIN__RES(uint8_t);
 
-//	VIA 1	9110-911F			VIA 2	9120-912F
-//	NMI					IRQ
-//	CA1 - ~RESTORE				CA1	CASSETTE READ
-// 	PA0 - SERIAL CLK(IN)			PA0	ROW INPUT
-//	PA1 - SERIAL DATA(IN)			PA1	ROW INPUT
-//	PA2 - JOY0				PA2	ROW INPUT
-//	PA3 - JOY1				PA3	ROW INPUT
-//	PA4 - JOY2				PA4	ROW INPUT
-//	PA5 - LIGHT PEN				PA5	ROW INPUT
-//	PA6 - CASETTE SWITCH			PA6	ROW INPUT
-//	PA7 - SERIAL ATN(OUT)			PA7	ROW INPUT
-//	CA2 - CASETTE MOTOR			CA2	SERIAL CLK (OUT)
-//
-//	CB1 - USER PORT				CB1	SERIAL SRQ(IN)
-//	PB0 - USER PORT				PB0	COLUMN OUTPUT
-//	PB1 - USER PORT				PB1	COLUMN OUTPUT
-//	PB2 - USER PORT				PB2	COLUMN OUTPUT
-//	PB3 - USER PORT				PB3	COLUMN OUTPUT	RECORD
-//	PB4 - USER PORT				PB4	COLUMN OUTPUT
-//	PB5 - USER PORT				PB5	COLUMN OUTPUT
-//	PB6 - USER PORT				PB6	COLUMN OUTPUT
-//	PB7 - USER PORT				PB7	COLUMN OUTPUT  JOY3
-//	CB2 - USER PORT				CB2	SERIAL DATA (OUT)
-//
-//
-//
-void	VIA0_PinSetPIN_PA(uint8_t);
-uint8_t VIA0_PinGetPIN_PA();
-void	VIA0_PinSetPIN_CA1(uint8_t);
-void	VIA0_PinSetPIN_CA2(uint8_t);
-uint8_t VIA0_PinGetPIN_CA2();
-void	VIA0_PinSetPIN_PB(uint8_t);
-uint8_t VIA0_PinGetPIN_PB();
-void	VIA0_PinSetPIN_CB1(uint8_t);
-uint8_t VIA0_PinGetPIN_CB1();
-void	VIA0_PinSetPIN_CB2(uint8_t);
-uint8_t VIA0_PinGetPIN_CB2();
-void	VIA0_PinSetPIN_RS(uint8_t);
-void	VIA0_PinSetPIN_CS(uint8_t);
-void	VIA0_PinSetPIN_D(uint8_t);
-uint8_t VIA0_PinGetPIN_D();
-void	VIA0_PinSetPIN__RES(uint8_t);
-void	VIA0_PinSetPIN_O2(uint8_t);
-void	VIA0_PinSetPIN_RW(uint8_t);
-uint8_t VIA0_PinGetPIN__IRQ();
-
-void	VIA1_PinSetPIN_PA(uint8_t);
-uint8_t VIA1_PinGetPIN_PA();
-void	VIA1_PinSetPIN_CA1(uint8_t);
-void	VIA1_PinSetPIN_CA2(uint8_t);
-uint8_t VIA1_PinGetPIN_CA2();
-void	VIA1_PinSetPIN_PB(uint8_t);
-uint8_t VIA1_PinGetPIN_PB();
-void	VIA1_PinSetPIN_CB1(uint8_t);
-uint8_t VIA1_PinGetPIN_CB1();
-void	VIA1_PinSetPIN_CB2(uint8_t);
-uint8_t VIA1_PinGetPIN_CB2();
-void	VIA1_PinSetPIN_RS(uint8_t);
-void	VIA1_PinSetPIN_CS(uint8_t);
-void	VIA1_PinSetPIN_D(uint8_t);
-uint8_t VIA1_PinGetPIN_D();
-void	VIA1_PinSetPIN__RES(uint8_t);
-void	VIA1_PinSetPIN_O2(uint8_t);
-void	VIA1_PinSetPIN_RW(uint8_t);
-uint8_t VIA1_PinGetPIN__IRQ();
 
 // Step 1. Memory
-
-unsigned char D20[0x2002];
-unsigned char D40[0x2002];
-unsigned char D60[0x2002];
-unsigned char DA0[0x2002];
 
 unsigned char CRom[0x1000];
 unsigned char BRom[0x2000];
 unsigned char KRom[0x2000];
 
-unsigned char RamLo[0x400];
-unsigned char RamHi[0xE00];
+unsigned char Ram[0x10000];
 
 unsigned char CRam[0x400];
-unsigned char SRam[0x200];
-
-#define USE_CART_A0		0
-#define USE_CART_60		0
-#define USE_CART_40		0
-#define USE_CART_20		0
-#define ALLOW_WRITE_A0		0
-#define ALLOW_WRITE_60		0
-#define ALLOW_WRITE_40		0
-#define ALLOW_WRITE_20		0
 
 int playDown=0;
 int recDown=0;
+
+uint8_t M6569_IRQ=1;
 
 int LoadRom(unsigned char* rom,unsigned int size,const char* fname)
 {
@@ -153,11 +74,11 @@ int LoadRom(unsigned char* rom,unsigned int size,const char* fname)
 
 int InitialiseMemory()
 {
-	if (LoadRom(CRom,0x1000,"roms/901460-03.ud7"))
+	if (LoadRom(CRom,0x1000,"roms/chargen"))
 		return 1;
-	if (LoadRom(BRom,0x2000,"roms/901486-01.ue11"))
+	if (LoadRom(BRom,0x2000,"roms/basic"))
 		return 1;
-	if (LoadRom(KRom,0x2000,"roms/901486-07.ue12"))
+	if (LoadRom(KRom,0x2000,"roms/kernal"))
 		return 1;
 
 #if 1
@@ -189,202 +110,151 @@ void VIASetByte(int chipNo,int regNo,uint8_t byte);
 void VIATick(int chipNo,uint8_t PB0);
 #endif
 
-uint8_t GetByte6561(int regNo);
-void SetByte6561(int regNo,uint8_t byte);
-void Tick6561();
+uint8_t GetByte6569(int regNo);
+void SetByte6569(int regNo,uint8_t byte);
+void Tick6569();
 
 uint8_t lastBus=0xFF;
 
 int doDebug=0;
 
+uint8_t M6510_DDR=0xEF;
+uint8_t M6510_PCR=0xFF;		//6-7xxx  5-cas motor  4-cas switch  3-cas out  2-charen  1-hiram   0-loram
+
+// Extremely dumb / Simplified mapper
+
 uint8_t GetByte(uint16_t addr)
 {
-	if (addr<0x0400)
+	if (addr<0x0001)
 	{
-		return RamLo[addr];
+		return M6510_DDR;
 	}
-	if (addr<0x1000)
+	if (addr<0x0002)
 	{
-		return lastBus;
-	}
-	if (addr<0x1E00)
-	{
-		return RamHi[addr-0x1000];
-	}
-	if (addr<0x2000)
-	{
-		return SRam[addr-0x1E00];
-	}
-	if (addr<0x4000)
-	{
-#if USE_CART_20
-		return D20[2+(addr-0x2000)];
-#else
-		return lastBus;
-#endif
-	}
-	if (addr<0x6000)
-	{
-#if USE_CART_20
-		return D40[2+(addr-0x4000)];
-#else
-		return lastBus;
-#endif
-	}
-	if (addr<0x8000)
-	{
-#if USE_CART_60
-		return D60[2+(addr-0x6000)];
-#else
-		return lastBus;
-#endif
-	}
-	if (addr<0x9000)
-	{
-		return CRom[addr-0x8000];
-	}
-	if (addr<0x9400)
-	{
-		if (addr>=0x9000 && addr<=0x900F)
-		{
-			return GetByte6561(addr&0x0F);
-		}
-		if (addr>=0x9110 && addr<=0x912F)
-		{
-			if (addr&0x0020)
-			{
-				if (doDebug)
-				{
-					printf("Getting PIN_D from VIA1\n");
-				}
-				return VIA1_PinGetPIN_D();		//TODO FIX.. according to the schematic via addressing is 1001 00xx xxBA RRRR
-			}
-			else
-			{
-				if (doDebug)
-				{
-					printf("Getting PIN_D from VIA0\n");
-				}
-				return VIA0_PinGetPIN_D();
-			}
-		}
-		// Various expansions
-		printf("Attempt to acccess : %04X\n",addr);
-		return lastBus;
-	}
-	if (addr<0x9800)
-	{
-		return CRam[addr-0x9400]&0x0F;
+		return M6510_PCR;
 	}
 	if (addr<0xA000)
 	{
-		return lastBus;
+		return Ram[addr];
 	}
 	if (addr<0xC000)
 	{
-#if USE_CART_A0
-		return DA0[2+(addr-0xA000)];
-#else
-		return lastBus;
-#endif
+		if ((M6510_PCR&0x01)==0x01)
+		{
+			return BRom[addr-0xA000];
+		}
+		else
+		{
+			return Ram[addr];
+		}
+	}
+	if (addr<0xD000)
+	{
+		return Ram[addr];
 	}
 	if (addr<0xE000)
 	{
-		return BRom[addr-0xC000];
+		if ((M6510_PCR&0x04)==0x04)
+		{
+			if (addr<0xD400)
+			{
+				return GetByte6569(addr&0x3F);
+			}
+			if (addr<0xD800)
+			{
+				printf("SID Register Read : %02X  ($1D-$1F - unconnected)\n",addr&0x1F);
+				return 0xFF;
+			}
+			if (addr<0xDC00)
+			{
+				return CRam[addr-0xD800]&0xF;
+			}
+			if (addr<0xDD00)
+			{
+				return CIA0_PinGetPIN_DB();
+			}
+			if (addr<0xDE00)
+			{
+				return CIA1_PinGetPIN_DB();
+			}
+			printf("IO Expansion\n");
+			return 0xFF;
+		}
+		else
+		{
+			return CRom[addr-0xD000];
+		}
 	}
-	return KRom[addr-0xE000];
+
+	if ((M6510_PCR&0x02)==0x02)
+	{
+		return KRom[addr-0xE000];
+	}
+	else
+	{
+		return Ram[addr];
+	}
 }
 
 void SetByte(uint16_t addr,uint8_t byte)
 {
-	if (addr<0x0400)
+	//TODO .. memory map for 64
+	if (addr<0x0001)
 	{
-		RamLo[addr]=byte;
+		M6510_DDR=byte;
 		return;
 	}
-	if (addr<0x1000)
+	if (addr<0x0002)
 	{
+		M6510_PCR&=M6510_DDR;
+		byte&=~M6510_DDR;
+		M6510_PCR|=byte;
 		return;
 	}
-	if (addr<0x1E00)
+	if (addr<0xD000)
 	{
-		RamHi[addr-0x1000]=byte;
-		return;
-	}
-	if (addr<0x2000)
-	{
-		SRam[addr-0x1E00]=byte;
-		return;
-	}
-	if (addr<0x4000)
-	{
-#if ALLOW_WRITE_20
-		D20[2+(addr-0x2000)]=byte;
-#endif
-		return;
-	}
-	if (addr<0x6000)
-	{
-#if ALLOW_WRITE_40
-		D40[2+(addr-0x4000)]=byte;
-#endif
-		return;
-	}
-	if (addr<0x8000)
-	{
-#if ALLOW_WRITE_60
-		D60[2+(addr-0x6000)]=byte;
-#endif
-		return;
-	}
-	if (addr<0x9000)
-	{
-		return;
-	}
-	if (addr<0x9400)
-	{
-		if (addr>=0x9000 && addr<=0x900F)
-		{
-			SetByte6561(addr&0x0F,byte);
-			return;
-		}
-		if (addr>=0x9110 && addr<=0x912F)
-		{
-			if (addr&0x0020)
-			{
-				VIA1_PinSetPIN_D(byte);
-			}
-			else
-			{
-				VIA0_PinSetPIN_D(byte);
-			}
-			return;
-		}
-		// Various expansions
-		printf("WRITE Attempt to acccess :%02X %04X\n",byte,addr);
-		return;
-	}
-	if (addr<0x9800)
-	{
-		CRam[addr-0x9400]=byte&0x0F;
-		return;
-	}
-	if (addr<0xA000)
-	{
-		return;
-	}
-	if (addr<0xC000)
-	{
-#if ALLOW_WRITE_A0
-		DA0[2+(addr-0xA000)]=byte;
-#endif
+		Ram[addr]=byte;
 		return;
 	}
 	if (addr<0xE000)
 	{
-		return;
+		if ((M6510_PCR&0x04)==0x04)
+		{
+			if (addr<0xD400)
+			{
+				SetByte6569(addr&0x3F,byte);
+				return;
+			}
+			if (addr<0xD800)
+			{
+				printf("SID Register Write : %02X<-%02X  ($1D-$1F - unconnected)\n",addr&0x1F,byte);
+				return;
+			}
+			if (addr<0xDC00)
+			{
+				CRam[addr-0xD800]=byte&0xF;
+				return;
+			}
+			if (addr<0xDD00)
+			{
+				CIA0_PinSetPIN_DB(byte);
+				return;
+			}
+			if (addr<0xDE00)
+			{
+				CIA1_PinSetPIN_DB(byte);
+				return;
+			}
+			printf("IO Expansion\n");
+			return;
+		}
+		else
+		{
+			Ram[addr]=byte;
+			return;
+		}
 	}
-	return;
+	Ram[addr]=byte;
 }
 
 
@@ -404,35 +274,6 @@ extern uint8_t	MAIN_Y;
 extern uint16_t	MAIN_SP;
 extern uint16_t	MAIN_PC;
 extern uint8_t	MAIN_P;
-
-#if 0
-struct via6522
-{
-	uint8_t CA1;
-	uint8_t CA2;
-	uint8_t CB1;
-	uint8_t CB2;
-	uint8_t	ORB;
-	uint8_t IRB;
-	uint8_t ORA;
-	uint8_t IRA;
-	uint8_t	DDRB;
-	uint8_t DDRA;
-	uint16_t	T1C;
-	uint8_t T1LL;
-	uint8_t T1LH;
-	uint8_t	T2LL;
-	uint16_t	T2C;
-	uint8_t SR;
-	uint8_t ACR;
-	uint8_t PCR;
-	uint8_t IFR;
-	uint8_t IER;
-	uint8_t T2TimerOff;
-};
-
-struct via6522	via[2];
-#endif
 
 void DUMP_REGISTERS()
 {
@@ -596,28 +437,6 @@ int g_traceStep=0;
 GLFWwindow windows[MAX_WINDOWS];
 unsigned char *videoMemory[MAX_WINDOWS];
 GLint videoTexture[MAX_WINDOWS];
-
-uint8_t CTRL_1=0;
-uint8_t CTRL_2=0;
-uint8_t CTRL_3=0;
-uint8_t CTRL_4=0;
-uint8_t CTRL_5=0;
-uint8_t CTRL_6=0;
-uint8_t CTRL_7=0;
-uint8_t CTRL_8=0;
-uint8_t CTRL_9=0;
-uint8_t CTRL_10=0;
-uint8_t CTRL_11=0;
-uint8_t CTRL_12=0;
-uint8_t CTRL_13=0;
-uint8_t CTRL_14=0;
-uint8_t CTRL_15=0;
-uint8_t CTRL_16=0;
-
-uint32_t	cTable[16]={
-	0x00000000,0x00ffffff,0x00782922,0x0087d6dd,0x00aa5fb6,0x0055a049,0x0040318d,0x00bfce72,
-	0x00aa7449,0x00eab489,0x00b86962,0x00c7ffff,0x00eaf9f6,0x0094e089,0x008071cc,0x00ffffb2,
-			};
 
 void ShowScreen(int windowNum,int w,int h)
 {
@@ -794,6 +613,7 @@ uint8_t kbuffer[8]={0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
 
 void UpdateKB()
 {
+#if 0
 	int colNum=0;
 	uint8_t keyval=0xFF;
 	uint8_t column=~VIA1_PinGetPIN_PB();
@@ -814,10 +634,12 @@ void UpdateKB()
 	}
 
 	VIA1_PinSetPIN_PA(keyval);
+#endif
 }
 
 void UpdateJoy()
 {
+#if 0
 	uint8_t joyVal=0xFF;
 	joyVal&=KeyDown(GLFW_KEY_KP_8)?0xFB:0xFF;
 	joyVal&=KeyDown(GLFW_KEY_KP_2)?0xF7:0xFF;
@@ -828,6 +650,7 @@ void UpdateJoy()
 	joyVal=0xFF;
 	joyVal&=KeyDown(GLFW_KEY_KP_6)?0x7F:0xFF;
 	VIA1_PinSetPIN_PB(joyVal);
+#endif
 }
 
 int casLevel=0;
@@ -842,6 +665,7 @@ uint32_t cntMax=0;
 
 void UpdateCassette()
 {
+#if 0
 #if 1
 	if (CheckKey(GLFW_KEY_PAGEUP))
 	{
@@ -901,6 +725,7 @@ void UpdateCassette()
 		}
 	}
 	VIA1_PinSetPIN_CA1(casLevel);
+#endif
 }
 
 uint8_t lastClk=12,lastDat=12;
@@ -909,6 +734,7 @@ uint16_t DISK_lastPC;
 
 void UpdateDiskInterface()
 {
+#if 0
 	uint8_t tmp,newpa;
 	uint8_t clk,dat,atn;
 
@@ -976,6 +802,7 @@ void UpdateDiskInterface()
 		}
 		via[1].CB1=(tmp&0x10)>>4;
 #endif
+#endif
 }
 
 void UpdateHardware()
@@ -986,7 +813,7 @@ void UpdateHardware()
 	UpdateDiskInterface();
 }
 		
-int stopTheClock=0;
+int stopTheClock=1;
 
 int main(int argc,char**argv)
 {
@@ -1134,8 +961,6 @@ int main(int argc,char**argv)
 	bp = GetByte(0xFFFE);
 	bp|=GetByte(0xFFFF)<<8;
 
-	bp=0xF7AF;
-
 	printf("%04X\n",bp);
 
 	printf("%02X != %02X\n",BRom[0xD487-0xC000],GetByte(0xD487));
@@ -1147,22 +972,21 @@ int main(int argc,char**argv)
 	via[0].CB1=1;
 #endif
 
+	CIA0_PinSetPIN__RES(0);
+	CIA0_PinSetPIN_O2(0);
+	CIA0_PinSetPIN_O2(1);
+	CIA0_PinSetPIN_O2(0);
+	CIA0_PinSetPIN_O2(1);
+	CIA0_PinSetPIN_O2(0);
+	CIA0_PinSetPIN__RES(1);
 
-	VIA0_PinSetPIN__RES(0);
-	VIA0_PinSetPIN_O2(0);
-	VIA0_PinSetPIN_O2(1);
-	VIA0_PinSetPIN_O2(0);
-	VIA0_PinSetPIN_O2(1);
-	VIA0_PinSetPIN_O2(0);
-	VIA0_PinSetPIN__RES(1);
-
-	VIA1_PinSetPIN__RES(0);
-	VIA1_PinSetPIN_O2(0);
-	VIA1_PinSetPIN_O2(1);
-	VIA1_PinSetPIN_O2(0);
-	VIA1_PinSetPIN_O2(1);
-	VIA1_PinSetPIN_O2(0);
-	VIA1_PinSetPIN__RES(1);
+	CIA1_PinSetPIN__RES(0);
+	CIA1_PinSetPIN_O2(0);
+	CIA1_PinSetPIN_O2(1);
+	CIA1_PinSetPIN_O2(0);
+	CIA1_PinSetPIN_O2(1);
+	CIA1_PinSetPIN_O2(0);
+	CIA1_PinSetPIN__RES(1);
 
 	while (!glfwGetKey(windows[MAIN_WINDOW],GLFW_KEY_ESC))
 	{
@@ -1195,30 +1019,25 @@ int main(int argc,char**argv)
 				}
 			}
 
-			VIA0_PinSetPIN_RW(MAIN_PinGetPIN_RW());
-			VIA1_PinSetPIN_RW(MAIN_PinGetPIN_RW());
+			CIA0_PinSetPIN_RW(MAIN_PinGetPIN_RW());
+			CIA1_PinSetPIN_RW(MAIN_PinGetPIN_RW());
 
-			VIA0_PinSetPIN_RS(addr&0xF);
-			VIA1_PinSetPIN_RS(addr&0xF);
+			CIA0_PinSetPIN_RS(addr&0xF);
+			CIA1_PinSetPIN_RS(addr&0xF);
 
-			if ((addr&0xFC00)==0x9000)
+			if ((addr&0xFE00)==0xDC00)
 			{
-				if (doDebug)
-					printf("%04X : CS SETTING\n",addr);
-				VIA0_PinSetPIN_CS((addr&0x0010)>>4);
-				VIA1_PinSetPIN_CS((addr&0x0020)>>5);
+				CIA0_PinSetPIN__CS((addr&0x0100)>>8);
+				CIA1_PinSetPIN__CS(((~addr)&0x0100)>>8);
 			}
 			else
 			{
-				if (doDebug)
-					printf("%04X : CS CLEARING\n",addr);
-				VIA0_PinSetPIN_CS(0x02|((addr&0x0010)>>4));
-				VIA1_PinSetPIN_CS(0x02|((addr&0x0020)>>5));
+				CIA0_PinSetPIN__CS(1);
+				CIA1_PinSetPIN__CS(1);
 			}
 
-			VIA0_PinSetPIN_O2(1);
-			VIA1_PinSetPIN_O2(1);
-
+			CIA0_PinSetPIN_O2(1);
+			CIA1_PinSetPIN_O2(1);
 
 			if (MAIN_PinGetPIN_RW())
 			{
@@ -1234,29 +1053,28 @@ int main(int argc,char**argv)
 				SetByte(addr,MAIN_PinGetPIN_DB());
 			}
 
-
-			VIA0_PinSetPIN_O2(0);
-			VIA1_PinSetPIN_O2(0);
+			CIA0_PinSetPIN_O2(0);
+			CIA1_PinSetPIN_O2(0);
 
 			UpdateHardware();
 
-			MAIN_PinSetPIN__IRQ(VIA1_PinGetPIN__IRQ());
+			MAIN_PinSetPIN__IRQ(CIA0_PinGetPIN__IRQ()&M6569_IRQ);
 
 			lastBus=MAIN_PinGetPIN_DB();
 
 			MAIN_PinSetPIN_O0(0);
 
-			Tick6561();
+			Tick6569();
 
 			pixelClock++;
 		}
 
-		if (pixelClock>=22152 || stopTheClock)
+		if (pixelClock>=(63*312) || stopTheClock)
 		{
 			static int normalSpeed=1;
 
-			if (pixelClock>=22152)
-				pixelClock-=22152;
+			if (pixelClock>=(63*312))
+				pixelClock-=(63*312);
 
             		glfwMakeContextCurrent(windows[MAIN_WINDOW]);
 			ShowScreen(MAIN_WINDOW,WIDTH,HEIGHT);
@@ -1569,119 +1387,59 @@ void VIATick(int chipNo,uint8_t PB0)
 }
 #endif
 
-////////////6561////////////////////
+////////////6569////////////////////
+
+uint8_t M6569_Regs[0x40];		// NB: Over allocated for now!
+
+uint32_t	cTable[16]={
+	0x00000000,0x00ffffff,0x00782922,0x0087d6dd,0x00aa5fb6,0x0055a049,0x0040318d,0x00bfce72,
+	0x00aa7449,0x00eab489,0x00b86962,0x00c7ffff,0x00eaf9f6,0x0094e089,0x008071cc,0x00ffffb2,
+			};
+
 
 uint32_t RASTER_CNT=0;
+uint32_t RASTER_CMP=0xFFFFFFFF;
 
-uint8_t GetByte6561(int regNo)
+uint8_t GetByte6569(int regNo)
 {
-//	printf("R 6561 %02X\n",regNo);
-	switch(regNo)
+	if (regNo<0x2F)
 	{
-		case 0:
-			return CTRL_1;
-		case 1:
-			return CTRL_2;
-		case 2:
-			return CTRL_3;
-		case 3:
-			return CTRL_4;
-		case 4:
-			return CTRL_5;
-		case 5:
-			return CTRL_6;
-		case 6:
-			return CTRL_7;
-		case 7:
-			return CTRL_8;
-		case 8:
-			return CTRL_9;
-		case 9:
-			return CTRL_10;
-		case 10:
-			return CTRL_11;
-		case 11:
-			return CTRL_12;
-		case 12:
-			return CTRL_13;
-		case 13:
-			return CTRL_14;
-		case 14:
-			return CTRL_15;
-		case 15:
-			return CTRL_16;
+		return M6569_Regs[regNo];
 	}
+	return 0xFF;
 }
-uint16_t	channel1Cnt=0;
-uint16_t	channel2Cnt=0;
-uint16_t	channel3Cnt=0;
-uint16_t	channel4Cnt=0;
-uint16_t	noiseShift=1;
 
-void SetByte6561(int regNo,uint8_t byte)
+void SetByte6569(int regNo,uint8_t byte)
 {
-//	printf("W 6561 %02X,%02X\n",regNo,byte);
-	switch(regNo)
+	if (regNo<0x2F)
 	{
-		case 0:
-			CTRL_1=byte;
-			break;
-		case 1:
-			CTRL_2=byte;
-			break;
-		case 2:
-			CTRL_3=byte;
-			break;
-		case 3:
-			CTRL_4&=0x80;
-			CTRL_4|=byte&0x7F;
-			break;
-		case 4:
-			break;
-		case 5:
-			CTRL_6=byte;
-			break;
-		case 6:
-			break;
-		case 7:
-			break;
-		case 8:
-			break;
-		case 9:
-			break;
-		case 10:
-			CTRL_11=byte;
-			channel1Cnt=(255-byte)<<8;
-			break;
-		case 11:
-			CTRL_12=byte;
-			channel2Cnt=(255-byte)<<7;
-			break;
-		case 12:
-			CTRL_13=byte;
-			channel3Cnt=(255-byte)<<6;
-			break;
-		case 13:
-			CTRL_14=byte;
-			channel4Cnt=(255-byte)<<5;
-			break;
-		case 14:
-			CTRL_15=byte;
-			break;
-		case 15:
-			CTRL_16=byte;
-			break;
+		if (regNo==0x12)		// TODO-Set RASTER COMPARE FOR INTERRUPT
+		{
+			RASTER_CMP&=0x100;
+			RASTER_CMP|=byte;
+			return;
+		}
+		if (regNo==0x11)
+		{
+			RASTER_CMP&=0xFF;
+			RASTER_CMP|=(byte&0x80)<<1;
+			byte&=0x7F;
+			byte|=M6569_Regs[0x11]&0x80;
+		}
+		M6569_Regs[regNo]=byte;
 	}
 }
 
 uint8_t xCnt=0;
 
+#if 0
 int16_t	channel1Level=0;
 int16_t channel2Level=0;
 int16_t	channel3Level=0;
 int16_t channel4Level=0;
+#endif
 
-uint8_t GetByteFrom6561(uint16_t addr)
+uint8_t GetByteFrom6569(uint16_t addr)
 {
 	// A0-A12 are connected as expected in vic20... a13 is inverted and connected to a15
 	addr=(addr&0x1FFF)|((addr&0x2000)<<2);
@@ -1689,7 +1447,7 @@ uint8_t GetByteFrom6561(uint16_t addr)
 	return GetByte(addr);
 }
 
-void Tick6561()
+void Tick6569()
 {
 	uint32_t* outputTexture = (uint32_t*)videoMemory[MAIN_WINDOW];
 	uint32_t originX;
@@ -1698,10 +1456,38 @@ void Tick6561()
 	uint32_t height;
 	uint32_t borderCol;
 
+
+	// For now.. just the raster
+
+	M6569_IRQ=1;
+	if (RASTER_CMP==RASTER_CNT)
+	{
+		M6569_IRQ=0;
+	}
+
+	xCnt++;
+	if (xCnt>=63)
+	{
+		if (RASTER_CMP==RASTER_CNT)
+		{
+			printf("IRQ SHOULD HAVE HAPPENED - %08X==%08X\n",RASTER_CNT,RASTER_CMP);
+		}
+		xCnt=0;
+		RASTER_CNT++;
+		if (RASTER_CNT>=312)
+		{
+			RASTER_CNT=0;
+		}
+		M6569_Regs[0x11]&=0x7F;
+		M6569_Regs[0x11]|=RASTER_CNT>>1;
+		M6569_Regs[0x12]=RASTER_CNT&0xFF;
+	}
+
+#if 0
 	borderCol=CTRL_16&0x07;
 	borderCol=cTable[borderCol];
 
-	// 4 pixels per clock		71 clocks per line (PAL)		312 lines per frame		vblank 0-27
+	// 8 pixels per clock		63 clocks per line (PAL)		312 lines per frame		vblank 0-27
 
 	if (RASTER_CNT>=28 && xCnt>=5 && xCnt<=71-5)		// !Blanking area
 	{
@@ -1764,17 +1550,17 @@ void Tick6561()
 			else
 				screenAddress+= (y/8)*(length/2);
 
-			uint32_t rcol= GetByteFrom6561(caddr+screenAddress);
+			uint32_t rcol= GetByteFrom6569(caddr+screenAddress);
 			uint32_t col;
 			col=cTable[rcol&7];
-			index=GetByteFrom6561(addr+screenAddress);
+			index=GetByteFrom6569(addr+screenAddress);
 			index<<=3+doubleHeight;
 			if (doubleHeight)
 				index+=y&15;
 			else
 				index+=y&7;
 
-			uint8_t byte = GetByteFrom6561((chaddr+index));
+			uint8_t byte = GetByteFrom6569((chaddr+index));
 			
 			if (rcol&0x08)
 			{
@@ -1902,6 +1688,7 @@ void Tick6561()
 		channel4Cnt=0;
 	}
 	
+#if 0
 	RecordPin(7 ,channel1Level);
 	RecordPin(8 ,channel2Level);
 	RecordPin(9 ,channel3Level);
@@ -1911,7 +1698,9 @@ void Tick6561()
 	_AudioAddData(1,channel2Level*256*(CTRL_15&0x0F));
 	_AudioAddData(2,channel3Level*256*(CTRL_15&0x0F));
 	_AudioAddData(3,channel4Level*256*(CTRL_15&0x0F));
+#endif
 
+#endif
 	UpdateAudio();
 
 }
