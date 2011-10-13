@@ -1918,7 +1918,7 @@ void Tick6561()
 
 //////////////////////// NOISES //////////////////////////
 
-#define NUMBUFFERS            (3)				/* living dangerously*/
+#define NUMBUFFERS            (2)				/* living dangerously*/
 
 ALuint		  uiBuffers[NUMBUFFERS];
 ALuint		  uiSource;

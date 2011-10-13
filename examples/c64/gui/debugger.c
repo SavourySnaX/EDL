@@ -11,7 +11,7 @@ unsigned short breakpoints[2][20]={
 	{0xFF48,0},
 	{/*0xE853,*//*0xF556,*/0xfd27,0xfd86,0xfd58,0xF497,0xF3C0,0xF567}
 	};		// first list main cpu, second is disk cpu
-unsigned int numBreakpoints[2]={1,3};
+unsigned int numBreakpoints[2]={0,0};
 
 unsigned short curAddresses[2][16];
 int Offs[2]={0,0};
@@ -130,20 +130,20 @@ void DrawRegister(int chip,uint8_t *table[256],unsigned char* buffer,unsigned in
 
 		if (Offs[chip]==b)
 		{
-			PrintAt(buffer,width,colR,colG,colB,0,10+b,"%04X >",address);
+			PrintAt(buffer,width,colR,colG,colB,0,8+b,"%04X >",address);
 		}
 		else
 		{
-			PrintAt(buffer,width,colR,colG,colB,0,10+b,"%04X  ",address);
+			PrintAt(buffer,width,colR,colG,colB,0,8+b,"%04X  ",address);
 		}
 
-		PrintAt(buffer,width,255,255,255,8,10+b,"            ");
+		PrintAt(buffer,width,255,255,255,8,8+b,"            ");
 		for (a=0;a<opcodeLength;a++)
 		{
-			PrintAt(buffer,width,colR,colG,colB,8+a*3,10+b,"%02X ",GetMem(address+a));
+			PrintAt(buffer,width,colR,colG,colB,8+a*3,8+b,"%02X ",GetMem(address+a));
 		}
-		PrintAt(buffer,width,255,255,255,8+4*3,10+b,"            ");
-		PrintAt(buffer,width,colR,colG,colB,8+4*3,10+b,"%s",retVal);
+		PrintAt(buffer,width,255,255,255,8+4*3,8+b,"            ");
+		PrintAt(buffer,width,colR,colG,colB,8+4*3,8+b,"%s",retVal);
 
 		address+=opcodeLength;
 	}
@@ -238,6 +238,8 @@ void UpdateRegisterDisk(GLFWwindow window)
 	}
 }
 
+extern uint8_t M6569_Regs[0x40];
+
 void DrawRegisterMain(unsigned char* buffer,unsigned int width,uint16_t address,uint8_t (*GetMem)(uint16_t))
 {
 	PrintAt(buffer,width,255,255,255,0,0,"FLAGS = N  V  -  B  D  I  Z  C");
@@ -256,6 +258,19 @@ void DrawRegisterMain(unsigned char* buffer,unsigned int width,uint16_t address,
 	PrintAt(buffer,width,255,255,255,0,5,"SP  %04X",MAIN_SP);
 
 	DrawRegister(0,MAIN_DIS_,buffer,width,address,GetMem,decodeDisasm);
+
+	{
+		int a;
+		int b;
+
+		for (a=0;a<8;a++)
+		{
+			for (b=0;b<8;b++)
+			{
+				PrintAt(buffer,width,255,255,255,0+b*3,26+a,"%02X",M6569_Regs[a*8+b]);
+			}
+		}
+	}
 }
 
 uint8_t DISK_VIA0_PinGetPIN_PA();
@@ -361,61 +376,10 @@ extern uint8_t	DISK_VIA1_PCR;
 extern uint8_t	DISK_VIA1_IFR;
 extern uint8_t	DISK_VIA1_IER;
 
-//	VIA 1	9110-911F			VIA 2	9120-912F
-//	NMI					IRQ
-//	CA1 - ~RESTORE				CA1	CASSETTE READ
-// 	PA0 - SERIAL CLK(IN)			PA0	ROW INPUT
-//	PA1 - SERIAL DATA(IN)			PA1	ROW INPUT
-//	PA2 - JOY0				PA2	ROW INPUT
-//	PA3 - JOY1				PA3	ROW INPUT
-//	PA4 - JOY2				PA4	ROW INPUT
-//	PA5 - LIGHT PEN				PA5	ROW INPUT
-//	PA6 - CASETTE SWITCH			PA6	ROW INPUT
-//	PA7 - SERIAL ATN(OUT)			PA7	ROW INPUT
-//	CA2 - CASETTE MOTOR			CA2	SERIAL CLK (OUT)
-//
-//	CB1 - USER PORT				CB1	SERIAL SRQ(IN)
-//	PB0 - USER PORT				PB0	COLUMN OUTPUT
-//	PB1 - USER PORT				PB1	COLUMN OUTPUT
-//	PB2 - USER PORT				PB2	COLUMN OUTPUT
-//	PB3 - USER PORT				PB3	COLUMN OUTPUT	RECORD
-//	PB4 - USER PORT				PB4	COLUMN OUTPUT
-//	PB5 - USER PORT				PB5	COLUMN OUTPUT
-//	PB6 - USER PORT				PB6	COLUMN OUTPUT
-//	PB7 - USER PORT				PB7	COLUMN OUTPUT  JOY3
-//	CB2 - USER PORT				CB2	SERIAL DATA (OUT)
-//	Serial BUS				Motor And READ/WRITE
-//	VIA 1	1800-180F			VIA 2	1C00-1C0F
-//	NMI??					IRQ??
-//	CA1 - ????				CA1	Byte Ready??
-// 	PA0 - 					PA0	DATA TO/FROM DISK HEAD
-//	PA1 - 					PA1	DATA TO/FROM DISK HEAD
-//	PA2 - 					PA2	DATA TO/FROM DISK HEAD
-//	PA3 - 					PA3	DATA TO/FROM DISK HEAD
-//	PA4 - 					PA4	DATA TO/FROM DISK HEAD
-//	PA5 - 					PA5	DATA TO/FROM DISK HEAD
-//	PA6 - 					PA6	DATA TO/FROM DISK HEAD
-//	PA7 - 					PA7	DATA TO/FROM DISK HEAD
-//	CA2 - ????				CA2	SOE - on DISK_6502
-//
-//	CB1 - ????				CB1	???
-//	PB0 - DATA IN				PB0	STEP MOTOR
-//	PB1 - DATA OUT				PB1	STEP MOTOR
-//	PB2 - CLOCK IN				PB2	MTR / drive motor (on/off)
-//	PB3 - CLOCK OUT				PB3	ACT / LED on drive
-//	PB4 - ATN ACK OUT			PB4	Write Protect Sense (1==on)
-//	PB5 - DEVICE ADDRESS			PB5	BIT RATE
-//	PB6 - DEVICE ADDRESS			PB6	BIT RATE
-//	PB7 - ATN IN				PB7	SYNC IN
-//	//CB2 - ATN IN				CB2	????
-//
-//
-//
-
 void DrawVIAMain(unsigned char* buffer,unsigned int width)
 {
 	PrintAt(buffer,width,255,255,255,0,0,"-----------------CIA#1 (DC00)");
-	PrintAt(buffer,width,255,255,255,0,2,"PA = ATN OT  CSW IN  PEN IN  JY2 IN  JY1 IN  JY0 IN  DAT IN  CLK IN");
+	PrintAt(buffer,width,255,255,255,0,2,"PA = RW7 OT  RW6 OT  RW5 OT  RW4 OT  RW3 OT  RW2 OT  RW1 OT  RW0 OT");
 	PrintAt(buffer,width,255,255,255,0,3,"     %s       %s       %s       %s        %s       %s       %s       %s",
 		CIA0_PinGetPIN_PA()&0x80 ? "1" : "0",
 		CIA0_PinGetPIN_PA()&0x40 ? "1" : "0",
@@ -435,7 +399,7 @@ void DrawVIAMain(unsigned char* buffer,unsigned int width)
 		CIA0_DDRA&0x04 ? "1" : "0",
 		CIA0_DDRA&0x02 ? "1" : "0",
 		CIA0_DDRA&0x01 ? "1" : "0");
-	PrintAt(buffer,width,255,255,255,0,5,"PB = USR7    USR6    USR5    USR4    USR3    USR2    USR1    USR0");
+	PrintAt(buffer,width,255,255,255,0,5,"PB = CL7 IN  CL6 IN  CL5 IN  CL4 IN  CL3 IN  CL2 IN  CL1 IN  CL0 IN");
 	PrintAt(buffer,width,255,255,255,0,6,"     %s       %s       %s       %s        %s       %s       %s       %s",
 		CIA0_PinGetPIN_PB()&0x80 ? "1" : "0",
 		CIA0_PinGetPIN_PB()&0x40 ? "1" : "0",

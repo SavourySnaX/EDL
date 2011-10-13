@@ -421,8 +421,8 @@ int g_traceStep=0;
 #define TIMING_WIDTH	640
 #define TIMING_HEIGHT	280
 
-#define HEIGHT	(312-28)
-#define	WIDTH	(284-(5*8))
+#define HEIGHT	(312)
+#define	WIDTH	(63*8)
 
 #define MAX_WINDOWS		(8)
 
@@ -613,10 +613,9 @@ uint8_t kbuffer[8]={0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
 
 void UpdateKB()
 {
-#if 0
 	int colNum=0;
 	uint8_t keyval=0xFF;
-	uint8_t column=~VIA1_PinGetPIN_PB();
+	uint8_t column=~CIA0_PinGetPIN_PA();
 
 	while (column)
 	{
@@ -633,8 +632,7 @@ void UpdateKB()
 //		doDebug=1;
 	}
 
-	VIA1_PinSetPIN_PA(keyval);
-#endif
+	CIA0_PinSetPIN_PB(keyval);
 }
 
 void UpdateJoy()
@@ -666,7 +664,6 @@ uint32_t cntMax=0;
 void UpdateCassette()
 {
 #if 0
-#if 1
 	if (CheckKey(GLFW_KEY_PAGEUP))
 	{
 		playDown=1;
@@ -686,21 +683,21 @@ void UpdateCassette()
 		casCount=0;
 		casLevel=0;
 	}
-	if (CheckKey(GLFW_KEY_END))
+	if (CheckKey(GLFW_KEY_PAGEUP))
 	{
 		playDown=0;
 		recDown=0;
-		ClearKey(GLFW_KEY_END);
+		ClearKey(GLFW_KEY_PAGEUP);
 		cntPos=0;
 		casCount=0;
 		casLevel=0;		
 	}
 
 	// Cassette deck
-	if (playDown)
-	{
-		VIA0_PinSetPIN_PA(VIA0_PinGetPIN_PA()&0xBF);
-	}
+	
+	M6510_PCR&=0xEF;
+	M6510_PCR|=(playDown<<4)^0x10;
+#if 0
 	if (playDown && recDown && (!VIA0_PinGetPIN_CA2())) // SAVING
 	{
 		uint8_t newRecLevel = (VIA1_PinGetPIN_PB()&0x08)>>3;
@@ -714,7 +711,8 @@ void UpdateCassette()
 			casLevel=newRecLevel;
 		}
 	}
-	if (playDown && (!recDown) && (!VIA0_PinGetPIN_CA2())) // LOADING
+#endif
+	if (playDown && (!recDown) && (0==(M6510_DDR&0x40))) // LOADING
 	{
 		casCount++;
 		if (casCount>=cntBuffer[cntPos])
@@ -724,8 +722,7 @@ void UpdateCassette()
 			casCount=0;
 		}
 	}
-	VIA1_PinSetPIN_CA1(casLevel);
-#endif
+	CIA0_PinSetPIN__FLAG(casLevel);
 }
 
 uint8_t lastClk=12,lastDat=12;
@@ -734,17 +731,20 @@ uint16_t DISK_lastPC;
 
 void UpdateDiskInterface()
 {
-#if 0
 	uint8_t tmp,newpa;
 	uint8_t clk,dat,atn;
+	uint8_t clko,dato;
 
-	clk=VIA1_PinGetPIN_CA2();
-	dat=VIA1_PinGetPIN_CB2();
-	atn=(VIA0_PinGetPIN_PA()&0x80)>>7;
+	clk=(CIA1_PinGetPIN_PA()&0x10)>>4;
+	dat=(CIA1_PinGetPIN_PA()&0x20)>>5;
+	atn=(CIA0_PinGetPIN_PA()&0x08)>>3;
 
 	clk^=1;
 	dat^=1;
 	atn^=1;
+
+	clko=clk;
+	dato=dat;
 
 	RecordPin(0,atn);
 	RecordPin(1,clk);
@@ -758,51 +758,11 @@ void UpdateDiskInterface()
 
 	UpdatePinTick();
 
-	tmp=VIA0_PinGetPIN_PA()&0xFC;
-	tmp|=clk;
-	tmp|=dat<<1;
-//	tmp|=atn<<7;
+	tmp=CIA0_PinGetPIN_PA()&0x3F;
+	tmp|=clk<<6;
+	tmp|=dat<<7;
 
-	VIA0_PinSetPIN_PA(tmp);
-#if 0
-	tmp&=0x0A;
-	newpa=VIA0_PinGetPIN_PA()&0xFC;
-	newpa|=(tmp&0x08)>>3;
-	newpa|=tmp&0x02;
-
-	VIA0_PinSetPIN_PA(newpa);
-#endif
-#if 0
-		if ((lastPb0&0x1A)!=(tmp&0x1A))
-		{
-			printf("Data From Disk Changed : %02X\n",tmp);
-		}
-		lastPb0=tmp;
-
-		pb0&=0xFC;
-		pb0|=(tmp&0x08)>>3;
-		pb0|=(tmp&0x02);
-
-		if (via[1].PCR&0x10)
-		{
-			if (via[1].CB1==0 && tmp&0x10)
-			{
-				printf("LH INT due to ATN ACK\n");
-				doDebug=1;
-				via[1].IFR=0x10;
-			}
-		}
-		else
-		{
-			if (via[1].CB1==1 && (tmp&0x10)==0)
-			{
-				printf("HL INT due to ATN ACK\n");
-				via[1].IFR=0x10;
-			}
-		}
-		via[1].CB1=(tmp&0x10)>>4;
-#endif
-#endif
+	CIA0_PinSetPIN_PA(tmp);
 }
 
 void UpdateHardware()
@@ -813,7 +773,7 @@ void UpdateHardware()
 	UpdateDiskInterface();
 }
 		
-int stopTheClock=1;
+int stopTheClock=0;
 
 int main(int argc,char**argv)
 {
@@ -849,7 +809,7 @@ int main(int argc,char**argv)
 	setupGL(TIMING_WINDOW,TIMING_WIDTH,TIMING_HEIGHT);
 	
 	// Open via OpenGL window 
-	if( !(windows[VIA_WINDOW]=glfwOpenWindow( VIA_WIDTH, VIA_HEIGHT, GLFW_WINDOWED,"VIA Chips (vic20)",NULL)) ) 
+	if( !(windows[VIA_WINDOW]=glfwOpenWindow( VIA_WIDTH, VIA_HEIGHT, GLFW_WINDOWED,"CIA Chips (c64)",NULL)) ) 
 	{ 
 		glfwTerminate(); 
 		return 1; 
@@ -897,13 +857,13 @@ int main(int argc,char**argv)
 	setupGL(REGISTER_WINDOW_DISK,REGISTER_WIDTH,REGISTER_HEIGHT);
 	
 	// Open screen OpenGL window 
-	if( !(windows[MAIN_WINDOW]=glfwOpenWindow( WIDTH, HEIGHT, GLFW_WINDOWED,"vic",NULL)) ) 
+	if( !(windows[MAIN_WINDOW]=glfwOpenWindow( WIDTH, HEIGHT, GLFW_WINDOWED,"c64",NULL)) ) 
 	{ 
 		glfwTerminate(); 
 		return 1; 
 	} 
 
-	glfwSetWindowPos(windows[MAIN_WINDOW],300,300);
+	glfwSetWindowPos(windows[MAIN_WINDOW],0,300);
 	
 	glfwMakeContextCurrent(windows[MAIN_WINDOW]);
 	setupGL(MAIN_WINDOW,WIDTH,HEIGHT);
@@ -988,7 +948,7 @@ int main(int argc,char**argv)
 	CIA1_PinSetPIN_O2(0);
 	CIA1_PinSetPIN__RES(1);
 
-	while (!glfwGetKey(windows[MAIN_WINDOW],GLFW_KEY_ESC))
+	while (!glfwGetKey(windows[MAIN_WINDOW],GLFW_KEY_F12))
 	{
 		static uint16_t lastPC;
 		static uint8_t lastPb0=0xff;
@@ -1074,7 +1034,13 @@ int main(int argc,char**argv)
 			static int normalSpeed=1;
 
 			if (pixelClock>=(63*312))
+			{
+				CIA0_PinSetPIN_TOD(1);
+				CIA0_PinSetPIN_TOD(0);
+				CIA1_PinSetPIN_TOD(1);
+				CIA1_PinSetPIN_TOD(0);
 				pixelClock-=(63*312);
+			}
 
             		glfwMakeContextCurrent(windows[MAIN_WINDOW]);
 			ShowScreen(MAIN_WINDOW,WIDTH,HEIGHT);
@@ -1114,6 +1080,7 @@ int main(int argc,char**argv)
 			
 			glfwPollEvents();
 			
+#if 0
 			kbuffer[0]=CheckKeys('1','3','5','7','9','-','=',GLFW_KEY_BACKSPACE);
 			kbuffer[1]=CheckKeys('`','W','R','Y','I','P',']',GLFW_KEY_ENTER);
 			kbuffer[2]=CheckKeys(GLFW_KEY_LCTRL,'A','D','G','J','L','\'',GLFW_KEY_RIGHT);
@@ -1122,15 +1089,25 @@ int main(int argc,char**argv)
 			kbuffer[5]=CheckKeys(GLFW_KEY_RCTRL,'S','F','H','K',';','#',GLFW_KEY_F3);
 			kbuffer[6]=CheckKeys('Q','E','T','U','O','[','/',GLFW_KEY_F5);
 			kbuffer[7]=CheckKeys('2','4','6','8','0','\\',GLFW_KEY_HOME,GLFW_KEY_F7);
+#else
+			kbuffer[0]=CheckKeys(GLFW_KEY_BACKSPACE,GLFW_KEY_ENTER,GLFW_KEY_RIGHT,GLFW_KEY_F7,GLFW_KEY_F1,GLFW_KEY_F3,GLFW_KEY_F5,GLFW_KEY_DOWN); 
+			kbuffer[1]=CheckKeys('3','W','A','4','Z','S','E',GLFW_KEY_LSHIFT);
+			kbuffer[2]=CheckKeys('5','R','D','6','C','F','T','X');
+			kbuffer[3]=CheckKeys('7','Y','G','8','B','H','U','V');
+			kbuffer[4]=CheckKeys('9','I','J','0','M','K','O','N');
+			kbuffer[5]=CheckKeys('-','P','L','=','.',';','[',',');
+			kbuffer[6]=CheckKeys(GLFW_KEY_INSERT,']','\'',GLFW_KEY_HOME,GLFW_KEY_RSHIFT,'#',GLFW_KEY_DELETE,'/');
+			kbuffer[7]=CheckKeys('1','`',GLFW_KEY_TAB,'2',GLFW_KEY_SPACE,GLFW_KEY_LCTRL,'Q',GLFW_KEY_ESC);
 
-			if (CheckKey(GLFW_KEY_INSERT))
+#endif
+			if (CheckKey(GLFW_KEY_END))
 			{
-				ClearKey(GLFW_KEY_INSERT);
+				ClearKey(GLFW_KEY_END);
 				normalSpeed^=1;
 			}
-			if (CheckKey(GLFW_KEY_DELETE))
+			if (CheckKey(GLFW_KEY_KP_0))
 			{
-				ClearKey(GLFW_KEY_DELETE);
+				ClearKey(GLFW_KEY_KP_0);
 				stopTheClock^=1;
 			}
 			g_traceStep=0;
@@ -1398,7 +1375,7 @@ uint32_t	cTable[16]={
 
 
 uint32_t RASTER_CNT=0;
-uint32_t RASTER_CMP=0xFFFFFFFF;
+uint32_t RASTER_CMP=0;
 
 uint8_t GetByte6569(int regNo)
 {
@@ -1426,6 +1403,13 @@ void SetByte6569(int regNo,uint8_t byte)
 			byte&=0x7F;
 			byte|=M6569_Regs[0x11]&0x80;
 		}
+		if (regNo==0x19)
+		{
+			byte&=0x7F;
+			byte=M6569_Regs[regNo]&(~byte);
+			if ((byte&0xF)==0)
+				byte&=0x7F;
+		}
 		M6569_Regs[regNo]=byte;
 	}
 }
@@ -1441,10 +1425,21 @@ int16_t channel4Level=0;
 
 uint8_t GetByteFrom6569(uint16_t addr)
 {
-	// A0-A12 are connected as expected in vic20... a13 is inverted and connected to a15
-	addr=(addr&0x1FFF)|((addr&0x2000)<<2);
-	addr^=0x8000;
-	return GetByte(addr);
+	// Need to or in two bits from CIA2 to make up bits 15-14 of address
+	
+	addr&=0x3FFF;
+	
+	//TODO Other 3 banks
+	
+	if (addr<0x1000)
+	{
+		return Ram[addr];
+	}
+	if (addr<0x2000)
+	{
+		return CRom[addr-0x1000];
+	}
+	return Ram[addr];
 }
 
 void Tick6569()
@@ -1456,24 +1451,93 @@ void Tick6569()
 	uint32_t height;
 	uint32_t borderCol;
 
+//	static uint8_t ccode=0;
 
 	// For now.. just the raster
 
 	M6569_IRQ=1;
 	if (RASTER_CMP==RASTER_CNT)
 	{
-		M6569_IRQ=0;
+		M6569_Regs[0x19]=0x81;	// IRQ + RASTER
+
+		if (M6569_Regs[0x1A]&0x01)
+		{
+			M6569_IRQ=0;
+		}
+	}
+
+	borderCol=M6569_Regs[0x20]&0x0F;
+	borderCol=cTable[borderCol];
+
+	if (RASTER_CNT<51 || RASTER_CNT>250)				// 200 mode.. 192 mode (<55  >246)
+	{
+		outputTexture[(xCnt)*8 + 0 + ((RASTER_CNT)*WIDTH)]=borderCol;
+		outputTexture[(xCnt)*8 + 1 + ((RASTER_CNT)*WIDTH)]=borderCol;
+		outputTexture[(xCnt)*8 + 2 + ((RASTER_CNT)*WIDTH)]=borderCol;
+		outputTexture[(xCnt)*8 + 3 + ((RASTER_CNT)*WIDTH)]=borderCol;
+		outputTexture[(xCnt)*8 + 4 + ((RASTER_CNT)*WIDTH)]=borderCol;
+		outputTexture[(xCnt)*8 + 5 + ((RASTER_CNT)*WIDTH)]=borderCol;
+		outputTexture[(xCnt)*8 + 6 + ((RASTER_CNT)*WIDTH)]=borderCol;
+		outputTexture[(xCnt)*8 + 7 + ((RASTER_CNT)*WIDTH)]=borderCol;
+	}
+	else
+	{
+		// Visible screen area...
+
+		if (xCnt<(24/8) || xCnt>(343/8))
+		{
+			// left/right borders
+			outputTexture[(xCnt)*8 + 0 + ((RASTER_CNT)*WIDTH)]=borderCol;
+			outputTexture[(xCnt)*8 + 1 + ((RASTER_CNT)*WIDTH)]=borderCol;
+			outputTexture[(xCnt)*8 + 2 + ((RASTER_CNT)*WIDTH)]=borderCol;
+			outputTexture[(xCnt)*8 + 3 + ((RASTER_CNT)*WIDTH)]=borderCol;
+			outputTexture[(xCnt)*8 + 4 + ((RASTER_CNT)*WIDTH)]=borderCol;
+			outputTexture[(xCnt)*8 + 5 + ((RASTER_CNT)*WIDTH)]=borderCol;
+			outputTexture[(xCnt)*8 + 6 + ((RASTER_CNT)*WIDTH)]=borderCol;
+			outputTexture[(xCnt)*8 + 7 + ((RASTER_CNT)*WIDTH)]=borderCol;
+		}
+		else
+		{
+			// Attempt to draw in default mode (2 color, char rom styley)
+
+			uint16_t screenAddress = (M6569_Regs[0x18]&0xF0)<<6;
+			uint16_t charAddress = (M6569_Regs[0x18]&0x0E)<<10;
+
+			uint16_t screenOffs = (((RASTER_CNT-51)/8) * 40) + (xCnt-(24/8));
+
+			uint8_t ccode = GetByteFrom6569(screenAddress+screenOffs);
+
+			uint8_t pixels=GetByteFrom6569(charAddress+ccode*8 + ((RASTER_CNT-51)&7));
+
+			int paperCol=M6569_Regs[0x21]&0xF;
+			int inkCol=1;								/// TODO look up in color ram!
+			int x;
+
+			paperCol=cTable[paperCol];
+			inkCol=cTable[inkCol];
+
+			for (x=0;x<8;x++)
+			{
+				if (pixels&(1<<(7-x)))
+				{
+					outputTexture[(xCnt)*8 + x + ((RASTER_CNT)*WIDTH)]=inkCol;
+				}
+				else
+				{
+					outputTexture[(xCnt)*8 + x + ((RASTER_CNT)*WIDTH)]=paperCol;
+				}
+			}
+		}
+
 	}
 
 	xCnt++;
 	if (xCnt>=63)
 	{
-		if (RASTER_CMP==RASTER_CNT)
-		{
-			printf("IRQ SHOULD HAVE HAPPENED - %08X==%08X\n",RASTER_CNT,RASTER_CMP);
-		}
 		xCnt=0;
 		RASTER_CNT++;
+//		if (((RASTER_CNT-51)&7)==0)
+//			ccode++;
 		if (RASTER_CNT>=312)
 		{
 			RASTER_CNT=0;
@@ -1484,8 +1548,6 @@ void Tick6569()
 	}
 
 #if 0
-	borderCol=CTRL_16&0x07;
-	borderCol=cTable[borderCol];
 
 	// 8 pixels per clock		63 clocks per line (PAL)		312 lines per frame		vblank 0-27
 
