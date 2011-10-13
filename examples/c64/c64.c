@@ -663,12 +663,12 @@ uint32_t cntMax=0;
 
 void UpdateCassette()
 {
-#if 0
-	if (CheckKey(GLFW_KEY_PAGEUP))
+#if 1
+	if (CheckKey(GLFW_KEY_KP_ADD))
 	{
 		playDown=1;
 		recDown=playDown;
-		ClearKey(GLFW_KEY_PAGEUP);
+		ClearKey(GLFW_KEY_KP_ADD);
 		cntPos=0;
 		casCount=0;
 		casLevel=0;		
@@ -697,10 +697,10 @@ void UpdateCassette()
 	
 	M6510_PCR&=0xEF;
 	M6510_PCR|=(playDown<<4)^0x10;
-#if 0
-	if (playDown && recDown && (!VIA0_PinGetPIN_CA2())) // SAVING
+#if 1
+	if (playDown && recDown && (M6510_PCR&0x20)) // SAVING
 	{
-		uint8_t newRecLevel = (VIA1_PinGetPIN_PB()&0x08)>>3;
+		uint8_t newRecLevel = (M6510_PCR&0x08)>>3;
 		casCount++;
 		if (newRecLevel!=casLevel)
 		{
@@ -710,9 +710,10 @@ void UpdateCassette()
 			casCount=0;
 			casLevel=newRecLevel;
 		}
+		RecordPin(8,newRecLevel);
 	}
 #endif
-	if (playDown && (!recDown) && (0==(M6510_DDR&0x40))) // LOADING
+	if (playDown && (!recDown) && (M6510_PCR&0x20)) // LOADING
 	{
 		casCount++;
 		if (casCount>=cntBuffer[cntPos])
@@ -721,8 +722,10 @@ void UpdateCassette()
 			cntPos++;
 			casCount=0;
 		}
+		CIA0_PinSetPIN__FLAG(casLevel);
 	}
-	CIA0_PinSetPIN__FLAG(casLevel);
+
+	RecordPin(7,casLevel);
 }
 
 uint8_t lastClk=12,lastDat=12;
@@ -735,9 +738,9 @@ void UpdateDiskInterface()
 	uint8_t clk,dat,atn;
 	uint8_t clko,dato;
 
+	atn=(CIA1_PinGetPIN_PA()&0x08)>>3;
 	clk=(CIA1_PinGetPIN_PA()&0x10)>>4;
 	dat=(CIA1_PinGetPIN_PA()&0x20)>>5;
-	atn=(CIA0_PinGetPIN_PA()&0x08)>>3;
 
 	clk^=1;
 	dat^=1;
@@ -758,11 +761,11 @@ void UpdateDiskInterface()
 
 	UpdatePinTick();
 
-	tmp=CIA0_PinGetPIN_PA()&0x3F;
+	tmp=CIA1_PinGetPIN_PA()&0x3F;
 	tmp|=clk<<6;
 	tmp|=dat<<7;
 
-	CIA0_PinSetPIN_PA(tmp);
+	CIA1_PinSetPIN_PA(tmp);
 }
 
 void UpdateHardware()
