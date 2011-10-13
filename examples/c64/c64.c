@@ -42,6 +42,7 @@ uint8_t MAIN_PinGetPIN_RW();
 void MAIN_PinSetPIN__IRQ(uint8_t);
 void MAIN_PinSetPIN__RES(uint8_t);
 
+#define USE_CART_OVERLAYS	1
 
 // Step 1. Memory
 
@@ -52,6 +53,9 @@ unsigned char KRom[0x2000];
 unsigned char Ram[0x10000];
 
 unsigned char CRam[0x400];
+
+unsigned char* testOverlay;//[0x4000];
+
 
 int playDown=0;
 int recDown=0;
@@ -81,26 +85,6 @@ int InitialiseMemory()
 	if (LoadRom(KRom,0x2000,"roms/kernal"))
 		return 1;
 
-#if 1
-//	if (LoadRom(D20,0x2002,"roms/Donkey Kong-2000.prg"))
-//		return 1;
-//	if (LoadRom(DA0,0x2002,"roms/Donkey Kong-A000.prg"))
-//		return 1;
-#else
-//	if (LoadRom(D60,0x2002,"roms/Lode Runner.60"))
-//		return 1;
-//	if (LoadRom(DA0,0x2002,"roms/Lode Runner.a0"))
-//		return 1;
-
-//	if (LoadRom(DA0,0x2002,"roms/solarsystem.a0"))
-//		return 1;
-	if (LoadRom(DA0,0x2002,"roms/Cosmic Cruncher (1982)(Commodore).a0"))
-		return 1;
-//	if (LoadRom(DA0,0x2002,"roms/Omega Race (1982)(Commodore).a0"))
-//		return 1;
-//	if (LoadRom(DA0,0x2002,"roms/Arcadia (19xx)(-).a0"))
-//		return 1;
-#endif
 	return 0;
 }
 
@@ -133,6 +117,16 @@ uint8_t GetByte(uint16_t addr)
 	{
 		return M6510_PCR;
 	}
+#if USE_CART_OVERLAYS
+	if (addr<0x8000)
+	{
+		return Ram[addr];
+	}
+	if (addr<0xC000)
+	{
+		return testOverlay[addr-0x8000];
+	}
+#else
 	if (addr<0xA000)
 	{
 		return Ram[addr];
@@ -148,6 +142,7 @@ uint8_t GetByte(uint16_t addr)
 			return Ram[addr];
 		}
 	}
+#endif
 	if (addr<0xD000)
 	{
 		return Ram[addr];
@@ -162,7 +157,7 @@ uint8_t GetByte(uint16_t addr)
 			}
 			if (addr<0xD800)
 			{
-				printf("SID Register Read : %02X  ($1D-$1F - unconnected)\n",addr&0x1F);
+//				printf("SID Register Read : %02X  ($1D-$1F - unconnected)\n",addr&0x1F);
 				return 0xFF;
 			}
 			if (addr<0xDC00)
@@ -227,7 +222,7 @@ void SetByte(uint16_t addr,uint8_t byte)
 			}
 			if (addr<0xD800)
 			{
-				printf("SID Register Write : %02X<-%02X  ($1D-$1F - unconnected)\n",addr&0x1F,byte);
+//				printf("SID Register Write : %02X<-%02X  ($1D-$1F - unconnected)\n",addr&0x1F,byte);
 				return;
 			}
 			if (addr<0xDC00)
@@ -566,7 +561,7 @@ void sizeHandler(GLFWwindow window,int xs,int ys)
 	glViewport(0, 0, xs, ys);
 }
 
-void LoadTape(const char* fileName);
+void AttachImage(const char* fileName);
 void SaveTAP(const char* filename);
 
 uint8_t CheckKeys(int key0,int key1,int key2,int key3,int key4,int key5,int key6,int key7)
@@ -635,20 +630,27 @@ void UpdateKB()
 	CIA0_PinSetPIN_PB(keyval);
 }
 
-void UpdateJoy()
+void UpdateJoy()		// For now returns data on BOTH ports
 {
-#if 0
-	uint8_t joyVal=0xFF;
-	joyVal&=KeyDown(GLFW_KEY_KP_8)?0xFB:0xFF;
-	joyVal&=KeyDown(GLFW_KEY_KP_2)?0xF7:0xFF;
-	joyVal&=KeyDown(GLFW_KEY_KP_4)?0xEF:0xFF;
-	joyVal&=KeyDown(GLFW_KEY_KP_0)?0xDF:0xFF;
-	VIA0_PinSetPIN_PA(joyVal);
+	uint8_t joyVal=0;
+	joyVal|=KeyDown(GLFW_KEY_KP_8)?1:0;
+	joyVal|=KeyDown(GLFW_KEY_KP_2)?2:0;
+	joyVal|=KeyDown(GLFW_KEY_KP_4)?4:0;
+	joyVal|=KeyDown(GLFW_KEY_KP_6)?8:0;
+	joyVal|=KeyDown(GLFW_KEY_KP_0)?0x10:0;
 
-	joyVal=0xFF;
-	joyVal&=KeyDown(GLFW_KEY_KP_6)?0x7F:0xFF;
-	VIA1_PinSetPIN_PB(joyVal);
-#endif
+	if (joyVal)
+	{
+		uint8_t prv;
+		prv=CIA0_PinGetPIN_PA();
+		prv&=0xE0;
+		prv|=~joyVal;
+		CIA0_PinSetPIN_PA(prv);
+		prv=CIA0_PinGetPIN_PB();
+		prv&=0xE0;
+		prv|=~joyVal;
+		CIA0_PinSetPIN_PB(prv);
+	}
 }
 
 int casLevel=0;
@@ -890,7 +892,7 @@ int main(int argc,char**argv)
 
 	if (argc==2)
 	{
-		LoadTape(argv[1]);
+		AttachImage(argv[1]);
 	}
 
 #if 0
@@ -1108,9 +1110,9 @@ int main(int argc,char**argv)
 				ClearKey(GLFW_KEY_END);
 				normalSpeed^=1;
 			}
-			if (CheckKey(GLFW_KEY_KP_0))
+			if (CheckKey(GLFW_KEY_KP_SUBTRACT))
 			{
-				ClearKey(GLFW_KEY_KP_0);
+				ClearKey(GLFW_KEY_KP_SUBTRACT);
 				stopTheClock^=1;
 			}
 			g_traceStep=0;
@@ -1428,35 +1430,37 @@ int16_t channel4Level=0;
 
 uint8_t GetByteFrom6569(uint16_t addr)
 {
+	uint16_t bank;
+
 	// Need to or in two bits from CIA2 to make up bits 15-14 of address
-	
+	bank=((~CIA1_PinGetPIN_PA())&0x3)<<14;
+
 	addr&=0x3FFF;
 	
 	//TODO Other 3 banks
 	
 	if (addr<0x1000)
 	{
-		return Ram[addr];
+		return Ram[addr-bank];
 	}
-	if (addr<0x2000)
+	if (addr<0x2000 && ((bank&0x4000)==0))
 	{
 		return CRom[addr-0x1000];
 	}
-	return Ram[addr];
+	return Ram[addr-bank];
 }
 
 void Tick6569()
 {
+	int sprite;
 	uint32_t* outputTexture = (uint32_t*)videoMemory[MAIN_WINDOW];
 	uint32_t originX;
 	uint32_t originY;
 	uint32_t length;
 	uint32_t height;
 	uint32_t borderCol;
-
-//	static uint8_t ccode=0;
-
-	// For now.. just the raster
+	uint8_t yScr=M6569_Regs[0x11]&0x7;
+	uint8_t xScr=M6569_Regs[0x16]&0x7;
 
 	M6569_IRQ=1;
 	if (RASTER_CMP==RASTER_CNT)
@@ -1472,7 +1476,7 @@ void Tick6569()
 	borderCol=M6569_Regs[0x20]&0x0F;
 	borderCol=cTable[borderCol];
 
-	if (RASTER_CNT<51 || RASTER_CNT>250)				// 200 mode.. 192 mode (<55  >246)
+	if (RASTER_CNT<(51+yScr) || RASTER_CNT>(250+yScr))				// 200 mode.. 192 mode (<55  >246)
 	{
 		outputTexture[(xCnt)*8 + 0 + ((RASTER_CNT)*WIDTH)]=borderCol;
 		outputTexture[(xCnt)*8 + 1 + ((RASTER_CNT)*WIDTH)]=borderCol;
@@ -1487,7 +1491,7 @@ void Tick6569()
 	{
 		// Visible screen area...
 
-		if (xCnt<(24/8) || xCnt>(343/8))
+		if ((xCnt*8)<(24+xScr) || (xCnt*8)>(343+xScr))
 		{
 			// left/right borders
 			outputTexture[(xCnt)*8 + 0 + ((RASTER_CNT)*WIDTH)]=borderCol;
@@ -1506,14 +1510,14 @@ void Tick6569()
 			uint16_t screenAddress = (M6569_Regs[0x18]&0xF0)<<6;
 			uint16_t charAddress = (M6569_Regs[0x18]&0x0E)<<10;
 
-			uint16_t screenOffs = (((RASTER_CNT-51)/8) * 40) + (xCnt-(24/8));
+			uint16_t screenOffs = (((RASTER_CNT-(51+yScr))/8) * 40) + (xCnt*8-(24+xScr))/8;
 
 			uint8_t ccode = GetByteFrom6569(screenAddress+screenOffs);
 
-			uint8_t pixels=GetByteFrom6569(charAddress+ccode*8 + ((RASTER_CNT-51)&7));
+			uint8_t pixels=GetByteFrom6569(charAddress+ccode*8 + ((RASTER_CNT-(51+yScr))&7));
 
 			int paperCol=M6569_Regs[0x21]&0xF;
-			int inkCol=1;								/// TODO look up in color ram!
+			int inkCol=CRam[screenOffs]&0x0F;								/// TODO look up in color ram!
 			int x;
 
 			paperCol=cTable[paperCol];
@@ -1534,6 +1538,40 @@ void Tick6569()
 
 	}
 
+	//// Draw sprites
+	for (sprite=0;sprite<8;sprite++)
+	{
+		if (M6569_Regs[0x15]&(1<<sprite))
+		{
+			// sprite enabled
+			uint8_t spriteY=M6569_Regs[0x01+sprite*2];
+
+			if (spriteY>=RASTER_CNT && spriteY<=(RASTER_CNT+21))
+			{
+				// On Raster
+
+				uint16_t spriteX=M6569_Regs[0x00+sprite*2];
+				if (M6569_Regs[0x10]&(1<<sprite))
+				{
+					spriteX|=0x100;
+				}
+
+				if (spriteX>=xCnt*8 && spriteX<=(xCnt*8+24))
+				{
+					// On cur 8 pixels (somewhere)
+
+					outputTexture[(xCnt)*8 + 0 + ((RASTER_CNT)*WIDTH)]=0x10101010;
+					outputTexture[(xCnt)*8 + 1 + ((RASTER_CNT)*WIDTH)]=0x20202020;
+					outputTexture[(xCnt)*8 + 2 + ((RASTER_CNT)*WIDTH)]=0x30303030;
+					outputTexture[(xCnt)*8 + 3 + ((RASTER_CNT)*WIDTH)]=0x40404040;
+					outputTexture[(xCnt)*8 + 4 + ((RASTER_CNT)*WIDTH)]=0x50505050;
+					outputTexture[(xCnt)*8 + 5 + ((RASTER_CNT)*WIDTH)]=0x60606060;
+					outputTexture[(xCnt)*8 + 6 + ((RASTER_CNT)*WIDTH)]=0x70707070;
+					outputTexture[(xCnt)*8 + 7 + ((RASTER_CNT)*WIDTH)]=0x80808080;
+				}
+			}
+		}
+	}
 	xCnt++;
 	if (xCnt>=63)
 	{
@@ -1546,7 +1584,7 @@ void Tick6569()
 			RASTER_CNT=0;
 		}
 		M6569_Regs[0x11]&=0x7F;
-		M6569_Regs[0x11]|=RASTER_CNT>>1;
+		M6569_Regs[0x11]|=(RASTER_CNT>>1)&0x80;
 		M6569_Regs[0x12]=RASTER_CNT&0xFF;
 	}
 
@@ -2426,13 +2464,134 @@ int LoadPRG(const char* fileName)
 	return 1;
 }
 
-void LoadTape(const char* fileName)
+int LoadCRT(const char* fileName)
 {
+	uint16_t type;
+	uint32_t headerLength;
+	uint32_t chipLength;
+	uint16_t chipType;
+	uint16_t bankNum;
+	uint16_t loadAddr;
+	uint16_t romSize;
+	uint32_t length;
+	uint32_t pos;
+	uint8_t *crtBuffer;
+
+	crtBuffer=qLoad(fileName,&length);
+	if (crtBuffer==NULL)
+	{
+		printf("Failed to load %s\n",fileName);
+		return 0;
+	}
+
+	// Parse Header
+	
+	if (strncmp(crtBuffer,"C64 CARTRIDGE   ",16)!=0)
+	{
+		printf("Not a CRT file\n");
+		free(crtBuffer);
+		return 0;
+	}
+
+	if (crtBuffer[0x14]!=1 || crtBuffer[0x15]!=0)
+	{
+		printf("Unsupported CRT version\n");
+		free(crtBuffer);
+		return 0;
+	}
+
+	headerLength =crtBuffer[0x10]<<24;
+	headerLength|=crtBuffer[0x11]<<16;
+	headerLength|=crtBuffer[0x12]<<8;
+	headerLength|=crtBuffer[0x13];
+
+	if (headerLength!=0x40)
+	{
+		printf("Unsupported CRT Header Length\n");
+		free(crtBuffer);
+		return 0;
+	}
+
+	type =crtBuffer[0x16]<<8;
+	type|=crtBuffer[0x17];
+
+	if (type!=0)
+	{
+		printf("Unsupported CRT Type (%02X)\n",type);
+		free(crtBuffer);
+		return 0;
+	}
+
+	printf("CRT EXROM : %d\n",crtBuffer[0x18]);
+	printf("CRT GAME : %d\n",crtBuffer[0x19]);
+
+	// Jump to 0x40 and start looking at the CHIP data
+	
+	pos=0x40;
+	while (1)
+	{
+		if (strncmp(&crtBuffer[pos],"CHIP",4)!=0)
+		{
+			printf("Seemingly corrupt cartridge\n");
+			free(crtBuffer);
+			return 0;
+		}
+
+		pos+=4;
+
+		chipLength =crtBuffer[pos++]<<24;
+		chipLength|=crtBuffer[pos++]<<16;
+		chipLength|=crtBuffer[pos++]<<8;
+		chipLength|=crtBuffer[pos++];
+
+		chipType =crtBuffer[pos++]<<8;
+		chipType|=crtBuffer[pos++];
+
+		if (chipType!=0)
+		{
+			printf("Non ROM chips not supported\n");
+			free(crtBuffer);
+			return 0;
+		}
+
+		bankNum =crtBuffer[pos++]<<8;
+		bankNum|=crtBuffer[pos++];
+
+		if (bankNum!=0)
+		{
+			printf("Unsupported bank number\n");
+			free(crtBuffer);
+			return 0;
+		}
+
+		loadAddr =crtBuffer[pos++]<<8;
+		loadAddr|=crtBuffer[pos++];
+
+		romSize =crtBuffer[pos++]<<8;
+		romSize|=crtBuffer[pos++];
+
+		printf("CHIP : %04X (%04X)\n",loadAddr,romSize);
+
+		testOverlay=&crtBuffer[pos];
+
+		pos+=romSize;
+		if (pos>=length)
+			break;
+	}
+
+	return 1;
+}
+
+void AttachImage(const char* fileName)
+{
+	cntPos=0;
+	cntMax=0;
+
+	if (LoadCRT(fileName))
+		return;
 	if (LoadTAP(fileName))
 		return;
 	if (LoadPRG(fileName))
 		return;
-	cntPos=0;
-	cntMax=0;
 }
 
