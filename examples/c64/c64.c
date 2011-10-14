@@ -1441,13 +1441,13 @@ uint8_t GetByteFrom6569(uint16_t addr)
 	
 	if (addr<0x1000)
 	{
-		return Ram[addr-bank];
+		return Ram[addr+bank];
 	}
 	if (addr<0x2000 && ((bank&0x4000)==0))
 	{
 		return CRom[addr-0x1000];
 	}
-	return Ram[addr-bank];
+	return Ram[addr+bank];
 }
 
 void Tick6569()
@@ -1544,30 +1544,44 @@ void Tick6569()
 		if (M6569_Regs[0x15]&(1<<sprite))
 		{
 			// sprite enabled
-			uint8_t spriteY=M6569_Regs[0x01+sprite*2];
+			uint8_t spriteY=M6569_Regs[0x01+sprite*2]+1;		// +1 because they are triggered the line before (but we are not cycle accurate yet!)
 
-			if (spriteY>=RASTER_CNT && spriteY<=(RASTER_CNT+21))
+			if (RASTER_CNT>=spriteY && RASTER_CNT<spriteY+21)
 			{
-				// On Raster
+				// On Raster - Lets try fetching its display data
+				uint16_t screenAddress = (M6569_Regs[0x18]&0xF0)<<6;
+				uint16_t screenOffs = 1024-(8-sprite);// (((RASTER_CNT-(51+yScr))/8) * 40) + (xCnt*8-(24+xScr))/8;
+
+				uint16_t loc = GetByteFrom6569(screenAddress+screenOffs)*64;
 
 				uint16_t spriteX=M6569_Regs[0x00+sprite*2];
+
 				if (M6569_Regs[0x10]&(1<<sprite))
 				{
 					spriteX|=0x100;
 				}
 
-				if (spriteX>=xCnt*8 && spriteX<=(xCnt*8+24))
+				if (xCnt*8>=spriteX && xCnt*8<spriteX+24)
 				{
-					// On cur 8 pixels (somewhere)
+					int x;
 
-					outputTexture[(xCnt)*8 + 0 + ((RASTER_CNT)*WIDTH)]=0x10101010;
-					outputTexture[(xCnt)*8 + 1 + ((RASTER_CNT)*WIDTH)]=0x20202020;
-					outputTexture[(xCnt)*8 + 2 + ((RASTER_CNT)*WIDTH)]=0x30303030;
-					outputTexture[(xCnt)*8 + 3 + ((RASTER_CNT)*WIDTH)]=0x40404040;
-					outputTexture[(xCnt)*8 + 4 + ((RASTER_CNT)*WIDTH)]=0x50505050;
-					outputTexture[(xCnt)*8 + 5 + ((RASTER_CNT)*WIDTH)]=0x60606060;
-					outputTexture[(xCnt)*8 + 6 + ((RASTER_CNT)*WIDTH)]=0x70707070;
-					outputTexture[(xCnt)*8 + 7 + ((RASTER_CNT)*WIDTH)]=0x80808080;
+					spriteX=xCnt*8-spriteX;
+					spriteY=RASTER_CNT-spriteY;
+
+					uint8_t data = GetByteFrom6569(loc + (spriteX/8) + spriteY*3);
+
+					// On cur 8 pixels (somewhere)
+					for (x=0;x<8;x++)
+					{
+						if (data&(1<<(7-x)))
+						{
+							outputTexture[(xCnt)*8 + x + ((RASTER_CNT)*WIDTH)]=0x80808080;
+						}
+						else
+						{
+							outputTexture[(xCnt)*8 + x + ((RASTER_CNT)*WIDTH)]=0x20202020;
+						}
+					}
 				}
 			}
 		}
