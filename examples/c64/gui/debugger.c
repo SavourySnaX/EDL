@@ -258,6 +258,39 @@ void DrawRegisterMain(unsigned char* buffer,unsigned int width,uint16_t address,
 	PrintAt(buffer,width,255,255,255,0,5,"SP  %04X",MAIN_SP);
 
 	DrawRegister(0,MAIN_DIS_,buffer,width,address,GetMem,decodeDisasm);
+}
+
+extern uint16_t VCBase;
+extern uint16_t VC;
+extern uint8_t	RC;
+
+extern uint32_t spData[8];
+
+void DrawRegister6569(unsigned char* buffer,unsigned int width)
+{
+	int a;
+
+	PrintAt(buffer,width,255,255,255,0,0,"Sprites: On Y  X    Multi EX EY Data");
+	for (a=0;a<8;a++)
+	{
+		PrintAt(buffer,width,255,255,255,9,2+a,"%s  %02X %04X %s     %s  %s %08X",
+				M6569_Regs[0x15]&(1<<a)?"1":"0",
+				M6569_Regs[0x01+a*2],
+				M6569_Regs[0x00+a*2] + (M6569_Regs[0x10]&(1<<a)?0x100:0),
+				M6569_Regs[0x1C]&(1<<a)?"1":"0",
+				M6569_Regs[0x1D]&(1<<a)?"1":"0",
+				M6569_Regs[0x17]&(1<<a)?"1":"0",
+				spData[a]
+		       );
+	}
+
+
+	PrintAt(buffer,width,255,255,255,0,12,"YSCROLL - %02X",M6569_Regs[0x11]&7);
+	PrintAt(buffer,width,255,255,255,0,13,"XSCROLL - %02X",M6569_Regs[0x16]&7);
+	
+	PrintAt(buffer,width,255,255,255,0,15,"VCBASE  - %02X",VCBase);
+	PrintAt(buffer,width,255,255,255,0,16,"VC      - %02X",VC);
+	PrintAt(buffer,width,255,255,255,0,17,"RC      - %02X",RC);
 
 	{
 		int a;

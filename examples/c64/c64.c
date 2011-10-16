@@ -42,8 +42,6 @@ uint8_t MAIN_PinGetPIN_RW();
 void MAIN_PinSetPIN__IRQ(uint8_t);
 void MAIN_PinSetPIN__RES(uint8_t);
 
-#define USE_CART_OVERLAYS	1
-
 // Step 1. Memory
 
 unsigned char CRom[0x1000];
@@ -105,151 +103,289 @@ int doDebug=0;
 uint8_t M6510_DDR=0xEF;
 uint8_t M6510_PCR=0xFF;		//6-7xxx  5-cas motor  4-cas switch  3-cas out  2-charen  1-hiram   0-loram
 
-// Extremely dumb / Simplified mapper
+uint8_t PLA_GAME=0x1;
+uint8_t PLA_EXROM=0x1;
+
+typedef uint8_t	(*ReadMap)(uint16_t);
+typedef void	(*WriteMap)(uint16_t,uint8_t);
+
+void WriteRam(uint16_t addr,uint8_t byte)
+{
+	Ram[addr]=byte;
+}
+
+void WriteIO(uint16_t addr,uint8_t byte)
+{
+	if (addr<0xD400)
+	{
+		SetByte6569(addr&0x3F,byte);
+		return;
+	}
+	if (addr<0xD800)
+	{
+		//				printf("SID Register Write : %02X<-%02X  ($1D-$1F - unconnected)\n",addr&0x1F,byte);
+		return;
+	}
+	if (addr<0xDC00)
+	{
+		CRam[addr-0xD800]=byte&0xF;
+		return;
+	}
+	if (addr<0xDD00)
+	{
+		CIA0_PinSetPIN_DB(byte);
+		return;
+	}
+	if (addr<0xDE00)
+	{
+		CIA1_PinSetPIN_DB(byte);
+		return;
+	}
+//	printf("IO Expansion\n");
+	return;
+}
+
+void WriteRomL(uint16_t addr,uint8_t byte)
+{
+// TODO: May need to write to cart ram
+}
+
+void WriteRomH(uint16_t addr,uint8_t byte)
+{
+// TODO: May need to write to cart ram
+}
+
+void WriteOpen(uint16_t addr,uint8_t byte)
+{
+// TODO: Need to pass through blocks to cartridge (if writeable connection)
+}
+
+uint8_t ReadIO(uint16_t addr)
+{
+	if (addr<0xD400)
+	{
+		return GetByte6569(addr&0x3F);
+	}
+	if (addr<0xD800)
+	{
+		//				printf("SID Register Read : %02X  ($1D-$1F - unconnected)\n",addr&0x1F);
+		return 0xFF;
+	}
+	if (addr<0xDC00)
+	{
+		return CRam[addr-0xD800]&0xF;
+	}
+	if (addr<0xDD00)
+	{
+		return CIA0_PinGetPIN_DB();
+	}
+	if (addr<0xDE00)
+	{
+		return CIA1_PinGetPIN_DB();
+	}
+//	printf("IO Expansion\n");
+	return 0xFF;
+}
+
+uint8_t ReadRam(uint16_t addr)
+{
+	return Ram[addr];
+}
+
+uint8_t ReadChar(uint16_t addr)
+{
+	return CRom[addr&0x0FFF];
+}
+
+uint8_t ReadBasic(uint16_t addr)
+{
+	return BRom[addr&0x1FFF];
+}
+
+uint8_t ReadKernel(uint16_t addr)
+{
+	return KRom[addr&0x1FFF];
+}
+
+uint8_t ReadCartL(uint16_t addr)
+{
+	return testOverlay[addr&0x1FFF];		// NB: May need clamping for 4k roms.. expanding for >8k??
+}
+
+uint8_t ReadCartH(uint16_t addr)
+{
+	return testOverlay[0x2000 + (addr&0x1FFF)];	// NB: May need clamping for 4k roms.. expanding for >8k??
+}
+
+uint8_t ReadOpen(uint16_t addr)
+{
+//TODO: need to query cartridge address bus
+	return 0xFF;
+}
+
+WriteMap writeIO[16]={WriteRam,WriteRam,WriteRam,WriteRam,WriteRam,WriteRam,WriteRam,WriteRam,WriteRam,WriteRam,WriteRam,WriteRam,WriteRam,WriteIO,WriteRam,WriteRam};
+WriteMap writeRam[16]={WriteRam,WriteRam,WriteRam,WriteRam,WriteRam,WriteRam,WriteRam,WriteRam,WriteRam,WriteRam,WriteRam,WriteRam,WriteRam,WriteRam,WriteRam,WriteRam};
+WriteMap writeOpen[16]={WriteRam,WriteOpen,WriteOpen,WriteOpen,WriteOpen,WriteOpen,WriteOpen,WriteOpen,WriteRomL,WriteRomL,WriteOpen,WriteOpen,WriteOpen,WriteIO,WriteRomH,WriteRomH};
+
+ReadMap readChar[16]={ReadRam,ReadChar,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadChar,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam};
+ReadMap readRomH[16]={ReadRam,ReadRam,ReadRam,ReadCartH,ReadRam,ReadRam,ReadRam,ReadCartH,ReadRam,ReadRam,ReadRam,ReadCartH,ReadRam,ReadRam,ReadRam,ReadCartH};
+
+ReadMap readRam[16]={ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam};
+ReadMap readI[16]={ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadIO,ReadRam,ReadRam};
+ReadMap readC[16]={ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadChar,ReadRam,ReadRam};
+ReadMap readIK[16]={ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadIO,ReadKernel,ReadKernel};
+ReadMap readCK[16]={ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadChar,ReadKernel,ReadKernel};
+ReadMap readHIK[16]={ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadCartH,ReadCartH,ReadRam,ReadIO,ReadKernel,ReadKernel};
+ReadMap readHCK[16]={ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadCartH,ReadCartH,ReadRam,ReadChar,ReadKernel,ReadKernel};
+ReadMap readBIK[16]={ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadBasic,ReadBasic,ReadRam,ReadIO,ReadKernel,ReadKernel};
+ReadMap readBCK[16]={ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadBasic,ReadBasic,ReadRam,ReadChar,ReadKernel,ReadKernel};
+ReadMap readLBIK[16]={ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadCartL,ReadCartL,ReadBasic,ReadBasic,ReadRam,ReadIO,ReadKernel,ReadKernel};
+ReadMap readLBCK[16]={ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadCartL,ReadCartL,ReadBasic,ReadBasic,ReadRam,ReadChar,ReadKernel,ReadKernel};
+ReadMap readLHIK[16]={ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadCartL,ReadCartL,ReadCartH,ReadCartH,ReadRam,ReadIO,ReadKernel,ReadKernel};
+ReadMap readLHCK[16]={ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadCartL,ReadCartL,ReadCartH,ReadCartH,ReadRam,ReadChar,ReadKernel,ReadKernel};
+ReadMap readOpen[16]={ReadRam,ReadOpen,ReadOpen,ReadOpen,ReadOpen,ReadOpen,ReadOpen,ReadOpen,ReadCartL,ReadCartL,ReadOpen,ReadOpen,ReadOpen,ReadIO,ReadCartH,ReadCartH};
+
+ReadMap *r_memMap=readBIK;
+ReadMap *v_memMap=readChar;
+WriteMap *w_memMap=writeIO;
+
+uint8_t lastMemControl=0x1F;
+
+void ChangeMemoryMap()
+{
+	int a;
+	uint8_t curMemControl=M6510_PCR&0x07;
+	curMemControl|=PLA_GAME<<4;
+	curMemControl|=PLA_EXROM<<3;
+
+	if (curMemControl==lastMemControl)
+		return;
+
+	lastMemControl=curMemControl;
+
+	switch (curMemControl)
+	{
+		case 0x1F:
+			w_memMap=writeIO;
+			r_memMap=readBIK;
+			v_memMap=readChar;
+			break;
+		case 0x1B:
+			w_memMap=writeRam;
+			r_memMap=readBCK;
+			v_memMap=readChar;
+			break;
+		case 0x17:
+			w_memMap=writeIO;
+			r_memMap=readLBIK;
+			v_memMap=readChar;
+			break;
+		case 0x13:
+			w_memMap=writeRam;
+			r_memMap=readLBCK;
+			v_memMap=readChar;
+			break;
+		case 0x07:
+			w_memMap=writeIO;
+			r_memMap=readLHIK;
+			v_memMap=readChar;
+			break;
+		case 0x03:
+			w_memMap=writeRam;
+			r_memMap=readLHCK;
+			v_memMap=readChar;
+			break;
+		case 0x06:
+			w_memMap=writeIO;
+			r_memMap=readHIK;
+			v_memMap=readChar;
+			break;
+		case 0x02:
+			w_memMap=writeIO;
+			r_memMap=readHCK;
+			v_memMap=readChar;
+			break;
+		case 0x1E:
+		case 0x16:
+			w_memMap=writeIO;
+			r_memMap=readIK;
+			v_memMap=readChar;
+			break;
+		case 0x1A:
+		case 0x12:
+			w_memMap=writeRam;
+			r_memMap=readCK;
+			v_memMap=readChar;
+			break;
+		case 0x1D:
+		case 0x15:
+		case 0x05:
+			w_memMap=writeIO;
+			r_memMap=readI;
+			v_memMap=readChar;
+			break;
+		case 0x19:
+		case 0x11:
+			w_memMap=writeRam;
+			r_memMap=readC;
+			v_memMap=readChar;
+			break;
+		case 0x1C:
+		case 0x18:
+		case 0x14:
+		case 0x10:
+		case 0x04:
+		case 0x00:
+		case 0x01:
+			w_memMap=writeRam;
+			r_memMap=readRam;
+			v_memMap=readChar;
+			break;
+		case 0x0F:
+		case 0x0E:
+		case 0x0D:
+		case 0x0C:
+		case 0x0B:
+		case 0x0A:
+		case 0x09:
+		case 0x08:
+			w_memMap=writeOpen;
+			r_memMap=readOpen;
+			v_memMap=readRomH;
+			break;
+	}
+}
 
 uint8_t GetByte(uint16_t addr)
 {
-	if (addr<0x0001)
-	{
-		return M6510_DDR;
-	}
-	if (addr<0x0002)
-	{
-		return M6510_PCR;
-	}
-#if USE_CART_OVERLAYS
-	if (addr<0x8000)
-	{
-		return Ram[addr];
-	}
-	if (addr<0xC000)
-	{
-		return testOverlay[addr-0x8000];
-	}
-#else
-	if (addr<0xA000)
-	{
-		return Ram[addr];
-	}
-	if (addr<0xC000)
-	{
-		if ((M6510_PCR&0x01)==0x01)
-		{
-			return BRom[addr-0xA000];
-		}
-		else
-		{
-			return Ram[addr];
-		}
-	}
-#endif
-	if (addr<0xD000)
-	{
-		return Ram[addr];
-	}
-	if (addr<0xE000)
-	{
-		if ((M6510_PCR&0x04)==0x04)
-		{
-			if (addr<0xD400)
-			{
-				return GetByte6569(addr&0x3F);
-			}
-			if (addr<0xD800)
-			{
-//				printf("SID Register Read : %02X  ($1D-$1F - unconnected)\n",addr&0x1F);
-				return 0xFF;
-			}
-			if (addr<0xDC00)
-			{
-				return CRam[addr-0xD800]&0xF;
-			}
-			if (addr<0xDD00)
-			{
-				return CIA0_PinGetPIN_DB();
-			}
-			if (addr<0xDE00)
-			{
-				return CIA1_PinGetPIN_DB();
-			}
-			printf("IO Expansion\n");
-			return 0xFF;
-		}
-		else
-		{
-			return CRom[addr-0xD000];
-		}
-	}
+	uint8_t map=addr>>12;
 
-	if ((M6510_PCR&0x02)==0x02)
-	{
-		return KRom[addr-0xE000];
-	}
-	else
-	{
-		return Ram[addr];
-	}
+	if (addr==0x0000)
+		return M6510_DDR;
+	if (addr==0x0001)
+		return M6510_PCR;
+
+	return r_memMap[map](addr);
 }
 
 void SetByte(uint16_t addr,uint8_t byte)
 {
-	//TODO .. memory map for 64
-	if (addr<0x0001)
+	uint8_t map=addr>>12;
+
+	if (addr==0x0000)
 	{
 		M6510_DDR=byte;
 		return;
 	}
-	if (addr<0x0002)
+	if (addr==0x0001)
 	{
 		M6510_PCR&=M6510_DDR;
 		byte&=~M6510_DDR;
 		M6510_PCR|=byte;
 		return;
 	}
-	if (addr<0xD000)
-	{
-		Ram[addr]=byte;
-		return;
-	}
-	if (addr<0xE000)
-	{
-		if ((M6510_PCR&0x04)==0x04)
-		{
-			if (addr<0xD400)
-			{
-				SetByte6569(addr&0x3F,byte);
-				return;
-			}
-			if (addr<0xD800)
-			{
-//				printf("SID Register Write : %02X<-%02X  ($1D-$1F - unconnected)\n",addr&0x1F,byte);
-				return;
-			}
-			if (addr<0xDC00)
-			{
-				CRam[addr-0xD800]=byte&0xF;
-				return;
-			}
-			if (addr<0xDD00)
-			{
-				CIA0_PinSetPIN_DB(byte);
-				return;
-			}
-			if (addr<0xDE00)
-			{
-				CIA1_PinSetPIN_DB(byte);
-				return;
-			}
-			printf("IO Expansion\n");
-			return;
-		}
-		else
-		{
-			Ram[addr]=byte;
-			return;
-		}
-	}
-	Ram[addr]=byte;
+
+	w_memMap[map](addr,byte);
 }
 
 
@@ -428,6 +564,9 @@ int g_traceStep=0;
 #define VIA_WINDOW		4
 #define VIA_WINDOW_DISK		5
 #define MEMORY_WINDOW_DISK	6
+#define REGISTER_6569		7
+
+#define ENABLE_DISK_DEBUG	0
 
 GLFWwindow windows[MAX_WINDOWS];
 unsigned char *videoMemory[MAX_WINDOWS];
@@ -789,6 +928,7 @@ int main(int argc,char**argv)
 	/// Initialize GLFW 
 	glfwInit(); 
 
+#if ENABLE_DISK_DEBUG
 	// Open memory OpenGL window 
 	if( !(windows[MEMORY_WINDOW_DISK]=glfwOpenWindow( MEMORY_WIDTH, MEMORY_HEIGHT, GLFW_WINDOWED,"Disk Memory",NULL)) ) 
 	{ 
@@ -812,19 +952,7 @@ int main(int argc,char**argv)
 
 	glfwMakeContextCurrent(windows[TIMING_WINDOW]);
 	setupGL(TIMING_WINDOW,TIMING_WIDTH,TIMING_HEIGHT);
-	
-	// Open via OpenGL window 
-	if( !(windows[VIA_WINDOW]=glfwOpenWindow( VIA_WIDTH, VIA_HEIGHT, GLFW_WINDOWED,"CIA Chips (c64)",NULL)) ) 
-	{ 
-		glfwTerminate(); 
-		return 1; 
-	} 
 
-	glfwSetWindowPos(windows[VIA_WINDOW],560,0);
-
-	glfwMakeContextCurrent(windows[VIA_WINDOW]);
-	setupGL(VIA_WINDOW,VIA_WIDTH,VIA_HEIGHT);
-	
 	// Open via OpenGL window 
 	if( !(windows[VIA_WINDOW_DISK]=glfwOpenWindow( VIA_WIDTH, VIA_HEIGHT, GLFW_WINDOWED,"VIA Chips (disk)",NULL)) ) 
 	{ 
@@ -838,18 +966,6 @@ int main(int argc,char**argv)
 	setupGL(VIA_WINDOW_DISK,VIA_WIDTH,VIA_HEIGHT);
 	
 	// Open registers OpenGL window 
-	if( !(windows[REGISTER_WINDOW]=glfwOpenWindow( REGISTER_WIDTH, REGISTER_HEIGHT, GLFW_WINDOWED,"Main CPU",NULL)) ) 
-	{ 
-		glfwTerminate(); 
-		return 1; 
-	} 
-
-	glfwSetWindowPos(windows[REGISTER_WINDOW],600,300);
-
-	glfwMakeContextCurrent(windows[REGISTER_WINDOW]);
-	setupGL(REGISTER_WINDOW,REGISTER_WIDTH,REGISTER_HEIGHT);
-	
-	// Open registers OpenGL window 
 	if( !(windows[REGISTER_WINDOW_DISK]=glfwOpenWindow( REGISTER_WIDTH, REGISTER_HEIGHT, GLFW_WINDOWED,"Disk CPU",NULL)) ) 
 	{ 
 		glfwTerminate(); 
@@ -860,6 +976,43 @@ int main(int argc,char**argv)
 
 	glfwMakeContextCurrent(windows[REGISTER_WINDOW_DISK]);
 	setupGL(REGISTER_WINDOW_DISK,REGISTER_WIDTH,REGISTER_HEIGHT);
+#endif
+
+	// Open via OpenGL window 
+	if( !(windows[REGISTER_6569]=glfwOpenWindow( REGISTER_WIDTH, REGISTER_HEIGHT, GLFW_WINDOWED,"6569",NULL)) ) 
+	{ 
+		glfwTerminate(); 
+		return 1; 
+	} 
+
+	glfwSetWindowPos(windows[REGISTER_6569],0,0);
+
+	glfwMakeContextCurrent(windows[REGISTER_6569]);
+	setupGL(REGISTER_6569,REGISTER_WIDTH,REGISTER_HEIGHT);
+	
+	// Open via OpenGL window 
+	if( !(windows[VIA_WINDOW]=glfwOpenWindow( VIA_WIDTH, VIA_HEIGHT, GLFW_WINDOWED,"CIA Chips (c64)",NULL)) ) 
+	{ 
+		glfwTerminate(); 
+		return 1; 
+	} 
+
+	glfwSetWindowPos(windows[VIA_WINDOW],560,0);
+
+	glfwMakeContextCurrent(windows[VIA_WINDOW]);
+	setupGL(VIA_WINDOW,VIA_WIDTH,VIA_HEIGHT);
+	
+	// Open registers OpenGL window 
+	if( !(windows[REGISTER_WINDOW]=glfwOpenWindow( REGISTER_WIDTH, REGISTER_HEIGHT, GLFW_WINDOWED,"Main CPU",NULL)) ) 
+	{ 
+		glfwTerminate(); 
+		return 1; 
+	} 
+
+	glfwSetWindowPos(windows[REGISTER_WINDOW],600,300);
+
+	glfwMakeContextCurrent(windows[REGISTER_WINDOW]);
+	setupGL(REGISTER_WINDOW,REGISTER_WIDTH,REGISTER_HEIGHT);
 	
 	// Open screen OpenGL window 
 	if( !(windows[MAIN_WINDOW]=glfwOpenWindow( WIDTH, HEIGHT, GLFW_WINDOWED,"c64",NULL)) ) 
@@ -961,6 +1114,7 @@ int main(int argc,char**argv)
 		
 		if ((!stopTheClock) || g_traceStep || g_instructionStep)
 		{
+			Tick6569();
 			MAIN_PinSetPIN_O0(1);
 			addr = MAIN_PinGetPIN_AB();
 
@@ -1028,8 +1182,9 @@ int main(int argc,char**argv)
 			lastBus=MAIN_PinGetPIN_DB();
 
 			MAIN_PinSetPIN_O0(0);
-
 			Tick6569();
+			UpdateAudio();
+
 
 			pixelClock++;
 		}
@@ -1050,27 +1205,11 @@ int main(int argc,char**argv)
             		glfwMakeContextCurrent(windows[MAIN_WINDOW]);
 			ShowScreen(MAIN_WINDOW,WIDTH,HEIGHT);
 			glfwSwapBuffers();
-				
+
+#if ENABLE_DISK_DEBUG
 			glfwMakeContextCurrent(windows[TIMING_WINDOW]);
 			DrawTiming(videoMemory[TIMING_WINDOW],TIMING_WIDTH);
 			ShowScreen(TIMING_WINDOW,TIMING_WIDTH,TIMING_HEIGHT);
-			glfwSwapBuffers();
-			
-			glfwMakeContextCurrent(windows[REGISTER_WINDOW]);
-			DrawRegisterMain(videoMemory[REGISTER_WINDOW],REGISTER_WIDTH,lastPC,GetByte);
-			UpdateRegisterMain(windows[REGISTER_WINDOW]);
-			ShowScreen(REGISTER_WINDOW,REGISTER_WIDTH,REGISTER_HEIGHT);
-			glfwSwapBuffers();
-			
-			glfwMakeContextCurrent(windows[REGISTER_WINDOW_DISK]);
-			DrawRegisterDisk(videoMemory[REGISTER_WINDOW_DISK],REGISTER_WIDTH,DISK_lastPC,DISK_GetByte);
-			UpdateRegisterDisk(windows[REGISTER_WINDOW_DISK]);
-			ShowScreen(REGISTER_WINDOW_DISK,REGISTER_WIDTH,REGISTER_HEIGHT);
-			glfwSwapBuffers();
-				
-			glfwMakeContextCurrent(windows[VIA_WINDOW]);
-			DrawVIAMain(videoMemory[VIA_WINDOW],VIA_WIDTH);
-			ShowScreen(VIA_WINDOW,VIA_WIDTH,VIA_HEIGHT);
 			glfwSwapBuffers();
 			
 			glfwMakeContextCurrent(windows[VIA_WINDOW_DISK]);
@@ -1081,6 +1220,28 @@ int main(int argc,char**argv)
 			glfwMakeContextCurrent(windows[MEMORY_WINDOW_DISK]);
 			DrawMemoryDisk(videoMemory[MEMORY_WINDOW_DISK],MEMORY_WIDTH,0x300,DISK_GetByte);
 			ShowScreen(MEMORY_WINDOW_DISK,MEMORY_WIDTH,MEMORY_HEIGHT);
+			glfwSwapBuffers();
+
+			glfwMakeContextCurrent(windows[REGISTER_WINDOW_DISK]);
+			DrawRegisterDisk(videoMemory[REGISTER_WINDOW_DISK],REGISTER_WIDTH,DISK_lastPC,DISK_GetByte);
+			UpdateRegisterDisk(windows[REGISTER_WINDOW_DISK]);
+			ShowScreen(REGISTER_WINDOW_DISK,REGISTER_WIDTH,REGISTER_HEIGHT);
+			glfwSwapBuffers();
+#endif
+			glfwMakeContextCurrent(windows[REGISTER_WINDOW]);
+			DrawRegisterMain(videoMemory[REGISTER_WINDOW],REGISTER_WIDTH,lastPC,GetByte);
+			UpdateRegisterMain(windows[REGISTER_WINDOW]);
+			ShowScreen(REGISTER_WINDOW,REGISTER_WIDTH,REGISTER_HEIGHT);
+			glfwSwapBuffers();
+			
+			glfwMakeContextCurrent(windows[VIA_WINDOW]);
+			DrawVIAMain(videoMemory[VIA_WINDOW],VIA_WIDTH);
+			ShowScreen(VIA_WINDOW,VIA_WIDTH,VIA_HEIGHT);
+			glfwSwapBuffers();
+			
+			glfwMakeContextCurrent(windows[REGISTER_6569]);
+			DrawRegister6569(videoMemory[REGISTER_6569],REGISTER_WIDTH);
+			ShowScreen(REGISTER_6569,REGISTER_WIDTH,REGISTER_HEIGHT);
 			glfwSwapBuffers();
 			
 			glfwPollEvents();
@@ -1148,236 +1309,34 @@ int main(int argc,char**argv)
 
 }
 
-#if 0
-///////////////////
-//
-
-
-
-uint8_t VIAGetByte(int chipNo,int regNo)
-{
-	if (doDebug)
-		printf("R VIA%d %02X\n",chipNo+1,regNo);
-	switch (regNo)
-	{
-		case 0:			//IRB
-			via[chipNo].IFR&=~0x18;
-			return (via[chipNo].IRB & (~via[chipNo].DDRB)) | (via[chipNo].ORB & via[chipNo].DDRB);
-		case 1:			//IRA
-			via[chipNo].IFR&=~0x03;
-			//FALL through intended
-		case 15:
-			return (via[chipNo].IRA & (~via[chipNo].DDRA));
-		case 2:
-			return via[chipNo].DDRB;
-		case 3:
-			return via[chipNo].DDRA;
-		case 4:
-			via[chipNo].IFR&=~0x40;
-			return (via[chipNo].T1C&0xFF);
-		case 5:
-			return (via[chipNo].T1C>>8);
-		case 6:
-			return via[chipNo].T1LL;
-		case 7:
-			return via[chipNo].T1LH;
-		case 8:
-			via[chipNo].IFR&=~0x20;
-			return (via[chipNo].T2C&0xFF);
-		case 9:
-			return (via[chipNo].T2C>>8);
-		case 10:
-			via[chipNo].IFR&=~0x04;
-			return via[chipNo].SR;
-		case 11:
-			return via[chipNo].ACR;
-		case 12:
-			return via[chipNo].PCR;
-		case 13:
-			return via[chipNo].IFR;
-		case 14:
-			return via[chipNo].IER & 0x7F;
-	}
-}
-
-void VIASetByte(int chipNo,int regNo,uint8_t byte)
-{
-//	if (doDebug)
-//		printf("W VIA%d %02X,%02X\n",chipNo+1,regNo,byte);
-	switch (regNo)
-	{
-		case 0:
-			via[chipNo].IFR&=~0x18;
-//			if (via[chipNo].ORB!=(byte&via[chipNo].DDRB))
-//				printf("W VIA%d %02X,%02X\n",chipNo+1,regNo,byte);
-			via[chipNo].ORB=byte&via[chipNo].DDRB;
-			break;
-		case 1:
-			via[chipNo].IFR&=~0x03;
-			//FALL through intended
-		case 15:
-//			if (via[chipNo].ORA!=(byte&via[chipNo].DDRA))
-			if (chipNo==0)
-			{
-				printf("CA2/CB2 %02X/%02X\n",via[1].CA2,via[1].CB2);
-				printf("W VIA%d %02X,%02X\n",chipNo+1,regNo,byte);
-			}
-			via[chipNo].ORA=byte&via[chipNo].DDRA;
-			break;
-		case 2:
-			if (via[chipNo].DDRB!=byte)
-				printf("W VIA%d %02X,%02X\n",chipNo+1,regNo,byte);
-			via[chipNo].DDRB=byte;
-			break;
-		case 3:
-			if (via[chipNo].DDRA!=byte)
-				printf("W VIA%d %02X,%02X\n",chipNo+1,regNo,byte);
-			via[chipNo].DDRA=byte;
-			break;
-		case 4:
-			via[chipNo].T1LL=byte;
-			break;
-		case 5:
-			via[chipNo].T1LH=byte;
-			via[chipNo].T1C=byte<<8;
-			via[chipNo].T1C|=via[chipNo].T1LL;
-			via[chipNo].IFR&=~0x40;
-			break;
-		case 6:
-			via[chipNo].T1LL=byte;
-			break;
-		case 7:
-			via[chipNo].T1LH=byte;
-			via[chipNo].IFR&=~0x40;
-			break;
-		case 8:
-			via[chipNo].T2LL=byte;
-			break;
-		case 9:
-			via[chipNo].T2TimerOff=0;
-			via[chipNo].T2C=byte<<8;
-			via[chipNo].T2C|=via[chipNo].T2LL;
-			via[chipNo].IFR&=~0x20;
-			break;
-		case 10:
-			via[chipNo].IFR&=~0x04;
-			via[chipNo].SR=byte;
-			break;
-		case 11:
-			if (via[chipNo].ACR!=byte)
-				printf("W VIA%d %02X,%02X\n",chipNo+1,regNo,byte);
-			via[chipNo].ACR=byte;
-			break;
-		case 12:
-			if (via[chipNo].PCR!=byte)
-				printf("W VIA%d %02X,%02X\n",chipNo+1,regNo,byte);
-			via[chipNo].PCR=byte;
-			break;
-		case 13:
-			byte&=0x7F;
-			byte=~byte;
-			via[chipNo].IFR&=byte;
-			break;
-		case 14:
-			if (byte&0x80)
-			{
-				via[chipNo].IER|=byte&0x7F;
-			}
-			else
-			{
-				via[chipNo].IER&=~(byte&0x7F);
-			}
-			printf("%d : byte %02X, IER %02X\n",chipNo+1,byte,via[chipNo].IER);
-			break;
-	}
-}
-
-void VIATick(int chipNo,uint8_t PB0)
-{
-	via[chipNo].IRA=0x00;
-	if (chipNo==0)
-	{
-		via[chipNo].IRB=PB0;
-	}
-	else
-	{
-		via[chipNo].IRB=0x00;
-	}
-
-	if (via[chipNo].T1C)
-	{
-		via[chipNo].T1C--;
-		if (via[chipNo].T1C==0)
-		{
-			via[chipNo].IFR|=0x40;
-			if (via[chipNo].ACR&0x40)
-			{
-				via[chipNo].T1C=via[chipNo].T1LH<<8;
-				via[chipNo].T1C|=via[chipNo].T1LL;
-			}
-//			printf("T1 Counter Underflow On VIA %d\n",chipNo);
-		}
-	}
-	via[chipNo].T2C--;
-	if ((via[chipNo].T2C==0) && (via[chipNo].T2TimerOff==0))
-	{
-		via[chipNo].IFR|=0x20;
-		via[chipNo].T2TimerOff=1;
-//		printf("T2 Counter Underflow On VIA %d\n",chipNo);
-	}
-
-	switch (via[chipNo].PCR&0x0E)
-	{
-		case 0x0:
-			//Input Mode - 
-			via[chipNo].CA2=0;
-			break;
-		case 0x2:
-		case 0x4:
-		case 0x6:
-		case 0x8:
-		case 0xA:
-			printf("Warning Unsupported PCR CA2 mode (%d)%d\n",chipNo+1,(via[chipNo].PCR&0xE)>>1);
-			break;
-		case 0xC:
-			via[chipNo].CA2=0x0;
-			break;
-		case 0xE:
-			via[chipNo].CA2=0x1;
-			break;
-	}
-	switch (via[chipNo].PCR&0xE0)
-	{
-		case 0x00:
-			//Input Mode -
-			break;
-		case 0x20:
-		case 0x40:
-		case 0x60:
-		case 0x80:
-		case 0xA0:
-			printf("Warning Unsupported PCR CB2 mode (%d)%d\n",chipNo+1,(via[chipNo].PCR&0xE)>>1);
-			break;
-		case 0xC0:
-			via[chipNo].CB2=0x0;
-			break;
-		case 0xE0:
-			via[chipNo].CB2=0x1;
-			break;
-	}
-
-}
-#endif
-
 ////////////6569////////////////////
 
 uint8_t M6569_Regs[0x40];		// NB: Over allocated for now!
 
 uint32_t	cTable[16]={
+
+#if 0
 	0x00000000,0x00ffffff,0x00782922,0x0087d6dd,0x00aa5fb6,0x0055a049,0x0040318d,0x00bfce72,
 	0x00aa7449,0x00eab489,0x00b86962,0x00c7ffff,0x00eaf9f6,0x0094e089,0x008071cc,0x00ffffb2,
+#else
+0x00000000,
+0x00FFFFFF,
+0x0068372B,
+0x0070A4B2,
+0x006F3D86,
+0x00588D43,
+0x00352879,
+0x00B8C76F,
+0x006F4F25,
+0x00433900,
+0x009A6759,
+0x00444444,
+0x006C6C6C,
+0x009AD284,
+0x006C5EB5,
+0x00959595
+#endif
 			};
-
 
 uint32_t RASTER_CNT=0;
 uint32_t RASTER_CMP=0;
@@ -1395,7 +1354,7 @@ void SetByte6569(int regNo,uint8_t byte)
 {
 	if (regNo<0x2F)
 	{
-		if (regNo==0x12)		// TODO-Set RASTER COMPARE FOR INTERRUPT
+		if (regNo==0x12)
 		{
 			RASTER_CMP&=0x100;
 			RASTER_CMP|=byte;
@@ -1419,7 +1378,6 @@ void SetByte6569(int regNo,uint8_t byte)
 	}
 }
 
-uint8_t xCnt=0;
 
 #if 0
 int16_t	channel1Level=0;
@@ -1431,395 +1389,399 @@ int16_t channel4Level=0;
 uint8_t GetByteFrom6569(uint16_t addr)
 {
 	uint16_t bank;
+	uint8_t map;
 
 	// Need to or in two bits from CIA2 to make up bits 15-14 of address
 	bank=((~CIA1_PinGetPIN_PA())&0x3)<<14;
 
 	addr&=0x3FFF;
-	
-	//TODO Other 3 banks
-	
-	if (addr<0x1000)
-	{
-		return Ram[addr+bank];
-	}
-	if (addr<0x2000 && ((bank&0x4000)==0))
-	{
-		return CRom[addr-0x1000];
-	}
-	return Ram[addr+bank];
+	addr|=bank;
+
+	map=addr>>12;
+
+	return v_memMap[map](addr);
 }
 
-void Tick6569()
+
+//Cycl-# 6                   1 1 1 1 1 1 1 1 1 1 2 2 2 2 2 2 2 2 2 2 3 3 3 3 3 3 3 3 3 3 4 4 4 4 4 4 4 4 4 4 5 5 5 5 5 5 5 5 5 5 6 6 6 6
+//       3 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 1
+//        _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+//    ø0 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+//       __
+//   IRQ   ________________________________________________________________________________________________________________________________
+//       ________________________                                                                                      ____________________
+//    BA                         ______________________________________________________________________________________
+//        _ _ _ _ _ _ _ _ _ _ _ _ _ _ _                                                                                 _ _ _ _ _ _ _ _ _ _
+//   AEC _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _________________________________________________________________________________ _ _ _ _ _ _ _ _ _
+//
+//   VIC i 3 i 4 i 5 i 6 i 7 i r r r r rcgcgcgcgcgcgcgcgcgcgcgcgcgcgcgcgcgcgcgcgcgcgcgcgcgcgcgcgcgcgcgcgcgcgcgcgcgcgcgcg i i 0 i 1 i 2 i 3
+//  6510  x x x x x x x x x x x x X X X                                                                                 x x x x x x x x x x
+//
+//Graph.                      |===========01020304050607080910111213141516171819202122232425262728293031323334353637383940=========
+//
+//X coo. \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+//       1111111111111111111111111110000000000000000000000000000000000000000000000000000000000000000111111111111111111111111111111111111111
+//       89999aaaabbbbccccddddeeeeff0000111122223333444455556666777788889999aaaabbbbccccddddeeeeffff000011112222333344445555666677778888999
+//       c048c048c048c048c048c048c04048c048c048c048c048c048c048c048c048c048c048c048c048c048c048c048c048c048c048c048c048c048c048c048c048c048
+
+uint8_t mBorder=1;
+uint8_t vBorder=1;
+uint16_t xCnt=0x190;
+uint16_t VCBase=0;
+uint16_t VC=0;
+uint8_t	RC=0;
+
+uint8_t bufccode;
+uint8_t bufccode1;
+uint8_t bufccol;
+uint8_t bufccol1;
+uint8_t bufpixels;
+uint8_t bufpixels1;
+uint8_t ccode;
+uint8_t ccol;
+uint8_t pixels;
+
+uint16_t xlCmp=0x18;
+uint16_t xrCmp=0x158;
+uint8_t  ytCmp=0x33;
+uint8_t  ybCmp=0xFB;
+
+uint32_t spData[8];
+uint16_t MCBase[8];
+uint16_t MC[8];
+uint8_t  spDma[8]={0,0,0,0,0,0,0,0};
+
+void Tick6569_OnePix();
+
+void Tick6569()		// Needs to do 8 pixels - or 4 if ticked properly - ie once per half cpu clock
 {
-	int sprite;
-	uint32_t* outputTexture = (uint32_t*)videoMemory[MAIN_WINDOW];
-	uint32_t originX;
-	uint32_t originY;
-	uint32_t length;
-	uint32_t height;
-	uint32_t borderCol;
-	uint8_t yScr=M6569_Regs[0x11]&0x7;
-	uint8_t xScr=M6569_Regs[0x16]&0x7;
+	int a,b;
 
-	M6569_IRQ=1;
-	if (RASTER_CMP==RASTER_CNT)
+	if (xCnt==0)
 	{
-		M6569_Regs[0x19]=0x81;	// IRQ + RASTER
-
-		if (M6569_Regs[0x1A]&0x01)
+		VC=VCBase;
+		if (/*RASTER_CNT>=0x30 && RASTER_CNT<=0xF7 &&*/ (RASTER_CNT&7)==(M6569_Regs[0x11]&0x7))
 		{
-			M6569_IRQ=0;
+			RC=0;
 		}
 	}
+	M6569_IRQ=1;
 
-	borderCol=M6569_Regs[0x20]&0x0F;
-	borderCol=cTable[borderCol];
-
-	if (RASTER_CNT<(51+yScr) || RASTER_CNT>(250+yScr))				// 200 mode.. 192 mode (<55  >246)
+	if ((M6569_Regs[0x19] & M6569_Regs[0x1A])&0x01)
 	{
-		outputTexture[(xCnt)*8 + 0 + ((RASTER_CNT)*WIDTH)]=borderCol;
-		outputTexture[(xCnt)*8 + 1 + ((RASTER_CNT)*WIDTH)]=borderCol;
-		outputTexture[(xCnt)*8 + 2 + ((RASTER_CNT)*WIDTH)]=borderCol;
-		outputTexture[(xCnt)*8 + 3 + ((RASTER_CNT)*WIDTH)]=borderCol;
-		outputTexture[(xCnt)*8 + 4 + ((RASTER_CNT)*WIDTH)]=borderCol;
-		outputTexture[(xCnt)*8 + 5 + ((RASTER_CNT)*WIDTH)]=borderCol;
-		outputTexture[(xCnt)*8 + 6 + ((RASTER_CNT)*WIDTH)]=borderCol;
-		outputTexture[(xCnt)*8 + 7 + ((RASTER_CNT)*WIDTH)]=borderCol;
+		M6569_IRQ=0;
 	}
-	else
-	{
-		// Visible screen area...
 
-		if ((xCnt*8)<(24+xScr) || (xCnt*8)>(343+xScr))
+	if ((xCnt&4)==0)
+	{
+		bufccode=bufccode1;
+		bufccol=bufccol1;
+		bufpixels=bufpixels1;
+	}
+	if ((xCnt&4)==0 && xCnt>=0x010 && xCnt<=0x148)
+	{
+		// Read C (note that this is wrong.. it should only be done on a BAD LINE)
+		uint16_t screenAddress = (M6569_Regs[0x18]&0xF0)<<6;
+
+		bufccode1 = GetByteFrom6569(screenAddress+(VC&0x3FF));
+		bufccol1 = CRam[VC&0x3FF]&0x0F;
+	}
+	if ((xCnt&4)==4 && xCnt>=0x014 && xCnt<=0x14C)
+	{
+		uint16_t charAddress;
+	       	
+		if (M6569_Regs[0x11]&0x20)
 		{
-			// left/right borders
-			outputTexture[(xCnt)*8 + 0 + ((RASTER_CNT)*WIDTH)]=borderCol;
-			outputTexture[(xCnt)*8 + 1 + ((RASTER_CNT)*WIDTH)]=borderCol;
-			outputTexture[(xCnt)*8 + 2 + ((RASTER_CNT)*WIDTH)]=borderCol;
-			outputTexture[(xCnt)*8 + 3 + ((RASTER_CNT)*WIDTH)]=borderCol;
-			outputTexture[(xCnt)*8 + 4 + ((RASTER_CNT)*WIDTH)]=borderCol;
-			outputTexture[(xCnt)*8 + 5 + ((RASTER_CNT)*WIDTH)]=borderCol;
-			outputTexture[(xCnt)*8 + 6 + ((RASTER_CNT)*WIDTH)]=borderCol;
-			outputTexture[(xCnt)*8 + 7 + ((RASTER_CNT)*WIDTH)]=borderCol;
+			charAddress = (M6569_Regs[0x18]&0x08)<<10;
+			if (M6569_Regs[0x11]&0x40)				//TODO
+			{
+				bufpixels1=GetByteFrom6569(charAddress+((VC&0x3FF)*8)+RC);
+			}
+			else
+			{
+				bufpixels1=GetByteFrom6569(charAddress+((VC&0x3FF)*8)+RC);
+			}
 		}
 		else
 		{
-			// Attempt to draw in default mode (2 color, char rom styley)
-
-			uint16_t screenAddress = (M6569_Regs[0x18]&0xF0)<<6;
-			uint16_t charAddress = (M6569_Regs[0x18]&0x0E)<<10;
-
-			uint16_t screenOffs = (((RASTER_CNT-(51+yScr))/8) * 40) + (xCnt*8-(24+xScr))/8;
-
-			uint8_t ccode = GetByteFrom6569(screenAddress+screenOffs);
-
-			uint8_t pixels=GetByteFrom6569(charAddress+ccode*8 + ((RASTER_CNT-(51+yScr))&7));
-
-			int paperCol=M6569_Regs[0x21]&0xF;
-			int inkCol=CRam[screenOffs]&0x0F;								/// TODO look up in color ram!
-			int x;
-
-			paperCol=cTable[paperCol];
-			inkCol=cTable[inkCol];
-
-			for (x=0;x<8;x++)
+			charAddress = (M6569_Regs[0x18]&0x0E)<<10;
+			if (M6569_Regs[0x11]&0x40)
 			{
-				if (pixels&(1<<(7-x)))
-				{
-					outputTexture[(xCnt)*8 + x + ((RASTER_CNT)*WIDTH)]=inkCol;
-				}
-				else
-				{
-					outputTexture[(xCnt)*8 + x + ((RASTER_CNT)*WIDTH)]=paperCol;
-				}
+				bufpixels1=GetByteFrom6569(charAddress+(bufccode1&0x1F)*8 + RC);
+			}
+			else
+			{
+				bufpixels1=GetByteFrom6569(charAddress+bufccode1*8 + RC);
 			}
 		}
 
+		VC++;
 	}
-
-	//// Draw sprites
-	for (sprite=0;sprite<8;sprite++)
+	if (xCnt==0x160)
 	{
-		if (M6569_Regs[0x15]&(1<<sprite))
+		if (RC==7)
 		{
-			// sprite enabled
-			uint8_t spriteY=M6569_Regs[0x01+sprite*2]+1;		// +1 because they are triggered the line before (but we are not cycle accurate yet!)
-
-			if (RASTER_CNT>=spriteY && RASTER_CNT<spriteY+21)
-			{
-				// On Raster - Lets try fetching its display data
-				uint16_t screenAddress = (M6569_Regs[0x18]&0xF0)<<6;
-				uint16_t screenOffs = 1024-(8-sprite);// (((RASTER_CNT-(51+yScr))/8) * 40) + (xCnt*8-(24+xScr))/8;
-
-				uint16_t loc = GetByteFrom6569(screenAddress+screenOffs)*64;
-
-				uint16_t spriteX=M6569_Regs[0x00+sprite*2];
-
-				if (M6569_Regs[0x10]&(1<<sprite))
-				{
-					spriteX|=0x100;
-				}
-
-				if (xCnt*8>=spriteX && xCnt*8<spriteX+24)
-				{
-					int x;
-
-					spriteX=xCnt*8-spriteX;
-					spriteY=RASTER_CNT-spriteY;
-
-					uint8_t data = GetByteFrom6569(loc + (spriteX/8) + spriteY*3);
-
-					// On cur 8 pixels (somewhere)
-					for (x=0;x<8;x++)
-					{
-						if (data&(1<<(7-x)))
-						{
-							outputTexture[(xCnt)*8 + x + ((RASTER_CNT)*WIDTH)]=0x80808080;
-						}
-						else
-						{
-							outputTexture[(xCnt)*8 + x + ((RASTER_CNT)*WIDTH)]=0x20202020;
-						}
-					}
-				}
-			}
+			VCBase=VC;
+		}
+		if (RASTER_CNT>=0x30 && RASTER_CNT<=0xF9 /*&& (RASTER_CNT&7)==(M6569_Regs[0x11]&0x7)*/)
+		{
+			RC++;
+			RC&=7;
 		}
 	}
-	xCnt++;
-	if (xCnt>=63)
+	if (xCnt==xrCmp)		// TODO fix for CSEL bit
 	{
-		xCnt=0;
+		mBorder=1;
+	}
+	if ((xCnt==0x18C))
+	{
 		RASTER_CNT++;
-//		if (((RASTER_CNT-51)&7)==0)
-//			ccode++;
 		if (RASTER_CNT>=312)
 		{
 			RASTER_CNT=0;
+			VCBase=0;
 		}
 		M6569_Regs[0x11]&=0x7F;
 		M6569_Regs[0x11]|=(RASTER_CNT>>1)&0x80;
 		M6569_Regs[0x12]=RASTER_CNT&0xFF;
-	}
-
-#if 0
-
-	// 8 pixels per clock		63 clocks per line (PAL)		312 lines per frame		vblank 0-27
-
-	if (RASTER_CNT>=28 && xCnt>=5 && xCnt<=71-5)		// !Blanking area
-	{
-		uint8_t doubleHeight=0;
-
-		originX=CTRL_1&0x7F;		// *4 pixels
-		length=CTRL_3&0x7F;		// num 8 pixel columns
-		length<<=1;
-		originY=CTRL_2;
-		originY<<=1;
-		height=CTRL_4&0x7E;
-		if (CTRL_4&0x01)
+	
+		if (RASTER_CMP==RASTER_CNT)
 		{
-			doubleHeight=1;
+			M6569_Regs[0x19]=0x81;	// IRQ + RASTER
 		}
 
-		height<<=2+doubleHeight;
-
-		if ((xCnt<originX) || (xCnt>=(originX+length)) || (RASTER_CNT<originY) || (RASTER_CNT>=(originY+height)))
+		if (RASTER_CNT==ybCmp)
 		{
-			// Border
-			outputTexture[(xCnt-5)*4 + 0 + ((RASTER_CNT-28)*WIDTH)]=borderCol;
-			outputTexture[(xCnt-5)*4 + 1 + ((RASTER_CNT-28)*WIDTH)]=borderCol;
-			outputTexture[(xCnt-5)*4 + 2 + ((RASTER_CNT-28)*WIDTH)]=borderCol;
-			outputTexture[(xCnt-5)*4 + 3 + ((RASTER_CNT-28)*WIDTH)]=borderCol;
+			vBorder=1;
+		}
+		if ((RASTER_CNT==ytCmp) && (M6569_Regs[0x11]&0x10))
+		{
+			vBorder=0;
+		}
+	}
+	if ((xCnt==xlCmp) && (RASTER_CNT==ybCmp))
+	{
+		vBorder=1;
+	}
+	if ((xCnt==xlCmp) && (RASTER_CNT==ytCmp) && (M6569_Regs[0x11]&0x10))
+	{
+		vBorder=0;
+	}
+	if ((xCnt==xlCmp) && (vBorder==0))
+	{
+		mBorder=0;
+	}
+
+	if (xCnt>=0x164 && xCnt<=0x1E0)
+	{
+		int spNum;
+		int spPhase;
+
+		spNum=(xCnt-0x164)/16;
+		spPhase=((xCnt-0x164)/4)&3;
+
+		uint8_t spriteY=M6569_Regs[0x01+spNum*2];
+
+		switch (spPhase)
+		{
+			case 0:			// Fetch address for sprite pixels - only done if spriteposy == raster_cnt
+				if (RASTER_CNT==spriteY)
+				{
+					uint16_t screenAddress = (M6569_Regs[0x18]&0xF0)<<6;
+					uint16_t screenOffs = 1024-(8-spNum);// (((RASTER_CNT-(51+yScr))/8) * 40) + (xCnt*8-(24+xScr))/8;
+					
+					MCBase[spNum]=GetByteFrom6569(screenAddress+screenOffs)*64;
+					spDma[spNum]=1;
+					MC[spNum]=0;
+				}
+				break;
+			case 1:
+				if (spDma[spNum])
+				{
+					spData[spNum]&=0x00FFFF;
+					spData[spNum]|=GetByteFrom6569(MCBase[spNum]+MC[spNum])<<16;
+					MC[spNum]++;
+				}
+				break;
+			case 2:
+				if (spDma[spNum])
+				{
+					spData[spNum]&=0xFF00FF;
+					spData[spNum]|=GetByteFrom6569(MCBase[spNum]+MC[spNum])<<8;
+					MC[spNum]++;
+				}
+				break;
+			case 3:
+				if (spDma[spNum])
+				{
+					spData[spNum]&=0xFFFF00;
+					spData[spNum]|=GetByteFrom6569(MCBase[spNum]+MC[spNum]);
+					MC[spNum]++;
+					if (MC[spNum]==63)
+					{
+						spDma[spNum]=0;
+					}
+				}
+				break;
+		}
+	}
+
+	///////
+	for (b=0;b<4;b++)
+	{
+		if ((xCnt&7)==(M6569_Regs[0x16]&7))
+		{
+			ccode=bufccode;
+			ccol=bufccol;
+			pixels=bufpixels;
+		}
+		Tick6569_OnePix();
+		xCnt++;
+	}
+	///////
+	if (xCnt==0x1F8)
+	{
+		xCnt=0;
+	}
+
+}
+
+void Tick6569_OnePix()
+{
+	uint32_t* outputTexture = (uint32_t*)videoMemory[MAIN_WINDOW];
+	uint32_t borderCol=cTable[M6569_Regs[0x20]&0xF];
+	uint32_t inkCol1;
+	uint32_t inkCol2;
+	uint32_t inkCol;
+	int MC=0;
+	uint32_t paperCol=cTable[M6569_Regs[0x21]&0xF];
+	int a;
+
+
+	if (M6569_Regs[0x16]&0x10)
+	{
+		if (M6569_Regs[0x11]&0x20)
+		{
+			MC=1;
+			inkCol=cTable[ccol&0xF];
+			inkCol1=cTable[(ccode&0xF0)>>4];
+			inkCol2=cTable[ccode&0xF];
 		}
 		else
 		{
-			int xx;
-			uint16_t addr,addr1,addr2;
-			uint16_t chaddr;
-			uint16_t caddr;
-			uint32_t paper;
-			uint32_t auxcol;
-
-			addr1=CTRL_6&0xF0;
-			addr2=CTRL_3&0x80;
-			addr=(addr1<<6)|(addr2<<2);
-
-			chaddr=CTRL_6&0x0F;
-			chaddr<<=10;
-
-			caddr=CTRL_3&0x80;
-			caddr<<=2;
-			caddr|=0x1400;
-
-			paper=(CTRL_16&0xF0)>>4;
-			paper=cTable[paper];
-
-			auxcol=(CTRL_15&0xF0)>>4;
-			auxcol=cTable[auxcol];
-
-			uint32_t x = xCnt-originX;
-			uint32_t y = RASTER_CNT-originY;
-
-			uint16_t index;
-			uint32_t screenAddress = x/2;
-			if (doubleHeight)
-				screenAddress+= (y/16)*(length/2);
-			else
-				screenAddress+= (y/8)*(length/2);
-
-			uint32_t rcol= GetByteFrom6569(caddr+screenAddress);
-			uint32_t col;
-			col=cTable[rcol&7];
-			index=GetByteFrom6569(addr+screenAddress);
-			index<<=3+doubleHeight;
-			if (doubleHeight)
-				index+=y&15;
-			else
-				index+=y&7;
-
-			uint8_t byte = GetByteFrom6569((chaddr+index));
-			
-			if (rcol&0x08)
+			MC=ccol&0x08;
+			inkCol=cTable[ccol&0x7];
+			inkCol1=cTable[M6569_Regs[0x22]&0xF];
+			inkCol2=cTable[M6569_Regs[0x23]&0xF];
+		}
+	}
+	else
+	{
+		if (M6569_Regs[0x11]&0x20)
+		{
+			paperCol=cTable[ccode&0xF];
+			inkCol=cTable[(ccode&0xF0)>>4];
+		}
+		else
+		{
+			if (M6569_Regs[0x11]&0x40)
 			{
-				uint8_t sMask = 0xC0;
-				if (x&1)
-					sMask=0x0C;
-				for (xx=0;xx<2;xx++)
-				{
-					switch (byte&sMask)
-					{
-						case 0x00:
-							outputTexture[(xCnt-5)*4 + (xx*2)+0 + ((RASTER_CNT-28)*WIDTH)]=paper;
-							outputTexture[(xCnt-5)*4 + (xx*2)+1 + ((RASTER_CNT-28)*WIDTH)]=paper;
-							break;
-						case 0x40:
-						case 0x10:
-						case 0x04:
-						case 0x01:
-							outputTexture[(xCnt-5)*4 + (xx*2)+0 + ((RASTER_CNT-28)*WIDTH)]=borderCol;
-							outputTexture[(xCnt-5)*4 + (xx*2)+1 + ((RASTER_CNT-28)*WIDTH)]=borderCol;
-							break;
-						case 0x80:
-						case 0x20:
-						case 0x08:
-						case 0x02:
-							outputTexture[(xCnt-5)*4 + (xx*2)+0 + ((RASTER_CNT-28)*WIDTH)]=col;
-							outputTexture[(xCnt-5)*4 + (xx*2)+1 + ((RASTER_CNT-28)*WIDTH)]=col;
-							break;
-						default:
-							outputTexture[(xCnt-5)*4 + (xx*2)+0 + ((RASTER_CNT-28)*WIDTH)]=auxcol;
-							outputTexture[(xCnt-5)*4 + (xx*2)+1 + ((RASTER_CNT-28)*WIDTH)]=auxcol;
-							break;
-					}
-					sMask>>=2;
-				}
+				paperCol=cTable[M6569_Regs[0x21+((ccode&0xC0)>>6)]&0xF];
+			}
+			inkCol=cTable[ccol];
+		}
+	}
+
+	if (mBorder || vBorder)
+	{
+		outputTexture[xCnt + ((RASTER_CNT)*WIDTH)]=borderCol;
+	}
+	else
+	{
+		if (MC)
+		{
+			switch(pixels&0xC0)
+			{
+				case 0x00:
+					outputTexture[xCnt + ((RASTER_CNT)*WIDTH)]=paperCol;
+					break;
+				case 0x40:
+					outputTexture[xCnt + ((RASTER_CNT)*WIDTH)]=inkCol1;
+					break;
+				case 0x80:
+					outputTexture[xCnt + ((RASTER_CNT)*WIDTH)]=inkCol2;
+					break;
+				case 0xC0:
+					outputTexture[xCnt + ((RASTER_CNT)*WIDTH)]=inkCol;
+					break;
+			}
+
+			if ((xCnt+(M6569_Regs[0x11]&7))&1)
+			{
+				pixels<<=2;
+			}
+		}
+		else
+		{
+			if (pixels&0x80)
+			{
+				outputTexture[xCnt + ((RASTER_CNT)*WIDTH)]=inkCol;
 			}
 			else
 			{
-				uint8_t sMask = 0x80;
-				if (CTRL_16&0x08)
-					byte^=0xFF;
-				if (x&1)
-					sMask=0x08;
-				for (xx=0;xx<4;xx++)
-				{
-					if (byte&sMask)
-					{
-						outputTexture[(xCnt-5)*4 + xx + ((RASTER_CNT-28)*WIDTH)]=paper;
-					}
-					else
-					{
-						outputTexture[(xCnt-5)*4 + xx + ((RASTER_CNT-28)*WIDTH)]=col;
-					}
-					sMask>>=1;
-				}
+				outputTexture[xCnt + ((RASTER_CNT)*WIDTH)]=paperCol;
 			}
+			pixels<<=1;
 		}
-	}
-	xCnt++;
-	if (xCnt>=71)
-	{
-		xCnt=0;
-		RASTER_CNT++;
-		if (RASTER_CNT>=312)
-			RASTER_CNT=0;
-		CTRL_5=(RASTER_CNT>>1)&0xFF;
-		CTRL_4&=0x7F;
-		CTRL_4|=(RASTER_CNT&0x01)<<7;
-	}
 
-	if (CTRL_11&0x80)
-	{
-		channel1Cnt--;
-		if (channel1Cnt==0xFFFF)
+		for (a=0;a<8;a++)
 		{
-			channel1Cnt=(255-CTRL_11)<<8;
-			channel1Level^=1;
-		}
-	}
-	else
-	{
-		channel1Cnt=0;
-	}
-	if (CTRL_12&0x80)
-	{
-		channel2Cnt--;
-		if (channel2Cnt==0xFFFF)
-		{
-			channel2Cnt=(255-CTRL_12)<<7;
-			channel2Level^=1;
-		}
-	}
-	else
-	{
-		channel2Cnt=0;
-	}
-	if (CTRL_13&0x80)
-	{
-		channel3Cnt--;
-		if (channel3Cnt==0xFFFF)//(channel3Cnt/*>>6*/)>=CTRL_13&0x7F)
-		{
-			channel3Cnt=(255-CTRL_13)<<6;
-			channel3Level^=1;
-		}
-	}
-	else
-	{
-		channel3Cnt=0;
-	}
-	if (CTRL_14&0x80)
-	{
-		channel4Cnt--;
-		if (channel4Cnt==0xFFFF)//(channel3Cnt/*>>6*/)>=CTRL_13&0x7F)
-		{
-			uint16_t newBit;
-			channel4Cnt=(255-CTRL_14)<<5;
-			channel4Level^=noiseShift&1;
-			newBit=((noiseShift&0x80)>>7) ^ (noiseShift&1);
-			noiseShift>>=1;
-			noiseShift|=newBit<<15;
-		}
-	}
-	else
-	{
-		channel4Cnt=0;
-	}
-	
-#if 0
-	RecordPin(7 ,channel1Level);
-	RecordPin(8 ,channel2Level);
-	RecordPin(9 ,channel3Level);
-	RecordPin(10,channel4Level);
+			uint16_t spriteX=M6569_Regs[0x00+a*2];
 
-	_AudioAddData(0,channel1Level*256*(CTRL_15&0x0F));
-	_AudioAddData(1,channel2Level*256*(CTRL_15&0x0F));
-	_AudioAddData(2,channel3Level*256*(CTRL_15&0x0F));
-	_AudioAddData(3,channel4Level*256*(CTRL_15&0x0F));
-#endif
+			if (M6569_Regs[0x10]&(1<<a))
+			{
+				spriteX|=0x100;
+			}
+			if (xCnt>=spriteX && M6569_Regs[0x15]&(1<<a))
+			{
+				if (M6569_Regs[0x1C]&(1<<a))
+				{
+					// Multi-Colour
 
-#endif
-	UpdateAudio();
+					switch(spData[a]&0xC00000)
+					{
+						case 0x000000:
+							break;
+						case 0x400000:
+							outputTexture[xCnt + ((RASTER_CNT)*WIDTH)]=cTable[M6569_Regs[0x25]&0x0F];
+							break;
+						case 0x800000:
+							outputTexture[xCnt + ((RASTER_CNT)*WIDTH)]=cTable[M6569_Regs[0x27+a]&0x0F];
+							break;
+						case 0xC00000:
+							outputTexture[xCnt + ((RASTER_CNT)*WIDTH)]=cTable[M6569_Regs[0x26]&0x0F];
+							break;
+					}
 
+					if ((spriteX-xCnt)&1)
+					{
+						spData[a]&=0x3FFFFF;
+						spData[a]<<=2;
+					}
+				}
+				else
+				{
+					if (spData[a]&0x800000)
+					{
+						outputTexture[xCnt + ((RASTER_CNT)*WIDTH)]=cTable[M6569_Regs[0x27+a]&0x0F];
+					}
+					spData[a]&=0x7FFFFF;
+					spData[a]<<=1;
+				}
+			}	
+		}
+
+	}
 }
 
 //////////////////////// NOISES //////////////////////////
@@ -2536,6 +2498,9 @@ int LoadCRT(const char* fileName)
 		return 0;
 	}
 
+	PLA_EXROM=crtBuffer[0x18]&1;
+	PLA_GAME=crtBuffer[0x19]&1;
+
 	printf("CRT EXROM : %d\n",crtBuffer[0x18]);
 	printf("CRT GAME : %d\n",crtBuffer[0x19]);
 
@@ -2592,6 +2557,8 @@ int LoadCRT(const char* fileName)
 		if (pos>=length)
 			break;
 	}
+
+	ChangeMemoryMap();
 
 	return 1;
 }
