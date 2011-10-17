@@ -32,6 +32,10 @@ void AudioInitialise();
 void UpdateAudio();
 void _AudioAddData(int channel,int16_t dacValue);
 
+void Reset6581();
+void SetByte6581(uint16_t regNo,uint8_t byte);
+void Tick6581();
+
 uint16_t MAIN_PinGetPIN_AB();
 uint8_t MAIN_PinGetPIN_DB();
 void MAIN_PinSetPIN_DB(uint8_t);
@@ -123,7 +127,7 @@ void WriteIO(uint16_t addr,uint8_t byte)
 	}
 	if (addr<0xD800)
 	{
-		//				printf("SID Register Write : %02X<-%02X  ($1D-$1F - unconnected)\n",addr&0x1F,byte);
+		SetByte6581(addr&0x1F,byte);
 		return;
 	}
 	if (addr<0xDC00)
@@ -1087,6 +1091,7 @@ int main(int argc,char**argv)
 	//printf("%02X != %02X\n",BRom[0xD487-0xC000],GetByte(0xD487));
 	
 	DISK_Reset();
+	Reset6581();
 	
 #if 0
 	uint8_t pb0=0xFF;
@@ -1186,6 +1191,7 @@ int main(int argc,char**argv)
 
 			MAIN_PinSetPIN_O0(0);
 			Tick6569();
+			Tick6581();
 			UpdateAudio();
 
 
@@ -1393,7 +1399,6 @@ uint8_t GetByteFrom6569(uint16_t addr)
 {
 	uint16_t bank;
 	uint8_t map;
-	uint8_t poop;
 
 	// Need to or in two bits from CIA2 to make up bits 15-14 of address
 	bank=((~CIA1_PinGetPIN_PA())&0x3)<<14;
@@ -1403,20 +1408,7 @@ uint8_t GetByteFrom6569(uint16_t addr)
 
 	map=addr>>12;
 
-	poop=v_memMap[map](addr);
-
-	if (poop==0x10)
-	{
-		g_whereToLook = (M6569_Regs[0x18]&0x0E)<<10;
-		g_whereToLook += 0x10*8;
-		g_whereToLook&=0x3FFF;
-		g_whereToLook|=bank;
-
-//		bufpixels1=GetByteFrom6569(g_whereToLook+0x10*8 + 0);
-//		g_whereToLook=addr;
-	}
-
-	return poop;
+	return v_memMap[map](addr);
 }
 
 
@@ -1910,7 +1902,7 @@ void _AudioAddData(int channel,int16_t dacValue)
 }
 
 uint32_t tickCnt=0;
-uint32_t tickRate=((22152*4096)/(44100/50));
+uint32_t tickRate=((63*312*4096)/(44100/50));
 
 /* audio ticked at same clock as everything else... so need a step down */
 void UpdateAudio()
@@ -2596,9 +2588,15 @@ void AttachImage(const char* fileName)
 
 // voice |           24 bit Oscillator	->	Waveform Generator*4 (saw,triangle,pulse,random) (12bits out)	-> Waveform Selector -> D/A -> Multiplying D/A -> Envelope Generator (do this go here?)
 
+uint8_t SID_6581_Regs[0x20];
+
 uint32_t	oscillator[3];
 uint32_t	noise[3]={0x7FFFF8,0x7FFFF8,0x7FFFF8};		// 23 bit lfsr
 uint8_t		lastNoiseClock[3];	// 1 bit
+uint8_t		envelopeLevel[3];	// 4 bits
+uint8_t		envelopeCount[3];	// 8 bit
+uint16_t	envelopeClock[3];	// 16 bit
+uint8_t		envelopeState[3];	// 2 bit   0 - Release, 1 - attack, 2 - decay, 3 - sustain
 
 uint16_t SID_FormSaw(int voice)
 {
@@ -2609,12 +2607,17 @@ uint16_t SID_FormTriangle(int voice)
 {
 	uint32_t xor=(oscillator[voice]&0x800000)?0x7FF00:0x000000;
 
-	return ((oscillator[voice]^xor)&0xFFF000)>>11;
+	return (((oscillator[voice]^xor)<<1)&0xFFE000)>>12;
 }
 
 uint16_t SID_FormPulse(int voice)
 {
-	// where is comparitor?
+	uint16_t compare = SID_6581_Regs[0x02+voice*7];
+	compare|=(SID_6581_Regs[0x03+voice*7]&0x0F)<<8;
+
+	if (oscillator[voice]>compare)
+		return 0x0FFF;
+	return 0x0000;
 }
 
 uint16_t SID_FormRandom(int voice)
@@ -2644,7 +2647,70 @@ uint16_t SID_FormRandom(int voice)
 	value|= (noise[voice]&(1<<4))>>(4-1);
 	value|= (noise[voice]&(1<<2))>>(2-0);
 
-	return value;
+	return value<<4;
+}
+
+int SID_IsOscillating(int voice)
+{
+	uint16_t freq;
+	freq=SID_6581_Regs[0x00 + voice*7];
+	freq|=SID_6581_Regs[0x00 + voice*7]<<8;
+
+	return freq!=0;
+}
+
+void SID_UpdateOscillator(int voice)
+{
+	uint16_t freq;
+	freq=SID_6581_Regs[0x00 + voice*7];
+	freq|=SID_6581_Regs[0x01 + voice*7]<<8;
+
+	oscillator[voice]+=freq;
+}
+
+uint16_t envelopePeriod[16] = { 9, 32, 63, 95, 149, 220, 267, 313, 392, 977, 1954, 3126, 3907, 11720, 19532, 31251};
+
+void SID_UpdateEnvelopeCount(int voice)
+{
+	uint8_t sustainLevel;
+
+	sustainLevel=SID_6581_Regs[0x06 + voice*7]&0xF0;
+	sustainLevel|=(SID_6581_Regs[0x06 + voice*7]&0xF0)>>4;
+
+	switch (envelopeState[voice])
+	{
+		case 0:
+			// Release
+			if (envelopeCount[voice]!=0)
+				envelopeCount[voice]--;
+			break;
+		case 1:	
+			// Attack
+			if (envelopeCount[voice]!=255)
+				envelopeCount[voice]++;
+			else
+				envelopeState[voice]=2;
+			break;
+		case 2:
+			// Decay
+			if (envelopeCount[voice]!=sustainLevel)
+				envelopeCount[voice]--;
+			else
+				envelopeState[voice]=3;
+			break;
+		case 3:
+			// Sustain
+			break;
+	}
+}
+
+uint8_t SID_UpdateEnvelope(int voice)
+{
+	// update clock.. if timeover : 
+	
+	SID_UpdateEnvelopeCount(voice);
+
+	return envelopeCount[voice];
 }
 
 void Reset6581()
@@ -2655,7 +2721,31 @@ void Reset6581()
 		oscillator[a]=0;
 		noise[a]=0x7FFFF8;
 		lastNoiseClock[a]=0;
+		envelopeLevel[a]=0;
+		envelopeCount[a]=0;
+		envelopeState[a]=0;
+		envelopeClock[a]=0;
 	}
+}
+
+
+void SetByte6581(uint16_t regNo,uint8_t byte)
+{
+	if (regNo==0x04 || regNo==(0x04+7) || regNo==(0x04+7*2))
+	{
+		// CTRL register write
+		if (((SID_6581_Regs[regNo]&0x1)==0) && ((byte&1)==1))
+		{
+			// Start attack phase
+			envelopeState[(regNo-4)/7]=1;
+		}
+		if (((SID_6581_Regs[regNo]&0x1)==1) && ((byte&1)==0))
+		{
+			// Start release phase
+			envelopeState[(regNo-4)/7]=0;
+		}
+	}
+	SID_6581_Regs[regNo]=byte;
 }
 
 void Tick6581()
@@ -2664,18 +2754,52 @@ void Tick6581()
 
 	for (a=0;a<3;a++)
 	{
-		uint16_t s,t,p,r;
+		uint32_t s,t,p,r;
+		uint32_t e;
+
 
 		s=SID_FormSaw(a);
 		t=SID_FormTriangle(a);
 		p=SID_FormPulse(a);
 		r=SID_FormRandom(a);
+		e=SID_UpdateEnvelope(a);
 
+		int16_t	soundLevel=0;
+		if (SID_6581_Regs[0x04+a*7]&0x80)
+			soundLevel=0 + ((r*e)>>7);
+		if (SID_6581_Regs[0x04+a*7]&0x40)
+			soundLevel=0 + ((p*e)>>7);
+		if (SID_6581_Regs[0x04+a*7]&0x20)
+			soundLevel=0 + ((s*e)>>7);
+		if (SID_6581_Regs[0x04+a*7]&0x10)
+			soundLevel=0 + ((t*e)>>7);
 
-		//TODO - clock oscillator
-		//       merge/select waveforms
-		//       implement 3*ADSR
+/*
+		if ((SID_6581_Regs[0x04+a*7]&0x60)!=0 && soundLevel!=0)
+		{
+			printf("%d %04X %04X %04X %04X %02X %04X %s%s%s%s\n",a,s&0xFFF,t&0xFFF,p&0xFFF,r&0xFFF,e,soundLevel,
+					SID_6581_Regs[0x04+a*7]&0x10 ? "T":" ",
+					SID_6581_Regs[0x04+a*7]&0x20 ? "S":" ",
+					SID_6581_Regs[0x04+a*7]&0x40 ? "P":" ",
+					SID_6581_Regs[0x04+a*7]&0x80 ? "N":" "
+					);
+		}*/
+/*
+		if (soundLevel!=0)		// we wont see the release portion but this is a good start
+		{
+			printf("%d %04X %04X %04X %04X %02X %04X %s%s%s%s\n",a,s&0xFFF,t&0xFFF,p&0xFFF,r&0xFFF,e,soundLevel,
+					SID_6581_Regs[0x04+a*7]&0x10 ? "T":" ",
+					SID_6581_Regs[0x04+a*7]&0x20 ? "S":" ",
+					SID_6581_Regs[0x04+a*7]&0x40 ? "P":" ",
+					SID_6581_Regs[0x04+a*7]&0x80 ? "N":" "
+					);
+		}
+*/
+		SID_UpdateOscillator(a);
+
 		//       implement filter
 	
+
+		_AudioAddData(a,soundLevel);
 	}
 }
