@@ -227,7 +227,7 @@ WriteMap writeIO[16]={WriteRam,WriteRam,WriteRam,WriteRam,WriteRam,WriteRam,Writ
 WriteMap writeRam[16]={WriteRam,WriteRam,WriteRam,WriteRam,WriteRam,WriteRam,WriteRam,WriteRam,WriteRam,WriteRam,WriteRam,WriteRam,WriteRam,WriteRam,WriteRam,WriteRam};
 WriteMap writeOpen[16]={WriteRam,WriteOpen,WriteOpen,WriteOpen,WriteOpen,WriteOpen,WriteOpen,WriteOpen,WriteRomL,WriteRomL,WriteOpen,WriteOpen,WriteOpen,WriteIO,WriteRomH,WriteRomH};
 
-ReadMap readChar[16]={ReadRam,ReadChar,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadChar,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam};
+ReadMap readChar[16]={ ReadRam,ReadChar,ReadRam,ReadRam, ReadRam,ReadRam,ReadRam,ReadRam, ReadRam,ReadChar,ReadRam,ReadRam, ReadRam,ReadRam,ReadRam,ReadRam};
 ReadMap readRomH[16]={ReadRam,ReadRam,ReadRam,ReadCartH,ReadRam,ReadRam,ReadRam,ReadCartH,ReadRam,ReadRam,ReadRam,ReadCartH,ReadRam,ReadRam,ReadRam,ReadCartH};
 
 ReadMap readRam[16]={ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam,ReadRam};
@@ -379,9 +379,10 @@ void SetByte(uint16_t addr,uint8_t byte)
 	}
 	if (addr==0x0001)
 	{
-		M6510_PCR&=M6510_DDR;
-		byte&=~M6510_DDR;
+		M6510_PCR&=~M6510_DDR;
+		byte&=M6510_DDR;
 		M6510_PCR|=byte;
+		ChangeMemoryMap();
 		return;
 	}
 
@@ -563,7 +564,7 @@ int g_traceStep=0;
 #define REGISTER_WINDOW_DISK	3
 #define VIA_WINDOW		4
 #define VIA_WINDOW_DISK		5
-#define MEMORY_WINDOW_DISK	6
+#define MEMORY_WINDOW		6
 #define REGISTER_6569		7
 
 #define ENABLE_DISK_DEBUG	0
@@ -839,7 +840,7 @@ void UpdateCassette()
 	M6510_PCR&=0xEF;
 	M6510_PCR|=(playDown<<4)^0x10;
 #if 1
-	if (playDown && recDown && (M6510_PCR&0x20)) // SAVING
+	if (playDown && recDown && (M6510_PCR&0x20)==0) // SAVING
 	{
 		uint8_t newRecLevel = (M6510_PCR&0x08)>>3;
 		casCount++;
@@ -851,10 +852,10 @@ void UpdateCassette()
 			casCount=0;
 			casLevel=newRecLevel;
 		}
-		RecordPin(8,newRecLevel);
+//		RecordPin(8,newRecLevel);
 	}
 #endif
-	if (playDown && (!recDown) && (M6510_PCR&0x20)) // LOADING
+	if (playDown && (!recDown) && (M6510_PCR&0x20)==0) // LOADING
 	{
 		casCount++;
 		if (casCount>=cntBuffer[cntPos])
@@ -909,6 +910,8 @@ void UpdateDiskInterface()
 	CIA1_PinSetPIN_PA(tmp);
 }
 
+uint16_t g_whereToLook=1;
+
 void UpdateHardware()
 {
 	UpdateKB();
@@ -928,19 +931,19 @@ int main(int argc,char**argv)
 	/// Initialize GLFW 
 	glfwInit(); 
 
-#if ENABLE_DISK_DEBUG
 	// Open memory OpenGL window 
-	if( !(windows[MEMORY_WINDOW_DISK]=glfwOpenWindow( MEMORY_WIDTH, MEMORY_HEIGHT, GLFW_WINDOWED,"Disk Memory",NULL)) ) 
+	if( !(windows[MEMORY_WINDOW]=glfwOpenWindow( MEMORY_WIDTH, MEMORY_HEIGHT, GLFW_WINDOWED,"Memory",NULL)) ) 
 	{ 
 		glfwTerminate(); 
 		return 1; 
 	} 
 
-	glfwSetWindowPos(windows[MEMORY_WINDOW_DISK],0,0);
+	glfwSetWindowPos(windows[MEMORY_WINDOW],0,0);
 
-	glfwMakeContextCurrent(windows[MEMORY_WINDOW_DISK]);
-	setupGL(MEMORY_WINDOW_DISK,MEMORY_WIDTH,MEMORY_HEIGHT);
+	glfwMakeContextCurrent(windows[MEMORY_WINDOW]);
+	setupGL(MEMORY_WINDOW,MEMORY_WIDTH,MEMORY_HEIGHT);
 	
+#if ENABLE_DISK_DEBUG
 	// Open timing OpenGL window 
 	if( !(windows[TIMING_WINDOW]=glfwOpenWindow( TIMING_WIDTH, TIMING_HEIGHT, GLFW_WINDOWED,"Serial Bus",NULL)) ) 
 	{ 
@@ -1030,7 +1033,7 @@ int main(int argc,char**argv)
 
 	glfwGetWindowSize(windows[MAIN_WINDOW],&w,&h);
 
-	printf("width : %d (%d) , height : %d (%d)\n", w,WIDTH,h,HEIGHT);
+	//printf("width : %d (%d) , height : %d (%d)\n", w,WIDTH,h,HEIGHT);
 	glfwSetKeyCallback(kbHandler);
 	glfwSetWindowSizeCallback(sizeHandler);
 
@@ -1079,9 +1082,9 @@ int main(int argc,char**argv)
 	bp = GetByte(0xFFFE);
 	bp|=GetByte(0xFFFF)<<8;
 
-	printf("%04X\n",bp);
+	//printf("%04X\n",bp);
 
-	printf("%02X != %02X\n",BRom[0xD487-0xC000],GetByte(0xD487));
+	//printf("%02X != %02X\n",BRom[0xD487-0xC000],GetByte(0xD487));
 	
 	DISK_Reset();
 	
@@ -1206,6 +1209,11 @@ int main(int argc,char**argv)
 			ShowScreen(MAIN_WINDOW,WIDTH,HEIGHT);
 			glfwSwapBuffers();
 
+			glfwMakeContextCurrent(windows[MEMORY_WINDOW]);
+			DrawMemory(videoMemory[MEMORY_WINDOW],MEMORY_WIDTH,g_whereToLook,ReadRam);
+			ShowScreen(MEMORY_WINDOW,MEMORY_WIDTH,MEMORY_HEIGHT);
+			glfwSwapBuffers();
+
 #if ENABLE_DISK_DEBUG
 			glfwMakeContextCurrent(windows[TIMING_WINDOW]);
 			DrawTiming(videoMemory[TIMING_WINDOW],TIMING_WIDTH);
@@ -1217,11 +1225,6 @@ int main(int argc,char**argv)
 			ShowScreen(VIA_WINDOW_DISK,VIA_WIDTH,VIA_HEIGHT);
 			glfwSwapBuffers();
 			
-			glfwMakeContextCurrent(windows[MEMORY_WINDOW_DISK]);
-			DrawMemoryDisk(videoMemory[MEMORY_WINDOW_DISK],MEMORY_WIDTH,0x300,DISK_GetByte);
-			ShowScreen(MEMORY_WINDOW_DISK,MEMORY_WIDTH,MEMORY_HEIGHT);
-			glfwSwapBuffers();
-
 			glfwMakeContextCurrent(windows[REGISTER_WINDOW_DISK]);
 			DrawRegisterDisk(videoMemory[REGISTER_WINDOW_DISK],REGISTER_WIDTH,DISK_lastPC,DISK_GetByte);
 			UpdateRegisterDisk(windows[REGISTER_WINDOW_DISK]);
@@ -1390,6 +1393,7 @@ uint8_t GetByteFrom6569(uint16_t addr)
 {
 	uint16_t bank;
 	uint8_t map;
+	uint8_t poop;
 
 	// Need to or in two bits from CIA2 to make up bits 15-14 of address
 	bank=((~CIA1_PinGetPIN_PA())&0x3)<<14;
@@ -1399,7 +1403,20 @@ uint8_t GetByteFrom6569(uint16_t addr)
 
 	map=addr>>12;
 
-	return v_memMap[map](addr);
+	poop=v_memMap[map](addr);
+
+	if (poop==0x10)
+	{
+		g_whereToLook = (M6569_Regs[0x18]&0x0E)<<10;
+		g_whereToLook += 0x10*8;
+		g_whereToLook&=0x3FFF;
+		g_whereToLook|=bank;
+
+//		bufpixels1=GetByteFrom6569(g_whereToLook+0x10*8 + 0);
+//		g_whereToLook=addr;
+	}
+
+	return poop;
 }
 
 
@@ -2029,7 +2046,6 @@ int LoadTAP(const char* fileName)
 			cntBuffer[cntPos]>>=1;
 			cntPos++;
 			cntBuffer[cntPos]=cntBuffer[cntPos-1];
-			printf("Pulse Length : %d\n",cntBuffer[cntPos]);
 			tapePos+=4;
 		}
 		else
@@ -2576,3 +2592,90 @@ void AttachImage(const char* fileName)
 		return;
 }
 
+//////////SID////////////
+
+// voice |           24 bit Oscillator	->	Waveform Generator*4 (saw,triangle,pulse,random) (12bits out)	-> Waveform Selector -> D/A -> Multiplying D/A -> Envelope Generator (do this go here?)
+
+uint32_t	oscillator[3];
+uint32_t	noise[3]={0x7FFFF8,0x7FFFF8,0x7FFFF8};		// 23 bit lfsr
+uint8_t		lastNoiseClock[3];	// 1 bit
+
+uint16_t SID_FormSaw(int voice)
+{
+	return (oscillator[voice]&0xFFF000)>>12;
+}
+
+uint16_t SID_FormTriangle(int voice)
+{
+	uint32_t xor=(oscillator[voice]&0x800000)?0x7FF00:0x000000;
+
+	return ((oscillator[voice]^xor)&0xFFF000)>>11;
+}
+
+uint16_t SID_FormPulse(int voice)
+{
+	// where is comparitor?
+}
+
+uint16_t SID_FormRandom(int voice)
+{
+	uint16_t value;
+
+	if (((oscillator[voice]>>19)^lastNoiseClock[voice])&1)
+	{
+		uint8_t tap1=(noise[voice]&(1<<22))>>22;
+		uint8_t tap2=(noise[voice]&(1<<17))>>17;
+
+		// clock noise shift register
+
+		noise[voice]<<=1;
+		noise[voice]|=tap1^tap2;
+		noise[voice]&=0x7FFFFF;
+
+		lastNoiseClock[voice]=(oscillator[voice]>>19)&1;
+	}
+
+	value = (noise[voice]&(1<<22))>>(22-7);
+	value|= (noise[voice]&(1<<20))>>(20-6);
+	value|= (noise[voice]&(1<<16))>>(16-5);
+	value|= (noise[voice]&(1<<13))>>(13-4);
+	value|= (noise[voice]&(1<<11))>>(11-3);
+	value|= (noise[voice]&(1<<7))>>(7-2);
+	value|= (noise[voice]&(1<<4))>>(4-1);
+	value|= (noise[voice]&(1<<2))>>(2-0);
+
+	return value;
+}
+
+void Reset6581()
+{
+	int a;
+	for (a=0;a<3;a++)
+	{
+		oscillator[a]=0;
+		noise[a]=0x7FFFF8;
+		lastNoiseClock[a]=0;
+	}
+}
+
+void Tick6581()
+{
+	int a;
+
+	for (a=0;a<3;a++)
+	{
+		uint16_t s,t,p,r;
+
+		s=SID_FormSaw(a);
+		t=SID_FormTriangle(a);
+		p=SID_FormPulse(a);
+		r=SID_FormRandom(a);
+
+
+		//TODO - clock oscillator
+		//       merge/select waveforms
+		//       implement 3*ADSR
+		//       implement filter
+	
+	}
+}

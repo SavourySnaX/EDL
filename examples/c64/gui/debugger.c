@@ -149,17 +149,19 @@ void DrawRegister(int chip,uint8_t *table[256],unsigned char* buffer,unsigned in
 	}
 }
 
-void DrawMemoryDisk(unsigned char* buffer,unsigned int width,uint16_t diskBaseAddress,uint8_t (*GetMem)(uint16_t))
+extern uint8_t Ram[0x10000];
+
+void DrawMemory(unsigned char* buffer,unsigned int width,uint16_t baseAddress,uint8_t (*GetMem)(uint16_t))
 {
 	int b;
 	for (b=0;b<31;b++)
 	{
 		int a;
 		unsigned char colR=255,colG=255,colB=255;
-		PrintAt(buffer,width,colR,colG,colB,0,b,"%04X ",diskBaseAddress+b*16);
+		PrintAt(buffer,width,colR,colG,colB,0,b,"%04X ",baseAddress+b*16);
 		for (a=0;a<16;a++)
 		{
-			PrintAt(buffer,width,colR,colG,colB,6+a*3,b,"%02X ",GetMem(diskBaseAddress + b*16+a));
+			PrintAt(buffer,width,colR,colG,colB,6+a*3,b,"%02X ",GetMem(baseAddress + b*16+a));
 		}
 	}
 }
@@ -668,7 +670,7 @@ void DrawVIADisk(unsigned char* buffer,unsigned int width)
 }
 
 #define MAX_CAPTURE		(512)
-#define MAX_PINS		(11)
+#define MAX_PINS		(11-3)
 
 unsigned char lohi[MAX_PINS][MAX_CAPTURE];
 int bufferPosition=0;
@@ -698,10 +700,10 @@ void DrawTiming(unsigned char* buffer,unsigned int width)
 	PrintAt(buffer,width,255,255,255,0,12,"DAT (DISK)");
 	PrintAt(buffer,width,255,255,255,0,15,"ATN (DISK)");
 	PrintAt(buffer,width,255,255,255,0,18,"DISK IN");
-	PrintAt(buffer,width,255,255,255,0,21,"SND 0");
-	PrintAt(buffer,width,255,255,255,0,24,"SND 1");
-	PrintAt(buffer,width,255,255,255,0,27,"SND 2");
-	PrintAt(buffer,width,255,255,255,0,30,"SND 3");
+	PrintAt(buffer,width,255,255,255,0,21,"CAS ");
+//	PrintAt(buffer,width,255,255,255,0,24,"SID 1");
+//	PrintAt(buffer,width,255,255,255,0,27,"SID 2");
+//	PrintAt(buffer,width,255,255,255,0,30,"SID 3");
 
 	pulsepos=bufferPosition<<16;
 	prevpulsepos=bufferPosition<<16;
