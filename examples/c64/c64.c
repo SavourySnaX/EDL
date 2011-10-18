@@ -2021,12 +2021,14 @@ int LoadTAP(const char* fileName)
 	tapeLength|=tapeBuffer[17]<<8;
 	tapeLength|=tapeBuffer[18]<<16;
 	tapeLength|=tapeBuffer[19]<<24;
-	
+
 	if (tapeLength!=length-0x14)
 	{
 		printf("Tape Length Mismatch\n");
-		free(tapeBuffer);
-		return 0;
+		printf("Correcting");
+		tapeLength=length-0x14;
+//		free(tapeBuffer);
+//		return 0;
 	}
 
 	tapePos=0;
