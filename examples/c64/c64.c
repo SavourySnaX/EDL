@@ -1861,30 +1861,42 @@ ALboolean ALFWShutdownOpenAL()
 
 int curPlayBuffer=0;
 
+#define NUM_SRC_BUFFERS		1
 #define BUFFER_LEN		(44100/50)
 
-BUFFER_FORMAT audioBuffer[BUFFER_LEN];
+BUFFER_FORMAT audioBuffer[NUM_SRC_BUFFERS][BUFFER_LEN];
+int audioBufferFull[NUM_SRC_BUFFERS];
+int numBufferFull=0;
+ALuint bufferFree[NUMBUFFERS];
+int numBufferFree=0;
+
+int curAudioBuffer=0;
+int firstUsedBuffer=0;
 int amountAdded=0;
 
 void AudioInitialise()
 {
-	int a=0;
-	for (a=0;a<BUFFER_LEN;a++)
+	int a=0,b;
+	for (b=0;b<NUM_SRC_BUFFERS;b++)
 	{
-		audioBuffer[a]=0;
+		for (a=0;a<BUFFER_LEN;a++)
+		{
+			audioBuffer[b][a]=0;
+		}
+		audioBufferFull[b]=NUM_SRC_BUFFERS;
 	}
 
 	ALFWInitOpenAL();
 
-  /* Generate some AL Buffers for streaming */
+	/* Generate some AL Buffers for streaming */
 	alGenBuffers( NUMBUFFERS, uiBuffers );
 
 	/* Generate a Source to playback the Buffers */
-  alGenSources( 1, &uiSource );
+	alGenSources( 1, &uiSource );
 
 	for (a=0;a<NUMBUFFERS;a++)
 	{
-		alBufferData(uiBuffers[a], AL_FORMAT, audioBuffer, BUFFER_LEN*BUFFER_FORMAT_SIZE, 44100);
+		alBufferData(uiBuffers[a], AL_FORMAT, audioBuffer[0], BUFFER_LEN*BUFFER_FORMAT_SIZE, 44100);
 		alSourceQueueBuffers(uiSource, 1, &uiBuffers[a]);
 	}
 
@@ -1916,39 +1928,66 @@ void UpdateAudio()
 	{
 		tickCnt-=tickRate;
 
-		if (amountAdded!=BUFFER_LEN)
+		if (amountAdded==BUFFER_LEN)
 		{
-			int32_t res=0;
-
-			res+=currentDAC[0];
-			res+=currentDAC[1];
-			res+=currentDAC[2];
-			res+=currentDAC[3];
-			res+=casLevel?1024:-1024;
-
-			audioBuffer[amountAdded]=res>>BUFFER_FORMAT_SHIFT;
-			amountAdded++;
+			audioBufferFull[numBufferFull]=curAudioBuffer;
+			numBufferFull++;
+			curAudioBuffer++;
+			curAudioBuffer%=NUM_SRC_BUFFERS;
+			if (numBufferFull==NUM_SRC_BUFFERS)
+			{
+				printf("Src Buffer Overrun - \n");
+				numBufferFull--;
+			}
+			amountAdded=0;
 		}
+		int32_t res=0;
+#if 0
+		res+=currentDAC[0];
+		res+=currentDAC[1];
+		res+=currentDAC[2];
+		res+=currentDAC[3];
+#endif
+//		res+=casLevel?1024:-1024;
+
+		static int16_t bob=0;
+
+		res+=bob;
+
+		bob++;
+
+		audioBuffer[curAudioBuffer][amountAdded]=res>>BUFFER_FORMAT_SHIFT;
+		amountAdded++;
 	}
 
-	if (amountAdded==BUFFER_LEN)
+	if (numBufferFull)
 	{
-		/* 1 second has passed by */
-
+		int a;
 		ALint processed;
 		ALint state;
-		alGetSourcei(uiSource, AL_SOURCE_STATE, &state);
 		alGetSourcei(uiSource, AL_BUFFERS_PROCESSED, &processed);
-		if (processed>0)
+
+		while (processed>0)
 		{
 			ALuint buffer;
 
 			amountAdded=0;
-			alSourceUnqueueBuffers(uiSource,1, &buffer);
-			alBufferData(buffer, AL_FORMAT, audioBuffer, BUFFER_LEN*BUFFER_FORMAT_SIZE, 44100);
-			alSourceQueueBuffers(uiSource, 1, &buffer);
+			alSourceUnqueueBuffers(uiSource,1, &bufferFree[numBufferFree++]);
+			processed--;
 		}
 
+		while (numBufferFree && numBufferFull)
+		{
+			alBufferData(bufferFree[--numBufferFree], AL_FORMAT, audioBuffer[audioBufferFull[0]], BUFFER_LEN*BUFFER_FORMAT_SIZE, 44100);
+			alSourceQueueBuffers(uiSource, 1, &bufferFree[numBufferFree]);
+			for (a=1;a<numBufferFull;a++)
+			{
+				audioBufferFull[a-1]=audioBufferFull[a];
+			}
+			numBufferFull--;
+		}
+
+		alGetSourcei(uiSource, AL_SOURCE_STATE, &state);
 		if (state!=AL_PLAYING)
 		{
 			alSourcePlay(uiSource);
