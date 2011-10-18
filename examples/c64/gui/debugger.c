@@ -669,15 +669,24 @@ void DrawVIADisk(unsigned char* buffer,unsigned int width)
 
 }
 
-#define MAX_CAPTURE		(512)
-#define MAX_PINS		(11-3)
+#define MAX_CAPTURE		(65536)
+#define MAX_PINS		(8)
+#define MAX_PINS_A		(9)
 
+unsigned char alohi[MAX_PINS_A][MAX_CAPTURE];
 unsigned char lohi[MAX_PINS][MAX_CAPTURE];
+
 int bufferPosition=0;
-int timeStretch=0x10000;
+uint32_t timeStretch=0x10000;
+
 void RecordPin(int pinPos,uint8_t pinVal)
 {
 	lohi[pinPos][bufferPosition]=pinVal&1;
+}
+
+void RecordPinA(int pinPos,uint8_t pinVal)
+{
+	alohi[pinPos][bufferPosition]=pinVal;
 }
 
 void UpdatePinTick()
@@ -762,4 +771,152 @@ void DrawTiming(unsigned char* buffer,unsigned int width)
 	}
 }
 
+uint32_t cols[MAX_PINS_A]={0x00FF0000,0x0000FF00,0x000000FF,0x00880088,0x00888800,0x00008888,0x00FF0088,0x0000FF88,0x000088FF};
+
+int pinOn[MAX_PINS_A]={1,1,1,1,1,1,1,1,1};
+
+void DrawTimingA(unsigned char* buffer,unsigned int width)
+{
+	int a,b,c;
+	int pulsepos;
+	int pulsestart;
+	uint32_t* argb=(uint32_t*)buffer;
+
+	if (pinOn[0])
+	{
+		PrintAt(buffer,width,(cols[0]>>16)&0xFF,(cols[0]>>8)&0xFF,(cols[0]>>0)&0xFF,0,0,"OSC 1");
+	}
+	else
+	{
+		PrintAt(buffer,width,0,0,0,0,0,"    ");
+	}
+	if (pinOn[1])
+	{
+		PrintAt(buffer,width,(cols[1]>>16)&0xFF,(cols[1]>>8)&0xFF,(cols[1]>>0)&0xFF,0,1,"OSC 2");
+	}
+	else
+	{
+		PrintAt(buffer,width,0,0,0,0,1,"    ");
+	}
+	if (pinOn[2])
+	{
+		PrintAt(buffer,width,(cols[2]>>16)&0xFF,(cols[2]>>8)&0xFF,(cols[2]>>0)&0xFF,0,2,"OSC 3");
+	}
+	else
+	{
+		PrintAt(buffer,width,0,0,0,0,2,"    ");
+	}
+	if (pinOn[3])
+	{
+		PrintAt(buffer,width,(cols[3]>>16)&0xFF,(cols[3]>>8)&0xFF,(cols[3]>>0)&0xFF,0,3,"ENV 1");
+	}
+	else
+	{
+		PrintAt(buffer,width,0,0,0,0,3,"    ");
+	}
+	if (pinOn[4])
+	{
+		PrintAt(buffer,width,(cols[4]>>16)&0xFF,(cols[4]>>8)&0xFF,(cols[4]>>0)&0xFF,0,4,"ENV 2");
+	}
+	else
+	{
+		PrintAt(buffer,width,0,0,0,0,4,"    ");
+	}
+	if (pinOn[5])
+	{
+		PrintAt(buffer,width,(cols[5]>>16)&0xFF,(cols[5]>>8)&0xFF,(cols[5]>>0)&0xFF,0,5,"ENV 3");
+	}
+	else
+	{
+		PrintAt(buffer,width,0,0,0,0,5,"    ");
+	}
+	if (pinOn[6])
+	{
+		PrintAt(buffer,width,(cols[6]>>16)&0xFF,(cols[6]>>8)&0xFF,(cols[6]>>0)&0xFF,0,6,"CMB 1");
+	}
+	else
+	{
+		PrintAt(buffer,width,0,0,0,0,6,"    ");
+	}
+	if (pinOn[7])
+	{
+		PrintAt(buffer,width,(cols[7]>>16)&0xFF,(cols[7]>>8)&0xFF,(cols[7]>>0)&0xFF,0,7,"CMB 2");
+	}
+	else
+	{
+		PrintAt(buffer,width,0,0,0,0,7,"    ");
+	}
+	if (pinOn[8])
+	{
+		PrintAt(buffer,width,(cols[8]>>16)&0xFF,(cols[8]>>8)&0xFF,(cols[8]>>0)&0xFF,0,8,"CMB 3");
+	}
+	else
+	{
+		PrintAt(buffer,width,0,0,0,0,8,"    ");
+	}
+
+	pulsepos=(bufferPosition-(512*2-1))<<16;
+	if ((pulsepos>>16)<0)
+	{
+		pulsepos+=MAX_CAPTURE<<16;
+	}
+	pulsestart=pulsepos;
+	
+	// Clear graph space
+	
+	for (b=0;b<512*2;b++)
+	{
+		for (c=12;c<256+12;c++)
+		{
+			argb[80+b+c*width]=0;
+		}
+	}
+
+	uint32_t level;
+	for (a=0;a<MAX_PINS_A;a++)
+	{
+		pulsepos=pulsestart;
+		if (pinOn[a])
+		{
+			for (b=0;b<512*2;b++)
+			{
+				level = 12+ (255-(alohi[a][pulsepos>>16]));
+				argb[80+b+level*width]=cols[a];
+
+				pulsepos+=timeStretch;
+				if ((pulsepos>>16)>=MAX_CAPTURE)
+				{
+					pulsepos=0;
+				}
+			}
+		}
+	}
+}
+
+void UpdateTimingWindow(GLFWwindow window)
+{
+	int a;
+
+	if (CheckKeyWindow(GLFW_KEY_DOWN,window))
+	{
+		if (timeStretch>1)
+			timeStretch>>=1;
+		ClearKey(GLFW_KEY_DOWN);
+	}
+	if (CheckKeyWindow(GLFW_KEY_UP,window))
+	{
+		if (timeStretch<0x80000000)
+			timeStretch<<=1;
+		ClearKey(GLFW_KEY_UP);
+	}
+
+	for (a=0;a<MAX_PINS_A;a++)
+	{
+		if (CheckKeyWindow('0'+a,window))
+		{
+			pinOn[a]^=1;
+			ClearKey('0'+a);
+		}
+	}
+}
 

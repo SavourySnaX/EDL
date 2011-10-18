@@ -22,6 +22,8 @@
 
 #include "gui\debugger.h"
 
+#define DEBUG_WINDOWS	1
+
 int DISK_InitialiseMemory();
 void DISK_Reset();
 uint16_t DISK_Tick(uint8_t* clk,uint8_t* atn,uint8_t* data);
@@ -554,7 +556,7 @@ int g_traceStep=0;
 #define MEMORY_WIDTH	450
 #define	MEMORY_HEIGHT	256
 
-#define TIMING_WIDTH	640
+#define TIMING_WIDTH	640*2
 #define TIMING_HEIGHT	280
 
 #define HEIGHT	(312)
@@ -935,6 +937,7 @@ int main(int argc,char**argv)
 	/// Initialize GLFW 
 	glfwInit(); 
 
+#if DEBUG_WINDOWS
 	// Open memory OpenGL window 
 	if( !(windows[MEMORY_WINDOW]=glfwOpenWindow( MEMORY_WIDTH, MEMORY_HEIGHT, GLFW_WINDOWED,"Memory",NULL)) ) 
 	{ 
@@ -947,7 +950,6 @@ int main(int argc,char**argv)
 	glfwMakeContextCurrent(windows[MEMORY_WINDOW]);
 	setupGL(MEMORY_WINDOW,MEMORY_WIDTH,MEMORY_HEIGHT);
 	
-#if ENABLE_DISK_DEBUG
 	// Open timing OpenGL window 
 	if( !(windows[TIMING_WINDOW]=glfwOpenWindow( TIMING_WIDTH, TIMING_HEIGHT, GLFW_WINDOWED,"Serial Bus",NULL)) ) 
 	{ 
@@ -960,6 +962,7 @@ int main(int argc,char**argv)
 	glfwMakeContextCurrent(windows[TIMING_WINDOW]);
 	setupGL(TIMING_WINDOW,TIMING_WIDTH,TIMING_HEIGHT);
 
+#if ENABLE_DISK_DEBUG
 	// Open via OpenGL window 
 	if( !(windows[VIA_WINDOW_DISK]=glfwOpenWindow( VIA_WIDTH, VIA_HEIGHT, GLFW_WINDOWED,"VIA Chips (disk)",NULL)) ) 
 	{ 
@@ -1020,7 +1023,7 @@ int main(int argc,char**argv)
 
 	glfwMakeContextCurrent(windows[REGISTER_WINDOW]);
 	setupGL(REGISTER_WINDOW,REGISTER_WIDTH,REGISTER_HEIGHT);
-	
+#endif
 	// Open screen OpenGL window 
 	if( !(windows[MAIN_WINDOW]=glfwOpenWindow( WIDTH, HEIGHT, GLFW_WINDOWED,"c64",NULL)) ) 
 	{ 
@@ -1214,18 +1217,18 @@ int main(int argc,char**argv)
             		glfwMakeContextCurrent(windows[MAIN_WINDOW]);
 			ShowScreen(MAIN_WINDOW,WIDTH,HEIGHT);
 			glfwSwapBuffers();
-
+#if DEBUG_WINDOWS
 			glfwMakeContextCurrent(windows[MEMORY_WINDOW]);
 			DrawMemory(videoMemory[MEMORY_WINDOW],MEMORY_WIDTH,g_whereToLook,ReadRam);
 			ShowScreen(MEMORY_WINDOW,MEMORY_WIDTH,MEMORY_HEIGHT);
 			glfwSwapBuffers();
 
-#if ENABLE_DISK_DEBUG
 			glfwMakeContextCurrent(windows[TIMING_WINDOW]);
-			DrawTiming(videoMemory[TIMING_WINDOW],TIMING_WIDTH);
+			DrawTimingA(videoMemory[TIMING_WINDOW],TIMING_WIDTH);
+			UpdateTimingWindow(windows[TIMING_WINDOW]);
 			ShowScreen(TIMING_WINDOW,TIMING_WIDTH,TIMING_HEIGHT);
 			glfwSwapBuffers();
-			
+#if ENABLE_DISK_DEBUG
 			glfwMakeContextCurrent(windows[VIA_WINDOW_DISK]);
 			DrawVIADisk(videoMemory[VIA_WINDOW_DISK],VIA_WIDTH);
 			ShowScreen(VIA_WINDOW_DISK,VIA_WIDTH,VIA_HEIGHT);
@@ -1252,7 +1255,7 @@ int main(int argc,char**argv)
 			DrawRegister6569(videoMemory[REGISTER_6569],REGISTER_WIDTH);
 			ShowScreen(REGISTER_6569,REGISTER_WIDTH,REGISTER_HEIGHT);
 			glfwSwapBuffers();
-			
+#endif
 			glfwPollEvents();
 			
 #if 0
@@ -2593,7 +2596,6 @@ uint8_t SID_6581_Regs[0x20];
 uint32_t	oscillator[3];
 uint32_t	noise[3]={0x7FFFF8,0x7FFFF8,0x7FFFF8};		// 23 bit lfsr
 uint8_t		lastNoiseClock[3];	// 1 bit
-uint8_t		envelopeLevel[3];	// 4 bits
 uint8_t		envelopeCount[3];	// 8 bit
 uint16_t	envelopeClock[3];	// 16 bit
 uint8_t		envelopeState[3];	// 2 bit   0 - Release, 1 - attack, 2 - decay, 3 - sustain
@@ -2605,9 +2607,9 @@ uint16_t SID_FormSaw(int voice)
 
 uint16_t SID_FormTriangle(int voice)
 {
-	uint32_t xor=(oscillator[voice]&0x800000)?0x7FF00:0x000000;
+	uint32_t xor=(oscillator[voice]&0x800000)?0x7FF000:0x000000;
 
-	return (((oscillator[voice]^xor)<<1)&0xFFE000)>>12;
+	return ((oscillator[voice]^xor)&0x7FF000)>>11;
 }
 
 uint16_t SID_FormPulse(int voice)
@@ -2721,7 +2723,6 @@ void Reset6581()
 		oscillator[a]=0;
 		noise[a]=0x7FFFF8;
 		lastNoiseClock[a]=0;
-		envelopeLevel[a]=0;
 		envelopeCount[a]=0;
 		envelopeState[a]=0;
 		envelopeClock[a]=0;
@@ -2765,14 +2766,30 @@ void Tick6581()
 		e=SID_UpdateEnvelope(a);
 
 		int16_t	soundLevel=0;
+		
+		RecordPinA(a+3,e);
 		if (SID_6581_Regs[0x04+a*7]&0x80)
+		{
+			RecordPinA(a,r>>4);
 			soundLevel=0 + ((r*e)>>7);
+		}
 		if (SID_6581_Regs[0x04+a*7]&0x40)
+		{
+			RecordPinA(a,p>>4);
 			soundLevel=0 + ((p*e)>>7);
+		}
 		if (SID_6581_Regs[0x04+a*7]&0x20)
+		{
+			RecordPinA(a,s>>4);
 			soundLevel=0 + ((s*e)>>7);
+		}
 		if (SID_6581_Regs[0x04+a*7]&0x10)
+		{
+			RecordPinA(a,t>>4);
 			soundLevel=0 + ((t*e)>>7);
+		}
+		
+		RecordPinA(a+6,soundLevel>>5);
 
 /*
 		if ((SID_6581_Regs[0x04+a*7]&0x60)!=0 && soundLevel!=0)
@@ -2798,8 +2815,7 @@ void Tick6581()
 		SID_UpdateOscillator(a);
 
 		//       implement filter
-	
 
-		_AudioAddData(a,soundLevel);
+		_AudioAddData(a,soundLevel-4096);
 	}
 }
