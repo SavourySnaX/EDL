@@ -92,8 +92,6 @@ int DISK_InitialiseMemory()
 	memcpy(DiskRomHi,combinedRom+0x2000,0x2000);
 #endif
 #if USE_DRW_IMAGE
-	LoadD64("disks/aufmonty.d64");
-	
 //	if (LoadRom(DiskData,252004,"disks/vicdemos3b.drw"))
 //		return 1;
 #else
@@ -871,7 +869,7 @@ int LoadD64(const char* filename)
 	if (length!=174848)
 	{
 		printf("Not 35 track file .. or maybe has error codes\n");
-		exit(-1);
+		return 0;
 	}
 
 	// For each of the 35 tracks :
@@ -976,4 +974,6 @@ int LoadD64(const char* filename)
 	}
 
 	fclose(input);
+
+	return 1;
 }

@@ -1046,7 +1046,6 @@ int main(int argc,char**argv)
 
 	atStart=glfwGetTime();
 	//////////////////
-	AudioInitialise();
 
 	if (InitialiseMemory())
 		return -1;
@@ -1117,6 +1116,7 @@ int main(int argc,char**argv)
 	CIA1_PinSetPIN_O2(0);
 	CIA1_PinSetPIN__RES(1);
 
+	AudioInitialise();
 	while (!glfwGetKey(windows[MAIN_WINDOW],GLFW_KEY_F12))
 	{
 		static uint16_t lastPC;
@@ -1861,7 +1861,7 @@ ALboolean ALFWShutdownOpenAL()
 
 int curPlayBuffer=0;
 
-#define NUM_SRC_BUFFERS		1
+#define NUM_SRC_BUFFERS		2
 #define BUFFER_LEN		(44100/50)
 
 BUFFER_FORMAT audioBuffer[NUM_SRC_BUFFERS][BUFFER_LEN];
@@ -1942,20 +1942,20 @@ void UpdateAudio()
 			amountAdded=0;
 		}
 		int32_t res=0;
-#if 0
+#if 1
 		res+=currentDAC[0];
 		res+=currentDAC[1];
 		res+=currentDAC[2];
 		res+=currentDAC[3];
 #endif
 //		res+=casLevel?1024:-1024;
+/*
+		static uint16_t bob=0;
 
-		static int16_t bob=0;
+		res=bob&0x8000?bob^0xFFFF:bob;
 
-		res+=bob;
-
-		bob++;
-
+		bob+=1024;
+*/
 		audioBuffer[curAudioBuffer][amountAdded]=res>>BUFFER_FORMAT_SHIFT;
 		amountAdded++;
 	}
@@ -2620,6 +2620,8 @@ void AttachImage(const char* fileName)
 	cntPos=0;
 	cntMax=0;
 
+	if (LoadD64(fileName))
+		return;
 	if (LoadCRT(fileName))
 		return;
 	if (LoadTAP(fileName))
@@ -2751,8 +2753,31 @@ uint8_t SID_UpdateEnvelope(int voice)
 {
 	// update clock.. if timeover : 
 	
-	SID_UpdateEnvelopeCount(voice);
-
+	envelopeClock[voice]++;
+	switch (envelopeState[voice])
+	{
+		case 0:
+			if (envelopeClock[voice]>envelopePeriod[(SID_6581_Regs[0x06+voice*3]&0x0F)])
+			{
+				SID_UpdateEnvelopeCount(voice);
+				envelopeClock[voice]=0;
+			}
+			break;
+		case 1:
+			if (envelopeClock[voice]>envelopePeriod[(SID_6581_Regs[0x05+voice*3]&0xF0)>>4])
+			{
+				SID_UpdateEnvelopeCount(voice);
+				envelopeClock[voice]=0;
+			}
+			break;
+		case 2:
+			if (envelopeClock[voice]>envelopePeriod[(SID_6581_Regs[0x05+voice*3]&0x0F)*3])
+			{
+				SID_UpdateEnvelopeCount(voice);
+				envelopeClock[voice]=0;
+			}
+			break;
+	}
 	return envelopeCount[voice];
 }
 
@@ -2780,11 +2805,15 @@ void SetByte6581(uint16_t regNo,uint8_t byte)
 		{
 			// Start attack phase
 			envelopeState[(regNo-4)/7]=1;
+			envelopeClock[(regNo-4)/7]=0;
+
+//			stopTheClock=1;
 		}
 		if (((SID_6581_Regs[regNo]&0x1)==1) && ((byte&1)==0))
 		{
 			// Start release phase
 			envelopeState[(regNo-4)/7]=0;
+			envelopeClock[(regNo-4)/7]=0;
 		}
 	}
 	SID_6581_Regs[regNo]=byte;
@@ -2830,6 +2859,10 @@ void Tick6581()
 			soundLevel=0 + ((t*e)>>7);
 		}
 		
+		if (soundLevel>8191)
+		{
+			printf("Clipping??? : %d\n",soundLevel);
+		}
 		RecordPinA(a+6,soundLevel>>5);
 
 /*
@@ -2857,6 +2890,6 @@ void Tick6581()
 
 		//       implement filter
 
-		_AudioAddData(a,soundLevel-4096);
+		_AudioAddData(a,soundLevel);
 	}
 }
