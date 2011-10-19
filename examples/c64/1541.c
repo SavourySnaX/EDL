@@ -866,10 +866,14 @@ int LoadD64(const char* filename)
 	fseek(input,0,SEEK_SET);
 
 	// just deal with 35 track files for now
-	if (length!=174848)
+	if (length!=174848 && length!=175531)
 	{
-		printf("Not 35 track file .. or maybe has error codes\n");
+		printf("Not 35 track file\n");
 		return 0;
+	}
+	if (length==175531)
+	{
+		printf("Warning error codes not presently supported - copy protection on disk may fail\n");
 	}
 
 	// For each of the 35 tracks :
