@@ -37,12 +37,12 @@ out/m6522_disk_via1.lls: ../../chips/Accurate/m6522.edl
 out/m6522_disk_via1.lls.s: out/m6522_disk_via1.lls
 	llc out/m6522_disk_via1.lls
 
-out/m6502_main.lls: ../../chips/Accurate/m6502.edl
+out/m6510_main.lls: ../../chips/Accurate/m6510.edl
 	mkdir -p out
-	$(EDL) -O2 -s MAIN_ ../../chips/Accurate/m6502.edl >out/m6502_main.lls
+	$(EDL) -O2 -s MAIN_ ../../chips/Accurate/m6510.edl >out/m6510_main.lls
 
-out/m6502_main.lls.s: out/m6502_main.lls
-	llc out/m6502_main.lls
+out/m6510_main.lls.s: out/m6510_main.lls
+	llc out/m6510_main.lls
 
 out/m6502_disk.lls: ../../chips/Accurate/m6502.edl
 	mkdir -p out
@@ -51,5 +51,5 @@ out/m6502_disk.lls: ../../chips/Accurate/m6502.edl
 out/m6502_disk.lls.s: out/m6502_disk.lls
 	llc out/m6502_disk.lls
 
-c64: c64.c 1541.c gui/debugger.c gui/debugger.h out/m6502_disk.lls.s out/m6502_main.lls.s out/m6526_cia0.lls.s out/m6526_cia1.lls.s out/m6522_disk_via0.lls.s out/m6522_disk_via1.lls.s
-	gcc -O3 -g c64.c gui/debugger.c 1541.c out/m6502_main.lls.s out/m6502_disk.lls.s out/m6526_cia0.lls.s out/m6526_cia1.lls.s out/m6522_disk_via0.lls.s out/m6522_disk_via1.lls.s $(ALLIBS) $(GLLIBS) -o c64.exe
+c64: c64.c 1541.c gui/debugger.c gui/debugger.h out/m6502_disk.lls.s out/m6510_main.lls.s out/m6526_cia0.lls.s out/m6526_cia1.lls.s out/m6522_disk_via0.lls.s out/m6522_disk_via1.lls.s
+	gcc -O3 -g -Wl,-Map,c64.map c64.c gui/debugger.c 1541.c out/m6510_main.lls.s out/m6502_disk.lls.s out/m6526_cia0.lls.s out/m6526_cia1.lls.s out/m6522_disk_via0.lls.s out/m6522_disk_via1.lls.s $(ALLIBS) $(GLLIBS) -o c64.exe

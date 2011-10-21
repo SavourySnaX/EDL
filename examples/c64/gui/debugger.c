@@ -8,10 +8,10 @@
 #include "font.h"
 
 unsigned short breakpoints[2][20]={
-	{0xFF5e,0},
+	{0x810,0},
 	{/*0xE853,*//*0xF556,*/0xfd27,0xfd86,0xfd58,0xF497,0xF3C0,0xF567}
 	};		// first list main cpu, second is disk cpu
-unsigned int numBreakpoints[2]={0,0};
+unsigned int numBreakpoints[2]={1,0};
 
 unsigned short curAddresses[2][16];
 int Offs[2]={0,0};
