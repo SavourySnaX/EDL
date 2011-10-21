@@ -1728,7 +1728,7 @@ void Tick6569_OnePix()
 					break;
 			}
 
-			if ((xCnt+(M6569_Regs[0x11]&7))&1)
+			if ((xCnt+(M6569_Regs[0x16]&7))&1)
 			{
 				pixels<<=2;
 			}
