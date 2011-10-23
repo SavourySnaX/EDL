@@ -1082,13 +1082,14 @@ int main(int argc,char**argv)
 	MAIN_PinSetPIN__RES(1);
 	
 	MAIN_PinSetPIN__IRQ(1);
+	MAIN_PinSetPIN__NMI(1);
 	MAIN_PinSetPIN_P(0xFF);
 	ChangeMemoryMap();
 
 	//dumpInstruction=100000;
 
-	MAIN_PC=GetByte(0xFFFC);
-	MAIN_PC|=GetByte(0xFFFD)<<8;
+//	MAIN_PC=GetByte(0xFFFC);
+//	MAIN_PC|=GetByte(0xFFFD)<<8;
 
 	bp = GetByte(0xc000);
 	bp|=GetByte(0xC001)<<8;
@@ -1180,6 +1181,11 @@ int main(int argc,char**argv)
 				if (doDebug)
 					printf("Storing : %02X @ %04X\n", MAIN_PinGetPIN_DB(),addr);
 				SetByte(addr,MAIN_PinGetPIN_DB());
+				if (w_memMap!=writeIO)				// Make sure io is not gated during write operation when io area is paged out
+				{
+					CIA0_PinSetPIN__CS(1);
+					CIA1_PinSetPIN__CS(1);
+				}
 			}
 
 			CIA0_PinSetPIN_O2(0);
@@ -1188,6 +1194,7 @@ int main(int argc,char**argv)
 			UpdateHardware();
 
 			MAIN_PinSetPIN__IRQ(CIA0_PinGetPIN__IRQ()&M6569_IRQ);
+			MAIN_PinSetPIN__NMI(CIA1_PinGetPIN__IRQ()&(~KeyDown(GLFW_KEY_PAUSE)));
 
 			lastBus=MAIN_PinGetPIN_DB();
 
