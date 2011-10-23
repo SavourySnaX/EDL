@@ -80,11 +80,12 @@ class CompilerOptions
 {
 public:
 
-	CompilerOptions() { symbolModifier=NULL; inputFile=NULL; optimisationLevel=0; }
+	CompilerOptions() { symbolModifier=NULL; inputFile=NULL; optimisationLevel=0; traceUnimplemented=0; }
 	
 	char *symbolModifier;
 	char *inputFile;
 	int optimisationLevel;
+	int traceUnimplemented;
 };
 
 class CodeGenContext 
@@ -107,6 +108,7 @@ public:
     CodeGenContext(CodeGenContext* parent);
     Function *debugTraceString;
     Function *debugTraceChar;
+    Function *debugTraceMissing;
 
     std::string	symbolPrepend;
 
@@ -136,6 +138,8 @@ public:
     std::map<CStatesDeclaration*,StateVariable> m_statesAlt;
     std::map<std::string, CHandlerDeclaration*> m_handlers;
     std::map<std::string, CMappingDeclaration*> m_mappings;
+
+    CompilerOptions opts;
 
     void generateCode(CBlock& root,CompilerOptions &opts);
     GenericValue runCode();

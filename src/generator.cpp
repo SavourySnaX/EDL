@@ -146,12 +146,13 @@ void CodeGenContext::GenerateDisassmTables()
 }
 
 /* Compile the AST into a module */
-void CodeGenContext::generateCode(CBlock& root,CompilerOptions &opts)
+void CodeGenContext::generateCode(CBlock& root,CompilerOptions &options)
 {
 	errorFlagged = false;
 
 	if (isRoot)
 	{
+		opts=options;
 		if (opts.symbolModifier)
 		{
 			symbolPrepend=opts.symbolModifier;
@@ -175,6 +176,10 @@ void CodeGenContext::generateCode(CBlock& root,CompilerOptions &opts)
 		debugTraceChar = Function::Create(/*Type=*/FuncTy_6,/*Linkage=*/GlobalValue::ExternalLinkage,/*Name=*/"putchar", module); // (external, no body)
 		debugTraceChar->setCallingConv(CallingConv::C);
 		debugTraceChar->setAttributes(func_puts_PAL);
+		
+		debugTraceMissing = Function::Create(FuncTy_6,GlobalValue::ExternalLinkage,symbolPrepend+"missing", module); // (external, no body)
+		debugTraceMissing->setCallingConv(CallingConv::C);
+		debugTraceMissing->setAttributes(func_puts_PAL);
 	}
 
 	root.prePass(*this);	/* Run a pre-pass on the code */
@@ -1832,7 +1837,29 @@ Value* CExecute::codeGen(CodeGenContext& context)
 
 		temp.blockEndForExecute = BasicBlock::Create(getGlobalContext(), "execReturn", context.currentBlock()->getParent(), 0);		// Need to cache this block away somewhere
 	
-		temp.switchForExecute = SwitchInst::Create(load,temp.blockEndForExecute,2<<typeForExecute->getBitWidth(),context.currentBlock());
+		if (context.opts.traceUnimplemented)
+		{
+			BasicBlock* tempBlock=BasicBlock::Create(getGlobalContext(),"default",context.currentBlock()->getParent(),0);
+
+			std::vector<Value*> args;
+	
+			// Handle variable promotion
+			const Type* ty = Type::getIntNTy(getGlobalContext(),32);
+			Instruction::CastOps op = CastInst::getCastOpcode(load,false,ty,false);
+
+			Instruction* truncExt = CastInst::Create(op,load,ty,"cast",tempBlock);
+		
+			args.push_back(truncExt);
+			CallInst *call = CallInst::Create(context.debugTraceMissing,args.begin(),args.end(),"DEBUGTRACEMISSING",tempBlock);
+
+			BranchInst::Create(temp.blockEndForExecute,tempBlock);
+			
+			temp.switchForExecute = SwitchInst::Create(load,tempBlock,2<<typeForExecute->getBitWidth(),context.currentBlock());
+		}
+		else
+		{
+			temp.switchForExecute = SwitchInst::Create(load,temp.blockEndForExecute,2<<typeForExecute->getBitWidth(),context.currentBlock());
+		}
 
 		context.setBlock(temp.blockEndForExecute);
 

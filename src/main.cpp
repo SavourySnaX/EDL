@@ -20,6 +20,7 @@ int Usage()
 	cerr << "-O0			disables optimisations" << endl;
 	cerr << "-O1			enables all but experimental optimisations" << endl;
 	cerr << "-O2			enables O1 plus experimental optimisations" << endl;
+	cerr << "-t                     trace on unimplemented instructions" << endl;
 	cerr << "-v			print version" << endl;
 	cerr << "-h --help		print usage" << endl;
 
@@ -47,6 +48,10 @@ int main(int argc, char **argv)
 				}
 				a+=1;
 				continue;
+			}
+			if (strcmp(argv[a],"-t")==0)
+			{
+				opts.traceUnimplemented=1;
 			}
 			if (strcmp(argv[a],"-v")==0)
 			{
