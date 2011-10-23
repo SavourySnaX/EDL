@@ -82,7 +82,7 @@ int LoadRom(unsigned char* rom,unsigned int size,const char* fname)
 	return 0;
 }
 
-#define JIFFY	1 
+#define JIFFY	0 
 int InitialiseMemory()
 {
 	if (LoadRom(CRom,0x1000,"roms/chargen"))
