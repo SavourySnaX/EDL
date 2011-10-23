@@ -75,6 +75,7 @@ int LoadRom(unsigned char* rom,unsigned int size,const char* fname);
 int curTrack=-1;
 void MoveHead(int);
 
+#define JIFFY	0
 #define USE_DRW_IMAGE	1
 int LoadD64(const char* filename);
 
@@ -86,8 +87,13 @@ int DISK_InitialiseMemory()
 	if (LoadRom(DiskRomHi,0x2000,"roms/1540-e000.325303-01.bin"))
 		return 1;
 #else
+#if JIFFY
+	if (LoadRom(combinedRom,0x4000,"roms/JiffyDOS_C1541.bin"))
+		return 1;
+#else
 	if (LoadRom(combinedRom,0x4000,"roms/dos1541"))
 		return 1;
+#endif
 	memcpy(DiskRomLo,combinedRom,0x2000);
 	memcpy(DiskRomHi,combinedRom+0x2000,0x2000);
 #endif

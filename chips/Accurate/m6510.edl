@@ -30,6 +30,8 @@ DECLARE	PC[16] 		ALIAS PCH[8]:PCL[8];
 DECLARE	P[8]		ALIAS n[1]:v[1]:%1:b[1]:d[1]:i[1]:z[1]:c[1];
 										# n negative : v overflow : b break : d decimal : i interrupt disable : z zero : c carry
 
+DECLARE DEBUG_SYNC[1];		# Indicates we are doing the SYNC phase (Instruction Fetch) - helpful for debugging
+
 # INTERNAL REGISTERS - NOT NEEDED OUTSIDE CPU 
 
 DECLARE	INTERNAL AD[16]		ALIAS	ADH[8]:ADL[8];				# Used as temporary store for address generation
@@ -102,6 +104,7 @@ HANDLER		PIN_O1	TRANSITION(0,1)
 		{
 			PIN_A<-PC;
 			PIN_RW<-1;
+			DEBUG_SYNC<-1;
 		}
 
 		STATE IMM			# allows for a 1 byte or 2 byte immediate read
@@ -208,6 +211,7 @@ HANDLER		PIN_O1	TRANSITION(0,1)
 
 HANDLER		PIN_O1	TRANSITION(1,0)
 {
+	DEBUG_SYNC<-0;
 	IF PIN_RW
 	{
 		CALL ReadIO();
@@ -1234,8 +1238,109 @@ INSTRUCTION	"RTS"			%01100000
 	}
 }
 
-INSTRUCTION	"NOP #2"	%10000000			## TEST
+#### Below are implementations for the undocumented instructions - They may not produce exact behaviour in the case of unstable instructions ####
+
+MAPPING opcodeSKW[4]
 {
-	CALL Immediate();
+	%0000	"%$2%$1"	CALL Absolute(0);
+	%0001	"%$2%$1,X"	CALL AbsoluteIndexed(0,X);
+	%0011	"%$2%$1,X"	CALL AbsoluteIndexed(0,X);
+	%0101	"%$2%$1,X"	CALL AbsoluteIndexed(0,X);
+	%0111	"%$2%$1,X"	CALL AbsoluteIndexed(0,X);
+	%1101	"%$2%$1,X"	CALL AbsoluteIndexed(0,X);
+	%1111	"%$2%$1,X"	CALL AbsoluteIndexed(0,X);
+}
+
+INSTRUCTION	"SKW %M0"	opcodeSKW:%1100
+{
+	opcodeSKW;
+}
+
+MAPPING opcodeSKB[8]
+{
+	$04	"%$1"		CALL ZeroPage(0);
+	$14	"%$1,X"		CALL ZeroPageIndexed(0,X);
+	$34	"%$1,X"		CALL ZeroPageIndexed(0,X);
+	$44	"%$1"		CALL ZeroPage(0);
+	$54	"%$1,X"		CALL ZeroPageIndexed(0,X);
+	$64	"%$1"		CALL ZeroPage(0);
+	$74	"%$1,X"		CALL ZeroPageIndexed(0,X);
+	$80	"#%$1"		CALL Immediate();
+	$82	"#%$1"		CALL Immediate();
+	$89	"#%$1"		CALL Immediate();
+	$C2	"#%$1"		CALL Immediate();
+	$D4	"%$1,X"		CALL ZeroPageIndexed(0,X);
+	$E2	"#%$1"		CALL Immediate();
+	$F4	"%$1,X"		CALL ZeroPageIndexed(0,X);
+}
+
+INSTRUCTION	"SKB %M0"	opcodeSKB
+{
+	opcodeSKB;
+}
+
+MAPPING opcodeANC[1]
+{
+	%0	"#%$1"		CALL Immediate();
+	%1	"#%$1"		CALL Immediate();
+}
+
+INSTRUCTION	"AAC %M0"	%00:opcodeANC:%01011
+{
+	IF opcodeANC
+	{
+		AFFECT z AS ZERO, n AS SIGN, c AS SIGN { A & TMP }->A;
+	}
+}
+
+MAPPING opcodeLAX[8]
+{
+	$A7	"%$1"		CALL ZeroPage(0);
+	$B7	"%$1,Y"		CALL ZeroPageIndexed(0,Y);
+	$AF	"%$2%$1"	CALL Absolute(0);
+	$BF	"%$2%$1,Y"	CALL AbsoluteIndexed(0,Y);
+	$A3	"(%$1,X)"	CALL IndirectX(0);
+	$B3	"(%$1),Y"	CALL IndirectY(0);
+}
+
+INSTRUCTION	"LAX %M0"	opcodeLAX
+{
+	IF opcodeLAX
+	{
+		AFFECT z AS ZERO, n AS SIGN { TMP }->A;
+		A->X;
+	}
+}
+
+MAPPING opcodeDCP[8]
+{
+	$C7	"%$1"		CALL ZeroPage(0);
+	$D7	"%$1,X"		CALL ZeroPageIndexed(0,X);
+	$CF	"%$2%$1"	CALL Absolute(0);
+	$DF	"%$2%$1,X"	CALL AbsoluteIndexed(0,X);
+	$DB	"%$2%$1,Y"	CALL AbsoluteIndexed(0,Y);
+	$C3	"(%$1,X)"	CALL IndirectX(0);
+	$D3	"(%$1),Y"	CALL IndirectY(0);
+}
+
+INSTRUCTION	"DCP %M0"	opcodeDCP
+{
+	IF opcodeDCP
+	{
+		MEMSTORE<-TMP;
+		NEXT PIN_O1.MW.MODIFY;
+	}
+
+	IF PIN_O1.MW.MODIFY@
+	{
+		TMP - 1->TMP;
+		AFFECT z AS ZERO, n AS SIGN, c AS NOCARRY(7) { A - TMP};
+		MEMSTORE<-TMP;
+	}
+
+	IF PIN_O1.MW.WRITE@
+	{
+		NEXT PIN_O1.FETCH;
+	}
 }
 

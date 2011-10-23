@@ -8,7 +8,7 @@
 #include "font.h"
 
 unsigned short breakpoints[2][20]={
-	{0x810,0},
+	{0xDA,0},
 	{/*0xE853,*//*0xF556,*/0xfd27,0xfd86,0xfd58,0xF497,0xF3C0,0xF567}
 	};		// first list main cpu, second is disk cpu
 unsigned int numBreakpoints[2]={1,0};
@@ -143,7 +143,7 @@ void DrawRegister(int chip,uint8_t *table[256],unsigned char* buffer,unsigned in
 			PrintAt(buffer,width,colR,colG,colB,8+a*3,8+b,"%02X ",GetMem(address+a));
 		}
 		PrintAt(buffer,width,255,255,255,8+4*3,8+b,"            ");
-		PrintAt(buffer,width,colR,colG,colB,8+4*3,8+b,"%s",retVal);
+		PrintAt(buffer,width,colR,colG,colB,8+3*3,8+b,"%s",retVal);
 
 		address+=opcodeLength;
 	}

@@ -39,14 +39,14 @@ out/m6522_disk_via1.lls.s: out/m6522_disk_via1.lls
 
 out/m6510_main.lls: ../../chips/Accurate/m6510.edl
 	mkdir -p out
-	$(EDL) -O2 -s MAIN_ ../../chips/Accurate/m6510.edl >out/m6510_main.lls
+	$(EDL) -O2 -t -s MAIN_ ../../chips/Accurate/m6510.edl >out/m6510_main.lls
 
 out/m6510_main.lls.s: out/m6510_main.lls
 	llc out/m6510_main.lls
 
 out/m6502_disk.lls: ../../chips/Accurate/m6502.edl
 	mkdir -p out
-	$(EDL) -O2 -s DISK_ ../../chips/Accurate/m6502.edl >out/m6502_disk.lls
+	$(EDL) -O2 -t -s DISK_ ../../chips/Accurate/m6502.edl >out/m6502_disk.lls
 
 out/m6502_disk.lls.s: out/m6502_disk.lls
 	llc out/m6502_disk.lls
