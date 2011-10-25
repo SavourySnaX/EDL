@@ -1306,6 +1306,30 @@ INSTRUCTION	"SKB %M0"	opcodeSKB
 	opcodeSKB;
 }
 
+MAPPING opcodeNOP[8]
+{
+	$1A	""		A->A;
+	$3A	""		A->A;
+	$5A	""		A->A;
+	$7A	""		A->A;
+	$DA	""		A->A;
+	$FA	""		A->A;
+}
+
+INSTRUCTION	"NOP"		opcodeNOP
+{
+	IF PIN_O1.FETCH@
+	{
+		NEXT PIN_O1.DUMMY.T0;
+	}
+
+	IF PIN_O1.DUMMY.T0@
+	{
+		opcodeNOP;
+		NEXT PIN_O1.FETCH;
+	}
+}
+
 MAPPING opcodeANC[1]
 {
 	%0	"#%$1"		CALL Immediate();
@@ -1370,4 +1394,178 @@ INSTRUCTION	"DCP %M0"	opcodeDCP
 		NEXT PIN_O1.FETCH;
 	}
 }
+
+MAPPING opcodeSLO[8]
+{
+	$07	"%$1"		CALL ZeroPage(0);
+	$17	"%$1,X"		CALL ZeroPageIndexed(0,X);
+	$0F	"%$2%$1"	CALL Absolute(0);
+	$1F	"%$2%$1,X"	CALL AbsoluteIndexed(0,X);
+	$1B	"%$2%$1,Y"	CALL AbsoluteIndexed(0,Y);
+	$03	"(%$1,X)"	CALL IndirectX(0);
+	$13	"(%$1),Y"	CALL IndirectY(0);
+}
+#
+#MAPPING operationSLO[3]
+#{
+#	%000	"ASL"	AFFECT z AS ZERO, n AS SIGN { ROL(TMP,c,0,1) }->TMP;
+#	%001	"ROL"	AFFECT z AS ZERO, n AS SIGN { ROL(TMP,c,c,1) }->TMP;
+#	%010	"LSR"	AFFECT z AS ZERO, n AS SIGN { ROR(TMP,c,0,1) }->TMP;
+#	%011	"ROR"	AFFECT z AS ZERO, n AS SIGN { ROR(TMP,c,c,1) }->TMP;
+##	%100	"STX"	;		# Handled seperately
+##	%101	"LDX"	;		# Handled seperately
+#	%110	"DEC"	AFFECT z AS ZERO, n AS SIGN { TMP - 1}->TMP;
+#	%111	"INC"	AFFECT z AS ZERO, n AS SIGN { TMP + 1}->TMP;
+#}
+#
+INSTRUCTION	"SLO %M0"	opcodeSLO
+{
+	IF opcodeSLO
+	{
+		MEMSTORE<-TMP;
+		NEXT PIN_O1.MW.MODIFY;
+	}
+
+	IF PIN_O1.MW.MODIFY@
+	{
+		AFFECT z AS ZERO, n AS SIGN { ROL(TMP,c,0,1) }->TMP;
+		AFFECT z AS ZERO, n AS SIGN { A | TMP }->A;
+		MEMSTORE<-TMP;
+	}
+
+	IF PIN_O1.MW.WRITE@
+	{
+		NEXT PIN_O1.FETCH;
+	}
+}
+
+MAPPING opcodeRLA[8]
+{
+	$27	"%$1"		CALL ZeroPage(0);
+	$37	"%$1,X"		CALL ZeroPageIndexed(0,X);
+	$2F	"%$2%$1"	CALL Absolute(0);
+	$3F	"%$2%$1,X"	CALL AbsoluteIndexed(0,X);
+	$3B	"%$2%$1,Y"	CALL AbsoluteIndexed(0,Y);
+	$23	"(%$1,X)"	CALL IndirectX(0);
+	$33	"(%$1),Y"	CALL IndirectY(0);
+}
+
+INSTRUCTION	"RLA %M0"	opcodeRLA
+{
+	IF opcodeRLA
+	{
+		MEMSTORE<-TMP;
+		NEXT PIN_O1.MW.MODIFY;
+	}
+
+	IF PIN_O1.MW.MODIFY@
+	{
+		AFFECT z AS ZERO, n AS SIGN { ROL(TMP,c,c,1) }->TMP;
+		AFFECT z AS ZERO, n AS SIGN { A & TMP }->A;
+		MEMSTORE<-TMP;
+	}
+
+	IF PIN_O1.MW.WRITE@
+	{
+		NEXT PIN_O1.FETCH;
+	}
+}
+
+MAPPING opcodeSRE[8]
+{
+	$47	"%$1"		CALL ZeroPage(0);
+	$57	"%$1,X"		CALL ZeroPageIndexed(0,X);
+	$4F	"%$2%$1"	CALL Absolute(0);
+	$5F	"%$2%$1,X"	CALL AbsoluteIndexed(0,X);
+	$5B	"%$2%$1,Y"	CALL AbsoluteIndexed(0,Y);
+	$43	"(%$1,X)"	CALL IndirectX(0);
+	$53	"(%$1),Y"	CALL IndirectY(0);
+}
+
+INSTRUCTION	"SRE %M0"	opcodeSRE
+{
+	IF opcodeSRE
+	{
+		MEMSTORE<-TMP;
+		NEXT PIN_O1.MW.MODIFY;
+	}
+
+	IF PIN_O1.MW.MODIFY@
+	{
+		AFFECT z AS ZERO, n AS SIGN { ROR(TMP,c,0,1) }->TMP;
+		AFFECT z AS ZERO, n AS SIGN { A ^ TMP }->A;
+		MEMSTORE<-TMP;
+	}
+
+	IF PIN_O1.MW.WRITE@
+	{
+		NEXT PIN_O1.FETCH;
+	}
+}
+
+MAPPING opcodeRRA[8]
+{
+	$67	"%$1"		CALL ZeroPage(0);
+	$77	"%$1,X"		CALL ZeroPageIndexed(0,X);
+	$6F	"%$2%$1"	CALL Absolute(0);
+	$7F	"%$2%$1,X"	CALL AbsoluteIndexed(0,X);
+	$7B	"%$2%$1,Y"	CALL AbsoluteIndexed(0,Y);
+	$63	"(%$1,X)"	CALL IndirectX(0);
+	$73	"(%$1),Y"	CALL IndirectY(0);
+}
+
+INSTRUCTION	"RRA %M0"	opcodeRRA
+{
+	IF opcodeRRA
+	{
+		MEMSTORE<-TMP;
+		NEXT PIN_O1.MW.MODIFY;
+	}
+
+	IF PIN_O1.MW.MODIFY@
+	{
+		AFFECT z AS ZERO, n AS SIGN { ROR(TMP,c,c,1) }->TMP;
+		CALL ADC(A,TMP)->A;
+		MEMSTORE<-TMP;
+	}
+
+	IF PIN_O1.MW.WRITE@
+	{
+		NEXT PIN_O1.FETCH;
+	}
+}
+
+MAPPING opcodeISC[8]
+{
+	$E7	"%$1"		CALL ZeroPage(0);
+	$F7	"%$1,X"		CALL ZeroPageIndexed(0,X);
+	$EF	"%$2%$1"	CALL Absolute(0);
+	$FF	"%$2%$1,X"	CALL AbsoluteIndexed(0,X);
+	$FB	"%$2%$1,Y"	CALL AbsoluteIndexed(0,Y);
+	$E3	"(%$1,X)"	CALL IndirectX(0);
+	$F3	"(%$1),Y"	CALL IndirectY(0);
+}
+
+INSTRUCTION	"ISC %M0"	opcodeISC
+{
+	IF opcodeISC
+	{
+		MEMSTORE<-TMP;
+		NEXT PIN_O1.MW.MODIFY;
+	}
+
+	IF PIN_O1.MW.MODIFY@
+	{
+		AFFECT z AS ZERO, n AS SIGN { TMP + 1}->TMP;
+		CALL SBC(A,TMP)->A;
+		MEMSTORE<-TMP;
+	}
+
+	IF PIN_O1.MW.WRITE@
+	{
+		NEXT PIN_O1.FETCH;
+	}
+}
+
+
 
