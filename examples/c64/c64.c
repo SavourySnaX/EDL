@@ -1371,11 +1371,21 @@ uint32_t RASTER_CMP=0;
 
 uint8_t GetByte6569(int regNo)
 {
+	uint8_t value=0xFF;
+
 	if (regNo<0x2F)
 	{
-		return M6569_Regs[regNo];
+		value=M6569_Regs[regNo];
 	}
-	return 0xFF;
+	if (regNo==0x1E)
+	{
+		M6569_Regs[0x1E]=0;
+	}
+	if (regNo==0x1F)
+	{
+		M6569_Regs[0x1F]=0;
+	}
+	return value;
 }
 
 void SetByte6569(int regNo,uint8_t byte)
@@ -1395,6 +1405,10 @@ void SetByte6569(int regNo,uint8_t byte)
 			byte&=0x7F;
 			byte|=M6569_Regs[0x11]&0x80;
 		}
+		if (regNo==0x1E)
+			return;
+		if (regNo==0x1F)
+			return;
 		if (regNo==0x19)
 		{
 			byte&=0x7F;
@@ -1495,7 +1509,7 @@ void Tick6569()		// Needs to do 8 pixels - or 4 if ticked properly - ie once per
 	}
 	M6569_IRQ=1;
 
-	if ((M6569_Regs[0x19] & M6569_Regs[0x1A])&0x01)
+	if ((M6569_Regs[0x19] & M6569_Regs[0x1A])&0x07)
 	{
 		M6569_IRQ=0;
 	}
@@ -1674,6 +1688,8 @@ void Tick6569()		// Needs to do 8 pixels - or 4 if ticked properly - ie once per
 
 }
 
+uint32_t miniZBuffer[10];
+
 void Tick6569_OnePix()
 {
 	uint32_t* outputTexture = (uint32_t*)videoMemory[MAIN_WINDOW];
@@ -1684,7 +1700,6 @@ void Tick6569_OnePix()
 	int MC=0;
 	uint32_t paperCol=cTable[M6569_Regs[0x21]&0xF];
 	int a;
-
 
 	if (M6569_Regs[0x16]&0x10)
 	{
@@ -1731,16 +1746,16 @@ void Tick6569_OnePix()
 			switch(pixels&0xC0)
 			{
 				case 0x00:
-					outputTexture[xCnt + ((RASTER_CNT)*WIDTH)]=paperCol;
+					miniZBuffer[8]=(paperCol&0x00FFFFFF)|0x00000000;
 					break;
 				case 0x40:
-					outputTexture[xCnt + ((RASTER_CNT)*WIDTH)]=inkCol1;
+					miniZBuffer[8]=(inkCol1&0x00FFFFFF)|0x00000000;
 					break;
 				case 0x80:
-					outputTexture[xCnt + ((RASTER_CNT)*WIDTH)]=inkCol2;
+					miniZBuffer[8]=(inkCol2&0x00FFFFFF)|0x10000000;
 					break;
 				case 0xC0:
-					outputTexture[xCnt + ((RASTER_CNT)*WIDTH)]=inkCol;
+					miniZBuffer[8]=(inkCol&0x00FFFFFF)|0x10000000;
 					break;
 			}
 
@@ -1753,11 +1768,11 @@ void Tick6569_OnePix()
 		{
 			if (pixels&0x80)
 			{
-				outputTexture[xCnt + ((RASTER_CNT)*WIDTH)]=inkCol;
+				miniZBuffer[8]=(inkCol&0x00FFFFFF)|0x10000000;
 			}
 			else
 			{
-				outputTexture[xCnt + ((RASTER_CNT)*WIDTH)]=paperCol;
+				miniZBuffer[8]=(paperCol&0x00FFFFFF)|0x00000000;
 			}
 			pixels<<=1;
 		}
@@ -1779,15 +1794,16 @@ void Tick6569_OnePix()
 					switch(spData[a]&0xC00000)
 					{
 						case 0x000000:
+							miniZBuffer[a]=0x00000000;
 							break;
 						case 0x400000:
-							outputTexture[xCnt + ((RASTER_CNT)*WIDTH)]=cTable[M6569_Regs[0x25]&0x0F];
+							miniZBuffer[a]=(cTable[M6569_Regs[0x25]&0x0F]&0x00FFFFFF)|0x01000000;
 							break;
 						case 0x800000:
-							outputTexture[xCnt + ((RASTER_CNT)*WIDTH)]=cTable[M6569_Regs[0x27+a]&0x0F];
+							miniZBuffer[a]=(cTable[M6569_Regs[0x27]&0x0F]&0x00FFFFFF)|0x10000000;
 							break;
 						case 0xC00000:
-							outputTexture[xCnt + ((RASTER_CNT)*WIDTH)]=cTable[M6569_Regs[0x26]&0x0F];
+							miniZBuffer[a]=(cTable[M6569_Regs[0x26]&0x0F]&0x00FFFFFF)|0x10000000;
 							break;
 					}
 
@@ -1801,7 +1817,11 @@ void Tick6569_OnePix()
 				{
 					if (spData[a]&0x800000)
 					{
-						outputTexture[xCnt + ((RASTER_CNT)*WIDTH)]=cTable[M6569_Regs[0x27+a]&0x0F];
+						miniZBuffer[a]=(cTable[M6569_Regs[0x27]&0x0F]&0x00FFFFFF)|0x10000000;
+					}
+					else
+					{
+						miniZBuffer[a]=0x00000000;
 					}
 					spData[a]&=0x7FFFFF;
 					spData[a]<<=1;
@@ -1809,6 +1829,48 @@ void Tick6569_OnePix()
 			}	
 		}
 
+		uint8_t spMask=0;
+		uint8_t bkMask=0;
+		uint8_t spCnt=0;
+		int outDone=0;
+		for (a=0;a<8;a++)
+		{
+			if (miniZBuffer[a]&0x10000000)
+			{
+				spMask|=1<<a;
+				spCnt++;
+			}
+			if ((miniZBuffer[a]&0x10000000) && (miniZBuffer[8]&0x10000000))
+			{
+				bkMask|=1<<a;
+			}
+
+			if ((!outDone) && (miniZBuffer[a]&0xFF000000))
+			{
+				outputTexture[xCnt + ((RASTER_CNT)*WIDTH)]=miniZBuffer[a]&0x00FFFFFF;
+				outDone=1;
+			}
+		}
+			
+		if (!outDone)
+		{
+			outputTexture[xCnt + ((RASTER_CNT)*WIDTH)]=miniZBuffer[8]&0x00FFFFFF;
+		}
+
+		if (spCnt>1)
+		{
+			M6569_Regs[0x1E]|=spMask;
+			M6569_Regs[0x19]=0x84;	// IRQ + sprite
+		}
+/*		else
+		{
+			M6569_Regs[0x1E]=0;
+		}*/
+		M6569_Regs[0x1F]|=bkMask;
+		if (bkMask)
+		{
+			M6569_Regs[0x19]=0x82;	// IRQ + background
+		}
 	}
 }
 
