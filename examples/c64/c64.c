@@ -934,6 +934,7 @@ void UpdateHardware()
 }
 		
 int stopTheClock=0;
+int cImage=1;
 
 uint32_t MAIN_missing(uint32_t opcode)
 {
@@ -1073,7 +1074,7 @@ int main(int argc,char**argv)
 	if (DISK_InitialiseMemory())
 		return -1;
 
-	if (argc==2)
+	if (argc>=2)
 	{
 		AttachImage(argv[1]);
 	}
@@ -1303,6 +1304,15 @@ int main(int argc,char**argv)
 			{
 				ClearKey(GLFW_KEY_KP_MULTIPLY);
 				g_traceStep=1;
+			}
+			if (CheckKey(GLFW_KEY_KP_ENTER))
+			{
+				ClearKey(GLFW_KEY_KP_ENTER);
+				cImage++;
+				if (cImage>=argc)
+					cImage=1;
+				printf("Attached : %s\n",argv[cImage]);
+				AttachImage(argv[cImage]);
 			}
 			
 			now=glfwGetTime();

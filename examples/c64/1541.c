@@ -866,6 +866,8 @@ int LoadD64(const char* filename)
 	int length;
 	FILE *input = fopen(filename,"rb");
 
+	diskBuilderPos=0;
+
 	fseek(input,0,SEEK_END);
 	length = ftell(input);
 
