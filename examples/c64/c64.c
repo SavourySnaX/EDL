@@ -1128,13 +1128,18 @@ int main(int argc,char**argv)
 	AudioInitialise();
 	while (!glfwGetKey(windows[MAIN_WINDOW],GLFW_KEY_F12))
 	{
+		static int normalSpeed=1;
 		static uint16_t lastPC;
 		static uint8_t lastPb0=0xff;
 		uint16_t addr; 
 		
 		if ((!stopTheClock) || g_traceStep || g_instructionStep)
 		{
-			Tick6569();
+			if (normalSpeed)
+			{
+				Tick6569();
+			}
+
 			MAIN_PinSetPIN_O1(1);
 			addr = MAIN_PinGetPIN_A();
 
@@ -1200,17 +1205,19 @@ int main(int argc,char**argv)
 			lastBus=MAIN_PinGetPIN_DB();
 
 			MAIN_PinSetPIN_O1(0);
-			Tick6569();
-			Tick6581();
-			UpdateAudio();
 
+			if (normalSpeed)
+			{
+				Tick6569();
+				Tick6581();
+				UpdateAudio();
+			}
 
 			pixelClock++;
 		}
 
 		if (pixelClock>=(63*312) || stopTheClock)
 		{
-			static int normalSpeed=1;
 
 			if (pixelClock>=(63*312))
 			{
