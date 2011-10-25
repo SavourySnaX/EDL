@@ -1140,7 +1140,7 @@ INSTRUCTION	"BRK"		%00000000
 
 	IF PIN_O1.PH.T2@
 	{
-		IF irq
+		IF ~nmi
 		{
 			$FFFE->IA;
 		}
