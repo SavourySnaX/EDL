@@ -1385,7 +1385,7 @@ INSTRUCTION	"DCP %M0"	opcodeDCP
 	IF PIN_O1.MW.MODIFY@
 	{
 		TMP - 1->TMP;
-		AFFECT z AS ZERO, n AS SIGN, c AS NOCARRY(7) { A - TMP};
+		AFFECT z AS ZERO, n AS SIGN, c AS NOCARRY(7) { A - TMP };
 		MEMSTORE<-TMP;
 	}
 
@@ -1564,6 +1564,22 @@ INSTRUCTION	"ISC %M0"	opcodeISC
 	IF PIN_O1.MW.WRITE@
 	{
 		NEXT PIN_O1.FETCH;
+	}
+}
+
+MAPPING opcodeAAX[8]
+{
+	$87	"%$1"		CALL ZeroPage(1);
+	$97	"%$1,Y"		CALL ZeroPageIndexed(1,Y);
+	$83	"(%$1,X)"	CALL IndirectX(1);
+	$8F	"%$2%$1"	CALL Absolute(1);
+}
+
+INSTRUCTION	"AAX %M0"	opcodeAAX
+{
+	IF opcodeAAX
+	{
+		MEMSTORE<- A & X;
 	}
 }
 
