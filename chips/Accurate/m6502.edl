@@ -40,6 +40,8 @@ DECLARE INTERNAL BA[16]		ALIAS	BAH[8]:BAL[8];				# Used as temporary store for b
 DECLARE	INTERNAL IA[16]		ALIAS	IAH[8]:IAL[8];
 DECLARE INTERNAL IAc[1];
 DECLARE INTERNAL irq[1];
+DECLARE INTERNAL nmi[1];
+DECLARE INTERNAL res[1];
 
 DECLARE INTERNAL MEMSTORE[8];
 DECLARE INTERNAL IR[8];
@@ -50,6 +52,20 @@ DECLARE TMP[8];
 # For now we don't implement the internal clock generator - we rely on a single phase clock on O0 
 #
 #
+
+HANDLER PIN__RES	ALWAYS
+{
+	IF ~PIN__RES
+	{
+		nmi<-0;
+		res<-1;
+	}
+}
+
+HANDLER		PIN__NMI	TRANSITION(1,0)
+{
+	nmi<-1;
+}
 
 HANDLER		PIN_O0	TRANSITION(0,1)
 {
@@ -174,7 +190,7 @@ HANDLER		PIN_O0	TRANSITION(0,1)
 
 HANDLER		PIN_O0	TRANSITION(1,0)
 {
-	IF PIN_O0.FETCH@ & (PIN__IRQ | i)
+	IF PIN_O0.FETCH@ & (PIN__IRQ | i) & (~(nmi|res))
 	{
 		PIN_DB->IR;
 		PC<-PC+1;
@@ -182,6 +198,10 @@ HANDLER		PIN_O0	TRANSITION(1,0)
 	IF PIN_O0.FETCH@ & (~PIN__IRQ) & (~i)
 	{
 		irq<-1;
+		$00->IR;
+	}
+	IF PIN_O0.FETCH@ & (nmi|res)
+	{
 		$00->IR;
 	}
 
@@ -1052,7 +1072,7 @@ INSTRUCTION	"BRK"		%00000000
 	IF PIN_O0.FETCH@
 	{
 		NEXT PIN_O0.IMM.LO;
-		IF irq
+		IF irq | nmi | res
 		{
 			NEXT PIN_O0.DUMMY.T0;
 		}
@@ -1062,6 +1082,11 @@ INSTRUCTION	"BRK"		%00000000
 	{
 		MEMSTORE<-PCH;
 		NEXT PIN_O0.PH.T0;
+		IF res
+		{
+			$FFFC->IA;
+			NEXT PIN_O0.IA.T0;
+		}
 	}
 
 	IF PIN_O0.PH.T0@
@@ -1071,12 +1096,12 @@ INSTRUCTION	"BRK"		%00000000
 
 	IF PIN_O0.PH.T1@
 	{
-		IF irq
+		IF irq | nmi
 		{
 			b<-0;
 			MEMSTORE<-P;
 		}
-		IF ~irq
+		IF (~irq) & (~nmi)
 		{
 			b<-1;
 			MEMSTORE<-P;
@@ -1085,7 +1110,14 @@ INSTRUCTION	"BRK"		%00000000
 
 	IF PIN_O0.PH.T2@
 	{
-		$FFFE->IA;
+		IF ~nmi
+		{
+			$FFFE->IA;
+		}
+		IF nmi
+		{
+			$FFFA->IA;
+		}
 		NEXT PIN_O0.IA.T0;
 	}
 
@@ -1101,6 +1133,8 @@ INSTRUCTION	"BRK"		%00000000
 		PC<-AD;
 		i<-1;
 		irq<-0;
+		nmi<-0;
+		res<-0;
 		NEXT PIN_O0.FETCH;
 	}
 }
