@@ -1583,5 +1583,129 @@ INSTRUCTION	"AAX %M0"	opcodeAAX
 	}
 }
 
+INSTRUCTION	"ASR #%$1"	$4B
+{
+	IF CALL Immediate()
+	{
+		AFFECT z AS ZERO, n AS SIGN { A & TMP }->A;
+		AFFECT z AS ZERO, n AS SIGN { ROR(A,c,0,1) }->A;
+	}
+}
 
+INSTRUCTION	"ARR #%$1"	$6B
+{
+	IF CALL Immediate()
+	{
+		AFFECT z AS ZERO, n AS SIGN { A & TMP }->TMP;
+		AFFECT z AS ZERO, n AS SIGN { ROR(TMP,c,c,1) }->A;
+
+		IF d
+		{
+			DECLARE ALUTmp[8] ALIAS ALUH[4]:ALUL[4];
+
+			v<-(A[6..6])^(TMP[6..6]);
+			ALUTmp<-A;
+
+			IF (((TMP[0..3]) + (TMP[0..0])) >5)
+			{
+				ALUL+6->ALUL;
+			}
+			c<-0;
+			IF (((TMP[4..7]) + (TMP[4..4])) >5)
+			{
+				ALUH+6->ALUH;
+				c<-1;
+			}
+			A<-ALUTmp;
+		}
+		IF ~d
+		{
+			c<-(A[6..6])^0;
+			v<-(A[6..6])^(A[5..5]);
+		}
+	}
+}
+
+INSTRUCTION	"XAA #%$1"	$8B
+{
+	IF CALL Immediate()
+	{
+		AFFECT z AS ZERO, n AS SIGN { (A | $EE) & X & TMP }->A;
+	}
+}
+
+INSTRUCTION	"ATX #%$1"	$AB
+{
+	IF CALL Immediate()
+	{
+		AFFECT z AS ZERO, n AS SIGN { (A | $EE) & TMP }->A;
+		A->X;
+	}
+}
+
+INSTRUCTION	"AXS #%$1"	$CB
+{
+	IF CALL Immediate()
+	{
+		AFFECT z AS ZERO, n AS SIGN { A & X }->X;
+		AFFECT z AS ZERO, n AS SIGN, c AS NOCARRY(7) { X - TMP }->X;
+	}
+}
+
+MAPPING opcodeAXA[8]
+{
+	$9F	"%$2%$1,Y"	CALL AbsoluteIndexed(1,Y);
+	$93	"(%$1),Y"	CALL IndirectY(1);
+}
+
+INSTRUCTION	"AXA %M0"	opcodeAXA
+{
+	IF opcodeAXA
+	{
+		MEMSTORE<- A & X & ((ADH-IAc)+1);		# ADH will have been corrected at this point, but the value stored is +1 from uncorrected ADH
+	}
+}
+
+INSTRUCTION	"SXA %$2%$1,Y"	$9E
+{
+	IF CALL AbsoluteIndexed(1,Y)
+	{
+		MEMSTORE<- X & ((ADH-IAc)+1);		# ADH will have been corrected at this point, but the value stored is +1 from uncorrected ADH
+	}
+}
+
+INSTRUCTION	"SYA %$2%$1,X"	$9C
+{
+	IF CALL AbsoluteIndexed(1,X)
+	{
+		MEMSTORE<- Y & ((ADH-IAc)+1);		# ADH will have been corrected at this point, but the value stored is +1 from uncorrected ADH
+	}
+}
+
+INSTRUCTION	"XAS %$2%$1,Y"	$9B
+{
+	IF CALL AbsoluteIndexed(1,Y)
+	{
+		S <- X & A;
+		MEMSTORE<- S & ((ADH-IAc)+1);		# ADH will have been corrected at this point, but the value stored is +1 from uncorrected ADH
+	}
+}
+
+INSTRUCTION	"LAR %$2%$1,Y"	$BB
+{
+	IF CALL AbsoluteIndexed(0,Y)
+	{
+		AFFECT z AS ZERO, n AS SIGN { TMP & S } -> S;
+		S->A;
+		S->X;
+	}
+}
+
+INSTRUCTION	"SBC #%$1"	$EB
+{
+	IF CALL Immediate()
+	{
+		CALL SBC(A,TMP)->A;
+	}
+}
 
