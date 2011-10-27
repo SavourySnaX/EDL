@@ -23,6 +23,7 @@
 #include "gui\debugger.h"
 
 #define DEBUG_WINDOWS	1
+#define JIFFY	0 
 
 int DISK_InitialiseMemory();
 void DISK_Reset();
@@ -82,7 +83,6 @@ int LoadRom(unsigned char* rom,unsigned int size,const char* fname)
 	return 0;
 }
 
-#define JIFFY	0 
 int InitialiseMemory()
 {
 	if (LoadRom(CRom,0x1000,"roms/chargen"))
@@ -1149,6 +1149,10 @@ int main(int argc,char**argv)
 /* - No sync signal is generated externally by 6510 - so the cpu emulation updates the above to aid in CPU tracing */
 				lastPC=addr;
 
+/*				if (addr==0xFFFF)
+				{
+					stopTheClock=1;
+				}*/
 				if (isBreakpoint(0,lastPC))
 				{
 					stopTheClock=1;

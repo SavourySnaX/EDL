@@ -109,6 +109,9 @@ extern uint16_t	DISK_SP;
 extern uint16_t	DISK_PC;
 extern uint8_t	DISK_P;
 
+extern uint8_t	MAIN_DDR;
+extern uint8_t	MAIN_PCR;
+
 void DrawRegister(int chip,uint8_t *table[256],unsigned char* buffer,unsigned int width,uint16_t address,uint8_t (*GetMem)(uint16_t),const char *(*decode)(uint8_t *table[256],unsigned int address,int *count,int realLength))
 {
 	unsigned int b;
@@ -151,6 +154,7 @@ void DrawRegister(int chip,uint8_t *table[256],unsigned char* buffer,unsigned in
 	if (chip==0)
 	{
 		PrintAt(buffer,width,255,255,255,0,25,"%02X %02X",GetMem(0),GetMem(1));
+		PrintAt(buffer,width,255,255,255,0,26,"%02X %02X",MAIN_DDR,MAIN_PCR);
 	}
 }
 
