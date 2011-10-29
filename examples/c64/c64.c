@@ -1503,6 +1503,7 @@ uint32_t spData[8];
 uint16_t MCBase[8];
 uint16_t MC[8];
 uint8_t  spDma[8]={0,0,0,0,0,0,0,0};
+uint8_t	 spStart[8]={0,0,0,0,0,0,0,0};
 
 void Tick6569_OnePix();
 
@@ -1600,7 +1601,7 @@ void Tick6569()		// Needs to do 8 pixels - or 4 if ticked properly - ie once per
 	
 		if (RASTER_CMP==RASTER_CNT)
 		{
-			M6569_Regs[0x19]=0x81;	// IRQ + RASTER
+			M6569_Regs[0x19]|=0x81;	// IRQ + RASTER
 		}
 
 		if (RASTER_CNT==ybCmp)
@@ -1746,11 +1747,11 @@ void Tick6569_OnePix()
 		}
 	}
 
-	if (mBorder || vBorder)
+/*	if (mBorder || vBorder)
 	{
 		outputTexture[xCnt + ((RASTER_CNT)*WIDTH)]=borderCol;
 	}
-	else
+	else*/
 	{
 		if (MC)
 		{
@@ -1787,7 +1788,8 @@ void Tick6569_OnePix()
 			}
 			pixels<<=1;
 		}
-
+	}
+	{
 		for (a=0;a<8;a++)
 		{
 			uint16_t spriteX=M6569_Regs[0x00+a*2];
@@ -1796,7 +1798,12 @@ void Tick6569_OnePix()
 			{
 				spriteX|=0x100;
 			}
-			if (xCnt>=spriteX && M6569_Regs[0x15]&(1<<a))
+			if (xCnt==spriteX && M6569_Regs[0x15]&(1<<a))
+			{
+				spStart[a]=23;
+			}
+
+			if (spStart[a])
 			{
 				if (M6569_Regs[0x1C]&(1<<a))
 				{
@@ -1822,6 +1829,7 @@ void Tick6569_OnePix()
 					{
 						spData[a]&=0x3FFFFF;
 						spData[a]<<=2;
+						spStart[a]--;
 					}
 				}
 				else
@@ -1836,7 +1844,12 @@ void Tick6569_OnePix()
 					}
 					spData[a]&=0x7FFFFF;
 					spData[a]<<=1;
+					spStart[a]--;
 				}
+			}
+			else
+			{
+				miniZBuffer[a]=0;
 			}	
 		}
 
@@ -1851,7 +1864,7 @@ void Tick6569_OnePix()
 				spMask|=1<<a;
 				spCnt++;
 			}
-			if ((miniZBuffer[a]&0x10000000) && (miniZBuffer[8]&0x10000000))
+			if ((miniZBuffer[a]&0x10000000) && (miniZBuffer[8]&0x10000000) && !mBorder && !vBorder)
 			{
 				bkMask|=1<<a;
 			}
@@ -1867,21 +1880,33 @@ void Tick6569_OnePix()
 		{
 			outputTexture[xCnt + ((RASTER_CNT)*WIDTH)]=miniZBuffer[8]&0x00FFFFFF;
 		}
+		if (mBorder || vBorder)
+		{
+			outputTexture[xCnt + ((RASTER_CNT)*WIDTH)]=borderCol;
+		}
 
+#if 1
 		if (spCnt>1)
 		{
-			M6569_Regs[0x1E]|=spMask;
-			M6569_Regs[0x19]=0x84;	// IRQ + sprite
+			if (M6569_Regs[0x1F]==0)
+			{
+				M6569_Regs[0x1E]|=spMask;
+				M6569_Regs[0x19]|=0x84;	// IRQ + sprite
+			}
 		}
 /*		else
 		{
 			M6569_Regs[0x1E]=0;
 		}*/
-		M6569_Regs[0x1F]|=bkMask;
-		if (bkMask)
+		if (M6569_Regs[0x1F]==0)
 		{
-			M6569_Regs[0x19]=0x82;	// IRQ + background
+			M6569_Regs[0x1F]=bkMask;
+			if (bkMask)
+			{
+				M6569_Regs[0x19]|=0x82;	// IRQ + background
+			}
 		}
+#endif
 	}
 }
 
