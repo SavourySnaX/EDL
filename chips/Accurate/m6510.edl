@@ -53,7 +53,7 @@ DECLARE TMP[8];
 FUNCTION INTERNAL UpdateP
 {
 	PIN_P<-PIN_P & (~DDR);
-	PIN_P<-PIN_P | (PCR & (DDR));
+	PIN_P<-PIN_P | (PCR & DDR);
 }
 
 HANDLER		PIN_P	ALWAYS
@@ -65,7 +65,7 @@ HANDLER PIN__RES	ALWAYS
 {
 	IF ~PIN__RES
 	{
-		DDR<-$FF;
+		DDR<-$00;
 		PCR<-$FF;
 		nmi<-0;
 		res<-1;
@@ -77,6 +77,7 @@ FUNCTION INTERNAL WriteIO
 	IF PIN_A == 0
 	{
 		DDR<-PIN_DB;
+		CALL UpdateP();
 	}
 	IF PIN_A == 1
 	{

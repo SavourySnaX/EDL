@@ -2858,7 +2858,8 @@ int LoadCRT(const char* fileName)
 	type =crtBuffer[0x16]<<8;
 	type|=crtBuffer[0x17];
 
-	if (type!=0 && type!=0x08 && type!=0x05 && type!=0x20 && type!=0x0F && type!=0x12 && type!=0x13 && type!=0x0B)
+	printf("CRT Type (%02X)\n",type);
+	if (type!=0 && type!=0x08 && type!=0x05 && type!=0x20 && type!=0x0F && type!=0x11 && type!=0x12 && type!=0x13 && type!=0x0B)
 	{
 		printf("Unsupported CRT Type (%02X)\n",type);
 		free(crtBuffer);
@@ -2874,7 +2875,7 @@ int LoadCRT(const char* fileName)
 	{
 		bankingAtDE00=1;
 	}
-	if (type==0x0F)
+	if (type==0x0F || type==0x11)
 	{
 		bankingAtDE00Offset=1;
 	}
