@@ -1919,7 +1919,7 @@ void Tick6569_OnePix()
 			}
 			if (xCnt==spriteX && M6569_Regs[0x15]&(1<<a))
 			{
-				spStart[a]=23;
+				spStart[a]=24;
 			}
 
 			if (spStart[a])
@@ -1937,14 +1937,14 @@ void Tick6569_OnePix()
 							miniZBuffer[a]=(cTable[M6569_Regs[0x25]&0x0F]&0x00FFFFFF)|0x01000000;
 							break;
 						case 0x800000:
-							miniZBuffer[a]=(cTable[M6569_Regs[0x27]&0x0F]&0x00FFFFFF)|0x10000000;
+							miniZBuffer[a]=(cTable[M6569_Regs[0x27+a]&0x0F]&0x00FFFFFF)|0x10000000;
 							break;
 						case 0xC00000:
 							miniZBuffer[a]=(cTable[M6569_Regs[0x26]&0x0F]&0x00FFFFFF)|0x10000000;
 							break;
 					}
 
-					if ((spriteX-xCnt)&1)
+					if ((spriteX-xCnt)&(M6569_Regs[0x1D]*(1<<a)?3:1))
 					{
 						spData[a]&=0x3FFFFF;
 						spData[a]<<=2;
@@ -1955,15 +1955,18 @@ void Tick6569_OnePix()
 				{
 					if (spData[a]&0x800000)
 					{
-						miniZBuffer[a]=(cTable[M6569_Regs[0x27]&0x0F]&0x00FFFFFF)|0x10000000;
+						miniZBuffer[a]=(cTable[M6569_Regs[0x27+a]&0x0F]&0x00FFFFFF)|0x10000000;
 					}
 					else
 					{
 						miniZBuffer[a]=0x00000000;
 					}
-					spData[a]&=0x7FFFFF;
-					spData[a]<<=1;
-					spStart[a]--;
+					if (M6569_Regs[0x1D]*(1<<a)?(spriteX-xCnt)&1:1)
+					{
+						spData[a]&=0x7FFFFF;
+						spData[a]<<=1;
+						spStart[a]--;
+					}
 				}
 			}
 			else
@@ -2007,7 +2010,7 @@ void Tick6569_OnePix()
 #if 1
 		if (spCnt>1)
 		{
-			if (M6569_Regs[0x1F]==0)
+			if (M6569_Regs[0x1E]==0)
 			{
 				M6569_Regs[0x1E]|=spMask;
 				M6569_Regs[0x19]|=0x84;	// IRQ + sprite
