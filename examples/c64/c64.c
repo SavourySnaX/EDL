@@ -1618,11 +1618,6 @@ uint8_t ccode;
 uint8_t ccol;
 uint8_t pixels;
 
-uint16_t xlCmp=0x18;
-uint16_t xrCmp=0x158;
-uint8_t  ytCmp=0x33;
-uint8_t  ybCmp=0xFB;
-
 uint32_t spData[8];
 uint16_t MCBase[8];
 uint16_t MC[8];
@@ -1685,7 +1680,7 @@ void Tick6569()		// Needs to do 8 pixels - or 4 if ticked properly - ie once per
 			charAddress = (M6569_Regs[0x18]&0x0E)<<10;
 			if (M6569_Regs[0x11]&0x40)
 			{
-				bufpixels1=GetByteFrom6569(charAddress+(bufccode1&0x1F)*8 + RC);
+				bufpixels1=GetByteFrom6569(charAddress+(bufccode1&0x3F)*8 + RC);
 			}
 			else
 			{
@@ -1707,10 +1702,6 @@ void Tick6569()		// Needs to do 8 pixels - or 4 if ticked properly - ie once per
 			RC&=7;
 		}
 	}
-	if (xCnt==xrCmp)		// TODO fix for CSEL bit
-	{
-		mBorder=1;
-	}
 	if ((xCnt==0x18C))
 	{
 		RASTER_CNT++;
@@ -1728,26 +1719,14 @@ void Tick6569()		// Needs to do 8 pixels - or 4 if ticked properly - ie once per
 			M6569_Regs[0x19]|=0x81;	// IRQ + RASTER
 		}
 
-		if (RASTER_CNT==ybCmp)
+		if (RASTER_CNT==(M6569_Regs[0x11]&0x08?0xFB:0xF7))
 		{
 			vBorder=1;
 		}
-		if ((RASTER_CNT==ytCmp) && (M6569_Regs[0x11]&0x10))
+		if ((RASTER_CNT==(M6569_Regs[0x11]&0x08?0x33:0x37)) && (M6569_Regs[0x11]&0x10))
 		{
 			vBorder=0;
 		}
-	}
-	if ((xCnt==xlCmp) && (RASTER_CNT==ybCmp))
-	{
-		vBorder=1;
-	}
-	if ((xCnt==xlCmp) && (RASTER_CNT==ytCmp) && (M6569_Regs[0x11]&0x10))
-	{
-		vBorder=0;
-	}
-	if ((xCnt==xlCmp) && (vBorder==0))
-	{
-		mBorder=0;
 	}
 
 	if (xCnt>=0x164 && xCnt<=0x1E0)
@@ -1807,6 +1786,22 @@ void Tick6569()		// Needs to do 8 pixels - or 4 if ticked properly - ie once per
 	///////
 	for (b=0;b<4;b++)
 	{
+		if ((xCnt==(M6569_Regs[0x16]&0x08?0x18:0x1F)) && (RASTER_CNT==(M6569_Regs[0x11]&0x08?0xFB:0xF7)))
+		{
+			vBorder=1;
+		}
+		if ((xCnt==(M6569_Regs[0x16]&0x08?0x18:0x1F)) && (RASTER_CNT==(M6569_Regs[0x11]&0x08?0x33:0x37)) && (M6569_Regs[0x11]&0x10))
+		{
+			vBorder=0;
+		}
+		if ((xCnt==(M6569_Regs[0x16]&0x08?0x18:0x1F)) && (vBorder==0))
+		{
+			mBorder=0;
+		}
+		if (xCnt==(M6569_Regs[0x16]&0x08?0x158:0x14F))
+		{
+			mBorder=1;
+		}
 		if ((xCnt&7)==(M6569_Regs[0x16]&7))
 		{
 			ccode=bufccode;
