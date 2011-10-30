@@ -1276,6 +1276,30 @@ INSTRUCTION	"SKB %M0"	opcodeSKB
 	opcodeSKB;
 }
 
+MAPPING opcodeNOP[8]
+{
+	$1A	""		A->A;
+	$3A	""		A->A;
+	$5A	""		A->A;
+	$7A	""		A->A;
+	$DA	""		A->A;
+	$FA	""		A->A;
+}
+
+INSTRUCTION	"NOP"		opcodeNOP
+{
+	IF PIN_O0.FETCH@
+	{
+		NEXT PIN_O0.DUMMY.T0;
+	}
+
+	IF PIN_O0.DUMMY.T0@
+	{
+		opcodeNOP;
+		NEXT PIN_O0.FETCH;
+	}
+}
+
 MAPPING opcodeANC[1]
 {
 	%0	"#%$1"		CALL Immediate();
@@ -1331,7 +1355,7 @@ INSTRUCTION	"DCP %M0"	opcodeDCP
 	IF PIN_O0.MW.MODIFY@
 	{
 		TMP - 1->TMP;
-		AFFECT z AS ZERO, n AS SIGN, c AS NOCARRY(7) { A - TMP};
+		AFFECT z AS ZERO, n AS SIGN, c AS NOCARRY(7) { A - TMP };
 		MEMSTORE<-TMP;
 	}
 
@@ -1341,4 +1365,317 @@ INSTRUCTION	"DCP %M0"	opcodeDCP
 	}
 }
 
+MAPPING opcodeSLO[8]
+{
+	$07	"%$1"		CALL ZeroPage(0);
+	$17	"%$1,X"		CALL ZeroPageIndexed(0,X);
+	$0F	"%$2%$1"	CALL Absolute(0);
+	$1F	"%$2%$1,X"	CALL AbsoluteIndexed(0,X);
+	$1B	"%$2%$1,Y"	CALL AbsoluteIndexed(0,Y);
+	$03	"(%$1,X)"	CALL IndirectX(0);
+	$13	"(%$1),Y"	CALL IndirectY(0);
+}
+#
+#MAPPING operationSLO[3]
+#{
+#	%000	"ASL"	AFFECT z AS ZERO, n AS SIGN { ROL(TMP,c,0,1) }->TMP;
+#	%001	"ROL"	AFFECT z AS ZERO, n AS SIGN { ROL(TMP,c,c,1) }->TMP;
+#	%010	"LSR"	AFFECT z AS ZERO, n AS SIGN { ROR(TMP,c,0,1) }->TMP;
+#	%011	"ROR"	AFFECT z AS ZERO, n AS SIGN { ROR(TMP,c,c,1) }->TMP;
+##	%100	"STX"	;		# Handled seperately
+##	%101	"LDX"	;		# Handled seperately
+#	%110	"DEC"	AFFECT z AS ZERO, n AS SIGN { TMP - 1}->TMP;
+#	%111	"INC"	AFFECT z AS ZERO, n AS SIGN { TMP + 1}->TMP;
+#}
+#
+INSTRUCTION	"SLO %M0"	opcodeSLO
+{
+	IF opcodeSLO
+	{
+		MEMSTORE<-TMP;
+		NEXT PIN_O0.MW.MODIFY;
+	}
+
+	IF PIN_O0.MW.MODIFY@
+	{
+		AFFECT z AS ZERO, n AS SIGN { ROL(TMP,c,0,1) }->TMP;
+		AFFECT z AS ZERO, n AS SIGN { A | TMP }->A;
+		MEMSTORE<-TMP;
+	}
+
+	IF PIN_O0.MW.WRITE@
+	{
+		NEXT PIN_O0.FETCH;
+	}
+}
+
+MAPPING opcodeRLA[8]
+{
+	$27	"%$1"		CALL ZeroPage(0);
+	$37	"%$1,X"		CALL ZeroPageIndexed(0,X);
+	$2F	"%$2%$1"	CALL Absolute(0);
+	$3F	"%$2%$1,X"	CALL AbsoluteIndexed(0,X);
+	$3B	"%$2%$1,Y"	CALL AbsoluteIndexed(0,Y);
+	$23	"(%$1,X)"	CALL IndirectX(0);
+	$33	"(%$1),Y"	CALL IndirectY(0);
+}
+
+INSTRUCTION	"RLA %M0"	opcodeRLA
+{
+	IF opcodeRLA
+	{
+		MEMSTORE<-TMP;
+		NEXT PIN_O0.MW.MODIFY;
+	}
+
+	IF PIN_O0.MW.MODIFY@
+	{
+		AFFECT z AS ZERO, n AS SIGN { ROL(TMP,c,c,1) }->TMP;
+		AFFECT z AS ZERO, n AS SIGN { A & TMP }->A;
+		MEMSTORE<-TMP;
+	}
+
+	IF PIN_O0.MW.WRITE@
+	{
+		NEXT PIN_O0.FETCH;
+	}
+}
+
+MAPPING opcodeSRE[8]
+{
+	$47	"%$1"		CALL ZeroPage(0);
+	$57	"%$1,X"		CALL ZeroPageIndexed(0,X);
+	$4F	"%$2%$1"	CALL Absolute(0);
+	$5F	"%$2%$1,X"	CALL AbsoluteIndexed(0,X);
+	$5B	"%$2%$1,Y"	CALL AbsoluteIndexed(0,Y);
+	$43	"(%$1,X)"	CALL IndirectX(0);
+	$53	"(%$1),Y"	CALL IndirectY(0);
+}
+
+INSTRUCTION	"SRE %M0"	opcodeSRE
+{
+	IF opcodeSRE
+	{
+		MEMSTORE<-TMP;
+		NEXT PIN_O0.MW.MODIFY;
+	}
+
+	IF PIN_O0.MW.MODIFY@
+	{
+		AFFECT z AS ZERO, n AS SIGN { ROR(TMP,c,0,1) }->TMP;
+		AFFECT z AS ZERO, n AS SIGN { A ^ TMP }->A;
+		MEMSTORE<-TMP;
+	}
+
+	IF PIN_O0.MW.WRITE@
+	{
+		NEXT PIN_O0.FETCH;
+	}
+}
+
+MAPPING opcodeRRA[8]
+{
+	$67	"%$1"		CALL ZeroPage(0);
+	$77	"%$1,X"		CALL ZeroPageIndexed(0,X);
+	$6F	"%$2%$1"	CALL Absolute(0);
+	$7F	"%$2%$1,X"	CALL AbsoluteIndexed(0,X);
+	$7B	"%$2%$1,Y"	CALL AbsoluteIndexed(0,Y);
+	$63	"(%$1,X)"	CALL IndirectX(0);
+	$73	"(%$1),Y"	CALL IndirectY(0);
+}
+
+INSTRUCTION	"RRA %M0"	opcodeRRA
+{
+	IF opcodeRRA
+	{
+		MEMSTORE<-TMP;
+		NEXT PIN_O0.MW.MODIFY;
+	}
+
+	IF PIN_O0.MW.MODIFY@
+	{
+		AFFECT z AS ZERO, n AS SIGN { ROR(TMP,c,c,1) }->TMP;
+		CALL ADC(A,TMP)->A;
+		MEMSTORE<-TMP;
+	}
+
+	IF PIN_O0.MW.WRITE@
+	{
+		NEXT PIN_O0.FETCH;
+	}
+}
+
+MAPPING opcodeISC[8]
+{
+	$E7	"%$1"		CALL ZeroPage(0);
+	$F7	"%$1,X"		CALL ZeroPageIndexed(0,X);
+	$EF	"%$2%$1"	CALL Absolute(0);
+	$FF	"%$2%$1,X"	CALL AbsoluteIndexed(0,X);
+	$FB	"%$2%$1,Y"	CALL AbsoluteIndexed(0,Y);
+	$E3	"(%$1,X)"	CALL IndirectX(0);
+	$F3	"(%$1),Y"	CALL IndirectY(0);
+}
+
+INSTRUCTION	"ISC %M0"	opcodeISC
+{
+	IF opcodeISC
+	{
+		MEMSTORE<-TMP;
+		NEXT PIN_O0.MW.MODIFY;
+	}
+
+	IF PIN_O0.MW.MODIFY@
+	{
+		AFFECT z AS ZERO, n AS SIGN { TMP + 1}->TMP;
+		CALL SBC(A,TMP)->A;
+		MEMSTORE<-TMP;
+	}
+
+	IF PIN_O0.MW.WRITE@
+	{
+		NEXT PIN_O0.FETCH;
+	}
+}
+
+MAPPING opcodeAAX[8]
+{
+	$87	"%$1"		CALL ZeroPage(1);
+	$97	"%$1,Y"		CALL ZeroPageIndexed(1,Y);
+	$83	"(%$1,X)"	CALL IndirectX(1);
+	$8F	"%$2%$1"	CALL Absolute(1);
+}
+
+INSTRUCTION	"AAX %M0"	opcodeAAX
+{
+	IF opcodeAAX
+	{
+		MEMSTORE<- A & X;
+	}
+}
+
+INSTRUCTION	"ASR #%$1"	$4B
+{
+	IF CALL Immediate()
+	{
+		AFFECT z AS ZERO, n AS SIGN { A & TMP }->A;
+		AFFECT z AS ZERO, n AS SIGN { ROR(A,c,0,1) }->A;
+	}
+}
+
+INSTRUCTION	"ARR #%$1"	$6B
+{
+	IF CALL Immediate()
+	{
+		AFFECT z AS ZERO, n AS SIGN { A & TMP }->TMP;
+		AFFECT z AS ZERO, n AS SIGN { ROR(TMP,c,c,1) }->A;
+
+		IF d
+		{
+			DECLARE ALUTmp[8] ALIAS ALUH[4]:ALUL[4];
+
+			v<-(A[6..6])^(TMP[6..6]);
+			ALUTmp<-A;
+
+			IF (((TMP[0..3]) + (TMP[0..0])) >5)
+			{
+				ALUL+6->ALUL;
+			}
+			c<-0;
+			IF (((TMP[4..7]) + (TMP[4..4])) >5)
+			{
+				ALUH+6->ALUH;
+				c<-1;
+			}
+			A<-ALUTmp;
+		}
+		IF ~d
+		{
+			c<-(A[6..6])^0;
+			v<-(A[6..6])^(A[5..5]);
+		}
+	}
+}
+
+INSTRUCTION	"XAA #%$1"	$8B
+{
+	IF CALL Immediate()
+	{
+		AFFECT z AS ZERO, n AS SIGN { (A | $EE) & X & TMP }->A;
+	}
+}
+
+INSTRUCTION	"ATX #%$1"	$AB
+{
+	IF CALL Immediate()
+	{
+		AFFECT z AS ZERO, n AS SIGN { (A | $EE) & TMP }->A;
+		A->X;
+	}
+}
+
+INSTRUCTION	"AXS #%$1"	$CB
+{
+	IF CALL Immediate()
+	{
+		AFFECT z AS ZERO, n AS SIGN { A & X }->X;
+		AFFECT z AS ZERO, n AS SIGN, c AS NOCARRY(7) { X - TMP }->X;
+	}
+}
+
+MAPPING opcodeAXA[8]
+{
+	$9F	"%$2%$1,Y"	CALL AbsoluteIndexed(1,Y);
+	$93	"(%$1),Y"	CALL IndirectY(1);
+}
+
+INSTRUCTION	"AXA %M0"	opcodeAXA
+{
+	IF opcodeAXA
+	{
+		MEMSTORE<- A & X & ((ADH-IAc)+1);		# ADH will have been corrected at this point, but the value stored is +1 from uncorrected ADH
+	}
+}
+
+INSTRUCTION	"SXA %$2%$1,Y"	$9E
+{
+	IF CALL AbsoluteIndexed(1,Y)
+	{
+		MEMSTORE<- X & ((ADH-IAc)+1);		# ADH will have been corrected at this point, but the value stored is +1 from uncorrected ADH
+	}
+}
+
+INSTRUCTION	"SYA %$2%$1,X"	$9C
+{
+	IF CALL AbsoluteIndexed(1,X)
+	{
+		MEMSTORE<- Y & ((ADH-IAc)+1);		# ADH will have been corrected at this point, but the value stored is +1 from uncorrected ADH
+	}
+}
+
+INSTRUCTION	"XAS %$2%$1,Y"	$9B
+{
+	IF CALL AbsoluteIndexed(1,Y)
+	{
+		S <- X & A;
+		MEMSTORE<- S & ((ADH-IAc)+1);		# ADH will have been corrected at this point, but the value stored is +1 from uncorrected ADH
+	}
+}
+
+INSTRUCTION	"LAR %$2%$1,Y"	$BB
+{
+	IF CALL AbsoluteIndexed(0,Y)
+	{
+		AFFECT z AS ZERO, n AS SIGN { TMP & S } -> S;
+		S->A;
+		S->X;
+	}
+}
+
+INSTRUCTION	"SBC #%$1"	$EB
+{
+	IF CALL Immediate()
+	{
+		CALL SBC(A,TMP)->A;
+	}
+}
 
