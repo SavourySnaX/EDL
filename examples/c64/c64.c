@@ -62,8 +62,25 @@ unsigned char Ram[0x10000];
 
 unsigned char CRam[0x400];
 
-unsigned char* testOverlay;//[0x4000];
+unsigned char ERam[0x100];
 
+uint32_t extraNumChips=0;
+uint8_t **extraChips;			 // CRT images map here
+uint16_t *extraBase;
+uint16_t *extraBank;
+uint16_t *extraSize;
+
+uint8_t *cur8000Chip;
+uint16_t cur8000Mask;
+uint8_t *curA000Chip;
+uint16_t curA000Mask;
+
+int usingEasyFlash=0;
+int bankingAtDE00=0;
+int bankingAtDF00=0;
+int bankingAtDE00Offset=0;
+int bankingViaReadLoRom=0;
+int bankingRAM=0;
 
 int playDown=0;
 int recDown=0;
@@ -115,14 +132,45 @@ uint8_t lastBus=0xFF;
 int doDebug=0;
 
 uint8_t PLA_GAME=0x1;
+uint8_t PLA_GAMEatBoot=0x1;
 uint8_t PLA_EXROM=0x1;
+uint8_t PLA_EXROMatBoot=0x1;
 
 typedef uint8_t	(*ReadMap)(uint16_t);
 typedef void	(*WriteMap)(uint16_t,uint8_t);
 
+void ChangeMemoryMap();
+
 void WriteRam(uint16_t addr,uint8_t byte)
 {
 	Ram[addr]=byte;
+}
+
+void SwitchBank(uint8_t bank)
+{
+	int a;
+	for (a=0;a<extraNumChips;a++)
+	{
+		if (bank==extraBank[a])
+		{
+			if (extraBase[a]==0x8000)
+			{
+				cur8000Chip=extraChips[a];
+				cur8000Mask=extraSize[a]-1;
+				if (extraSize[a]>0x2000)
+				{
+					curA000Chip=extraChips[a]+0x2000;
+					cur8000Mask=extraSize[a]-0x2000-1;
+					curA000Mask=extraSize[a]-0x2000-1;
+				}
+			}
+			if (extraBase[a]==0xA000)
+			{
+				curA000Chip=extraChips[a];
+				curA000Mask=extraSize[a]-1;
+			}
+		}
+	}
 }
 
 void WriteIO(uint16_t addr,uint8_t byte)
@@ -151,6 +199,67 @@ void WriteIO(uint16_t addr,uint8_t byte)
 	{
 		CIA1_PinSetPIN_DB(byte);
 		return;
+	}
+	if (bankingAtDE00Offset)
+	{
+		if (addr<0xDF00)
+		{
+			SwitchBank(addr-0xDE00);
+		}
+	}
+	if (bankingAtDE00)
+	{
+		if (addr==0xDE00)
+		{
+			if (bankingRAM && byte&0x80)
+			{
+				if (byte&0x80)
+				{
+					PLA_GAME=1;
+					PLA_EXROM=1;
+				}
+				else
+				{
+					PLA_GAME=PLA_GAMEatBoot;
+					PLA_EXROM=PLA_EXROMatBoot;
+				}
+				ChangeMemoryMap();
+			}
+			byte&=0x3F;
+			SwitchBank(byte);
+			return;
+		}
+	}
+	if (bankingAtDF00)
+	{
+		if (addr==0xDF00)
+		{
+			byte&=0x03;
+			SwitchBank(byte);
+			return;
+		}
+	}
+	if (usingEasyFlash)
+	{
+		if (addr==0xDE02)
+		{
+			// EasyFlash - Control
+
+			PLA_EXROM=((byte&0x02)>>1)^1;
+			PLA_GAME=(byte&0x04)?((byte&0x1)^1):PLA_GAMEatBoot;
+
+			ChangeMemoryMap();
+			return;
+		}
+		if (addr<0xDF00)
+		{
+			return;
+		}
+		if (addr<0xE000)
+		{
+			ERam[addr&0xFF]=byte;
+			return;
+		}
 	}
 //	printf("IO Expansion\n");
 	return;
@@ -193,6 +302,17 @@ uint8_t ReadIO(uint16_t addr)
 	{
 		return CIA1_PinGetPIN_DB();
 	}
+	if (usingEasyFlash)
+	{
+		if (addr<0xDF00)
+		{
+			return;
+		}
+		if (addr<0xE000)
+		{
+			return ERam[addr&0xFF];
+		}
+	}
 //	printf("IO Expansion\n");
 	return 0xFF;
 }
@@ -219,12 +339,16 @@ uint8_t ReadKernel(uint16_t addr)
 
 uint8_t ReadCartL(uint16_t addr)
 {
-	return testOverlay[addr&0x1FFF];		// NB: May need clamping for 4k roms.. expanding for >8k??
+	if (bankingViaReadLoRom)
+	{
+		SwitchBank((addr&0x1000)>>12);
+	}
+	return cur8000Chip[addr&cur8000Mask];
 }
 
 uint8_t ReadCartH(uint16_t addr)
 {
-	return testOverlay[0x2000 + (addr&0x1FFF)];	// NB: May need clamping for 4k roms.. expanding for >8k??
+	return curA000Chip[addr&curA000Mask];
 }
 
 uint8_t ReadOpen(uint16_t addr)
@@ -775,7 +899,7 @@ void UpdateJoy()		// For now returns data on BOTH ports
 	joyVal|=KeyDown(GLFW_KEY_KP_2)?2:0;
 	joyVal|=KeyDown(GLFW_KEY_KP_4)?4:0;
 	joyVal|=KeyDown(GLFW_KEY_KP_6)?8:0;
-	joyVal|=KeyDown(GLFW_KEY_KP_0)?0x10:0;
+	joyVal|=KeyDown(GLFW_KEY_RCTRL)?0x10:0;
 
 	if (joyVal)
 	{
@@ -1293,7 +1417,7 @@ int main(int argc,char**argv)
 			kbuffer[4]=CheckKeys('9','I','J','0','M','K','O','N');
 			kbuffer[5]=CheckKeys('-','P','L','=','.',';','[',',');
 			kbuffer[6]=CheckKeys(GLFW_KEY_INSERT,']','\'',GLFW_KEY_HOME,GLFW_KEY_RSHIFT,'#',GLFW_KEY_DELETE,'/');
-			kbuffer[7]=CheckKeys('1','`',GLFW_KEY_TAB,'2',GLFW_KEY_SPACE,GLFW_KEY_LCTRL,'Q',GLFW_KEY_ESC);
+			kbuffer[7]=CheckKeys('1','¬',GLFW_KEY_TAB,'2',GLFW_KEY_SPACE,GLFW_KEY_LCTRL,'Q',GLFW_KEY_ESC);
 
 #endif
 			if (CheckKey(GLFW_KEY_END))
@@ -2696,6 +2820,7 @@ int LoadCRT(const char* fileName)
 	uint32_t length;
 	uint32_t pos;
 	uint8_t *crtBuffer;
+	uint32_t numChips=0;
 
 	crtBuffer=qLoad(fileName,&length);
 	if (crtBuffer==NULL)
@@ -2735,21 +2860,88 @@ int LoadCRT(const char* fileName)
 	type =crtBuffer[0x16]<<8;
 	type|=crtBuffer[0x17];
 
-	if (type!=0)
+	if (type!=0 && type!=0x08 && type!=0x05 && type!=0x20 && type!=0x0F && type!=0x12 && type!=0x13 && type!=0x0B)
 	{
 		printf("Unsupported CRT Type (%02X)\n",type);
 		free(crtBuffer);
 		return 0;
 	}
 
+	if (type==0x20)
+	{
+		usingEasyFlash=1;
+		bankingAtDE00=1;
+	}
+	if (type==0x05||type==0x13)
+	{
+		bankingAtDE00=1;
+	}
+	if (type==0x0F)
+	{
+		bankingAtDE00Offset=1;
+	}
+	if (type==0x12)
+	{
+		bankingViaReadLoRom=1;
+	}
+	if (type==0x13)
+	{
+		bankingRAM=1;
+	}
+	if (type==0x08)
+	{
+		bankingAtDF00=1;
+	}
+
 	PLA_EXROM=crtBuffer[0x18]&1;
 	PLA_GAME=crtBuffer[0x19]&1;
+	if (type==0x0b)
+	{
+		PLA_GAME=1;
+	}
+	PLA_EXROMatBoot=PLA_EXROM;
+	PLA_GAMEatBoot=PLA_GAME;
 
 	printf("CRT EXROM : %d\n",crtBuffer[0x18]);
 	printf("CRT GAME : %d\n",crtBuffer[0x19]);
 
-	// Jump to 0x40 and start looking at the CHIP data
+	// Count up number of chips to allocate
+	pos=0x40;
+	while (1)
+	{
+		if (strncmp(&crtBuffer[pos],"CHIP",4)!=0)
+		{
+			printf("Seemingly corrupt cartridge\n");
+			free(crtBuffer);
+			return 0;
+		}
+
+		numChips++;
+
+		pos+=14;
+
+		romSize =crtBuffer[pos++]<<8;
+		romSize|=crtBuffer[pos++];
+
+		pos+=romSize;
+		if (pos>=length)
+			break;
+	}
+
+	printf("Allocating space for %d chips\n",numChips);
+
+	extraChips=(uint8_t**)malloc(numChips*sizeof(uint8_t*));
+	extraBase=(uint16_t*)malloc(numChips*sizeof(uint16_t));
+	extraBank=(uint16_t*)malloc(numChips*sizeof(uint16_t));
+	extraSize=(uint16_t*)malloc(numChips*sizeof(uint16_t));
+
+	extraNumChips=numChips;
+	numChips=0;
+	// Jump back to 0x40 and start looking at the CHIP data
 	
+	cur8000Chip=NULL;
+	curA000Chip=NULL;
+
 	pos=0x40;
 	while (1)
 	{
@@ -2770,7 +2962,7 @@ int LoadCRT(const char* fileName)
 		chipType =crtBuffer[pos++]<<8;
 		chipType|=crtBuffer[pos++];
 
-		if (chipType!=0)
+		if (chipType!=0 && chipType!=2)
 		{
 			printf("Non ROM chips not supported\n");
 			free(crtBuffer);
@@ -2779,27 +2971,60 @@ int LoadCRT(const char* fileName)
 
 		bankNum =crtBuffer[pos++]<<8;
 		bankNum|=crtBuffer[pos++];
-
+/*
 		if (bankNum!=0)
 		{
 			printf("Unsupported bank number\n");
 			free(crtBuffer);
 			return 0;
 		}
-
+*/
 		loadAddr =crtBuffer[pos++]<<8;
 		loadAddr|=crtBuffer[pos++];
 
 		romSize =crtBuffer[pos++]<<8;
 		romSize|=crtBuffer[pos++];
 
-		printf("CHIP : %04X (%04X)\n",loadAddr,romSize);
+		printf("%d[%d] : %04X (%04X) - %08X\n",chipType,bankNum,loadAddr,romSize,chipLength);
 
-		testOverlay=&crtBuffer[pos];
+		extraChips[numChips]=&crtBuffer[pos];
+		extraBase[numChips]=loadAddr;
+		extraBank[numChips]=bankNum;
+		extraSize[numChips]=romSize;
+
+		if (loadAddr==0x8000 && cur8000Chip==NULL)
+		{
+			cur8000Chip=extraChips[numChips];
+			cur8000Mask=extraSize[numChips]-1;
+			if (romSize>0x2000)
+			{
+				curA000Chip=extraChips[numChips]+0x2000;
+				cur8000Mask=extraSize[numChips]-0x2000-1;
+				curA000Mask=extraSize[numChips]-0x2000-1;
+			}
+		}
+		if (loadAddr==0xA000 && curA000Chip==NULL)
+		{
+			curA000Chip=extraChips[numChips];
+			curA000Mask=extraSize[numChips]-1;
+		}
+		if (loadAddr==0xE000 && cur8000Chip==NULL && curA000Chip==NULL)
+		{
+			cur8000Chip=extraChips[numChips];
+			cur8000Mask=extraSize[numChips]-1;
+			curA000Chip=extraChips[numChips];
+			curA000Mask=extraSize[numChips]-1;
+		}
+		numChips++;
 
 		pos+=romSize;
 		if (pos>=length)
 			break;
+	}
+	if (curA000Chip==NULL)
+	{
+		curA000Chip=cur8000Chip;
+		curA000Mask=curA000Mask;
 	}
 
 	ChangeMemoryMap();
