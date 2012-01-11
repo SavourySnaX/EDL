@@ -1001,12 +1001,199 @@ void FetchBGData(int y,int x)
 	}
 }
 
+uint8_t	SP_BUF_Tile[8];
+uint8_t	SP_BUF_XCoord[8];
+uint8_t	SP_BUF_Attribs[8];
+uint8_t SP_BUF_Yline[8];
+
+uint8_t SP_BUF_BitMap0[8];
+uint8_t SP_BUF_BitMap1[8];
+uint8_t SP_BUF_XCounter[8];
+uint8_t SP_BUF_RastAttribs[8];
+
+uint8_t SP_BUF_SpriteInRange;
+uint8_t SP_BUF_CurSprite;
+uint8_t SP_BUF_ZeroInRange;
+
+uint8_t SP_BUF_RastZeroInRange;
+
+void SpriteCompute(uint8_t clock,uint16_t cLine)
+{
+	uint8_t spNum=clock>>3;
+
+	uint8_t spPhase=clock&7;
+	uint16_t spSize=8;			// TODO - Fix for 16 high
+
+	switch (spPhase)
+	{
+	case 0:
+		{
+			uint16_t compare=cLine-sprRam[spNum*4+0];
+	
+			SP_BUF_SpriteInRange=compare<spSize;
+			SP_BUF_ZeroInRange|=SP_BUF_SpriteInRange && (spNum==0);
+			if (SP_BUF_CurSprite<8)
+			{
+				SP_BUF_Yline[SP_BUF_CurSprite]=compare;
+			}
+			else
+			{
+				if (SP_BUF_SpriteInRange)
+					printf("Overflow %d\n",cLine);
+				SP_BUF_SpriteInRange=0;
+			}
+		}
+		break;
+	case 1:
+		break;
+	case 2:
+		if (SP_BUF_SpriteInRange)
+		{
+			SP_BUF_Tile[SP_BUF_CurSprite]=sprRam[spNum*4+1];
+		}
+		break;
+	case 3:
+		break;
+	case 4:
+		if (SP_BUF_SpriteInRange)
+		{
+			SP_BUF_Attribs[SP_BUF_CurSprite]=sprRam[spNum*4+2];
+		}
+		break;
+	case 5:
+		if (SP_BUF_SpriteInRange)
+		{
+			if (SP_BUF_Attribs[SP_BUF_CurSprite]&0x80)
+			{
+				SP_BUF_Yline[SP_BUF_CurSprite]=(~SP_BUF_Yline[SP_BUF_CurSprite])&0x07;
+			}
+		}
+		break;
+	case 6:
+		if (SP_BUF_SpriteInRange)
+		{
+			SP_BUF_XCoord[SP_BUF_CurSprite]=sprRam[spNum*4+3];
+			printf("spNum : %d %02X,%02X\n",spNum,cLine,SP_BUF_XCoord[SP_BUF_CurSprite]);
+		}
+		break;
+	case 7:
+		if (SP_BUF_SpriteInRange)
+		{
+			SP_BUF_CurSprite++;
+		}
+		break;
+	}
+}
+
+void SpriteFetch(uint16_t curClock)
+{
+	curClock-=256;
+	uint8_t curFetch=curClock>>3;
+	switch(curClock&7)
+	{
+		case 0:
+			break;
+		case 1:
+			SP_BUF_XCounter[curFetch]=SP_BUF_XCoord[curFetch];
+			//dummy fetch
+			break;
+		case 2:
+			break;
+		case 3:
+			SP_BUF_RastAttribs[curFetch]=SP_BUF_Attribs[curFetch];
+			//dummy fetch
+			break;
+		case 4:
+			break;
+		case 5:
+			if (curFetch<SP_BUF_CurSprite)
+			{
+				uint16_t tilePos=(SP_BUF_Tile[curFetch]<<4)+SP_BUF_Yline[curFetch];
+				if (regs2C02[0]&0x08)
+				{
+					tilePos+=0x1000;
+				}
+				SP_BUF_BitMap0[curFetch]=PPUGetByte(tilePos);
+			}
+			else
+			{
+				SP_BUF_BitMap0[curFetch]=0;
+			}
+			break;
+		case 6:
+			break;
+		case 7:
+			if (curFetch<SP_BUF_CurSprite)
+			{
+				uint16_t tilePos=(SP_BUF_Tile[curFetch]<<4)+SP_BUF_Yline[curFetch]+8;
+				if (regs2C02[0]&0x08)
+				{
+					tilePos+=0x1000;
+				}
+				SP_BUF_BitMap1[curFetch]=PPUGetByte(tilePos);
+			}
+			else
+			{
+				SP_BUF_BitMap1[curFetch]=0;
+			}
+			break;
+
+	}
+}
+
+uint8_t spColour;
+uint8_t spZero;
+uint8_t spBack;
+
+void SpriteRender()
+{
+	int a;
+
+	spColour=0;
+	for (a=0;a<8;a++)
+	{
+		if (SP_BUF_XCounter[a]==0)
+		{
+			uint8_t col0,col1,col23;
+			//calculate sprite data
+			if (SP_BUF_RastAttribs[a]&0x40)
+			{
+				col0=(SP_BUF_BitMap0[a]&0x01);
+				col1=(SP_BUF_BitMap1[a]&0x01)<<1;
+				col23=(SP_BUF_RastAttribs[a]&0x03)<<2;
+
+				SP_BUF_BitMap0[a]>>=1;
+				SP_BUF_BitMap1[a]>>=1;
+			}
+			else
+			{
+				col0=(SP_BUF_BitMap0[a]&0x80)>>7;
+				col1=(SP_BUF_BitMap1[a]&0x80)>>6;
+				col23=(SP_BUF_RastAttribs[a]&0x03)<<2;
+
+				SP_BUF_BitMap0[a]<<=1;
+				SP_BUF_BitMap1[a]<<=1;
+			}
+			if ((col0|col1)&&(spColour==0))
+			{
+				spColour=0x10|col0|col1|col23;
+				spZero=SP_BUF_RastZeroInRange && (a==0);
+				spBack=SP_BUF_RastAttribs[a]&0x20;
+//				break;
+			}
+		}
+		else
+		{
+			SP_BUF_XCounter[a]--;
+		}
+	}
+}
+
 void Tick2C02()
 {
 	uint32_t* outputTexture = (uint32_t*)videoMemory[MAIN_WINDOW];
 	int a;
 
-	uint8_t lastPixel=0;
 	static uint16_t lastCollision=0;
 
 	if (curLine<20)
@@ -1017,6 +1204,11 @@ void Tick2C02()
 	{
 		if (curLine==20)
 		{
+			if (curClock<256 && (regs2C02[1]&0x10))
+			{
+				SpriteCompute(curClock,curLine-20);
+			}
+
 			if (curClock==0)
 			{
 				regs2C02[2]&=0xBF;
@@ -1049,6 +1241,12 @@ void Tick2C02()
 		{
 			if (curLine<261)
 			{
+				if (curClock<256 && (regs2C02[1]&0x10))
+				{
+					SpriteCompute(curClock,curLine-20);
+					SpriteRender();
+				}
+
 				if ((curClock<256) && (regs2C02[1]&0x08))
 				{
 					uint8_t shift=PPU_FHl;
@@ -1083,22 +1281,35 @@ void Tick2C02()
 					uint8_t col=colbpl|col3|col4;
 					if (colbpl==0)
 					{
-						outputTexture[(curLine-21)*WIDTH+curClock]=nesColours[palIndex[0]];
-						lastPixel=0;
+						outputTexture[(curLine-21)*WIDTH+curClock]=nesColours[palIndex[spColour]];
 					}
 					else
 					{
-
-						lastPixel=1;
-						outputTexture[(curLine-21)*WIDTH + curClock]=nesColours[palIndex[col]];
+						if (spZero && lastCollision==0 && spColour)
+						{
+							lastCollision=1;
+							regs2C02[2]|=0x40;
+						}
+						if (!spBack && spColour)
+						{
+							outputTexture[(curLine-21)*WIDTH + curClock]=nesColours[palIndex[spColour]];
+						}
+						else
+						{
+							outputTexture[(curLine-21)*WIDTH + curClock]=nesColours[palIndex[col]];
+						}
 					}
+					//spColour=0;
 				}
 
 				if ((curClock<256) && (regs2C02[1]&0x08))
 				{
 					FetchBGData(curLine-21,curClock+16);
 				}
-
+				if ((curClock>=256) && (curClock<=319) && (regs2C02[1]&0x10))
+				{
+					SpriteFetch(curClock);
+				}
 				if ((curClock>=320) && (curClock<=335) && (regs2C02[1]&0x08))
 				{
 					FetchBGData(curLine-20,curClock-320);
@@ -1120,7 +1331,7 @@ void Tick2C02()
 	}
 
 //sprite hack
-
+/*
 	if (curLine>20 && curLine<261 && curClock<256 && (regs2C02[1]&0x10))
 	{
 		uint8_t sprSize=8;
@@ -1191,10 +1402,11 @@ void Tick2C02()
 			}
 		}
 	}
-
+*/
 	curClock++;
 	if ((curClock==320) && (regs2C02[1]&0x08))
 	{
+
 		//pretend this is the horizontal blanking pulse?
 
 		uint16_t tmpV=(PPU_Vc<<8)|(PPU_VTc<<3)|PPU_FVc;
@@ -1214,6 +1426,9 @@ void Tick2C02()
 		curClock=0;
 		curLine++;
 		lastCollision=0;
+		SP_BUF_CurSprite=0;
+		SP_BUF_RastZeroInRange=SP_BUF_ZeroInRange;
+		SP_BUF_ZeroInRange=0;
 		if (curLine==20)
 		{
 			regs2C02[2]&=0x7F;
