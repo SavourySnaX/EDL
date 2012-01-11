@@ -12,7 +12,6 @@ PIN IN			PIN_RDY[1];			# ReaDY signal for external devices
 PIN OUT			PIN_O1[1];			# O1 Phase Clock Output
 PIN IN			PIN__IRQ[1];			# Interrupt ReQuest
 PIN IN			PIN__NMI[1];			# Non Maskable Interrupt request
-PIN OUT			PIN_SYNC[1];			# Fetching Opcode
 PIN OUT			PIN_AB[16];			# Address Bus
 PIN IN			PIN__RES[1];			# RESet
 PIN OUT			PIN_O2[1];			# O2 Phase Clock Output
@@ -34,6 +33,8 @@ DECLARE	PC[16] 		ALIAS PCH[8]:PCL[8];
 DECLARE	P[8]		ALIAS n[1]:v[1]:%1:b[1]:d[1]:i[1]:z[1]:c[1];
 										# n negative : v overflow : b break : d decimal : i interrupt disable : z zero : c carry
 
+DECLARE DEBUG_SYNC[1];								# Used for debugging, since the sync pin is no longer exposed
+
 # INTERNAL REGISTERS - NOT NEEDED OUTSIDE CPU 
 
 DECLARE	INTERNAL AD[16]		ALIAS	ADH[8]:ADL[8];				# Used as temporary store for address generation
@@ -47,7 +48,10 @@ DECLARE INTERNAL res[1];
 DECLARE INTERNAL MEMSTORE[8];
 DECLARE INTERNAL IR[8];
 
-DECLARE TMP[8];
+DECLARE INTERNAL TMP[8];
+
+DECLARE INTERNAL DMA_ADD[16]	ALIAS	DMA_ADDH[8]:DMA_ADDL[8];
+DECLARE INTERNAL DMA_START[1];
 
 #
 # For now we don't implement the internal clock generator - we rely on a single phase clock on O0 
@@ -60,6 +64,8 @@ HANDLER PIN__RES	ALWAYS
 	{
 		nmi<-0;
 		res<-1;
+		DMA_START<-0;
+		DMA_ADDL<-0;
 	}
 }
 
@@ -72,12 +78,12 @@ HANDLER		PIN_O0	TRANSITION(0,1)
 {
 #Will be doing memory request/writes
 
-	STATES	FETCH|IMM|BA|IA|ADR|ADW|MW|PH|PL|DUMMY
+	STATES	FETCH|IMM|BA|IA|ADR|ADW|MW|PH|PL|DUMMY|DMA
 	{
 		STATE FETCH
 		{
 			PIN_AB<-PC;
-			PIN_SYNC<-1;
+			DEBUG_SYNC<-1;
 			PIN_RW<-1;
 		}
 
@@ -87,7 +93,7 @@ HANDLER		PIN_O0	TRANSITION(0,1)
 			{
 			}
 			PIN_AB<-PC;
-			PIN_SYNC<-0;
+			DEBUG_SYNC<-0;
 			PIN_RW<-1;
 		}
 
@@ -97,7 +103,7 @@ HANDLER		PIN_O0	TRANSITION(0,1)
 			{
 			}
 			PIN_AB<-IA;
-			PIN_SYNC<-0;
+			DEBUG_SYNC<-0;
 			PIN_RW<-1;
 		}
 
@@ -107,7 +113,7 @@ HANDLER		PIN_O0	TRANSITION(0,1)
 			{
 			}
 			PIN_AB<-BA;
-			PIN_SYNC<-0;
+			DEBUG_SYNC<-0;
 			PIN_RW<-1;
 		}
 
@@ -118,7 +124,7 @@ HANDLER		PIN_O0	TRANSITION(0,1)
 			}
 			PIN_AB<-SP;
 			S<-S-1;
-			PIN_SYNC<0;
+			DEBUG_SYNC<0;
 			PIN_RW<-0;
 			PIN_DB<-MEMSTORE;
 		}
@@ -153,14 +159,14 @@ HANDLER		PIN_O0	TRANSITION(0,1)
 		STATE ADR
 		{
 			PIN_AB<-AD;
-			PIN_SYNC<-0;
+			DEBUG_SYNC<-0;
 			PIN_RW<-1;
 		}
 		
 		STATE ADW
 		{
 			PIN_AB<-AD;
-			PIN_SYNC<-0;
+			DEBUG_SYNC<-0;
 			PIN_RW<-0;
 			PIN_DB<-MEMSTORE;
 		}
@@ -171,7 +177,7 @@ HANDLER		PIN_O0	TRANSITION(0,1)
 			{
 			}
 			PIN_AB<-AD;
-			PIN_SYNC<-0;
+			DEBUG_SYNC<-0;
 			PIN_RW<-0;
 			PIN_DB<-MEMSTORE;
 		}
@@ -182,11 +188,56 @@ HANDLER		PIN_O0	TRANSITION(0,1)
 			{
 			}
 			PIN_AB<-PC;
-			PIN_SYNC<-0;
+			DEBUG_SYNC<-0;
 			PIN_RW<-1;
+		}
+
+		STATE DMA
+		{
+			STATES DUMMY_FETCH,DMA_READ,DMA_WRITE
+			{
+				STATE DUMMY_FETCH
+				{
+					PIN_AB<-PC;
+					PIN_RW<-1;
+				}
+				STATE DMA_READ
+				{
+					PIN_AB<-DMA_ADD;
+					PIN_RW<-1;
+					DMA_ADDL<-DMA_ADDL+1;
+				}
+				STATE DMA_WRITE
+				{
+					PIN_AB<-$2004;
+					PIN_RW<-0;
+					IF DMA_ADDL==0
+					{
+						DMA_START<-0;
+						NEXT PIN_O0.FETCH;
+					}
+				}
+			}
+			DEBUG_SYNC<-0;
 		}
 	}
 
+}
+
+FUNCTION INTERNAL	LastWriteCycle
+{
+	NEXT PIN_O0.FETCH;
+
+	EXECUTE registers PIN_AB;
+}
+
+INSTRUCTION registers "OAM_DMA"	$4014
+{
+	DMA_ADDH<-PIN_DB;
+	DMA_ADDL<-0;
+	DMA_START<-1;
+		
+	NEXT PIN_O0.DMA.DUMMY_FETCH;
 }
 
 HANDLER		PIN_O0	TRANSITION(1,0)
@@ -266,7 +317,7 @@ FUNCTION INTERNAL	tmpRdy[1]	ZeroPage	store[1]
 	
 	IF PIN_O0.ADW@
 	{
-		NEXT PIN_O0.FETCH;
+		CALL LastWriteCycle();
 	}
 }
 
@@ -304,7 +355,7 @@ FUNCTION INTERNAL	tmpRdy[1]	Absolute	store[1]
 	
 	IF PIN_O0.ADW@
 	{
-		NEXT PIN_O0.FETCH;
+		CALL LastWriteCycle();
 	}
 }
 
@@ -355,7 +406,7 @@ FUNCTION INTERNAL	tmpRdy[1]	IndirectX	store[1]
 	
 	IF PIN_O0.ADW@
 	{
-		NEXT PIN_O0.FETCH;
+		CALL LastWriteCycle();
 	}
 }
 
@@ -416,7 +467,7 @@ FUNCTION INTERNAL	tmpRdy[1]	IndirectY	store[1]
 	
 	IF PIN_O0.ADW@
 	{
-		NEXT PIN_O0.FETCH;
+		CALL LastWriteCycle();
 	}
 }
 
@@ -457,7 +508,7 @@ FUNCTION INTERNAL	tmpRdy[1]	ZeroPageIndexed	store[1],index[8]
 	
 	IF PIN_O0.ADW@
 	{
-		NEXT PIN_O0.FETCH;
+		CALL LastWriteCycle();
 	}
 }
 
@@ -510,7 +561,7 @@ FUNCTION INTERNAL	tmpRdy[1]	AbsoluteIndexed	store[1],index[8]
 	
 	IF PIN_O0.ADW@
 	{
-		NEXT PIN_O0.FETCH;
+		CALL LastWriteCycle();
 	}
 }
 
@@ -638,7 +689,7 @@ INSTRUCTION	"%M0 %M1"	operation10:addressing10:%10
 
 	IF PIN_O0.MW.WRITE@
 	{
-		NEXT PIN_O0.FETCH;
+		CALL LastWriteCycle();
 	}
 }
 
@@ -970,7 +1021,7 @@ INSTRUCTION	"PHP"		%00001000
 
 	IF PIN_O0.PH.T0@
 	{
-		NEXT PIN_O0.FETCH;
+		CALL LastWriteCycle();
 	}
 }
 
@@ -989,7 +1040,7 @@ INSTRUCTION	"PHA"		%01001000
 
 	IF PIN_O0.PH.T0@
 	{
-		NEXT PIN_O0.FETCH;
+		CALL LastWriteCycle();
 	}
 }
 
@@ -1329,7 +1380,7 @@ INSTRUCTION	"DCP %M0"	opcodeDCP
 
 	IF PIN_O0.MW.WRITE@
 	{
-		NEXT PIN_O0.FETCH;
+		CALL LastWriteCycle();
 	}
 }
 
@@ -1373,7 +1424,7 @@ INSTRUCTION	"SLO %M0"	opcodeSLO
 
 	IF PIN_O0.MW.WRITE@
 	{
-		NEXT PIN_O0.FETCH;
+		CALL LastWriteCycle();
 	}
 }
 
@@ -1405,7 +1456,7 @@ INSTRUCTION	"RLA %M0"	opcodeRLA
 
 	IF PIN_O0.MW.WRITE@
 	{
-		NEXT PIN_O0.FETCH;
+		CALL LastWriteCycle();
 	}
 }
 
@@ -1437,7 +1488,7 @@ INSTRUCTION	"SRE %M0"	opcodeSRE
 
 	IF PIN_O0.MW.WRITE@
 	{
-		NEXT PIN_O0.FETCH;
+		CALL LastWriteCycle();
 	}
 }
 
@@ -1469,7 +1520,7 @@ INSTRUCTION	"RRA %M0"	opcodeRRA
 
 	IF PIN_O0.MW.WRITE@
 	{
-		NEXT PIN_O0.FETCH;
+		CALL LastWriteCycle();
 	}
 }
 
@@ -1501,7 +1552,7 @@ INSTRUCTION	"ISC %M0"	opcodeISC
 
 	IF PIN_O0.MW.WRITE@
 	{
-		NEXT PIN_O0.FETCH;
+		CALL LastWriteCycle();
 	}
 }
 

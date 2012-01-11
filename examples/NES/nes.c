@@ -26,7 +26,6 @@ uint8_t MAIN_PinGetPIN_DB();
 void MAIN_PinSetPIN_DB(uint8_t);
 void MAIN_PinSetPIN_O0(uint8_t);
 void MAIN_PinSetPIN_SO(uint8_t);
-uint8_t MAIN_PinGetPIN_SYNC();
 uint8_t MAIN_PinGetPIN_RW();
 void MAIN_PinSetPIN__IRQ(uint8_t);
 void MAIN_PinSetPIN__RES(uint8_t);
@@ -35,6 +34,8 @@ uint8_t *prgRom;
 uint32_t prgRomSize;
 uint8_t *chrRom;
 uint32_t chrRomSize;
+
+uint8_t chrRam[8192];
 
 // Step 1. Memory
 
@@ -64,8 +65,22 @@ uint8_t sprRam[0x100];
 uint8_t regs2C02[8]={0,0,0,0,0,0,0,0};
 uint16_t ppuAddr;
 
-uint8_t xScroll;
-uint8_t yScroll;
+uint16_t PPU_VAddress;
+uint16_t PPU_FV;		// 3 bits
+uint16_t PPU_FVc;
+uint16_t PPU_V;			// 1 bit
+uint16_t PPU_Vc;
+uint16_t PPU_H;			// 1 bit
+uint16_t PPU_Hc;
+uint16_t PPU_VT;		// 5 bits
+uint16_t PPU_VTc;
+uint16_t PPU_HT;		// 5 bits
+uint16_t PPU_HTc;
+uint16_t PPU_FH;		// 3 bits
+uint16_t PPU_FHl;		// 3 bits		// latched cant change during scanline render
+uint16_t PPU_S;			// 1 bits
+uint16_t PPU_PAR;		// 8 bits
+uint16_t PPU_AR;		// 2 bits
 
 uint8_t palIndex[0x20];
 
@@ -86,7 +101,11 @@ void PPUSetByte(uint16_t addr,uint8_t byte)
 {
 	addr&=0x3FFF;
 	if (addr<0x2000)
+	{
+		if (chrRom==chrRam)
+			chrRom[addr]=byte;
 		return;		/// assuming fixed tile ram
+	}
 	if (addr<0x3F00)
 	{
 		ppuRam[(addr-0x2000)&0x7FF]=byte;
@@ -116,7 +135,7 @@ uint8_t IORead(uint8_t addr)
 		printf("IO Read : %d\n",addr&0x7);
 			break;
 		case 2:
-			regs2C02[addr]=0;
+			regs2C02[addr]&=0x7F;
 			regs2C02[6]=0;	// reset address latch
 			regs2C02[5]=0;	// reset address latch
 			break;
@@ -151,8 +170,12 @@ void IOWrite(uint8_t addr,uint8_t byte)
 	switch (addr)
 	{
 		case 0:
-			printf("IO Write : %d<-%02X\n",addr&0x7,byte);
+			PPU_V=(byte&0x02)>>1;
+			PPU_H=(byte&0x01);
+			PPU_S=(byte&0x10)>>4;
 		case 1:
+//			if (addr==1)
+//				printf("001-Byte : %02X\n",byte);
 		case 3:
 			regs2C02[addr]=byte;
 			break;
@@ -172,12 +195,14 @@ void IOWrite(uint8_t addr,uint8_t byte)
 			if (regs2C02[addr])
 			{
 				//second write
-				yScroll=byte;
+				PPU_FV=(byte&0x7);
+				PPU_VT=(byte&0xF8)>>3;
 				regs2C02[addr]=0;
 			}
 			else
 			{
-				xScroll=byte;
+				PPU_HT=(byte&0xF8)>>3;
+				PPU_FH=(byte&0x07);
 				regs2C02[addr]=1;
 			}
 			break;
@@ -185,6 +210,16 @@ void IOWrite(uint8_t addr,uint8_t byte)
 			if (regs2C02[addr])
 			{
 				//second write
+				PPU_VT&=0x18;
+				PPU_VT|=(byte&0xE0)>>5;
+				PPU_HT=(byte&0x1F);
+
+				PPU_FVc=PPU_FV;
+				PPU_Vc=PPU_V;
+				PPU_Hc=PPU_H;
+				PPU_VTc=PPU_VT;
+				PPU_HTc=PPU_HT;
+
 				ppuAddr&=0xFF00;
 				ppuAddr|=byte;
 				regs2C02[addr]=0;
@@ -192,6 +227,11 @@ void IOWrite(uint8_t addr,uint8_t byte)
 			else
 			{
 				//first write
+				PPU_FV=(byte&0x30)>>4;
+				PPU_V=(byte&0x08)>>3;
+				PPU_H=(byte&0x04)>>2;
+				PPU_VT&=0x07;
+				PPU_VT|=(byte&0x3)<<3;
 				ppuAddr&=0x00FF;
 				ppuAddr|=(byte&0x3F)<<8;
 				regs2C02[addr]=1;
@@ -200,6 +240,10 @@ void IOWrite(uint8_t addr,uint8_t byte)
 	}
 	return;
 }
+int KeyDown(int key);
+void ClearKey(int key);
+
+uint8_t controllerData=0;
 
 uint8_t GetByte(uint16_t addr)
 {
@@ -213,9 +257,16 @@ uint8_t GetByte(uint16_t addr)
 	}
 	if (addr<0x8000)
 	{
-		if (addr>=0x4016 && addr<=0x4017)	//controller ports
+		if (addr==0x4016)
+		{
+			uint8_t tmp=controllerData&0x80;
+			controllerData<<=1;
+			tmp>>=7;
+			return tmp;
+		}
+		if (addr>=0x4017 && addr<=0x4017)	//controller ports
 			return 0;
-		printf("Unkown Read : %08X\n",addr);
+//		printf("Unkown Read : %08X\n",addr);
 		return 0;
 	}
 	if (addr<0xC000)
@@ -229,6 +280,7 @@ uint8_t GetByte(uint16_t addr)
 
 	return prgRom[addr-0x8000];
 }
+
 
 void SetByte(uint16_t addr,uint8_t byte)
 {
@@ -244,32 +296,60 @@ void SetByte(uint16_t addr,uint8_t byte)
 	}
 	if (addr<0x8000)
 	{
-		if (addr==0x4014)
+		if (addr>=0x4014 && addr<=0x4017)		// sound channel + controller 2.. todo  - controller 1 will need rewriting when rp2a03 has proper register support
 		{
-			int a;				///DMA HACK
-			for (a=0;a<256;a++)
+			if (addr>=4016)
 			{
-				IOWrite(4,GetByte((byte<<8)+a));
+				if (byte&1)
+				{
+					// Latch controller - reset shifter
+					controllerData=0;
+					if (KeyDown(GLFW_KEY_RIGHT))
+					{
+						controllerData|=0x01;
+					}
+					if (KeyDown(GLFW_KEY_LEFT))
+					{
+						controllerData|=0x02;
+					}
+					if (KeyDown(GLFW_KEY_DOWN))
+					{
+						controllerData|=0x04;
+					}
+					if (KeyDown(GLFW_KEY_UP))
+					{
+						controllerData|=0x08;
+					}
+					if (KeyDown(GLFW_KEY_ENTER))
+					{
+						controllerData|=0x10;
+					}
+					if (KeyDown(GLFW_KEY_SPACE))
+					{
+						controllerData|=0x20;
+					}
+					if (KeyDown('Z'))
+					{
+						controllerData|=0x40;
+					}
+					if (KeyDown('X'))
+					{
+						controllerData|=0x80;
+					}
+				}
 			}
 			return;
-
 		}
-		if (addr>=0x4015 && addr<=0x4017)		// sound channel + controllers.. todo
-			return;
-		printf("Unknown Write : %08X\n",addr);
+//		printf("Unknown Write : %08X\n",addr);
 		return;
 	}
-	printf("Unmapped Write : %08X\n",addr);
+//	printf("Unmapped Write : %08X\n",addr);
 	return;
 }
 
 int masterClock=0;
 int pixelClock=0;
 int cpuClock=0;
-
-int KeyDown(int key);
-int CheckKey(int key);
-void ClearKey(int key);
 
 extern uint8_t *MAIN_DIS_[256];
 
@@ -279,6 +359,8 @@ extern uint8_t	MAIN_Y;
 extern uint16_t	MAIN_SP;
 extern uint16_t	MAIN_PC;
 extern uint8_t	MAIN_P;
+
+extern uint8_t	MAIN_DEBUG_SYNC;
 
 int stopTheClock=1;
 
@@ -566,8 +648,7 @@ void UpdateHardware()
 {
 	UpdateJoy();
 }
-		
-
+	
 int main(int argc,char**argv)
 {
 	int w,h;
@@ -638,7 +719,7 @@ int main(int argc,char**argv)
 			MAIN_PinSetPIN_O0(1);
 			addr = MAIN_PinGetPIN_AB();
 
-			if (MAIN_PinGetPIN_SYNC())
+			if (MAIN_DEBUG_SYNC)
 			{
 				lastPC=addr;
 
@@ -662,6 +743,8 @@ int main(int argc,char**argv)
 			UpdateHardware();
 
 			MAIN_PinSetPIN__IRQ(1);//VIA1_PinGetPIN__IRQ());
+/*			if (regs2C02[0]&0x80)
+				stopTheClock=1;*/
 //			printf("NMI Val : %d\n",(~(regs2C02[0]&regs2C02[2])>>7)&0x01);
 			MAIN_PinSetPIN__NMI((~(regs2C02[0]&regs2C02[2])>>7)&0x01);
 
@@ -804,7 +887,119 @@ uint32_t nesColours[0x40]=
 0x000000
 };
 
-uint16_t latchedScrollX;
+uint8_t tileData1_temp;
+uint16_t tileData1_latch;
+uint16_t tileData2_latch;
+uint16_t attr1_latch;
+uint16_t attr2_latch;
+
+uint8_t attr1_temp;
+uint8_t attr2_temp;
+//uint8_t attr_latch;
+//uint8_t attr_latch_1;
+uint8_t tile_latch;
+
+uint8_t flipBits(uint8_t a)
+{
+	int c;
+	uint8_t b=0;
+
+	for (c=0;c<8;c++)
+	{
+		b<<=1;
+		b|=a&1;
+		a>>=1;
+	}
+
+	return b;
+}
+		
+
+void FetchBGData(int y,int x)
+{
+	switch (curClock&7)
+	{
+		case 0:
+			break;		// Will need changing when half address bus is used
+		case 1:
+			// Get Name table byte
+			{
+				uint16_t nameTableAddress=0x2000;
+
+				nameTableAddress|=PPU_Vc<<11;
+				nameTableAddress|=PPU_Hc<<10;
+				nameTableAddress|=PPU_VTc<<5;
+				nameTableAddress|=PPU_HTc;
+				
+				uint8_t tile = PPUGetByte(nameTableAddress);
+				tile_latch=tile;
+			}
+			break;
+		case 2:
+			break;
+		case 3:
+			{
+				uint16_t attrAddress=0x23C0;
+				attrAddress|=PPU_Vc<<11;
+				attrAddress|=PPU_Hc<<10;
+				attrAddress|=(PPU_VTc&0x1C)<<1;
+				attrAddress|=(PPU_HTc&0x1C)>>2;
+
+				attr1_temp = PPUGetByte(attrAddress);
+					
+				uint8_t attrshift=(PPU_VTc&0x02)<<1;
+				attrshift|=PPU_HTc&0x02;
+
+				attr1_temp>>=attrshift;
+				attr1_temp&=3;
+				attr1_temp|=attr1_temp<<2;
+				attr1_temp|=attr1_temp<<4;
+
+				attr2_temp=attr1_temp&0xAA;
+				attr2_temp|=attr2_temp>>1;
+
+				attr1_temp=attr1_temp&0x55;
+				attr1_temp|=attr1_temp<<1;
+			}
+			break;
+		case 4:
+			break;
+		case 5:
+			{
+				uint16_t patternTable=0x0000;
+				patternTable|=PPU_S<<12;
+				patternTable|=tile_latch<<4;
+				patternTable|=PPU_FVc&7;
+				
+				tileData1_temp=flipBits(PPUGetByte(patternTable));
+			}
+			break;
+		case 6:
+			break;
+		case 7:
+			{
+				uint16_t patternTable=0x0008;
+				patternTable|=PPU_S<<12;
+				patternTable|=tile_latch<<4;
+				patternTable|=PPU_FVc&7;
+				
+				tileData2_latch&=0x00FF;
+				tileData2_latch|=flipBits(PPUGetByte(patternTable))<<8;
+				tileData1_latch&=0x00FF;
+				tileData1_latch|=tileData1_temp<<8;
+				attr1_latch&=0x00FF;
+				attr1_latch|=attr1_temp<<8;
+				attr2_latch&=0x00FF;
+				attr2_latch|=attr2_temp<<8;
+
+				uint8_t tmpH=(PPU_Hc<<5)|PPU_HTc;
+				tmpH++;
+				PPU_Hc=(tmpH&0x20)>>5;
+				PPU_HTc=(tmpH&0x1F);
+			}
+			break;
+	}
+}
 
 void Tick2C02()
 {
@@ -822,74 +1017,97 @@ void Tick2C02()
 	{
 		if (curLine==20)
 		{
+			if (curClock==0)
+			{
+				regs2C02[2]&=0xBF;
+			}
+			if (curClock==256)
+			{
+				PPU_FVc=PPU_FV;
+				PPU_Vc=PPU_V;
+				PPU_Hc=PPU_H;
+				PPU_VTc=PPU_VT;
+				PPU_HTc=PPU_HT;
+			}
 			// DUMMY line
+			if ((curClock<256) && (regs2C02[1]&0x08))
+			{
+				FetchBGData(21,curClock+16);
+			}
+
+			if ((curClock>=320) && (curClock<=335) && (regs2C02[1]&0x08))
+			{
+				FetchBGData(21,curClock-320);
+				tileData1_latch>>=8;
+				tileData2_latch>>=8;
+				attr1_latch>>=8;
+				attr2_latch>>=8;
+			}
+			
 		}
 		else
 		{
 			if (curLine<261)
 			{
-				// Real Render  - for now.. cheat and draw in place
-
-				if (curClock<256)
+				if ((curClock<256) && (regs2C02[1]&0x08))
 				{
-					// Look up pixel from tile info
+					uint8_t shift=PPU_FHl;
 
-					uint8_t yPos=curLine-21;
-					uint8_t xPos=curClock;
+					uint16_t fetchMask=0x0001;
+					fetchMask<<=shift;
 
-					uint16_t vX=(xPos+latchedScrollX)&0x1FF;
-
-					uint16_t namePos = (yPos/8)*32 + ((vX&0xFF)/8);
-
-					uint8_t tile = PPUGetByte(namePos+0x2000);
-					if (vX>255)
-					{
-						tile = PPUGetByte(namePos+0x2400);
-					}
-
-					uint16_t tilePos = tile*16 + (yPos&7);
-
-					tilePos+=0x1000;
-					uint8_t tileData1=PPUGetByte(tilePos);
-					uint8_t tileData2=PPUGetByte(tilePos+8);
-
-					uint16_t fetchMask=0x80;
-					fetchMask>>=xPos&7;
-
-					uint8_t col1 = fetchMask & tileData1;
-					uint8_t col2 = fetchMask & tileData2;
-					col1>>=(7-(xPos&7));
-					col2>>=(7-(xPos&7));
+					uint8_t col1 = fetchMask & tileData1_latch;
+					uint8_t col2 = fetchMask & tileData2_latch;
+					uint8_t col3 = fetchMask & attr1_latch;
+					uint8_t col4 = fetchMask & attr2_latch;
+					col1>>=shift;
+					col2>>=shift;
+					col3>>=shift;
+					col4>>=shift;
 					
 					col1<<=0;
 					col2<<=1;
+					col3<<=2;
+					col4<<=3;
 
-					uint8_t col = col1|col2;
+					tileData1_latch>>=1;
+					tileData2_latch>>=1;
+					attr1_latch>>=1;
+					attr2_latch>>=1;
 
-					uint16_t attrPos = (yPos/32)*8 + (xPos/32);
+					uint8_t colbpl = col1|col2;
 
-					uint8_t attr = PPUGetByte(0x2000+0x3C0+attrPos);
+					uint8_t attrshift=(PPU_VTc&0x02)<<1;
+					attrshift|=PPU_HTc&0x02;
 
-					uint8_t attrX=(xPos&0x1F)/16;
-					uint8_t attrY=(yPos&0x1F)/16;
-
-					if (col==0)
+					uint8_t col=colbpl|col3|col4;
+					if (colbpl==0)
 					{
-						outputTexture[yPos*WIDTH+xPos]=nesColours[palIndex[0]];
+						outputTexture[(curLine-21)*WIDTH+curClock]=nesColours[palIndex[0]];
 						lastPixel=0;
 					}
 					else
 					{
+
 						lastPixel=1;
-						if (attrX==0 && attrY==0)
-							col|=(attr&0x03)<<2;
-						if (attrX==1 && attrY==0)
-							col|=(attr&0x0C);
-						if (attrX==0 && attrY==1)
-							col|=(attr&0x30)>>2;
-						if (attrX==1 && attrY==1)
-							col|=(attr&0xC0)>>4;
-						outputTexture[yPos*WIDTH + xPos]=nesColours[palIndex[col]];
+						outputTexture[(curLine-21)*WIDTH + curClock]=nesColours[palIndex[col]];
+					}
+				}
+
+				if ((curClock<256) && (regs2C02[1]&0x08))
+				{
+					FetchBGData(curLine-21,curClock+16);
+				}
+
+				if ((curClock>=320) && (curClock<=335) && (regs2C02[1]&0x08))
+				{
+					FetchBGData(curLine-20,curClock-320);
+					if (curClock==328)
+					{
+						tileData1_latch>>=8;
+						tileData2_latch>>=8;
+						attr1_latch>>=8;
+						attr2_latch>>=8;
 					}
 				}
 
@@ -903,7 +1121,7 @@ void Tick2C02()
 
 //sprite hack
 
-	if (curLine>20 && curLine<261 && curClock<256)
+	if (curLine>20 && curLine<261 && curClock<256 && (regs2C02[1]&0x10))
 	{
 		uint8_t sprSize=8;
 		uint16_t yPos=curLine-21;
@@ -932,6 +1150,11 @@ void Tick2C02()
 					uint8_t tile=sprRam[a*4+1];		// not for 8x16!!!
 					
 					uint16_t tilePos = tile*16 + sprY;
+					
+					if (regs2C02[0]&0x08)
+					{
+						tilePos+=0x1000;
+					}
 
 					uint8_t tileData1=PPUGetByte(tilePos);
 					uint8_t tileData2=PPUGetByte(tilePos+8);
@@ -970,15 +1193,31 @@ void Tick2C02()
 	}
 
 	curClock++;
-	if (curClock==256)
+	if ((curClock==320) && (regs2C02[1]&0x08))
 	{
-		latchedScrollX = xScroll | ((regs2C02[0]&0x1)<<8);
+		//pretend this is the horizontal blanking pulse?
+
+		uint16_t tmpV=(PPU_Vc<<8)|(PPU_VTc<<3)|PPU_FVc;
+		if (curLine>=21)
+			tmpV++;
+		PPU_Vc=(tmpV&0x100)>>8;
+		PPU_VTc=(tmpV&0xF8)>>3;
+		PPU_FVc=(tmpV&0x07);
+
+		// RELOAD here apparantly
+		PPU_Hc=PPU_H;
+		PPU_HTc=PPU_HT;
+		PPU_FHl=PPU_FH;
 	}
 	if (curClock>=341)
 	{
 		curClock=0;
 		curLine++;
 		lastCollision=0;
+		if (curLine==20)
+		{
+			regs2C02[2]&=0x7F;
+		}
 		if (curLine>=262)
 		{
 			curLine=0;
@@ -1223,10 +1462,17 @@ void LoadCart(const char* fileName)
 		printf("flags10 : %02X\n",flags10);
 
 		prgRomSize=prgSize*16384;
-		chrRomSize=chrSize*8192;
-
+		if (chrSize==0)
+		{
+			chrRomSize=8192;
+			chrRom=chrRam;
+		}
+		else
+		{
+			chrRomSize=chrSize*8192;
+			chrRom=&ptr[16+prgRomSize];
+		}
 		prgRom=&ptr[16];
-		chrRom=&ptr[16+prgRomSize];
 	}
 }
 

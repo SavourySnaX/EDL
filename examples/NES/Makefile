@@ -11,7 +11,7 @@ clean:
 
 out/rp2a03.lls: ../../chips/Accurate/rp2a03.edl
 	mkdir -p out
-	$(EDL) -O2 -t -s MAIN_ ../../chips/Accurate/rp2a03.edl >out/rp2a03.lls
+	$(EDL) -O2 -s MAIN_ ../../chips/Accurate/rp2a03.edl >out/rp2a03.lls
 
 out/rp2a03.lls.s: out/rp2a03.lls
 	llc out/rp2a03.lls
