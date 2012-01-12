@@ -37,6 +37,9 @@ uint32_t chrRomSize;
 
 uint8_t chrRam[8192];
 
+uint8_t hMirror;
+uint8_t vMirror;
+
 // Step 1. Memory
 
 int LoadRom(unsigned char* rom,unsigned int size,const char* fname)
@@ -94,8 +97,10 @@ uint8_t PPUGetByte(uint16_t addr)
 	if (addr<0x3F00)
 	{
 		uint16_t chrAddr=(addr-0x2000)&0x3FF;
-//		chrAddr|=(addr&0x0800)>>1;
-		chrAddr|=(addr&0x0400);
+		if (hMirror)
+			chrAddr|=(addr&0x0800)>>1;
+		if (vMirror)
+			chrAddr|=(addr&0x0400);
 		return ppuRam[chrAddr];		// WILL NEED FIXING
 	}
 	return palIndex[addr&0x1F];/// PALLETTE
@@ -112,8 +117,10 @@ void PPUSetByte(uint16_t addr,uint8_t byte)
 	if (addr<0x3F00)
 	{
 		uint16_t chrAddr=(addr-0x2000)&0x3FF;
-//		chrAddr|=(addr&0x0800)>>1;
-		chrAddr|=(addr&0x0400);
+		if (hMirror)
+			chrAddr|=(addr&0x0800)>>1;
+		if (vMirror)
+			chrAddr|=(addr&0x0400);
 		ppuRam[chrAddr]=byte;
 		return;
 	}
@@ -660,6 +667,17 @@ int main(int argc,char**argv)
 	int w,h;
 	double	atStart,now,remain;
 	uint16_t bp;
+	
+	if (argc==2)
+	{
+		printf("Loading %s\n",argv[1]);
+		LoadCart(argv[1]);
+	}
+	else
+	{
+		printf("Currently require a rom name as argument (iNes format)\n");
+		exit(-1);
+	}
 
 	/// Initialize GLFW 
 	glfwInit(); 
@@ -702,11 +720,6 @@ int main(int argc,char**argv)
 
 	if (InitialiseMemory())
 		return -1;
-
-	if (argc==2)
-	{
-		LoadCart(argv[1]);
-	}
 
 	MAIN_PinSetPIN_SO(1);
 	MAIN_PinSetPIN__IRQ(1);
@@ -1581,7 +1594,7 @@ void LoadCart(const char* fileName)
 		    ptr[3]!=0x1A)
 		{
 			printf("Not in iNES format\n");
-			return;
+			exit(-1);
 		}
 
 		prgSize=ptr[4];
@@ -1592,12 +1605,6 @@ void LoadCart(const char* fileName)
 		flags9=ptr[9];
 		flags10=ptr[10];
 
-		if ((flags6&0xF0)!=0 || (flags7&0xF0)!=0)
-		{
-			printf("Only supports mapper 0!\n");
-			return;
-		}
-
 		printf("prgSize : %08X\n",prgSize*16384);
 		printf("chrSize : %08X\n",chrSize*8192);
 		printf("flags6 : %02X\n",flags6);
@@ -1605,6 +1612,28 @@ void LoadCart(const char* fileName)
 		printf("prgRamSize : %02X\n",prgRamSize);
 		printf("flags9 : %02X\n",flags9);
 		printf("flags10 : %02X\n",flags10);
+		
+		if ((flags6&0xF0)!=0 || (flags7&0xF0)!=0)
+		{
+			printf("Only supports mapper 0!\n");
+			exit(-1);
+		}
+		if ((flags6&0x0E)!=0)
+		{
+			printf("No Bat/Train/4Scr Support\n");
+			exit(-1);
+		}
+		if (flags6&0x01)
+		{
+			hMirror=0;
+			vMirror=1;
+		}
+		else
+		{
+			hMirror=1;
+			vMirror=0;
+		}
+
 
 		prgRomSize=prgSize*16384;
 		if (chrSize==0)
