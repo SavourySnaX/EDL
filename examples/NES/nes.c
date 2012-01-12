@@ -93,7 +93,10 @@ uint8_t PPUGetByte(uint16_t addr)
 	}
 	if (addr<0x3F00)
 	{
-		return ppuRam[(addr-0x2000)&0x7FF];	// WILL NEED FIXING
+		uint16_t chrAddr=(addr-0x2000)&0x3FF;
+//		chrAddr|=(addr&0x0800)>>1;
+		chrAddr|=(addr&0x0400);
+		return ppuRam[chrAddr];		// WILL NEED FIXING
 	}
 	return palIndex[addr&0x1F];/// PALLETTE
 }
@@ -108,7 +111,10 @@ void PPUSetByte(uint16_t addr,uint8_t byte)
 	}
 	if (addr<0x3F00)
 	{
-		ppuRam[(addr-0x2000)&0x7FF]=byte;
+		uint16_t chrAddr=(addr-0x2000)&0x3FF;
+//		chrAddr|=(addr&0x0800)>>1;
+		chrAddr|=(addr&0x0400);
+		ppuRam[chrAddr]=byte;
 		return;
 	}
 	switch (addr&0x1F)
@@ -1019,16 +1025,16 @@ uint8_t SP_BUF_RastZeroInRange;
 
 void SpriteCompute(uint8_t clock,uint16_t cLine)
 {
-	uint8_t spNum=clock>>3;
+	uint8_t spNum=clock>>2;
 
-	uint8_t spPhase=clock&7;
+	uint8_t spPhase=clock&3;
 	uint16_t spSize=8;			// TODO - Fix for 16 high
 
 	switch (spPhase)
 	{
 	case 0:
 		{
-			uint16_t compare=cLine-sprRam[spNum*4+0];
+			uint16_t compare=cLine-(sprRam[spNum*4+0]+1);
 	
 			SP_BUF_SpriteInRange=compare<spSize;
 			SP_BUF_ZeroInRange|=SP_BUF_SpriteInRange && (spNum==0);
@@ -1038,29 +1044,20 @@ void SpriteCompute(uint8_t clock,uint16_t cLine)
 			}
 			else
 			{
-				if (SP_BUF_SpriteInRange)
-					printf("Overflow %d\n",cLine);
+//				if (SP_BUF_SpriteInRange)
+//					printf("Overflow %d\n",cLine);
 				SP_BUF_SpriteInRange=0;
 			}
 		}
 		break;
 	case 1:
-		break;
-	case 2:
 		if (SP_BUF_SpriteInRange)
 		{
 			SP_BUF_Tile[SP_BUF_CurSprite]=sprRam[spNum*4+1];
-		}
-		break;
-	case 3:
-		break;
-	case 4:
-		if (SP_BUF_SpriteInRange)
-		{
 			SP_BUF_Attribs[SP_BUF_CurSprite]=sprRam[spNum*4+2];
 		}
 		break;
-	case 5:
+	case 2:
 		if (SP_BUF_SpriteInRange)
 		{
 			if (SP_BUF_Attribs[SP_BUF_CurSprite]&0x80)
@@ -1069,16 +1066,10 @@ void SpriteCompute(uint8_t clock,uint16_t cLine)
 			}
 		}
 		break;
-	case 6:
+	case 3:
 		if (SP_BUF_SpriteInRange)
 		{
 			SP_BUF_XCoord[SP_BUF_CurSprite]=sprRam[spNum*4+3];
-			printf("spNum : %d %02X,%02X\n",spNum,cLine,SP_BUF_XCoord[SP_BUF_CurSprite]);
-		}
-		break;
-	case 7:
-		if (SP_BUF_SpriteInRange)
-		{
 			SP_BUF_CurSprite++;
 		}
 		break;
@@ -1113,7 +1104,7 @@ void SpriteFetch(uint16_t curClock)
 				{
 					tilePos+=0x1000;
 				}
-				SP_BUF_BitMap0[curFetch]=PPUGetByte(tilePos);
+				SP_BUF_BitMap0[curFetch]=/*0xFF;*/PPUGetByte(tilePos);
 			}
 			else
 			{
@@ -1130,7 +1121,7 @@ void SpriteFetch(uint16_t curClock)
 				{
 					tilePos+=0x1000;
 				}
-				SP_BUF_BitMap1[curFetch]=PPUGetByte(tilePos);
+				SP_BUF_BitMap1[curFetch]=/*0xFF;*/PPUGetByte(tilePos);
 			}
 			else
 			{
@@ -1145,7 +1136,7 @@ uint8_t spColour;
 uint8_t spZero;
 uint8_t spBack;
 
-void SpriteRender()
+void SpriteRender(uint8_t curClock)
 {
 	int a;
 
@@ -1174,12 +1165,11 @@ void SpriteRender()
 				SP_BUF_BitMap0[a]<<=1;
 				SP_BUF_BitMap1[a]<<=1;
 			}
-			if ((col0|col1)&&(spColour==0))
+			if ((col0|col1)&&(spColour==0) && (curClock>7||regs2C02[1]&0x04))
 			{
 				spColour=0x10|col0|col1|col23;
 				spZero=SP_BUF_RastZeroInRange && (a==0);
 				spBack=SP_BUF_RastAttribs[a]&0x20;
-//				break;
 			}
 		}
 		else
@@ -1244,10 +1234,10 @@ void Tick2C02()
 				if (curClock<256 && (regs2C02[1]&0x10))
 				{
 					SpriteCompute(curClock,curLine-20);
-					SpriteRender();
+					SpriteRender(curClock);
 				}
 
-				if ((curClock<256) && (regs2C02[1]&0x08))
+				if ((curClock<256) && (regs2C02[1]&0x08) && ((curClock>7) || (regs2C02[1]&0x02)))
 				{
 					uint8_t shift=PPU_FHl;
 
@@ -1330,88 +1320,22 @@ void Tick2C02()
 		}
 	}
 
-//sprite hack
-/*
-	if (curLine>20 && curLine<261 && curClock<256 && (regs2C02[1]&0x10))
-	{
-		uint8_t sprSize=8;
-		uint16_t yPos=curLine-21;
-
-		if (regs2C02[0]&0x20)
-			sprSize=16;
-
-		for (a=0;a<64;a++)
-		{
-			int16_t sY=yPos;
-			sY-=sprRam[a*4+0];
-
-			if (sY>=0 && sY<sprSize)
-			{
-				int16_t sX=curClock;
-				sX-=sprRam[a*4+3];
-
-				if (sprRam[a*4+2]&0x80)
-					sY=7-sY;
-
-				if (sX>=0 && sX<8)
-				{
-					uint8_t sprY=sY;
-					uint8_t sprX=sX;
-
-					uint8_t tile=sprRam[a*4+1];		// not for 8x16!!!
-					
-					uint16_t tilePos = tile*16 + sprY;
-					
-					if (regs2C02[0]&0x08)
-					{
-						tilePos+=0x1000;
-					}
-
-					uint8_t tileData1=PPUGetByte(tilePos);
-					uint8_t tileData2=PPUGetByte(tilePos+8);
-
-					uint16_t fetchMask=0x80;
-
-					if (sprRam[a*4+2]&0x40)
-						sprX=7-sprX;
-
-					fetchMask>>=sprX&7;
-
-					uint8_t col1 = fetchMask & tileData1;
-					uint8_t col2 = fetchMask & tileData2;
-					col1>>=(7-(sprX&7));
-					col2>>=(7-(sprX&7));
-					
-					col1<<=0;
-					col2<<=1;
-
-					uint8_t col = col1|col2;
-
-
-					if (col)
-					{
-						if (a==0 && lastCollision==0 && lastPixel==1)
-						{
-							lastCollision=1;
-							regs2C02[2]|=0x40;
-						}
-						col|=((sprRam[a*4+2]&0x3)<<2)|0x10;
-						outputTexture[yPos*WIDTH + curClock]=nesColours[palIndex[col]];
-					}
-				}
-			}
-		}
-	}
-*/
 	curClock++;
 	if ((curClock==320) && (regs2C02[1]&0x08))
 	{
 
 		//pretend this is the horizontal blanking pulse?
-
 		uint16_t tmpV=(PPU_Vc<<8)|(PPU_VTc<<3)|PPU_FVc;
+
 		if (curLine>=21)
+		{
+			// Check for VT overflow this operation
+			if (PPU_FVc==7 && PPU_VTc==29)
+			{
+				tmpV+=8+8;
+			}
 			tmpV++;
+		}
 		PPU_Vc=(tmpV&0x100)>>8;
 		PPU_VTc=(tmpV&0xF8)>>3;
 		PPU_FVc=(tmpV&0x07);
@@ -1600,11 +1524,17 @@ void UpdateAudio()
 	}
 }
 
+unsigned char * LoadFirstFileInZip(const char* path,unsigned int *length);
+
 unsigned char *qLoad(const char *romName,uint32_t *length)
 {
 	FILE *inRom;
-	unsigned char *romData;
+	unsigned char *romData=NULL;
 	*length=0;
+
+	romData = LoadFirstFileInZip(romName,length);
+	if (romData!=0)
+		return romData;
 
 	inRom = fopen(romName,"rb");
 	if (!inRom)
