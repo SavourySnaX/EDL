@@ -375,7 +375,7 @@ extern uint8_t	MAIN_P;
 
 extern uint8_t	MAIN_DEBUG_SYNC;
 
-int stopTheClock=1;
+int stopTheClock=0;
 
 uint32_t MAIN_missing(uint32_t opcode)
 {
