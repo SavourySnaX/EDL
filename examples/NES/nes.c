@@ -661,6 +661,8 @@ void UpdateHardware()
 {
 	UpdateJoy();
 }
+
+int dumpNTSC=0;
 	
 int main(int argc,char**argv)
 {
@@ -815,6 +817,11 @@ int main(int argc,char**argv)
 				ClearKey(GLFW_KEY_KP_MULTIPLY);
 				g_traceStep=1;
 			}
+			if (CheckKey(GLFW_KEY_KP_ADD))
+			{
+				ClearKey(GLFW_KEY_KP_ADD);
+				dumpNTSC=1;
+			}
 			
 			now=glfwGetTime();
 
@@ -905,6 +912,20 @@ uint32_t nesColours[0x40]=
 0x000000,
 0x000000
 };
+uint8_t nesColoursBW[0x40];
+
+void YFROMRGB()
+{
+	int a;
+	for (a=0;a<0x40;a++)
+	{
+		uint8_t r=nesColours[a]>>16;
+		uint8_t g=nesColours[a]>>8;
+		uint8_t b=nesColours[a];
+
+		nesColoursBW[a]=r*0.229f  +  g*0.587f   + b*0.114f;
+	}
+}
 
 uint8_t tileData1_temp;
 uint16_t tileData1_latch;
@@ -1192,15 +1213,95 @@ void SpriteRender(uint8_t curClock)
 	}
 }
 
+uint8_t lastPixelValue;
+
+int dumpStart=0;
+
+FILE* ntsc_file=NULL;
+
+static int offsoffs=0;
+	
+//static int wave[4]={0,20,0,-20};
+//-----888888-
+
+static int colourBurstWave0[12]={0,0,0,0,0,0,0,0,0,0,0,0};
+static int colourBurstWave1[12]={1,1,1,1,1,1,-1,-1,-1,-1,-1,-1};
+static int colourBurstWave2[12]={1,1,1,1,1,-1,-1,-1,-1,-1,-1,1};
+static int colourBurstWave3[12]={1,1,1,1,-1,-1,-1,-1,-1,-1,1,1};
+static int colourBurstWave4[12]={1,1,1,-1,-1,-1,-1,-1,-1,1,1,1};
+static int colourBurstWave5[12]={1,1,-1,-1,-1,-1,-1,-1,1,1,1,1};
+static int colourBurstWave6[12]={1,-1,-1,-1,-1,-1,-1,1,1,1,1,1};
+static int colourBurstWave7[12]={-1,-1,-1,-1,-1,-1,1,1,1,1,1,1};
+static int colourBurstWave8[12]={-1,-1,-1,-1,-1,1,1,1,1,1,1,-1};
+static int colourBurstWave9[12]={-1,-1,-1,-1,1,1,1,1,1,1,-1,-1};
+static int colourBurstWaveA[12]={-1,-1,-1,1,1,1,1,1,1,-1,-1,-1};
+static int colourBurstWaveB[12]={-1,-1,1,1,1,1,1,1,-1,-1,-1,-1};
+static int colourBurstWaveC[12]={-1,1,1,1,1,1,1,-1,-1,-1,-1,-1};
+
+static int cClock=0;
+
+void DumpNTSCComposite(uint8_t level,uint8_t col,uint8_t low,uint8_t high)
+{
+	static int _3rds=0;
+	int actualLevel=((cClock+col+level)%12)<6?low:high;
+//	int actualLevel=low;
+
+	cClock+=8;
+
+	fwrite(&actualLevel,1,1,ntsc_file);
+	fwrite(&actualLevel,1,1,ntsc_file);
+
+	_3rds+=2;
+	if (_3rds>=3)
+	{
+		//actualLevel=((cClock+col+level)%12)<6?low:high;
+		_3rds-=3;
+		fwrite(&actualLevel,1,1,ntsc_file);
+	}
+
+}
+
 void Tick2C02()
 {
+	static int field=0;
+	static int triCnt=0;
 	uint32_t* outputTexture = (uint32_t*)videoMemory[MAIN_WINDOW];
 	int a;
 
 	static uint16_t lastCollision=0;
 
+	static firstEver=1;
+	if (firstEver)
+	{
+		YFROMRGB();
+		firstEver=0;
+	}
+
+
+/*	triCnt++;
+	if (triCnt==2)
+		triCnt=0;*/
+
 	if (curLine<20)
 	{
+		if (curLine==0 && curClock==0)
+		{
+			offsoffs++;
+			if (!dumpStart)
+			{
+				dumpStart=dumpNTSC;
+				if (dumpStart)
+				{
+					triCnt=2*500;
+					ntsc_file=fopen("out.ntsc","wb+");
+				}
+				else
+				{
+					ntsc_file=NULL;
+				}
+				dumpNTSC=0;
+			}
+		}
 		// IDLE PPU
 	}
 	else
@@ -1238,7 +1339,10 @@ void Tick2C02()
 				attr1_latch>>=8;
 				attr2_latch>>=8;
 			}
-			
+			if (curClock==340)
+				field++;
+			if ((curClock==340)&&(field&1))
+				curClock++;
 		}
 		else
 		{
@@ -1284,6 +1388,7 @@ void Tick2C02()
 					uint8_t col=colbpl|col3|col4;
 					if (colbpl==0)
 					{
+						lastPixelValue=palIndex[spColour];
 						outputTexture[(curLine-21)*WIDTH+curClock]=nesColours[palIndex[spColour]];
 					}
 					else
@@ -1295,10 +1400,12 @@ void Tick2C02()
 						}
 						if (!spBack && spColour)
 						{
+							lastPixelValue=palIndex[spColour];
 							outputTexture[(curLine-21)*WIDTH + curClock]=nesColours[palIndex[spColour]];
 						}
 						else
 						{
+							lastPixelValue=palIndex[col];
 							outputTexture[(curLine-21)*WIDTH + curClock]=nesColours[palIndex[col]];
 						}
 					}
@@ -1333,6 +1440,91 @@ void Tick2C02()
 		}
 	}
 
+	// YUK- Right the ppu clock is 21.47 / 4 - so every clock we need to write 2.6666666 samples to file. - lets try that.
+	
+	if (/*triCnt==1 &&*/ ntsc_file)
+	{
+		if (/*curLine>17 && */curLine>=8 && curLine<11)
+		{
+			DumpNTSCComposite(4,0,4,4);
+		}
+		else
+		// For Every Line (for Now)
+		if (curClock<256)			// active
+		{
+//			static uint8_t levelsLow[4]={10,70,90,180};
+//			static uint8_t levelsHigh[4]={95,175,200,200};
+
+			uint8_t level=(lastPixelValue&0x30)>>4;
+			uint8_t colour=lastPixelValue&0x0F;
+/*			
+			if (colour>13)
+				level=1;
+*/
+			uint8_t levelLow=50+/*levelsLow[level]*/(level<<0);
+			uint8_t levelHigh=50+/*levelsHigh[level]*/(level<<6);
+
+			if (colour==0)
+			{
+				levelLow=levelHigh;
+			}
+			if (colour>12)
+			{
+				levelHigh=levelLow;
+			}
+			DumpNTSCComposite(6,colour,levelLow,levelHigh);
+		}
+		else
+		if (curClock<256+11)
+		{
+			uint8_t sample=0;		// background colour
+			DumpNTSCComposite(sample,0,70,70);
+		}
+		else
+		if (curClock<256+11+9)
+		{
+			uint8_t sample=0;		// black
+			DumpNTSCComposite(sample,0,60,60);
+		}
+		else
+		if (curClock<256+11+9+25)
+		{
+			uint8_t sample=0;		// sync
+			DumpNTSCComposite(sample,0,4,4);	
+		}
+		else
+		if (curClock<256+11+9+25+4)
+		{
+			uint8_t sample=0;		// black
+			DumpNTSCComposite(sample,0,60,60);
+		}
+		else
+		if (curClock<256+11+9+25+4+15)
+		{
+			uint8_t sample=0;		// colour burst
+			DumpNTSCComposite(sample,8,40,80);
+		}
+		else
+		if (curClock<256+11+9+25+4+15+5)
+		{
+			uint8_t sample=0;		// black
+			DumpNTSCComposite(sample,0,60,60);
+		}
+		else
+		if (curClock<256+11+9+25+4+15+5+1)
+		{
+			uint8_t sample=0;		// pulse???
+			DumpNTSCComposite(sample,0,60,60);
+		}
+		else
+		if (curClock<256+11+9+25+4+15+5+1+15)
+		{
+			uint8_t sample=0;		// background colour
+			DumpNTSCComposite(sample,0,70,70);
+		}
+	}
+
+//	cClock+=8;		// gives 12 phase stepping for colour clock (which results in 21.47/6)
 	curClock++;
 	if ((curClock==320) && (regs2C02[1]&0x08))
 	{
@@ -1372,6 +1564,15 @@ void Tick2C02()
 		}
 		if (curLine>=262)
 		{
+			if (ntsc_file)
+			{
+				triCnt--;
+				if (triCnt==0)
+				{
+					fclose(ntsc_file);
+					dumpStart=0;
+				}
+			}
 			curLine=0;
 			regs2C02[2]|=0x80;
 		}
