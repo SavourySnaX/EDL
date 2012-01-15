@@ -96,6 +96,7 @@ unsigned char * LoadFirstFileInZip(const char* path,unsigned int *length)
 				return 0;
 			}
 
+			size_buf=file_info.uncompressed_size;
 			buf = malloc(file_info.uncompressed_size);
 			if (buf==NULL)
 			{
