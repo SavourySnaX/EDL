@@ -663,7 +663,13 @@ void UpdateHardware()
 }
 
 int dumpNTSC=0;
-	
+
+int MasterClock=0;
+
+FILE* ntsc_file=NULL;
+
+void WriteNTSC(int colourClock);
+
 int main(int argc,char**argv)
 {
 	int w,h;
@@ -737,53 +743,66 @@ int main(int argc,char**argv)
 		
 		if ((!stopTheClock) || g_traceStep || g_instructionStep)
 		{
-			MAIN_PinSetPIN_O0(1);
-			addr = MAIN_PinGetPIN_AB();
+			// Tick Hardware based on MASTER clocks (or as close as damn it)
 
-			if (MAIN_DEBUG_SYNC)
+			int cpuClock=MasterClock%24;
+			int ppuClock=MasterClock%8;
+			int ColourClock=MasterClock%12;
+			int NTSCClock=MasterClock%3;
+
+			if (cpuClock==0)
 			{
-				lastPC=addr;
+				MAIN_PinSetPIN_O0(1);
+				addr = MAIN_PinGetPIN_AB();
 
-				if (isBreakpoint(0,lastPC))
+				if (MAIN_DEBUG_SYNC)
 				{
-					stopTheClock=1;
+					lastPC=addr;
+	
+					if (isBreakpoint(0,lastPC))
+					{
+						stopTheClock=1;
+					}
 				}
-			}
+	
+				if (MAIN_PinGetPIN_RW())
+				{
+					uint8_t  data = GetByte(addr);
+					MAIN_PinSetPIN_DB(data);
+				}
+				if (!MAIN_PinGetPIN_RW())
+				{
+					SetByte(addr,MAIN_PinGetPIN_DB());
+				}
+	
+	
+				UpdateHardware();
 
-			if (MAIN_PinGetPIN_RW())
-			{
-				uint8_t  data = GetByte(addr);
-				MAIN_PinSetPIN_DB(data);
-			}
-			if (!MAIN_PinGetPIN_RW())
-			{
-				SetByte(addr,MAIN_PinGetPIN_DB());
-			}
-
-
-			UpdateHardware();
-
-			MAIN_PinSetPIN__IRQ(1);//VIA1_PinGetPIN__IRQ());
+				MAIN_PinSetPIN__IRQ(1);//VIA1_PinGetPIN__IRQ());
 /*			if (regs2C02[0]&0x80)
 				stopTheClock=1;*/
 //			printf("NMI Val : %d\n",(~(regs2C02[0]&regs2C02[2])>>7)&0x01);
-			MAIN_PinSetPIN__NMI((~(regs2C02[0]&regs2C02[2])>>7)&0x01);
+				MAIN_PinSetPIN__NMI((~(regs2C02[0]&regs2C02[2])>>7)&0x01);
 
-			MAIN_PinSetPIN_O0(0);
-
-			Tick2C02();
-			Tick2C02();
-			Tick2C02();
-
-			pixelClock+=3;
+				MAIN_PinSetPIN_O0(0);
+			}
+			if (ppuClock==0)
+			{
+				Tick2C02();
+			}
+			if (ntsc_file && (NTSCClock==0))
+			{
+				WriteNTSC(ColourClock);
+			}
+			MasterClock+=1;
 		}
 
-		if (pixelClock>=341*262 || stopTheClock)
+		if (MasterClock>=341*262*2*4 || stopTheClock)
 		{
 			static int normalSpeed=1;
 
-			if (pixelClock>=341*262)
-				pixelClock-=341*262;
+			if (MasterClock>=341*262*2*4)
+				MasterClock-=341*262*2*4;
 
             		glfwMakeContextCurrent(windows[MAIN_WINDOW]);
 			ShowScreen(MAIN_WINDOW,WIDTH,HEIGHT);
@@ -1217,8 +1236,6 @@ uint8_t lastPixelValue;
 
 int dumpStart=0;
 
-FILE* ntsc_file=NULL;
-
 static int offsoffs=0;
 	
 //static int wave[4]={0,20,0,-20};
@@ -1259,6 +1276,17 @@ void DumpNTSCComposite(uint8_t level,uint8_t col,uint8_t low,uint8_t high)
 		fwrite(&actualLevel,1,1,ntsc_file);
 	}
 
+}
+
+uint8_t activeNTSCSignalLow;
+uint8_t activeNTSCSignalHi;
+uint8_t activeNTSCSignalCol;
+
+void WriteNTSC(int colourClock)
+{
+	int actualLevel=((colourClock+activeNTSCSignalCol)%12)<6?activeNTSCSignalLow:activeNTSCSignalHi;
+
+	fwrite(&actualLevel,1,1,ntsc_file);
 }
 
 void Tick2C02()
@@ -1439,12 +1467,11 @@ void Tick2C02()
 			}
 		}
 	}
-
+/*
 	// YUK- Right the ppu clock is 21.47 / 4 - so every clock we need to write 2.6666666 samples to file. - lets try that.
-	
-	if (/*triCnt==1 &&*/ ntsc_file)
+	if (ntsc_file)
 	{
-		if (/*curLine>17 && */curLine>=8 && curLine<11)
+		if (curLine>=8 && curLine<11)
 		{
 			DumpNTSCComposite(4,0,4,4);
 		}
@@ -1457,12 +1484,12 @@ void Tick2C02()
 
 			uint8_t level=(lastPixelValue&0x30)>>4;
 			uint8_t colour=lastPixelValue&0x0F;
-/*			
+			
 			if (colour>13)
 				level=1;
-*/
-			uint8_t levelLow=50+/*levelsLow[level]*/(level<<0);
-			uint8_t levelHigh=50+/*levelsHigh[level]*/(level<<6);
+
+			uint8_t levelLow=50+level<<0);
+			uint8_t levelHigh=50+level<<6);
 
 			if (colour==0)
 			{
@@ -1521,6 +1548,103 @@ void Tick2C02()
 		{
 			uint8_t sample=0;		// background colour
 			DumpNTSCComposite(sample,0,70,70);
+		}
+	}
+*/
+	
+	{
+		if (/*curLine>17 && */curLine>=8 && curLine<11)
+		{
+			activeNTSCSignalLow=4;
+			activeNTSCSignalHi=4;
+		}
+		else
+		// For Every Line (for Now)
+		if (curClock<256)			// active
+		{
+/*			static uint8_t levelsLow[4]={10,70,90,180};
+			static uint8_t levelsHigh[4]={95,175,200,200};
+*/
+			uint8_t level=(lastPixelValue&0x30)>>4;
+			uint8_t colour=lastPixelValue&0x0F;
+
+			if (colour>13)
+				level=1;
+
+//			uint8_t levelLow=50+levelsLow[level]/*(level<<0)*/;
+//			uint8_t levelHigh=50+levelsHigh[level]/*(level<<6)*/;
+
+			uint8_t levelLow=70+(level<<3);
+			uint8_t levelHigh=70+(level<<5);
+
+			if (colour==0)
+			{
+				levelLow=levelHigh;
+			}
+			if (colour>12)
+			{
+				levelHigh=levelLow;
+			}
+			activeNTSCSignalLow=levelLow;
+			activeNTSCSignalHi=levelHigh;
+			activeNTSCSignalCol=colour+4;
+		}
+		else
+		if (curClock<256+11)
+		{
+			activeNTSCSignalLow=70;
+			activeNTSCSignalHi=70;
+			// background colour
+		}
+		else
+		if (curClock<256+11+9)
+		{
+			activeNTSCSignalLow=60;
+			activeNTSCSignalHi=60;
+			// black
+		}
+		else
+		if (curClock<256+11+9+25)
+		{
+			activeNTSCSignalLow=4;
+			activeNTSCSignalHi=4;
+			// sync
+		}
+		else
+		if (curClock<256+11+9+25+4)
+		{
+			activeNTSCSignalLow=60;
+			activeNTSCSignalHi=60;
+			// black
+		}
+		else
+		if (curClock<256+11+9+25+4+15)
+		{
+			activeNTSCSignalLow=40;
+			activeNTSCSignalHi=80;
+			activeNTSCSignalCol=8;
+			// colour burst
+		}
+		else
+		if (curClock<256+11+9+25+4+15+5)
+		{
+			activeNTSCSignalLow=60;
+			activeNTSCSignalHi=60;
+			// black
+		}
+		else
+		if (curClock<256+11+9+25+4+15+5+1)
+		{
+			activeNTSCSignalLow=60;
+			activeNTSCSignalHi=60;
+			// pulse???
+		}
+		else
+		if (curClock<256+11+9+25+4+15+5+1+15)
+		{
+			activeNTSCSignalLow=70;
+			activeNTSCSignalHi=70;
+			// background colour
 		}
 	}
 
