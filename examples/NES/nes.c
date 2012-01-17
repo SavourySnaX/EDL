@@ -1448,6 +1448,16 @@ void Tick2C02()
 					}
 					//spColour=0;
 				}
+				if ((curClock<256) && ((regs2C02[1]&0x08)==0))
+				{
+					uint16_t ppuAddr=(PPU_FVc<<12)|(PPU_Vc<<11)|(PPU_Hc<<10)|(PPU_VTc<<5)|PPU_HTc;
+					ppuAddr&=0x3FFF;
+					if (ppuAddr>0x3EFF)
+					{
+						lastPixelValue=palIndex[ppuAddr&0x1F];
+						outputTexture[(curLine-21)*WIDTH + curClock]=nesColours[lastPixelValue];
+					}
+				}
 
 				if ((curClock<256) && (regs2C02[1]&0x08))
 				{
