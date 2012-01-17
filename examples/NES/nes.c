@@ -1255,6 +1255,11 @@ static int colourBurstWaveA[12]={-1,-1,-1,1,1,1,1,1,1,-1,-1,-1};
 static int colourBurstWaveB[12]={-1,-1,1,1,1,1,1,1,-1,-1,-1,-1};
 static int colourBurstWaveC[12]={-1,1,1,1,1,1,1,-1,-1,-1,-1,-1};
 
+//static int waveGuide={-4,-3,-1,1,3,4,3,1,-1,-3};
+
+//static int TopBottomPercentage={0,100,0,100,0,100,0,100,0,100,0,100,0,100,0,100}
+static int TopBottomPercentage[12]={0,16,32,64,80,96,100,96,80,64,32,16};
+
 static int cClock=0;
 
 void DumpNTSCComposite(uint8_t level,uint8_t col,uint8_t low,uint8_t high)
@@ -1284,7 +1289,11 @@ uint8_t activeNTSCSignalCol;
 
 void WriteNTSC(int colourClock)
 {
-	int actualLevel=((colourClock+activeNTSCSignalCol)%12)<6?activeNTSCSignalLow:activeNTSCSignalHi;
+//	int actualLevel=((colourClock+activeNTSCSignalCol)%12)<6?activeNTSCSignalLow:activeNTSCSignalHi;
+	int range = activeNTSCSignalHi-activeNTSCSignalLow;
+	int actualLevel=(range*TopBottomPercentage[(colourClock+activeNTSCSignalCol)%12])/100;
+	actualLevel+=activeNTSCSignalLow;
+//	int actualLevel=((colourClock+activeNTSCSignalCol)%12)<6?activeNTSCSignalLow:activeNTSCSignalHi;
 
 	fwrite(&actualLevel,1,1,ntsc_file);
 }
@@ -1562,20 +1571,36 @@ void Tick2C02()
 		// For Every Line (for Now)
 		if (curClock<256)			// active
 		{
-/*			static uint8_t levelsLow[4]={10,70,90,180};
-			static uint8_t levelsHigh[4]={95,175,200,200};
+/*Synch	 	0.781	 0.000	 -0.359
+Colorburst L	 1.000	 0.218	 -0.208
+Colorburst H	 1.712	 0.931	 0.286
+Color 0D	 1.131	 0.350	 -0.117
+Color 1D (black) 1.300	 0.518	 0.000
+Color 2D	 1.743	 0.962	 0.308
+Color 3D	 2.331	 1.550	 0.715
+Color 00	 1.875	 1.090	 0.397
+Color 10	 2.287	 1.500	 0.681
+Color 20	 2.743	 1.960	 1.000
+Color 30	 2.743	 1.960	 1.000
 */
+
+			static uint8_t levelsLow[4]={60+(-.117f*140),60+(.0f*140),60+(.308f*140),60+(.715f*140)};
+			static uint8_t levelsHigh[4]={60+(.397f*140),60+(.681f*140),60+(1.0f*140),60+(1.0f*140)};
+
+
+//			lastPixelValue=(curClock>>4)|((curLine-21)&0x30);
+
 			uint8_t level=(lastPixelValue&0x30)>>4;
 			uint8_t colour=lastPixelValue&0x0F;
 
 			if (colour>13)
 				level=1;
 
-//			uint8_t levelLow=50+levelsLow[level]/*(level<<0)*/;
-//			uint8_t levelHigh=50+levelsHigh[level]/*(level<<6)*/;
+			uint8_t levelLow=levelsLow[level]/*(level<<0)*/;
+			uint8_t levelHigh=levelsHigh[level]/*(level<<6)*/;
 
-			uint8_t levelLow=70+(level<<3);
-			uint8_t levelHigh=70+(level<<5);
+//			uint8_t levelLow=63+((level+1)<<5);
+//			uint8_t levelHigh=127+((level)<<5);
 
 			if (colour==0)
 			{
@@ -1587,7 +1612,7 @@ void Tick2C02()
 			}
 			activeNTSCSignalLow=levelLow;
 			activeNTSCSignalHi=levelHigh;
-			activeNTSCSignalCol=colour+4;
+			activeNTSCSignalCol=colour+5;
 		}
 		else
 		if (curClock<256+11)
@@ -1620,8 +1645,8 @@ void Tick2C02()
 		else
 		if (curClock<256+11+9+25+4+15)
 		{
-			activeNTSCSignalLow=40;
-			activeNTSCSignalHi=80;
+			activeNTSCSignalLow=60+(-.208f*140);
+			activeNTSCSignalHi=60+(.286f*140);
 			activeNTSCSignalCol=8;
 			// colour burst
 		}
