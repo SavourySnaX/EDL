@@ -66,7 +66,7 @@ uint8_t internalRam[0x800];
 uint8_t ppuRam[0x800];
 uint8_t sprRam[0x100];
 uint8_t regs2C02[8]={0,0,0,0,0,0,0,0};
-uint16_t ppuAddr;
+//uint16_t ppuAddr;
 
 uint16_t PPU_VAddress;
 uint16_t PPU_FV;		// 3 bits
@@ -164,15 +164,31 @@ uint8_t IORead(uint8_t addr)
 		printf("IO Read : %d\n",addr&0x7);
 			break;
 		case 7:
+			{
+			uint16_t ppuAddr=(PPU_FVc<<12)|(PPU_Vc<<11)|(PPU_Hc<<10)|(PPU_VTc<<5)|PPU_HTc;
 			regs2C02[addr]=PPUGetByte(ppuAddr);
 			if ((ppuAddr&0x3FFF)>0x3eFF)
 			{
 				value=regs2C02[addr];
 			}
 			if (regs2C02[0]&0x04)
+			{
+				ppuAddr+=32;
+			}
+			else
+			{
+				ppuAddr+=1;
+			}
+			PPU_FVc=(ppuAddr&0x7000)>>12;
+			PPU_Vc=(ppuAddr&0x0800)>>11;
+			PPU_Hc=(ppuAddr&0x0400)>>10;
+			PPU_VTc=(ppuAddr&0x03E0)>>5;
+			PPU_HTc=(ppuAddr&0x001F);
+/*			if (regs2C02[0]&0x04)
 				ppuAddr+=32;
 			else
-				ppuAddr++;
+				ppuAddr++;*/
+			}
 			break;
 	}
 	return value;
@@ -197,12 +213,28 @@ void IOWrite(uint8_t addr,uint8_t byte)
 			regs2C02[3]++;
 			break;
 		case 7:
+			{
 			//vram write
+			uint16_t ppuAddr=(PPU_FVc<<12)|(PPU_Vc<<11)|(PPU_Hc<<10)|(PPU_VTc<<5)|PPU_HTc;
 			PPUSetByte(ppuAddr,byte);
 			if (regs2C02[0]&0x04)
+			{
+				ppuAddr+=32;
+			}
+			else
+			{
+				ppuAddr+=1;
+			}
+			PPU_FVc=(ppuAddr&0x7000)>>12;
+			PPU_Vc=(ppuAddr&0x0800)>>11;
+			PPU_Hc=(ppuAddr&0x0400)>>10;
+			PPU_VTc=(ppuAddr&0x03E0)>>5;
+			PPU_HTc=(ppuAddr&0x001F);
+/*			if (regs2C02[0]&0x04)
 				ppuAddr+=32;
 			else
-				ppuAddr++;
+				ppuAddr++;*/
+			}
 			break;
 		case 5:
 			if (regs2C02[addr])
@@ -233,8 +265,8 @@ void IOWrite(uint8_t addr,uint8_t byte)
 				PPU_VTc=PPU_VT;
 				PPU_HTc=PPU_HT;
 
-				ppuAddr&=0xFF00;
-				ppuAddr|=byte;
+//				ppuAddr&=0xFF00;
+//				ppuAddr|=byte;
 				regs2C02[addr]=0;
 			}
 			else
@@ -245,8 +277,8 @@ void IOWrite(uint8_t addr,uint8_t byte)
 				PPU_H=(byte&0x04)>>2;
 				PPU_VT&=0x07;
 				PPU_VT|=(byte&0x3)<<3;
-				ppuAddr&=0x00FF;
-				ppuAddr|=(byte&0x3F)<<8;
+//				ppuAddr&=0x00FF;
+//				ppuAddr|=(byte&0x3F)<<8;
 				regs2C02[addr]=1;
 			}
 			break;
@@ -1354,7 +1386,7 @@ void Tick2C02()
 			{
 				regs2C02[2]&=0xBF;
 			}
-			if (curClock==256)
+			if (curClock==256 && regs2C02[1]&0x08)
 			{
 				PPU_FVc=PPU_FV;
 				PPU_Vc=PPU_V;
