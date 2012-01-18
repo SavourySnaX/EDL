@@ -1290,7 +1290,8 @@ static int colourBurstWaveC[12]={-1,1,1,1,1,1,1,-1,-1,-1,-1,-1};
 //static int waveGuide={-4,-3,-1,1,3,4,3,1,-1,-3};
 
 //static int TopBottomPercentage={0,100,0,100,0,100,0,100,0,100,0,100,0,100,0,100}
-static int TopBottomPercentage[12]={0,16,32,64,80,96,100,96,80,64,32,16};
+//static int TopBottomPercentage[12]={64,80,96,128,96,80,64,32,16,0,16,32};
+static int TopBottomPercentage[12]={64,104,128,128,128,104,64,24,0,0,0,24};
 
 static int cClock=0;
 
@@ -1314,18 +1315,39 @@ void DumpNTSCComposite(uint8_t level,uint8_t col,uint8_t low,uint8_t high)
 	}
 
 }
-
 uint8_t activeNTSCSignalLow;
 uint8_t activeNTSCSignalHi;
+uint8_t activeNTSCDisplay=1;
 uint8_t activeNTSCSignalCol;
+
+uint8_t activeNTSCBase;
+uint8_t	activeNTSCAmplitude;
+uint8_t activeNTSCPhase;
+
+#define SIGNAL_OFFSET	(60)
+#define SIGNAL_RANGE	(130)
 
 void WriteNTSC(int colourClock)
 {
-//	int actualLevel=((colourClock+activeNTSCSignalCol)%12)<6?activeNTSCSignalLow:activeNTSCSignalHi;
 	int range = activeNTSCSignalHi-activeNTSCSignalLow;
-	int actualLevel=(range*TopBottomPercentage[(colourClock+activeNTSCSignalCol)%12])/100;
+	int inRangeR=((colourClock+0+5)%12)<6;
+	int inRangeG=((colourClock+4+5)%12)<6;
+	int inRangeB=((colourClock+8+5)%12)<6;
+	int actualLevel=(range*TopBottomPercentage[(colourClock+activeNTSCSignalCol)%12])/128;
+
+	if (((regs2C02[1]&0x20 && inRangeR) ||
+	    (regs2C02[1]&0x40 && inRangeG) ||
+	    (regs2C02[1]&0x80 && inRangeB)) && activeNTSCDisplay)
+	{
+		actualLevel*=.546f;
+		actualLevel-=SIGNAL_RANGE*.0902f;
+	}
+//	else
+//		actualLevel+=15;
+
 	actualLevel+=activeNTSCSignalLow;
-//	int actualLevel=((colourClock+activeNTSCSignalCol)%12)<6?activeNTSCSignalLow:activeNTSCSignalHi;
+	if (actualLevel<0)
+		printf("Level : %d\n",actualLevel);
 
 	fwrite(&actualLevel,1,1,ntsc_file);
 }
@@ -1361,7 +1383,7 @@ void Tick2C02()
 				dumpStart=dumpNTSC;
 				if (dumpStart)
 				{
-					triCnt=2*500;
+					triCnt=2;//*500;
 					ntsc_file=fopen("out.ntsc","wb+");
 				}
 				else
@@ -1518,90 +1540,6 @@ void Tick2C02()
 			}
 		}
 	}
-/*
-	// YUK- Right the ppu clock is 21.47 / 4 - so every clock we need to write 2.6666666 samples to file. - lets try that.
-	if (ntsc_file)
-	{
-		if (curLine>=8 && curLine<11)
-		{
-			DumpNTSCComposite(4,0,4,4);
-		}
-		else
-		// For Every Line (for Now)
-		if (curClock<256)			// active
-		{
-//			static uint8_t levelsLow[4]={10,70,90,180};
-//			static uint8_t levelsHigh[4]={95,175,200,200};
-
-			uint8_t level=(lastPixelValue&0x30)>>4;
-			uint8_t colour=lastPixelValue&0x0F;
-			
-			if (colour>13)
-				level=1;
-
-			uint8_t levelLow=50+level<<0);
-			uint8_t levelHigh=50+level<<6);
-
-			if (colour==0)
-			{
-				levelLow=levelHigh;
-			}
-			if (colour>12)
-			{
-				levelHigh=levelLow;
-			}
-			DumpNTSCComposite(6,colour,levelLow,levelHigh);
-		}
-		else
-		if (curClock<256+11)
-		{
-			uint8_t sample=0;		// background colour
-			DumpNTSCComposite(sample,0,70,70);
-		}
-		else
-		if (curClock<256+11+9)
-		{
-			uint8_t sample=0;		// black
-			DumpNTSCComposite(sample,0,60,60);
-		}
-		else
-		if (curClock<256+11+9+25)
-		{
-			uint8_t sample=0;		// sync
-			DumpNTSCComposite(sample,0,4,4);	
-		}
-		else
-		if (curClock<256+11+9+25+4)
-		{
-			uint8_t sample=0;		// black
-			DumpNTSCComposite(sample,0,60,60);
-		}
-		else
-		if (curClock<256+11+9+25+4+15)
-		{
-			uint8_t sample=0;		// colour burst
-			DumpNTSCComposite(sample,8,40,80);
-		}
-		else
-		if (curClock<256+11+9+25+4+15+5)
-		{
-			uint8_t sample=0;		// black
-			DumpNTSCComposite(sample,0,60,60);
-		}
-		else
-		if (curClock<256+11+9+25+4+15+5+1)
-		{
-			uint8_t sample=0;		// pulse???
-			DumpNTSCComposite(sample,0,60,60);
-		}
-		else
-		if (curClock<256+11+9+25+4+15+5+1+15)
-		{
-			uint8_t sample=0;		// background colour
-			DumpNTSCComposite(sample,0,70,70);
-		}
-	}
-*/
 	
 	{
 		if (/*curLine>17 && */curLine>=8 && curLine<11)
@@ -1626,8 +1564,8 @@ Color 20	 2.743	 1.960	 1.000
 Color 30	 2.743	 1.960	 1.000
 */
 
-			static uint8_t levelsLow[4]={60+(-.117f*140),60+(.0f*140),60+(.308f*140),60+(.715f*140)};
-			static uint8_t levelsHigh[4]={60+(.397f*140),60+(.681f*140),60+(1.0f*140),60+(1.0f*140)};
+			static uint8_t levelsLow[4]={SIGNAL_OFFSET+(-.117f*SIGNAL_RANGE),SIGNAL_OFFSET+(.0f*SIGNAL_RANGE),SIGNAL_OFFSET+(.308f*SIGNAL_RANGE),SIGNAL_OFFSET+(.815f*SIGNAL_RANGE)};
+			static uint8_t levelsHigh[4]={SIGNAL_OFFSET+(.397f*SIGNAL_RANGE),SIGNAL_OFFSET+(.681f*SIGNAL_RANGE),SIGNAL_OFFSET+(1.0f*SIGNAL_RANGE),SIGNAL_OFFSET+(1.0f*SIGNAL_RANGE)};
 
 
 //			lastPixelValue=(curClock>>4)|((curLine-21)&0x30);
@@ -1641,8 +1579,8 @@ Color 30	 2.743	 1.960	 1.000
 			uint8_t levelLow=levelsLow[level]/*(level<<0)*/;
 			uint8_t levelHigh=levelsHigh[level]/*(level<<6)*/;
 
-//			uint8_t levelLow=63+((level+1)<<5);
-//			uint8_t levelHigh=127+((level)<<5);
+//			uint8_t levelLow=SIGNAL_OFFSET+((level+1)<<3);
+//			uint8_t levelHigh=SIGNAL_OFFSET+((level+1)<<6);
 
 			if (colour==0)
 			{
@@ -1655,12 +1593,14 @@ Color 30	 2.743	 1.960	 1.000
 			activeNTSCSignalLow=levelLow;
 			activeNTSCSignalHi=levelHigh;
 			activeNTSCSignalCol=colour+5;
+			activeNTSCDisplay=1;
 		}
 		else
 		if (curClock<256+11)
 		{
 			activeNTSCSignalLow=70;
 			activeNTSCSignalHi=70;
+			activeNTSCDisplay=0;
 			// background colour
 		}
 		else
@@ -1687,8 +1627,8 @@ Color 30	 2.743	 1.960	 1.000
 		else
 		if (curClock<256+11+9+25+4+15)
 		{
-			activeNTSCSignalLow=60+(-.208f*140);
-			activeNTSCSignalHi=60+(.286f*140);
+			activeNTSCSignalLow=60+(-.208f*SIGNAL_RANGE);
+			activeNTSCSignalHi=60+(.286f*SIGNAL_RANGE);
 			activeNTSCSignalCol=8;
 			// colour burst
 		}
