@@ -16,10 +16,28 @@
 
 #include "gui\debugger.h"
 
+#define USE_EDL_PPU	1
+
 void AudioKill();
 void AudioInitialise();
 void UpdateAudio();
 void _AudioAddData(int channel,int16_t dacValue);
+
+extern uint8_t PPU_Control;
+extern uint8_t PPU_Mask;
+extern uint8_t PPU_Status;
+
+void PPU_PinSetPIN_RW(uint8_t);
+void PPU_PinSetPIN__DBE(uint8_t);
+void PPU_PinSetPIN_RS(uint8_t);
+void PPU_PinSetPIN_D(uint8_t);
+void PPU_PinSetPIN_CLK(uint8_t);
+uint8_t PPU_PinGetPIN_D();
+uint8_t PPU_PinGetPIN_PA();
+uint8_t PPU_PinGetPIN_AD();
+uint8_t PPU_PinGetPIN_ALE();
+uint8_t PPU_PinGetPIN__RE();
+uint8_t PPU_PinGetPIN__WE();
 
 uint16_t MAIN_PinGetPIN_AB();
 uint8_t MAIN_PinGetPIN_DB();
@@ -68,7 +86,6 @@ uint8_t sprRam[0x100];
 uint8_t regs2C02[8]={0,0,0,0,0,0,0,0};
 //uint16_t ppuAddr;
 
-uint16_t PPU_VAddress;
 uint16_t PPU_FV;		// 3 bits
 uint16_t PPU_FVc;
 uint16_t PPU_V;			// 1 bit
@@ -82,13 +99,12 @@ uint16_t PPU_HTc;
 uint16_t PPU_FH;		// 3 bits
 uint16_t PPU_FHl;		// 3 bits		// latched cant change during scanline render
 uint16_t PPU_S;			// 1 bits
-uint16_t PPU_PAR;		// 8 bits
-uint16_t PPU_AR;		// 2 bits
 
 uint8_t palIndex[0x20];
 
 uint8_t PPUGetByte(uint16_t addr)
 {
+//	printf("FETCH FROM : %04X\n",addr);
 	addr&=0x3FFF;
 	if (addr<0x2000)
 	{
@@ -107,6 +123,7 @@ uint8_t PPUGetByte(uint16_t addr)
 }
 void PPUSetByte(uint16_t addr,uint8_t byte)
 {
+	//printf("STORE TO : %04X (%02X)\n",addr,byte);
 	addr&=0x3FFF;
 	if (addr<0x2000)
 	{
@@ -139,6 +156,11 @@ void PPUSetByte(uint16_t addr,uint8_t byte)
 uint8_t IORead(uint8_t addr)
 {
 	uint8_t value=regs2C02[addr];
+	uint8_t ppuCmp=PPU_PinGetPIN_D();
+	if (ppuCmp!=value)
+	{
+//		printf("Mismatch : %02X : %02X!=%02X\n",addr,value,ppuCmp);
+	}
 	switch (addr)
 	{
 		case 0:
@@ -407,7 +429,7 @@ extern uint8_t	MAIN_P;
 
 extern uint8_t	MAIN_DEBUG_SYNC;
 
-int stopTheClock=0;
+int stopTheClock=1;
 
 uint32_t MAIN_missing(uint32_t opcode)
 {
@@ -701,6 +723,9 @@ int MasterClock=0;
 FILE* ntsc_file=NULL;
 
 void WriteNTSC(int colourClock);
+void GenerateNTSC(int colourClock);
+
+int NTSCClock;
 
 int main(int argc,char**argv)
 {
@@ -768,6 +793,12 @@ int main(int argc,char**argv)
 	MAIN_PC=GetByte(0xFFFC);
 	MAIN_PC|=GetByte(0xFFFD)<<8;
 
+// TODO PPU RESET + PROPER CPU RESET
+
+	PPU_PinSetPIN__RST(0);
+	PPU_PinSetPIN__RST(1);
+	PPU_PinSetPIN__DBE(1);
+
 	while (!glfwGetKey(windows[MAIN_WINDOW],GLFW_KEY_ESC))
 	{
 		static uint16_t lastPC;
@@ -780,7 +811,7 @@ int main(int argc,char**argv)
 			int cpuClock=MasterClock%24;
 			int ppuClock=MasterClock%8;
 			int ColourClock=MasterClock%12;
-			int NTSCClock=MasterClock%3;
+			NTSCClock=MasterClock%3;
 
 			if (cpuClock==0)
 			{
@@ -797,34 +828,77 @@ int main(int argc,char**argv)
 					}
 				}
 	
-				if (MAIN_PinGetPIN_RW())
+				// Phase is 1 (LS139 decode gives us DBE low when Phase 1, Address=001x xxxx xxxx xxxx
+#if USE_EDL_PPU
+				if (1 && ((addr&0x8000)==0) && ((addr&0x4000)==0) && ((addr&0x2000)==0x2000))
 				{
-					uint8_t  data = GetByte(addr);
-					MAIN_PinSetPIN_DB(data);
+					PPU_PinSetPIN_RS(addr&0x7);
+					PPU_PinSetPIN_RW(MAIN_PinGetPIN_RW());
+					PPU_PinSetPIN_D(MAIN_PinGetPIN_DB());
+
+					PPU_PinSetPIN__DBE(0);
+					if (MAIN_PinGetPIN_RW())
+					{
+						MAIN_PinSetPIN_DB(PPU_PinGetPIN_D());
+					}
 				}
-				if (!MAIN_PinGetPIN_RW())
+				else
+#endif
 				{
-					SetByte(addr,MAIN_PinGetPIN_DB());
+					if (MAIN_PinGetPIN_RW())
+					{
+						uint8_t  data = GetByte(addr);
+						MAIN_PinSetPIN_DB(data);
+					}
+					if (!MAIN_PinGetPIN_RW())
+					{
+						SetByte(addr,MAIN_PinGetPIN_DB());
+					}
 				}
-	
-	
+
+				PPU_PinSetPIN__DBE(1);
+
 				UpdateHardware();
 
 				MAIN_PinSetPIN__IRQ(1);//VIA1_PinGetPIN__IRQ());
 /*			if (regs2C02[0]&0x80)
 				stopTheClock=1;*/
 //			printf("NMI Val : %d\n",(~(regs2C02[0]&regs2C02[2])>>7)&0x01);
+#if USE_EDL_PPU
+				MAIN_PinSetPIN__NMI(PPU_PinGetPIN__INT());
+#else
 				MAIN_PinSetPIN__NMI((~(regs2C02[0]&regs2C02[2])>>7)&0x01);
-
+#endif
+	//			printf("PPU REGS : CONTROL %02X,MASK %02X,STATUS %02X\n",PPU_Control,PPU_Mask,PPU_Status);
 				MAIN_PinSetPIN_O0(0);
+
+
 			}
 			if (ppuClock==0)
 			{
+#if USE_EDL_PPU
+				static uint8_t vramLowAddressLatch=0;
+
+				PPU_PinSetPIN_CLK(1);
+				if (PPU_PinGetPIN_ALE()&1)
+				{
+					vramLowAddressLatch=PPU_PinGetPIN_AD();
+				}
+				if ((PPU_PinGetPIN__RE()&1)==0)
+				{
+					uint16_t addr = ((PPU_PinGetPIN_PA()&0x3F)<<8)|vramLowAddressLatch;
+					PPU_PinSetPIN_AD(PPUGetByte(addr));
+				}
+				PPU_PinSetPIN_CLK(0);
+#else
 				Tick2C02();
+#endif
 			}
-			if (ntsc_file && (NTSCClock==0))
+			if (ntsc_file /*&& (NTSCClock==0)*/)
 			{
-				WriteNTSC(ColourClock);
+				GenerateNTSC(ColourClock);
+				if (NTSCClock==2)
+					WriteNTSC(ColourClock);
 			}
 			MasterClock+=1;
 		}
@@ -1021,7 +1095,7 @@ void FetchBGData(int y,int x)
 				nameTableAddress|=PPU_Hc<<10;
 				nameTableAddress|=PPU_VTc<<5;
 				nameTableAddress|=PPU_HTc;
-				
+//					printf("Address To Fetch From %04X\n",nameTableAddress);
 				uint8_t tile = PPUGetByte(nameTableAddress);
 				tile_latch=tile;
 			}
@@ -1035,7 +1109,7 @@ void FetchBGData(int y,int x)
 				attrAddress|=PPU_Hc<<10;
 				attrAddress|=(PPU_VTc&0x1C)<<1;
 				attrAddress|=(PPU_HTc&0x1C)>>2;
-
+//					printf("Address To Fetch From %04X\n",attrAddress);
 				attr1_temp = PPUGetByte(attrAddress);
 					
 				uint8_t attrshift=(PPU_VTc&0x02)<<1;
@@ -1043,6 +1117,7 @@ void FetchBGData(int y,int x)
 
 				attr1_temp>>=attrshift;
 				attr1_temp&=3;
+
 				attr1_temp|=attr1_temp<<2;
 				attr1_temp|=attr1_temp<<4;
 
@@ -1051,6 +1126,11 @@ void FetchBGData(int y,int x)
 
 				attr1_temp=attr1_temp&0x55;
 				attr1_temp|=attr1_temp<<1;
+/*
+				{
+					printf("Attr : %02X,%02X\n",attr1_temp,attr2_temp);
+				}
+*/
 			}
 			break;
 		case 4:
@@ -1061,7 +1141,7 @@ void FetchBGData(int y,int x)
 				patternTable|=PPU_S<<12;
 				patternTable|=tile_latch<<4;
 				patternTable|=PPU_FVc&7;
-				
+//					printf("Address To Fetch From %04X\n",patternTable);
 				tileData1_temp=flipBits(PPUGetByte(patternTable));
 			}
 			break;
@@ -1073,7 +1153,7 @@ void FetchBGData(int y,int x)
 				patternTable|=PPU_S<<12;
 				patternTable|=tile_latch<<4;
 				patternTable|=PPU_FVc&7;
-				
+//					printf("Address To Fetch From %04X\n",patternTable);
 				tileData2_latch&=0x00FF;
 				tileData2_latch|=flipBits(PPUGetByte(patternTable))<<8;
 				tileData1_latch&=0x00FF;
@@ -1189,6 +1269,7 @@ void SpriteFetch(uint16_t curClock)
 				{
 					tilePos+=0x1000;
 				}
+			printf("Tile %02X : Addr %04X\n",SP_BUF_Tile[curFetch],tilePos);
 				SP_BUF_BitMap0[curFetch]=/*0xFF;*/PPUGetByte(tilePos);
 			}
 			else
@@ -1327,7 +1408,9 @@ uint8_t activeNTSCPhase;
 #define SIGNAL_OFFSET	(60)
 #define SIGNAL_RANGE	(130)
 
-void WriteNTSC(int colourClock)
+uint16_t avgNTSC[3];
+
+void GenerateNTSC(int colourClock)
 {
 	int range = activeNTSCSignalHi-activeNTSCSignalLow;
 	int inRangeR=((colourClock+0+5)%12)<6;
@@ -1349,7 +1432,33 @@ void WriteNTSC(int colourClock)
 	if (actualLevel<0)
 		printf("Level : %d\n",actualLevel);
 
+	avgNTSC[NTSCClock]=actualLevel;
+}
+
+void WriteNTSC(int colourClock)
+{
+	uint8_t actualLevel=(avgNTSC[0]+avgNTSC[1]+avgNTSC[2])/3;
 	fwrite(&actualLevel,1,1,ntsc_file);
+}
+
+void PPU_SetVideo(uint8_t x,uint8_t y,uint8_t col)
+{
+	uint32_t* outputTexture = (uint32_t*)videoMemory[MAIN_WINDOW];
+
+//	printf("%02X,%02X  %02X\n",x,y,col&0xF);
+	//if (x>=8)
+	{
+		if (col&3)
+		{
+			outputTexture[y*WIDTH+x]=nesColours[palIndex[col&0x1F]];
+	//		outputTexture[y*WIDTH+x]=0xFFFFFFFF;//nesColours[palIndex[col&0x1F]];
+		}
+		else
+		{
+			outputTexture[y*WIDTH+x]=nesColours[palIndex[0]];
+	//		outputTexture[y*WIDTH+x]=0;//nesColours[palIndex[0]];
+		}
+	}
 }
 
 void Tick2C02()
@@ -1383,7 +1492,7 @@ void Tick2C02()
 				dumpStart=dumpNTSC;
 				if (dumpStart)
 				{
-					triCnt=2;//*500;
+					triCnt=2;//*5000;
 					ntsc_file=fopen("out.ntsc","wb+");
 				}
 				else
@@ -1419,21 +1528,22 @@ void Tick2C02()
 			// DUMMY line
 			if ((curClock<256) && (regs2C02[1]&0x08))
 			{
-				FetchBGData(21,curClock+16);
+				FetchBGData(20,curClock+16);
 			}
 
 			if ((curClock>=320) && (curClock<=335) && (regs2C02[1]&0x08))
 			{
-				FetchBGData(21,curClock-320);
+				FetchBGData(20,curClock-320);
 				tileData1_latch>>=8;
 				tileData2_latch>>=8;
 				attr1_latch>>=8;
 				attr2_latch>>=8;
 			}
+			/*
 			if (curClock==340)
 				field++;
 			if ((curClock==340)&&(field&1))
-				curClock++;
+				curClock++;*/
 		}
 		else
 		{
@@ -1484,12 +1594,13 @@ void Tick2C02()
 					}
 					else
 					{
+						//printf("MM %02X\n",col&0xF);
 						if (spZero && lastCollision==0 && spColour)
 						{
 							lastCollision=1;
 							regs2C02[2]|=0x40;
 						}
-						if (!spBack && spColour)
+						if (1)//!spBack && spColour)
 						{
 							lastPixelValue=palIndex[spColour];
 							outputTexture[(curLine-21)*WIDTH + curClock]=nesColours[palIndex[spColour]];
@@ -1982,4 +2093,44 @@ void LoadCart(const char* fileName)
 	}
 }
 
+///////////////////////////////////////////
 
+// Testing Bed for PPU on a chip
+
+uint8_t oamRam[0x100];
+
+uint8_t oamRamTmp[8*8];
+
+uint8_t PPU_FetchOAMTmp(uint8_t sp,uint8_t offs)
+{
+//printf("fetch sprite %02X : offs %02X : value %02X\n",sp,offs,oamRamTmp[sp*8+offs]);
+	return oamRamTmp[sp*8+offs];
+}
+
+void PPU_StoreOAMTmp(uint8_t sp,uint8_t offs,uint8_t val)
+{
+//printf("store sprite %02X : offs %02X : value %02X\n",sp,offs,val);
+	oamRamTmp[sp*8+offs]=val;
+}
+
+uint8_t PPU_FetchOAM(uint8_t addr)
+{
+	return oamRam[addr];
+}
+
+void PPU_StoreOAM(uint8_t addr,uint8_t value)
+{
+	oamRam[addr]=value;
+}
+
+void PPU_SetByte(uint16_t addr,uint8_t value)
+{
+	PPUSetByte(addr,value);
+	//printf("Store To : %04X (%02X)\n",addr,value);	
+}
+
+uint8_t PPU_GetByte(uint16_t addr)
+{
+	//printf("Fetch From : %04X\n",addr);
+	return PPUGetByte(addr);
+}
