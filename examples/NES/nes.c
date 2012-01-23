@@ -16,7 +16,10 @@
 
 #include "gui\debugger.h"
 
-#define USE_EDL_PPU	1
+#define USE_EDL_PPU	0
+
+#include "jake\ntscDecode.h"
+
 
 void AudioKill();
 void AudioInitialise();
@@ -568,9 +571,13 @@ int g_traceStep=0;
 #define HEIGHT	(262)
 #define	WIDTH	(341)
 
+#define NTSC_WIDTH	(NTSC_SAMPLES_PER_LINE)
+#define NTSC_HEIGHT	(NTSC_LINES_PER_FRAME)
+
 #define MAX_WINDOWS		(8)
 
 #define MAIN_WINDOW		0
+#define NTSC_WINDOW		1
 #define REGISTER_WINDOW		2
 
 GLFWwindow windows[MAX_WINDOWS];
@@ -691,6 +698,16 @@ void ClearKey(int key)
 	keyArray[key].debounced=0;
 }
 
+void windowClearKey(int key)
+{
+	ClearKey(key);
+}
+
+int windowCheckKey(int key)
+{
+	return CheckKey(key);
+}
+
 void kbHandler( GLFWwindow window, int key, int action )
 {
 	keyArray[key].lastState=keyArray[key].curState;
@@ -744,6 +761,7 @@ int main(int argc,char**argv)
 		exit(-1);
 	}
 
+
 	/// Initialize GLFW 
 	glfwInit(); 
 
@@ -754,11 +772,22 @@ int main(int argc,char**argv)
 		return 1; 
 	} 
 
-	glfwSetWindowPos(windows[REGISTER_WINDOW],700,300);
+	glfwSetWindowPos(windows[REGISTER_WINDOW],300,0);
 
 	glfwMakeContextCurrent(windows[REGISTER_WINDOW]);
 	setupGL(REGISTER_WINDOW,REGISTER_WIDTH,REGISTER_HEIGHT);
 	
+	if( !(windows[NTSC_WINDOW]=glfwOpenWindow( NTSC_WIDTH, NTSC_HEIGHT, GLFW_WINDOWED,"NTSC",NULL)) ) 
+	{ 
+		glfwTerminate(); 
+		return 1; 
+	} 
+
+	glfwSetWindowPos(windows[NTSC_WINDOW],700,300);
+
+	glfwMakeContextCurrent(windows[NTSC_WINDOW]);
+	setupGL(NTSC_WINDOW,NTSC_WIDTH,NTSC_HEIGHT);
+
 	// Open screen OpenGL window 
 	if( !(windows[MAIN_WINDOW]=glfwOpenWindow( WIDTH, HEIGHT, GLFW_WINDOWED,"nes",NULL)) ) 
 	{ 
@@ -778,6 +807,8 @@ int main(int argc,char**argv)
 	printf("width : %d (%d) , height : %d (%d)\n", w,WIDTH,h,HEIGHT);
 	glfwSetKeyCallback(kbHandler);
 	glfwSetWindowSizeCallback(sizeHandler);
+	
+	ntscDecodeInit((uint32_t*)videoMemory[NTSC_WINDOW]);
 
 	atStart=glfwGetTime();
 	//////////////////
@@ -894,17 +925,20 @@ int main(int argc,char**argv)
 				Tick2C02();
 #endif
 			}
-			if (ntsc_file /*&& (NTSCClock==0)*/)
+//			if (ntsc_file /*&& (NTSCClock==0)*/)
 			{
 				GenerateNTSC(ColourClock);
 				if (NTSCClock==2)
+				{
 					WriteNTSC(ColourClock);
+				}
 			}
 			MasterClock+=1;
 		}
 
 		if (MasterClock>=341*262*2*4 || stopTheClock)
 		{
+			static int twofields=0;
 			static int normalSpeed=1;
 
 			if (MasterClock>=341*262*2*4)
@@ -912,6 +946,13 @@ int main(int argc,char**argv)
 
             		glfwMakeContextCurrent(windows[MAIN_WINDOW]);
 			ShowScreen(MAIN_WINDOW,WIDTH,HEIGHT);
+			glfwSwapBuffers();
+            		
+			if (twofields&1)
+				ntscDecodeTick();
+			twofields++;
+			glfwMakeContextCurrent(windows[NTSC_WINDOW]);
+			ShowScreen(NTSC_WINDOW,NTSC_WIDTH,NTSC_HEIGHT);
 			glfwSwapBuffers();
 				
 			glfwMakeContextCurrent(windows[REGISTER_WINDOW]);
@@ -1269,7 +1310,7 @@ void SpriteFetch(uint16_t curClock)
 				{
 					tilePos+=0x1000;
 				}
-			printf("Tile %02X : Addr %04X\n",SP_BUF_Tile[curFetch],tilePos);
+//			printf("Tile %02X : Addr %04X\n",SP_BUF_Tile[curFetch],tilePos);
 				SP_BUF_BitMap0[curFetch]=/*0xFF;*/PPUGetByte(tilePos);
 			}
 			else
@@ -1438,7 +1479,8 @@ void GenerateNTSC(int colourClock)
 void WriteNTSC(int colourClock)
 {
 	uint8_t actualLevel=(avgNTSC[0]+avgNTSC[1]+avgNTSC[2])/3;
-	fwrite(&actualLevel,1,1,ntsc_file);
+	ntscDecodeAddSample(actualLevel);
+//	fwrite(&actualLevel,1,1,ntsc_file);
 }
 
 void PPU_SetVideo(uint8_t x,uint8_t y,uint8_t col)
@@ -1600,7 +1642,7 @@ void Tick2C02()
 							lastCollision=1;
 							regs2C02[2]|=0x40;
 						}
-						if (1)//!spBack && spColour)
+						if (!spBack && spColour)
 						{
 							lastPixelValue=palIndex[spColour];
 							outputTexture[(curLine-21)*WIDTH + curClock]=nesColours[palIndex[spColour]];

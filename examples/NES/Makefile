@@ -24,5 +24,5 @@ out/rp2a03.lls: ../../chips/Accurate/rp2a03.edl
 out/rp2a03.lls.s: out/rp2a03.lls
 	llc out/rp2a03.lls
 
-nes: nes.c gui/debugger.c gui/debugger.h out/rp2a03.lls.s minizip/miniunz.c minizip/iowin32.c minizip/ioapi.c minizip/unzip.c out/rp2c02.lls.s
-	gcc -O3 -g -Wl,-Map,nes.map nes.c gui/debugger.c out/rp2a03.lls.s out/rp2c02.lls.s minizip/miniunz.c minizip/iowin32.c minizip/ioapi.c minizip/unzip.c $(ALLIBS) $(GLLIBS) $(ZLIB) -o nes.exe
+nes: nes.c gui/debugger.c gui/debugger.h out/rp2a03.lls.s minizip/miniunz.c minizip/iowin32.c minizip/ioapi.c minizip/unzip.c out/rp2c02.lls.s jake/ntscDecode.c jake/ntscDecode.h jake/ntscDecodeCrtsim.c jake/ntscDecodeCrtsim.h
+	gcc -O3 -g -Wl,-Map,nes.map nes.c gui/debugger.c out/rp2a03.lls.s out/rp2c02.lls.s minizip/miniunz.c minizip/iowin32.c minizip/ioapi.c minizip/unzip.c jake/ntscDecode.c jake/ntscDecodeCrtsim.c $(ALLIBS) $(GLLIBS) $(ZLIB) -o nes.exe
