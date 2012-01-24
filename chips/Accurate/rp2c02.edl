@@ -201,7 +201,7 @@ HANDLER		PIN__DBE	TRANSITION(1,0)
 
 FUNCTION INTERNAL	IncrementVScroll
 {
-	DECLARE INTERNAL VScroll[9] ALIAS SV[1]:SVT[5]:SFV[3];
+	DECLARE VScroll[9] ALIAS SV[1]:SVT[5]:SFV[3];
 
 	SV<-Vl;
 	SVT<-VTl;
@@ -213,7 +213,7 @@ FUNCTION INTERNAL	IncrementVScroll
 	}
 	VScroll<-VScroll+1;
 
-	Vl<-SFV;
+	Vl<-SV;
 	VTl<-SVT;
 	FVl<-SFV;
 }
