@@ -74,8 +74,6 @@ namespace
 
 using namespace std;
 
-#define USE_OPTIMISER	1
-    
 CodeGenContext::CodeGenContext(CodeGenContext* parent) 
 { 
 	if (!parent) 

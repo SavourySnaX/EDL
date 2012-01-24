@@ -1,0 +1,23 @@
+
+PIN IN Main[1];
+
+#MEMORY	rom[[4]][8]	ALIAS	upper[4]:lower[4]
+#{
+#	0,7,3,2
+#}
+
+DECLARE ram[[2]][8];
+
+DECLARE index[8];
+
+HANDLER Main	TRANSITION(0,1)
+{
+	DEBUG_TRACE BASE 10,index,ram[[index]];#,rom[[index]];
+
+	ram[[index]]<-index; #rom[[index]];
+
+	DEBUG_TRACE BASE 10,index,ram[[index]];#,rom[[index]];
+
+	index<-index+1;
+}
+

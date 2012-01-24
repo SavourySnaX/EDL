@@ -71,6 +71,8 @@ C_FUNC_EXTERN				{ return TOKEN(TOK_C_FUNC_EXTERN); }
 \"(\\.|[^"])*\"				{ SAVE_TOKEN; return TOK_STRING; }
 
 "<->"					{ return TOKEN(TOK_EXCHANGE); }
+"[["					{ return TOKEN(TOK_INDEXOPEN); }
+"]]"					{ return TOKEN(TOK_INDEXCLOSE); }
 "++"					{ return TOKEN(TOK_DADD); }
 "--"					{ return TOKEN(TOK_DSUB); }
 ".."					{ return TOKEN(TOK_DDOT); }
