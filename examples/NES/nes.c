@@ -16,7 +16,7 @@
 
 #include "gui\debugger.h"
 
-#define USE_EDL_PPU	0
+#define USE_EDL_PPU	1
 
 #include "jake\ntscDecode.h"
 
