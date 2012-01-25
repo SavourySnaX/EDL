@@ -155,7 +155,7 @@ function_decl : TOK_FUNCTION TOK_INTERNAL named_return ident named_params_list b
 
 debug : quoted { $$ = new CDebugTraceString(*$1); }
       | numeric { $$ = new CDebugTraceInteger(*$1); }
-      | ident { $$ = new CDebugTraceIdentifier(*$1); }
+      | ident_ref { $$ = new CDebugTraceIdentifier(*$1); }
       | TOK_BASE numeric { $$ = new CDebugTraceBase(*$2); }
       ;
 
@@ -235,12 +235,16 @@ pin_type: TOK_IN
 	| TOK_BIDIRECTIONAL
 	;
 
-var_decl : TOK_DECLARE TOK_INTERNAL ident TOK_LSQR numeric TOK_RSQR { $$ = new CVariableDeclaration(true, *$3, *$5); }
-	| TOK_DECLARE TOK_INTERNAL ident TOK_LSQR numeric TOK_RSQR TOK_ALIAS aliases { $$ = new CVariableDeclaration(true, *$3, *$5, *$8); delete $8; }
-	| TOK_DECLARE ident TOK_LSQR numeric TOK_RSQR { $$ = new CVariableDeclaration(false, *$2, *$4); }
-	| TOK_DECLARE ident TOK_LSQR numeric TOK_RSQR TOK_ALIAS aliases { $$ = new CVariableDeclaration(false, *$2, *$4, *$7); delete $7; }
-	| TOK_PIN pin_type ident TOK_LSQR numeric TOK_RSQR { $$ = new CVariableDeclaration($2,*$3,*$5); }
-	| TOK_PIN pin_type ident TOK_LSQR numeric TOK_RSQR TOK_ALIAS aliases { $$ = new CVariableDeclaration($2,*$3,*$5,*$8); delete $8; }
+var_decl : TOK_DECLARE TOK_INTERNAL ident TOK_LSQR numeric TOK_RSQR { $$ = new CVariableDeclaration(CVariableDeclaration::notArray,true, *$3, *$5); }
+	| TOK_DECLARE TOK_INTERNAL ident TOK_LSQR numeric TOK_RSQR TOK_ALIAS aliases { $$ = new CVariableDeclaration(CVariableDeclaration::notArray,true, *$3, *$5, *$8); delete $8; }
+	| TOK_DECLARE ident TOK_LSQR numeric TOK_RSQR { $$ = new CVariableDeclaration(CVariableDeclaration::notArray,false, *$2, *$4); }
+	| TOK_DECLARE ident TOK_LSQR numeric TOK_RSQR TOK_ALIAS aliases { $$ = new CVariableDeclaration(CVariableDeclaration::notArray,false, *$2, *$4, *$7); delete $7; }
+	| TOK_DECLARE TOK_INTERNAL ident TOK_INDEXOPEN numeric TOK_INDEXCLOSE TOK_LSQR numeric TOK_RSQR { $$ = new CVariableDeclaration(*$5,true, *$3, *$8); }
+	| TOK_DECLARE TOK_INTERNAL ident TOK_INDEXOPEN numeric TOK_INDEXCLOSE TOK_LSQR numeric TOK_RSQR TOK_ALIAS aliases { $$ = new CVariableDeclaration(*$5, true, *$3, *$8, *$11); delete $11; }
+	| TOK_DECLARE ident TOK_INDEXOPEN numeric TOK_INDEXCLOSE TOK_LSQR numeric TOK_RSQR { $$ = new CVariableDeclaration(*$4, false, *$2, *$7); }
+	| TOK_DECLARE ident TOK_INDEXOPEN numeric TOK_INDEXCLOSE TOK_LSQR numeric TOK_RSQR TOK_ALIAS aliases { $$ = new CVariableDeclaration(*$4, false, *$2, *$7, *$10); delete $10; }
+	| TOK_PIN pin_type ident TOK_LSQR numeric TOK_RSQR { $$ = new CVariableDeclaration(*$3,*$5,$2); }
+	| TOK_PIN pin_type ident TOK_LSQR numeric TOK_RSQR TOK_ALIAS aliases { $$ = new CVariableDeclaration(*$3,*$5,*$8,$2); delete $8; }
 	;
 
 affector : ident TOK_AS TOK_ZERO { $$ = new CAffect(*$1,TOK_ZERO); }
@@ -303,6 +307,7 @@ ident : TOK_IDENTIFIER { $$ = new CIdentifier(*$1); delete $1; }
 	  ;
 
 ident_ref : TOK_IDENTIFIER { $$ = new CIdentifier(*$1); }
+	  | TOK_IDENTIFIER TOK_INDEXOPEN expr TOK_INDEXCLOSE { $$ = new CIdentifierArray(*$3,*$1); }
 	  | TOK_IDENTIFIER TOK_IDENTIFIER { $$ = new CIdentifier(*$1,*$2); }
 	  ;
 

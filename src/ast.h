@@ -131,6 +131,14 @@ public:
 	virtual bool IsIdentifierExpression() { return true; }
 };
 
+class CIdentifierArray : public CIdentifier
+{
+public:
+	CExpression& arrayIndex;
+	CIdentifierArray(CExpression& expr,const std::string& name): CIdentifier(name),arrayIndex(expr) {};
+	CIdentifierArray(CExpression& expr,const std::string& module, const std::string& name): CIdentifier(module,name),arrayIndex(expr) {};
+};
+
 class CStateIdent : public CExpression {
 public:
 	std::string name;
@@ -346,19 +354,21 @@ class CVariableDeclaration : public CStatement {
 private:
 	llvm::Instruction* writeAccessor;
 public:
+	static CInteger notArray;
 	bool internal;
 	CIdentifier& id;
+	CInteger& arraySize;
 	CInteger& size;
 	AliasList aliases;
 	int pinType;
-	CVariableDeclaration(bool internal,CIdentifier& id, CInteger& size) :
-		internal(internal), id(id), size(size),pinType(0) { }
-	CVariableDeclaration(bool internal,CIdentifier& id, CInteger& size,AliasList& aliases) :
-		internal(internal), id(id), size(size),aliases(aliases),pinType(0) { }
-	CVariableDeclaration(int pinType,CIdentifier& id, CInteger& size) :
-		id(id), size(size),pinType(pinType) { }
-	CVariableDeclaration(int pinType,CIdentifier& id, CInteger& size,AliasList& aliases) :
-		id(id), size(size),aliases(aliases),pinType(pinType) { }
+	CVariableDeclaration(CInteger& arraySize,bool internal,CIdentifier& id, CInteger& size) :
+		internal(internal), id(id), arraySize(arraySize),size(size),pinType(0) { }
+	CVariableDeclaration(CInteger& arraySize,bool internal,CIdentifier& id, CInteger& size,AliasList& aliases) :
+		internal(internal), id(id), arraySize(arraySize),size(size),aliases(aliases),pinType(0) { }
+	CVariableDeclaration(CIdentifier& id, CInteger& size,int pinType) :
+		id(id), arraySize(notArray),size(size),pinType(pinType) { }
+	CVariableDeclaration(CIdentifier& id, CInteger& size,AliasList& aliases,int pinType) :
+		id(id), arraySize(notArray),size(size),aliases(aliases),pinType(pinType) { }
 	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 

@@ -2227,7 +2227,7 @@ BitVariable COperandMapping::GetBitVariable(CodeGenContext& context,unsigned num
 	}
 	else
 	{
-		// Not an identifier, so we must create an expression maps (this limits the mapping to only being useful for a limited set of things, (but is an accepted part of the language!)
+		// Not an identifier, so we must create an expression map (this limits the mapping to only being useful for a limited set of things, (but is an accepted part of the language!)
 
 		temp.mappingRef=true;
 		temp.mapping = &mapping->expr;
@@ -2896,6 +2896,7 @@ Value* CFuncCall::codeGen(CodeGenContext& context)
 	return call;
 }
 
+CInteger CVariableDeclaration::notArray(stringZero);
 CInteger CTrigger::zero(stringZero);
 
 Value* CTrigger::codeGen(CodeGenContext& context,BitVariable& pin,Value* function)
