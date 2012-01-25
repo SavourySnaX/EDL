@@ -16,7 +16,7 @@
 
 #include "gui\debugger.h"
 
-#define USE_EDL_PPU	1
+#define USE_EDL_PPU	0
 
 #include "jake\ntscDecode.h"
 
@@ -941,16 +941,18 @@ int main(int argc,char**argv)
 			static int twofields=0;
 			static int normalSpeed=1;
 
+			if (twofields&1)
+				ntscDecodeTick();
 			if (MasterClock>=341*262*2*4)
+			{
+				twofields++;
 				MasterClock-=341*262*2*4;
+			}
 
             		glfwMakeContextCurrent(windows[MAIN_WINDOW]);
 			ShowScreen(MAIN_WINDOW,WIDTH,HEIGHT);
 			glfwSwapBuffers();
             		
-			if (twofields&1)
-				ntscDecodeTick();
-			twofields++;
 			glfwMakeContextCurrent(windows[NTSC_WINDOW]);
 			ShowScreen(NTSC_WINDOW,NTSC_WIDTH,NTSC_HEIGHT);
 			glfwSwapBuffers();
@@ -1694,6 +1696,8 @@ void Tick2C02()
 		}
 	}
 	
+
+	/// NTSC
 	{
 		if (/*curLine>17 && */curLine>=8 && curLine<11)
 		{
@@ -1751,6 +1755,7 @@ Color 30	 2.743	 1.960	 1.000
 		else
 		if (curClock<256+11)
 		{
+			lastPixelValue=0x0F;
 			activeNTSCSignalLow=70;
 			activeNTSCSignalHi=70;
 			activeNTSCDisplay=0;
