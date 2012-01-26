@@ -1,12 +1,12 @@
 
 PIN IN Main[1];
 
-#MEMORY	rom[[4]][8]	ALIAS	upper[4]:lower[4]
+#MEMORY	rom[[2]][8]	ALIAS	upper[4]:lower[4]
 #{
 #	0,7,3,2
 #}
 
-DECLARE ram[[2]][8];
+DECLARE ram[[1]][8]	ALIAS	ramH[4]:ramL[4];
 
 DECLARE index[8];
 
@@ -15,7 +15,7 @@ HANDLER Main	TRANSITION(0,1)
 	DEBUG_TRACE BASE 16,"0:",ram[[0]];#,rom[[index]];
 	DEBUG_TRACE BASE 16,"1:",ram[[1]];#,rom[[index]];
 
-	ram[[index]]<-index; #rom[[index]];
+	ramH[[index]]<-index; #rom[[index]];
 	DEBUG_TRACE BASE 16,"Setting ",index," into ram@",index;
 
 	DEBUG_TRACE BASE 16,"0:",ram[[0]];#,rom[[index]];

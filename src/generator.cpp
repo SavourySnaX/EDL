@@ -477,7 +477,30 @@ Value* CIdentifier::codeGen(CodeGenContext& context)
 
 	if (var.value->getType()->isPointerTy())
 	{
-		Value* final = new LoadInst(var.value, "", false, context.currentBlock());
+		Value* final = NULL;
+		if (IsArray())
+		{
+			Value* exprResult=GetExpression()->codeGen(context);
+
+			const Type* ty = Type::getIntNTy(getGlobalContext(),var.arraySize.getLimitedValue());
+			const Type* ty64 = Type::getIntNTy(getGlobalContext(),64);
+			Instruction::CastOps op = CastInst::getCastOpcode(exprResult,false,ty,false);
+			Instruction* truncExt0 = CastInst::Create(op,exprResult,ty,"cast",context.currentBlock());		// Cast index to 64 bit type
+			Instruction::CastOps op1 = CastInst::getCastOpcode(exprResult,false,ty64,false);
+			Instruction* truncExt = CastInst::Create(op1,truncExt0,ty64,"cast",context.currentBlock());		// Cast index to 64 bit type
+
+ 			std::vector<Value*> indices;
+ 			ConstantInt* index0 = ConstantInt::get(getGlobalContext(), APInt(var.size.getLimitedValue(), StringRef("0"), 10));
+			indices.push_back(index0);
+ 			indices.push_back(truncExt);
+			Instruction* elementPtr = GetElementPtrInst::Create(var.value,indices.begin(),indices.end(),"array index",context.currentBlock());
+
+			final = new LoadInst(elementPtr, "", false, context.currentBlock());
+		}
+		else
+		{
+			final = new LoadInst(var.value, "", false, context.currentBlock());
+		}
 		return GetAliasedData(context,final,var);
 	}
 
@@ -895,7 +918,7 @@ Value* CRotationOperator::codeGen(CodeGenContext& context)
 
 		Value *shiftedDown = BinaryOperator::Create(Instruction::LShr,toShift,amountToShift,"carryOutShift",context.currentBlock());
 
-		CAssignment::generateAssignment(var,bitsOut.module,bitsOut.name,shiftedDown,context);
+		CAssignment::generateAssignment(var,bitsOut,shiftedDown,context);
 
 		Value *shifted=BinaryOperator::Create(Instruction::Shl,toShift,rotByCast,"rolShift",context.currentBlock());
 
@@ -920,7 +943,7 @@ Value* CRotationOperator::codeGen(CodeGenContext& context)
 
 		Value *maskedDown = BinaryOperator::Create(Instruction::And,toShift,downMask,"carryOutMask",context.currentBlock());
 
-		CAssignment::generateAssignment(var,bitsOut.module,bitsOut.name,maskedDown,context);
+		CAssignment::generateAssignment(var,bitsOut,maskedDown,context);
 
 		Value *shifted=BinaryOperator::Create(Instruction::LShr,toShift,rotByCast,"rorShift",context.currentBlock());
 			
@@ -938,11 +961,34 @@ Value* CRotationOperator::codeGen(CodeGenContext& context)
 	return value.codeGen(context);
 }
 
-Value* CAssignment::generateAssignment(BitVariable& to,const std::string& moduleName,const std::string& name, Value* from,CodeGenContext& context)
+Value* CAssignment::generateAssignment(BitVariable& to,const CIdentifier& toIdent, Value* from,CodeGenContext& context)
 {
 	Value* assignTo;
 
 	assignTo = to.value;
+
+	if (toIdent.IsArray())
+	{
+		Value* exprResult=toIdent.GetExpression()->codeGen(context);
+
+		const Type* ty = Type::getIntNTy(getGlobalContext(),to.arraySize.getLimitedValue());
+		const Type* ty64 = Type::getIntNTy(getGlobalContext(),64);
+		Instruction::CastOps op = CastInst::getCastOpcode(exprResult,false,ty,false);
+		Instruction* truncExt0 = CastInst::Create(op,exprResult,ty,"cast",context.currentBlock());		// Cast index to 64 bit type
+		Instruction::CastOps op1 = CastInst::getCastOpcode(exprResult,false,ty64,false);
+		Instruction* truncExt = CastInst::Create(op1,truncExt0,ty64,"cast",context.currentBlock());		// Cast index to 64 bit type
+//		const Type* ty = Type::getIntNTy(getGlobalContext(),to.arraySize.getLimitedValue());
+//		Instruction::CastOps op = CastInst::getCastOpcode(exprResult,false,ty,false);
+//		Instruction* truncExt = CastInst::Create(op,exprResult,ty,"cast",context.currentBlock());		// Cast index to 64 bit type
+
+		std::vector<Value*> indices;
+		ConstantInt* index0 = ConstantInt::get(getGlobalContext(), APInt(to.size.getLimitedValue(), StringRef("0"), 10));
+		indices.push_back(index0);
+		indices.push_back(truncExt);
+		Instruction* elementPtr = GetElementPtrInst::Create(to.value,indices.begin(),indices.end(),"array index",context.currentBlock());
+
+		assignTo = elementPtr;//new LoadInst(elementPtr, "", false, context.currentBlock());
+	}
 
 	if (!assignTo->getType()->isPointerTy())
 	{
@@ -965,6 +1011,7 @@ Value* CAssignment::generateAssignment(BitVariable& to,const std::string& module
 
 	// cnst initialiser only used when we are updating the primary register
 	BinaryOperator* final;
+
 	if (to.aliased == false)
 	{
 		ConstantInt* const_intCnst = ConstantInt::get(getGlobalContext(), to.cnst);
@@ -973,8 +1020,31 @@ Value* CAssignment::generateAssignment(BitVariable& to,const std::string& module
 	}
 	else
 	{
+		Value* dest=to.value;
+		if (toIdent.IsArray())
+		{
+			Value* exprResult=toIdent.GetExpression()->codeGen(context);
+
+			const Type* ty = Type::getIntNTy(getGlobalContext(),to.arraySize.getLimitedValue());
+			const Type* ty64 = Type::getIntNTy(getGlobalContext(),64);
+			Instruction::CastOps op = CastInst::getCastOpcode(exprResult,false,ty,false);
+			Instruction* truncExt0 = CastInst::Create(op,exprResult,ty,"cast",context.currentBlock());		// Cast index to 64 bit type
+			Instruction::CastOps op1 = CastInst::getCastOpcode(exprResult,false,ty64,false);
+			Instruction* truncExt = CastInst::Create(op1,truncExt0,ty64,"cast",context.currentBlock());		// Cast index to 64 bit type
+	//		const Type* ty = Type::getIntNTy(getGlobalContext(),to.arraySize.getLimitedValue()/* 64*/);
+	//		Instruction::CastOps op = CastInst::getCastOpcode(exprResult,false,ty,false);
+	//		Instruction* truncExt = CastInst::Create(op,exprResult,ty,"cast",context.currentBlock());		// Cast index to 64 bit type
+
+			std::vector<Value*> indices;
+			ConstantInt* index0 = ConstantInt::get(getGlobalContext(), APInt(to.size.getLimitedValue(), StringRef("0"), 10));
+			indices.push_back(index0);
+			indices.push_back(truncExt);
+			Instruction* elementPtr = GetElementPtrInst::Create(to.value,indices.begin(),indices.end(),"array index",context.currentBlock());
+
+			dest = elementPtr;
+		}
 		// Now if the assignment is assigning to an aliased register part, we need to have loaded the original register, masked off the inverse of the section mask, and or'd in the result before we store
-		LoadInst* loadInst=new LoadInst(to.value, "", false, context.currentBlock());
+		LoadInst* loadInst=new LoadInst(dest, "", false, context.currentBlock());
 		ConstantInt* const_intInvMask = ConstantInt::get(getGlobalContext(), ~to.mask);
 		BinaryOperator* primaryAndInst = BinaryOperator::Create(Instruction::And, loadInst, const_intInvMask , "InvMasking", context.currentBlock());
 		final = BinaryOperator::Create(Instruction::Or,primaryAndInst,andInst,"Combining",context.currentBlock());
@@ -984,14 +1054,14 @@ Value* CAssignment::generateAssignment(BitVariable& to,const std::string& module
 	{
 		if (to.pinType!=TOK_IN && to.pinType!=TOK_BIDIRECTIONAL)
 		{
-			std::cerr << "Pin marked as non writable in module!" << name << std::endl;
+			std::cerr << "Pin marked as non writable in module!" << toIdent.name << std::endl;
 			context.errorFlagged=true;
 			return NULL;
 		}
 		else
 		{
 			// At this point, we need to get PinSet method and call it.
-			Function* function = context.LookupFunctionInExternalModule(moduleName,"PinSet"+name);
+			Function* function = context.LookupFunctionInExternalModule(toIdent.module,"PinSet"+toIdent.name);
 
 			std::vector<Value*> args;
 			args.push_back(final);
@@ -1028,7 +1098,7 @@ Value* CAssignment::codeGen(CodeGenContext& context)
 
 	assignWith = rhs.codeGen(context);
 
-	return CAssignment::generateAssignment(var,lhs.module,lhs.name,assignWith,context);
+	return CAssignment::generateAssignment(var,lhs,assignWith,context);
 }
 
 Value* CAssignment::codeGen(CodeGenContext& context,CCastOperator* cast)
@@ -1069,7 +1139,7 @@ Value* CAssignment::codeGen(CodeGenContext& context,CCastOperator* cast)
 
 	assignWith = rhs.codeGen(context);
 
-	return CAssignment::generateAssignment(var,lhs.module,lhs.name,assignWith,context);
+	return CAssignment::generateAssignment(var,lhs,assignWith,context);
 }
 
 void CBlock::prePass(CodeGenContext& context)
@@ -1457,7 +1527,7 @@ void CVariableDeclaration::CreateWriteAccessor(CodeGenContext& context,BitVariab
 	setVal->setName("InputVal");
 
 	LoadInst* load=new LoadInst(var.value,"",false,bblock);
-	Value* stor=CAssignment::generateAssignment(var,moduleName, name,setVal,context);
+	Value* stor=CAssignment::generateAssignment(var,id/*moduleName, name*/,setVal,context);
 
 	var.priorValue=load;
 	var.writeInput=setVal;
@@ -1498,6 +1568,7 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 {
 	BitVariable temp;
 
+	temp.arraySize = arraySize.integer;
 	temp.size = size.integer;
 	temp.trueSize = size.integer;
 	temp.cnst = APInt(size.integer.getLimitedValue(),0);
@@ -1529,13 +1600,21 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 		// Rules for globals have changed. If we are definining a PIN then the variable should be private to this module, and accessors should be created instead. 
 		if (pinType==0)
 		{
+			const Type* type = Type::getIntNTy(getGlobalContext(),size.integer.getLimitedValue());
+			if (arraySize.integer.getLimitedValue())
+			{
+				APInt power2(arraySize.integer.getLimitedValue()+1,1);
+				power2<<=arraySize.integer.getLimitedValue();
+				type=ArrayType::get(Type::getIntNTy(getGlobalContext(),size.integer.getLimitedValue()),power2.getLimitedValue());
+			}
+
 			if (internal || !context.isRoot)
 			{
-				temp.value = new GlobalVariable(*context.module,Type::getIntNTy(getGlobalContext(),size.integer.getLimitedValue()), false, GlobalValue::PrivateLinkage,NULL,context.symbolPrepend+id.name);
+				temp.value = new GlobalVariable(*context.module,type, false, GlobalValue::PrivateLinkage,NULL,context.symbolPrepend+id.name);
 			}
 			else
 			{
-				temp.value = new GlobalVariable(*context.module,Type::getIntNTy(getGlobalContext(),size.integer.getLimitedValue()), false, GlobalValue::ExternalLinkage,NULL,context.symbolPrepend+id.name);
+				temp.value = new GlobalVariable(*context.module,type, false, GlobalValue::ExternalLinkage,NULL,context.symbolPrepend+id.name);
 			}
 		}
 		else
@@ -1592,6 +1671,7 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 			bitPos-=aliases[a]->sizeOrValue.integer-1;
 
 			BitVariable alias;
+			alias.arraySize = temp.arraySize;
 			alias.size = temp.size;
 			alias.trueSize = aliases[a]->sizeOrValue.integer;
 			alias.value = temp.value;	// the value will always point at the stored local/global
@@ -1634,7 +1714,17 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 	else
 	{
 		// Initialiser Definitions
-		cast<GlobalVariable>(temp.value)->setInitializer(const_intn_0);
+		if (temp.arraySize.getLimitedValue())
+		{
+			APInt power2(arraySize.integer.getLimitedValue()+1,1);
+			power2<<=arraySize.integer.getLimitedValue();
+			ConstantAggregateZero* const_array_7 = ConstantAggregateZero::get(ArrayType::get(Type::getIntNTy(getGlobalContext(),size.integer.getLimitedValue()),power2.getLimitedValue()));
+			cast<GlobalVariable>(temp.value)->setInitializer(const_array_7);
+		}
+		else
+		{
+			cast<GlobalVariable>(temp.value)->setInitializer(const_intn_0);
+		}
 
 		context.globals()[id.name]=temp;
 	}
@@ -2720,7 +2810,7 @@ Value* CAffect::codeGenFinal(CodeGenContext& context,Value* exprResult)
 			return NULL;
 	}
 
-	return CAssignment::generateAssignment(var,ident.module,ident.name,answer,context);
+	return CAssignment::generateAssignment(var,ident,answer,context);
 }
 
 void CAffector::prePass(CodeGenContext& context)
@@ -3158,8 +3248,8 @@ Value* CExchange::codeGen(CodeGenContext& context)
 				return NULL;
 			}
 		
-			CAssignment::generateAssignment(lhsVar,lhs.module,lhs.name,right,context);
-			CAssignment::generateAssignment(rhsVar,rhs.module,rhs.name,left,context);
+			CAssignment::generateAssignment(lhsVar,lhs,right,context);
+			CAssignment::generateAssignment(rhsVar,rhs,left,context);
 		}
 		
 		return NULL;

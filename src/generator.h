@@ -37,6 +37,7 @@ class BitVariable
 {
 public:
 	Value* value;
+	APInt	arraySize;
 	APInt	size;
 	APInt	trueSize;
 	APInt	mask;

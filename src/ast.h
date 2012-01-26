@@ -119,7 +119,14 @@ public:
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
 
-class CIdentifier : public CExpression {
+class CBaseIdentifier : public CExpression
+{
+public:
+	virtual CExpression *GetExpression() const=0;
+	virtual bool IsArray() const { return false;}
+};
+
+class CIdentifier : public CBaseIdentifier {
 public:
 	std::string module;
 	std::string name;
@@ -129,6 +136,7 @@ public:
 	static llvm::Value* GetAliasedData(CodeGenContext& context,llvm::Value* in,BitVariable& var);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 	virtual bool IsIdentifierExpression() { return true; }
+	virtual CExpression *GetExpression() const { return NULL; }
 };
 
 class CIdentifierArray : public CIdentifier
@@ -137,6 +145,8 @@ public:
 	CExpression& arrayIndex;
 	CIdentifierArray(CExpression& expr,const std::string& name): CIdentifier(name),arrayIndex(expr) {};
 	CIdentifierArray(CExpression& expr,const std::string& module, const std::string& name): CIdentifier(module,name),arrayIndex(expr) {};
+	virtual CExpression *GetExpression() const { return &arrayIndex; }
+	virtual bool IsArray() const { return true; }
 };
 
 class CStateIdent : public CExpression {
@@ -282,7 +292,7 @@ public:
 	virtual bool IsLeaf() { return false; }
 	virtual bool IsAssignmentExpression() { return true; }
 
-	static llvm::Value* generateAssignment(BitVariable& to,const std::string& moduleName, const std::string& name,llvm::Value* from,CodeGenContext& context);
+	static llvm::Value* generateAssignment(BitVariable& to,const CIdentifier& identTo,llvm::Value* from,CodeGenContext& context);
 };
 
 class CBlock : public CExpression {
