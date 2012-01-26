@@ -562,19 +562,9 @@ Value* CDebugTraceInteger::codeGen(CodeGenContext& context)
 	return fcall;
 }
 
-Value* CDebugTraceIdentifier::codeGen(CodeGenContext& context)
+// The below provides the output for a single expr, will be called multiple times for arrays (at least for now)
+Value* CDebugTraceIdentifier::generate(CodeGenContext& context,Value *loadedValue)
 {
-	CallInst* fcall;
-
-	std::string tmp = "\"";
-	tmp+=ident.name;
-	tmp+="(\"";
-	CString strng(tmp);
-	CDebugTraceString identName(strng);
-
-	identName.codeGen(context);
-
-	Value* loadedValue = ident.codeGen(context);
 	const IntegerType* valueType = cast<IntegerType>(loadedValue->getType());
 	unsigned bitWidth = valueType->getBitWidth();
 
@@ -611,7 +601,7 @@ Value* CDebugTraceIdentifier::codeGen(CodeGenContext& context)
 		CmpInst* check=CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_ULE,readyToAdd,ConstantInt::get(getGlobalContext(),APInt(32,9)),"rangeCheck",context.currentBlock());
 
 		BinaryOperator* lowAdd = BinaryOperator::Create(Instruction::Add,readyToAdd,ConstantInt::get(getGlobalContext(),APInt(32,'0')),"lowAdd",context.currentBlock());
-		BinaryOperator* hiAdd = BinaryOperator::Create(Instruction::Add,readyToAdd,ConstantInt::get(getGlobalContext(),APInt(32,'A'-10)),"lowAdd",context.currentBlock());
+		BinaryOperator* hiAdd = BinaryOperator::Create(Instruction::Add,readyToAdd,ConstantInt::get(getGlobalContext(),APInt(32,'A'-10)),"hiAdd",context.currentBlock());
 
 		SelectInst *select = SelectInst::Create(check,lowAdd,hiAdd,"getRightChar",context.currentBlock());
 
@@ -625,13 +615,77 @@ Value* CDebugTraceIdentifier::codeGen(CodeGenContext& context)
 			baseDivisor=baseDivisor.udiv(APInt(bitWidth,currentBase));
 		}
 	}
+	return NULL;
+}
+
+Value* CDebugTraceIdentifier::codeGen(CodeGenContext& context)
+{
+	int a;
+	BitVariable var;
+
+	if (!context.LookupBitVariable(var,ident.module,ident.name))
 	{
+		return NULL;
+	}
+
+	if (var.arraySize.getLimitedValue()==0 || ident.IsArray())
+	{
+		std::string tmp = "\"";
+		tmp+=ident.name;
+		tmp+="(\"";
+		CString strng(tmp);
+		CDebugTraceString identName(strng);
+
+		identName.codeGen(context);
+
+		Value* loadedValue = ident.codeGen(context);
+		
+		Value* ret=generate(context,loadedValue);
+
 		std::vector<Value*> args;
 		args.push_back(ConstantInt::get(getGlobalContext(), APInt(32, ')')));
-		fcall = CallInst::Create(context.debugTraceChar,args.begin(),args.end(),"DEBUGTRACE",context.currentBlock());
+		CallInst::Create(context.debugTraceChar,args.begin(),args.end(),"DEBUGTRACE",context.currentBlock());
+
+		return ret;
 	}
-	return fcall;
+
+	// presume they want the entire contents of array dumping
+
+	{
+		std::string tmp = "\"";
+		tmp+=ident.name;
+		tmp+="(\"";
+		CString strng(tmp);
+		CDebugTraceString identName(strng);
+		
+		identName.codeGen(context);
+
+		APInt power2(var.arraySize.getLimitedValue()+1,1);
+		power2<<=var.arraySize.getLimitedValue();
+		for (a=0;a<power2.getLimitedValue();a++)
+		{
+			std::string tmp;
+			tmp+=a;
+			CInteger index(tmp);
+			CIdentifierArray idArrayTemp(index,ident.name);
+
+			generate(context,idArrayTemp.codeGen(context));
+			if (a!=power2.getLimitedValue()-1)
+			{
+				std::vector<Value*> args;
+				args.push_back(ConstantInt::get(getGlobalContext(), APInt(32, ',')));
+				CallInst::Create(context.debugTraceChar,args.begin(),args.end(),"DEBUGTRACE",context.currentBlock());
+			}
+		}
+		
+		std::vector<Value*> args;
+		args.push_back(ConstantInt::get(getGlobalContext(), APInt(32, ')')));
+		CallInst::Create(context.debugTraceChar,args.begin(),args.end(),"DEBUGTRACE",context.currentBlock());
+	}
+
+	return NULL;
 }
+
 
 Value* CDebugLine::codeGen(CodeGenContext& context)		// Refactored away onto its own block - TODO factor away to a function - need to take care of passing identifiers forward though
 {
@@ -1707,8 +1761,24 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 	if (context.currentBlock())
 	{
 		// Initialiser Definitions
-		StoreInst* stor = new StoreInst(const_intn_0,temp.value,false,context.currentBlock());		// NOT SURE HOW WELL THIS WILL WORK IN FUTURE
-		
+
+		if (initialiserList.empty())
+		{
+			StoreInst* stor = new StoreInst(const_intn_0,temp.value,false,context.currentBlock());		// NOT SURE HOW WELL THIS WILL WORK IN FUTURE
+		}
+		else
+		{
+			if (initialiserList.size()!=1)
+			{
+				std::cerr << "Too many initialisers" << endl;
+				context.errorFlagged=true;
+				return NULL;
+			}
+
+			ConstantInt* constInit=ConstantInt::get(getGlobalContext(),initialiserList[0]->integer.zext(size.integer.getLimitedValue()));
+
+			StoreInst* stor = new StoreInst(constInit,temp.value,false,context.currentBlock());
+		}
 		context.locals()[id.name] = temp;
 	}
 	else
@@ -1718,12 +1788,60 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 		{
 			APInt power2(arraySize.integer.getLimitedValue()+1,1);
 			power2<<=arraySize.integer.getLimitedValue();
-			ConstantAggregateZero* const_array_7 = ConstantAggregateZero::get(ArrayType::get(Type::getIntNTy(getGlobalContext(),size.integer.getLimitedValue()),power2.getLimitedValue()));
-			cast<GlobalVariable>(temp.value)->setInitializer(const_array_7);
+
+			if (initialiserList.empty())
+			{
+				ConstantAggregateZero* const_array_7 = ConstantAggregateZero::get(ArrayType::get(Type::getIntNTy(getGlobalContext(),size.integer.getLimitedValue()),power2.getLimitedValue()));
+				cast<GlobalVariable>(temp.value)->setInitializer(const_array_7);
+			}
+			else
+			{
+				if (initialiserList.size()>power2.getLimitedValue())
+				{
+					std::cerr << "Too many initialisers" << endl;
+					context.errorFlagged=true;
+					return NULL;
+				}
+		
+				int a;
+				std::vector<Constant*> const_array_9_elems;
+				ArrayType* arrayTy = ArrayType::get(Type::getIntNTy(getGlobalContext(),size.integer.getLimitedValue()),power2.getLimitedValue());
+				ConstantInt* const0 = ConstantInt::get(getGlobalContext(), APInt(size.integer.getLimitedValue(),0));
+
+				for (a=0;a<power2.getLimitedValue();a++)
+				{
+					if (a<initialiserList.size())
+					{
+						const_array_9_elems.push_back(ConstantInt::get(getGlobalContext(),initialiserList[a]->integer.zext(size.integer.getLimitedValue())));
+					}
+					else
+					{
+						const_array_9_elems.push_back(const0);
+					}
+				}
+
+				Constant* const_array_9 = ConstantArray::get(arrayTy, const_array_9_elems);
+				cast<GlobalVariable>(temp.value)->setInitializer(const_array_9);
+			}
 		}
 		else
 		{
-			cast<GlobalVariable>(temp.value)->setInitializer(const_intn_0);
+			if (initialiserList.empty())
+			{
+				cast<GlobalVariable>(temp.value)->setInitializer(const_intn_0);
+			}
+			else
+			{
+				if (initialiserList.size()!=1)
+				{
+					std::cerr << "Too many initialisers" << endl;
+					context.errorFlagged=true;
+					return NULL;
+				}
+
+				ConstantInt* constInit=ConstantInt::get(getGlobalContext(),initialiserList[0]->integer.zext(size.integer.getLimitedValue()));
+				cast<GlobalVariable>(temp.value)->setInitializer(constInit);
+			}
 		}
 
 		context.globals()[id.name]=temp;

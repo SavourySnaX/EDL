@@ -66,7 +66,7 @@
 %type <trigger> trigger
 %type <token> pin_type
 %type <params> params
-%type <externparams> params_list return_val
+%type <externparams> params_list return_val var_inits
 %type <affect> affector
 %type <mapping> mapping
 %type <operand> operand 
@@ -107,8 +107,12 @@ stmts : stmt { $$ = new CBlock(); $$->statements.push_back($<stmt>1); }
 	  | stmts stmt { $1->statements.push_back($<stmt>2); }
 	  ;
 
+var_inits : numeric { $$ = new ExternParamsList(); $$->push_back($<intgr>1); }
+	  | var_inits TOK_COMMA numeric { $$->push_back($<intgr>3); }
+
 stmt : TOK_INSTANCE quoted TOK_AS ident TOK_EOS { $$ = new CInstance(*$2,*$4); }
      | var_decl TOK_EOS
+     | var_decl TOK_LBRACE var_inits TOK_RBRACE TOK_EOS { $<var_decl>1->AddInitialisers(*$3); delete $3; }
      | states_decl
      | state_def
      | handler_decl

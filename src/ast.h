@@ -340,6 +340,7 @@ public:
 	CIdentifier& ident;
 	CDebugTraceIdentifier(CIdentifier& ident) :
 		ident(ident) { }
+	llvm::Value* generate(CodeGenContext& context,llvm::Value* loadedValue);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
 
@@ -371,6 +372,8 @@ public:
 	CInteger& size;
 	AliasList aliases;
 	int pinType;
+	ExternParamsList initialiserList;
+
 	CVariableDeclaration(CInteger& arraySize,bool internal,CIdentifier& id, CInteger& size) :
 		internal(internal), id(id), arraySize(arraySize),size(size),pinType(0) { }
 	CVariableDeclaration(CInteger& arraySize,bool internal,CIdentifier& id, CInteger& size,AliasList& aliases) :
@@ -379,6 +382,9 @@ public:
 		id(id), arraySize(notArray),size(size),pinType(pinType) { }
 	CVariableDeclaration(CIdentifier& id, CInteger& size,AliasList& aliases,int pinType) :
 		id(id), arraySize(notArray),size(size),aliases(aliases),pinType(pinType) { }
+
+	void AddInitialisers(ExternParamsList &initialisers) {initialiserList=initialisers;}
+
 	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 

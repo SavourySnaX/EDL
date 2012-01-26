@@ -9,8 +9,8 @@ extern int yyparse();
 extern CBlock* g_ProgramBlock;
 extern FILE *yyin;
 
-#define EDL_LANGUAGE_VERSION		"0.3"
-#define EDL_COMPILER_VERSION		"1.0"
+#define EDL_LANGUAGE_VERSION		"0.4"
+#define EDL_COMPILER_VERSION		"1.1"
 
 int Usage()
 {
