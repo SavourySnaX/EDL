@@ -1,6 +1,6 @@
 # Ricoh RP2C02 (as used in the NTSC model NES) - Accurate Version 
 #
-# This should be used like the real CPU, ie interact with the PIN_'s
+# This should be used like the real CPU, ie interact with the PIN_'s		- TODO Split into BG / OAM parts
 #
 # EXT pins not present
 # SYNC pins not present
@@ -42,7 +42,7 @@ DECLARE INTERNAL	OAMSecondary[[3]][32]		ALIAS	SecondaryY[8]:SecondaryTile[8]:Sec
 DECLARE INTERNAL	OAMBpl0[[3]][8];		# Bpl0 For SpriteN
 DECLARE INTERNAL	OAMBpl1[[3]][8];		# Bpl0 For SpriteN
 DECLARE INTERNAL	OAMCnt[[3]][8];			# Horizontal Counter for SpriteN
-DECLARE INTERNAL	OAMAttr[[3]][8]			ALIAS %0:FlipH[1]:Priority[1]:%000:Palette[2];
+DECLARE INTERNAL	OAMAttr[[3]][8]			ALIAS FlipV[1]:FlipH[1]:Priority[1]:%000:Palette[2];
 
 # IORegisters
 
@@ -276,20 +276,9 @@ DECLARE INTERNAL SpriteCollision[1];
 DECLARE INTERNAL SpriteColour[5];
 DECLARE INTERNAL SpriteZero[1];
 DECLARE INTERNAL SpriteBack[1];
-DECLARE INTERNAL SpriteInRange[1];
 DECLARE INTERNAL Sprite0InRange[1];
 DECLARE INTERNAL Sprite0InRange_latch[1];
 DECLARE INTERNAL SpriteBufCur[4];
-
-DECLARE INTERNAL SpriteY[8]	ALIAS	$00;
-DECLARE INTERNAL SpriteTile[8]	ALIAS	$01;
-DECLARE INTERNAL SpriteAttr[8]	ALIAS	$02;
-DECLARE INTERNAL SpriteX[8]	ALIAS	$03;
-DECLARE INTERNAL SpriteCnt[8]	ALIAS	$04;
-DECLARE INTERNAL SpritePal[8]	ALIAS	$05;
-DECLARE INTERNAL SpriteBp0[8]	ALIAS	$06;
-DECLARE INTERNAL SpriteBp1[8]	ALIAS	$07;
-
 
 FUNCTION INTERNAL	UpdateSprite	sprNum[3]
 {
@@ -383,73 +372,13 @@ FUNCTION INTERNAL	Rasterise
 	}
 }
 
-FUNCTION INTERNAL	SpriteComputePhase0
-{
-	DECLARE sprite[8] ALIAS spNum[6]:spPhase[2];
-	DECLARE compare[9];
-	DECLARE yLocation[9];
-
-	sprite<-hClock;
-	yLocation<-OAM[[sprite]]+1;
-	compare<-(vClock-20) - yLocation;
-	SpriteInRange<-compare[3..8]==0;
-	IF SpriteBufCur<8 & SpriteInRange
-	{
-		Sprite0InRange<-Sprite0InRange | (SpriteInRange & (spNum==0));
-		SecondaryY[[SpriteBufCur]]<-compare;
-	}
-}
-
-FUNCTION INTERNAL	SpriteComputePhase1
-{
-	DECLARE sprite[8] ALIAS spNum[6]:spPhase[2];
-
-	sprite<-hClock;
-
-	IF SpriteInRange
-	{
-		SecondaryTile[[SpriteBufCur]]<-OAM[[sprite]];
-	}
-}
-
-FUNCTION INTERNAL	SpriteComputePhase2
-{
-	DECLARE sprite[8] ALIAS spNum[6]:spPhase[2];
-
-	sprite<-hClock;
-
-	IF SpriteInRange
-	{
-		DECLARE attribsTmp[8] ALIAS FlipV[1]:rest[7];
-		attribsTmp<-OAM[[sprite]];
-		SecondaryAttrs[[SpriteBufCur]]<-attribsTmp;
-
-		IF FlipV
-		{
-			SecondaryY[[SpriteBufCur]]<-(~SecondaryY[[SpriteBufCur]])&7;
-		}
-	}
-}
-
-FUNCTION INTERNAL	SpriteComputePhase3
-{
-	DECLARE sprite[8] ALIAS spNum[6]:spPhase[2];
-
-	sprite<-hClock;
-
-	IF SpriteInRange
-	{
-		SecondaryX[[SpriteBufCur]]<-OAM[[sprite]];
-		SpriteBufCur<-SpriteBufCur+1;
-	}
-}
-
 FUNCTION INTERNAL	TickPixelClockStart
 {
 	PIN__INT<-~(NMI&VBlank);
 	IF (vClock>=20) & (vClock<=260)
 	{
 		EXECUTE PixelClock	hClock;		### TMP just to get an update across the entire screen
+		EXECUTE OAMClock	hClock;
 	}
 	IF (vClock>=21) & (vClock<=260) & SprShow
 	{
@@ -669,6 +598,10 @@ FUNCTION INTERNAL FetchSpritePattern0	sprNum[3]
 	tmpTH<-tile[4..7];
 	tmpTL<-tile[0..3];
 	tmpFH<-SecondaryY[[sprNum]];
+	IF FlipV[[sprNum]]
+	{
+		tmpFH<-~tmpFH;
+	}
 
 	CALL VRAMAddressSetupALE(tmpPA,tmpDB);
 }
@@ -684,100 +617,269 @@ FUNCTION INTERNAL FetchSpritePattern1	sprNum[3]
 	tmpTH<-tile[4..7];
 	tmpTL<-tile[0..3];
 	tmpFH<-SecondaryY[[sprNum]];
+	IF FlipV[[sprNum]]
+	{
+		tmpFH<-~tmpFH;
+	}
 
 	CALL VRAMAddressSetupALE(tmpPA,tmpDB);
 }
 
-# Clocks 0-255
+# Clocks 0-255  (BG)
 
 INSTRUCTION	PixelClock	"FetchNT0"	%0:dontCare[5]:%000
 {
-	CALL SpriteComputePhase0();
 	CALL FetchBGSetupNT();
 }
 
 INSTRUCTION	PixelClock	"FetchNT1"	%0:dontCare[5]:%001
 {
-	CALL SpriteComputePhase1();
 	CALL VRAMAddressSetupR(1);
 }
 
 INSTRUCTION	PixelClock	"FetchAT0"	%0:dontCare[5]:%010
 {
-	CALL SpriteComputePhase2();
 	CALL FetchBGSetupAT();
 }
 
 INSTRUCTION	PixelClock	"FetchAT1"	%0:dontCare[5]:%011
 {
-	CALL SpriteComputePhase3();
 	CALL VRAMAddressSetupR(2);
 }
 
 INSTRUCTION	PixelClock	"FetchPT00"	%0:dontCare[5]:%100
 {
-	CALL SpriteComputePhase0();
 	CALL FetchBGSetupPT0();
 }
 
 INSTRUCTION	PixelClock	"FetchPT01"	%0:dontCare[5]:%101
 {
-	CALL SpriteComputePhase1();
 	CALL VRAMAddressSetupR(3);
 }
 
 INSTRUCTION	PixelClock	"FetchPT10"	%0:dontCare[5]:%110
 {
-	CALL SpriteComputePhase2();
 	CALL FetchBGSetupPT1();
 }
 
 INSTRUCTION	PixelClock	"FetchPT11"	%0:dontCare[5]:%111
 {
-	CALL SpriteComputePhase3();
 	CALL VRAMAddressSetupR(4);
+}
+
+# Clocks 0-63 (Sprites)
+
+DECLARE SpriteTmpTransfer[8];
+
+INSTRUCTION	OAMClock	"ClearOAM"	%000:oamRamAddr[5]:%0
+{
+	SpriteTmpTransfer<-$FF;
+}
+
+INSTRUCTION	OAMClock	"ClearOAM"	%000:oamRamAddr[3]:%001
+{
+	SecondaryY[[oamRamAddr]]<-SpriteTmpTransfer;
+}
+
+INSTRUCTION	OAMClock	"ClearOAM"	%000:oamRamAddr[3]:%011
+{
+	SecondaryTile[[oamRamAddr]]<-SpriteTmpTransfer;
+}
+
+INSTRUCTION	OAMClock	"ClearOAM"	%000:oamRamAddr[3]:%101
+{
+	SecondaryAttrs[[oamRamAddr]]<-SpriteTmpTransfer;
+}
+
+INSTRUCTION	OAMClock	"ClearOAM"	%000:oamRamAddr[3]:%111
+{
+	SecondaryX[[oamRamAddr]]<-SpriteTmpTransfer;
+}
+
+DECLARE SpriteComputePhase[8];
+DECLARE SpriteComputePhaseNext[8];
+DECLARE SpriteSrcAddr[8]	ALIAS	SpriteN[6]:SpriteM[2];
+DECLARE SpriteDstAddr[4];
+DECLARE SpriteDisableWrites[1];
+
+FUNCTION INTERNAL	ProcessSprite
+{
+	IF SpriteComputePhase==0
+	{
+		SpriteTmpTransfer<-OAM[[SpriteSrcAddr]];
+		SpriteComputePhaseNext<-1;
+	}
+	IF SpriteComputePhase==1
+	{
+		DECLARE compare[9];
+		DECLARE SpriteInRange[1];
+		
+		compare<-(vClock-21) - SpriteTmpTransfer;
+		SpriteInRange<-compare[3..8]==0;
+		IF ~SpriteDisableWrites
+		{
+			SecondaryY[[SpriteDstAddr]]<-compare;
+		}
+		IF SpriteInRange
+		{
+			Sprite0InRange<-Sprite0InRange | (SpriteInRange & (SpriteSrcAddr==0));
+			SpriteM<-SpriteM+1;
+			SpriteComputePhaseNext<-10;
+		}
+		IF ~SpriteInRange
+		{
+			SpriteComputePhaseNext<-2;
+		}
+	}
+	IF SpriteComputePhase==2
+	{
+		SpriteN<-SpriteN+1;
+		IF SpriteN==0
+		{
+			SpriteComputePhaseNext<-99;
+		}
+		IF SpriteDstAddr<8
+		{
+			SpriteComputePhaseNext<-0;
+		}
+		IF SpriteDstAddr==8
+		{
+			SpriteDisableWrites<-1;
+			SpriteComputePhaseNext<-3;
+		}
+	}
+
+	IF SpriteComputePhase==3
+	{
+		DECLARE compare[9];
+		DECLARE SpriteInRange[1];
+		
+		compare<-(vClock-21) - SpriteTmpTransfer;
+		IF ~SpriteDisableWrites
+		{
+			SecondaryY[[SpriteDstAddr]]<-SpriteTmpTransfer;
+		}
+		SpriteInRange<-compare[3..8]==0;
+		IF SpriteInRange
+		{
+			# Set Overflow
+			SpriteM<-SpriteM+1;
+			SpriteComputePhaseNext<-10;
+		}
+		IF ~SpriteInRange
+		{
+			SpriteM<-SpriteM+1;
+			SpriteComputePhaseNext<-2;
+		}
+	}
+
+	IF SpriteComputePhase==10
+	{
+		SpriteTmpTransfer<-OAM[[SpriteSrcAddr]];
+		SpriteComputePhaseNext<-11;
+	}
+	IF SpriteComputePhase==11
+	{
+		IF ~SpriteDisableWrites
+		{
+			SecondaryTile[[SpriteDstAddr]]<-SpriteTmpTransfer;
+		}
+		SpriteM<-SpriteM+1;
+		SpriteComputePhaseNext<-12;
+	}
+	IF SpriteComputePhase==12
+	{
+		SpriteTmpTransfer<-OAM[[SpriteSrcAddr]];
+		SpriteComputePhaseNext<-13;
+	}
+	IF SpriteComputePhase==13
+	{
+		IF ~SpriteDisableWrites
+		{
+			SecondaryAttrs[[SpriteDstAddr]]<-SpriteTmpTransfer;
+		}
+		SpriteM<-SpriteM+1;
+		SpriteComputePhaseNext<-14;
+	}
+	IF SpriteComputePhase==14
+	{
+		SpriteTmpTransfer<-OAM[[SpriteSrcAddr]];
+		SpriteComputePhaseNext<-15;
+	}
+	IF SpriteComputePhase==15
+	{
+		IF ~SpriteDisableWrites
+		{
+			SecondaryX[[SpriteDstAddr]]<-SpriteTmpTransfer;
+		}
+		SpriteM<-SpriteM+1;
+		SpriteDstAddr<-SpriteDstAddr+1;
+		SpriteComputePhaseNext<-2;
+	}
+
+	SpriteComputePhase<-SpriteComputePhaseNext;
+}
+
+# Clocks 64-255 (Sprites)
+
+MAPPING RemainingClocks[2]
+{
+	%01	""	0;
+	%10	""	1;
+	%11	""	2;
+}
+
+INSTRUCTION	OAMClock	"SpriteCompute"	%0:RemainingClocks:dontCare[6]
+{
+	IF (dontCare==0) & (RemainingClocks==0)
+	{
+		SpriteComputePhase<-0;
+		SpriteSrcAddr<-0;
+		SpriteDstAddr<-0;
+		SpriteDisableWrites<-0;
+	}
+	CALL ProcessSprite();
 }
 
 # Clocks 256-319
 
-DECLARE SpriteTmpTransfer[8];
 
-INSTRUCTION	PixelClock	"Sprite%M0"	%100:sprNum[3]:%000
+INSTRUCTION	OAMClock	"Sprite%M0"	%100:sprNum[3]:%000
 {
 	SpriteTmpTransfer<-SecondaryX[[sprNum]];
 }
 
-INSTRUCTION	PixelClock	"Sprite%M0"	%100:sprNum[3]:%001
+INSTRUCTION	OAMClock	"Sprite%M0"	%100:sprNum[3]:%001
 {
 	OAMCnt[[sprNum]]<-SpriteTmpTransfer;
 }
 
-INSTRUCTION	PixelClock	"Sprite%M0"	%100:sprNum[3]:%010
+INSTRUCTION	OAMClock	"Sprite%M0"	%100:sprNum[3]:%010
 {
 	SpriteTmpTransfer<-SecondaryAttrs[[sprNum]];
 }
 
-INSTRUCTION	PixelClock	"Sprite%M0"	%100:sprNum[3]:%011
+INSTRUCTION	OAMClock	"Sprite%M0"	%100:sprNum[3]:%011
 {
 	OAMAttr[[sprNum]]<-SpriteTmpTransfer;
 }
 
-INSTRUCTION	PixelClock	"Sprite%M0"	%100:sprNum[3]:%100
+INSTRUCTION	OAMClock	"Sprite%M0"	%100:sprNum[3]:%100
 {
 	CALL FetchSpritePattern0(sprNum);
 }
 
-INSTRUCTION	PixelClock	"Sprite%M0"	%100:SprNum[3]:%101
+INSTRUCTION	OAMClock	"Sprite%M0"	%100:SprNum[3]:%101
 {
 	CALL VRAMAddressSetupR(5);
 }
 
-INSTRUCTION	PixelClock	"Sprite%M0"	%100:sprNum[3]:%110
+INSTRUCTION	OAMClock	"Sprite%M0"	%100:sprNum[3]:%110
 {
 	CALL FetchSpritePattern1(sprNum);
 }
 
-INSTRUCTION	PixelClock	"Sprite%M0"	%100:sprNum[3]:%111
+INSTRUCTION	OAMClock	"Sprite%M0"	%100:sprNum[3]:%111
 {
 	CALL VRAMAddressSetupR(6);
 }
