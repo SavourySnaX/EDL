@@ -665,7 +665,7 @@ Value* CDebugTraceIdentifier::codeGen(CodeGenContext& context)
 		for (a=0;a<power2.getLimitedValue();a++)
 		{
 			std::string tmp;
-			tmp+=a;
+			tmp+=Twine(a).str();
 			CInteger index(tmp);
 			CIdentifierArray idArrayTemp(index,ident.name);
 
