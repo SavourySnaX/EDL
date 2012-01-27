@@ -16,7 +16,7 @@
 
 #include "gui\debugger.h"
 
-#define USE_EDL_PPU	1
+#define USE_EDL_PPU	0
 
 #include "jake\ntscDecode.h"
 
@@ -922,8 +922,8 @@ int main(int argc,char**argv)
 				}
 				PPU_PinSetPIN_CLK(0);
 #else
-				Tick2C02();
 #endif
+				Tick2C02();
 			}
 //			if (ntsc_file /*&& (NTSCClock==0)*/)
 			{
@@ -1489,17 +1489,20 @@ void PPU_SetVideo(uint8_t x,uint8_t y,uint8_t col)
 {
 	uint32_t* outputTexture = (uint32_t*)videoMemory[MAIN_WINDOW];
 
+
 //	printf("%02X,%02X  %02X\n",x,y,col&0xF);
 	//if (x>=8)
 	{
 		if (col&3)
 		{
 			outputTexture[y*WIDTH+x]=nesColours[palIndex[col&0x1F]];
+			lastPixelValue=palIndex[col];
 	//		outputTexture[y*WIDTH+x]=0xFFFFFFFF;//nesColours[palIndex[col&0x1F]];
 		}
 		else
 		{
 			outputTexture[y*WIDTH+x]=nesColours[palIndex[0]];
+			lastPixelValue=palIndex[0];
 	//		outputTexture[y*WIDTH+x]=0;//nesColours[palIndex[0]];
 		}
 	}
@@ -1507,8 +1510,9 @@ void PPU_SetVideo(uint8_t x,uint8_t y,uint8_t col)
 
 void Tick2C02()
 {
-	static int field=0;
 	static int triCnt=0;
+#if !USE_EDL_PPU
+	static int field=0;
 	uint32_t* outputTexture = (uint32_t*)videoMemory[MAIN_WINDOW];
 	int a;
 
@@ -1695,7 +1699,7 @@ void Tick2C02()
 			}
 		}
 	}
-	
+#endif
 
 	/// NTSC
 	{
@@ -1817,7 +1821,7 @@ Color 30	 2.743	 1.960	 1.000
 	curClock++;
 	if ((curClock==320) && (regs2C02[1]&0x08))
 	{
-
+#if !USE_EDL_PPU
 		//pretend this is the horizontal blanking pulse?
 		uint16_t tmpV=(PPU_Vc<<8)|(PPU_VTc<<3)|PPU_FVc;
 
@@ -1838,11 +1842,13 @@ Color 30	 2.743	 1.960	 1.000
 		PPU_Hc=PPU_H;
 		PPU_HTc=PPU_HT;
 		PPU_FHl=PPU_FH;
+#endif
 	}
 	if (curClock>=341)
 	{
 		curClock=0;
 		curLine++;
+#if !USE_EDL_PPU
 		lastCollision=0;
 		SP_BUF_CurSprite=0;
 		SP_BUF_RastZeroInRange=SP_BUF_ZeroInRange;
@@ -1851,6 +1857,7 @@ Color 30	 2.743	 1.960	 1.000
 		{
 			regs2C02[2]&=0x7F;
 		}
+#endif
 		if (curLine>=262)
 		{
 			if (ntsc_file)
