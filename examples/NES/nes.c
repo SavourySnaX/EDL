@@ -16,7 +16,7 @@
 
 #include "gui\debugger.h"
 
-#define USE_EDL_PPU	0
+#define USE_EDL_PPU	1
 
 #include "jake\ntscDecode.h"
 
@@ -2143,32 +2143,6 @@ void LoadCart(const char* fileName)
 ///////////////////////////////////////////
 
 // Testing Bed for PPU on a chip
-
-uint8_t oamRam[0x100];
-
-uint8_t oamRamTmp[8*8];
-
-uint8_t PPU_FetchOAMTmp(uint8_t sp,uint8_t offs)
-{
-//printf("fetch sprite %02X : offs %02X : value %02X\n",sp,offs,oamRamTmp[sp*8+offs]);
-	return oamRamTmp[sp*8+offs];
-}
-
-void PPU_StoreOAMTmp(uint8_t sp,uint8_t offs,uint8_t val)
-{
-//printf("store sprite %02X : offs %02X : value %02X\n",sp,offs,val);
-	oamRamTmp[sp*8+offs]=val;
-}
-
-uint8_t PPU_FetchOAM(uint8_t addr)
-{
-	return oamRam[addr];
-}
-
-void PPU_StoreOAM(uint8_t addr,uint8_t value)
-{
-	oamRam[addr]=value;
-}
 
 void PPU_SetByte(uint16_t addr,uint8_t value)
 {

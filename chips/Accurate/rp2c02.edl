@@ -14,12 +14,6 @@ C_FUNC_EXTERN		SetVideo		[8],[8],[8];	# X,Y,ColIndex (Based on possible colours 
 C_FUNC_EXTERN	[8]	GetByte			[16];
 C_FUNC_EXTERN		SetByte			[16],[8];
 
-C_FUNC_EXTERN	[8]	FetchOAM		[8];		# Used to FAKE intenral ram storage - until i have array support in EDL
-C_FUNC_EXTERN		StoreOAM		[8],[8];	#
-
-C_FUNC_EXTERN	[8]	FetchOAMTmp		[8],[8];	# Used to FAKE intenral ram storage - until i have array support in EDL
-C_FUNC_EXTERN		StoreOAMTmp		[8],[8],[8];	#
-
 PIN IN			PIN__RST[1];			# Reset Pin
 
 PIN IN			PIN_CLK[1];			# 21.48Mhz
@@ -39,6 +33,16 @@ PIN BIDIRECTIONAL	PIN_AD[8];			# VRAM Facing - Data Lines (used for Low 8 bits o
 PIN OUT			PIN_PA[6];			# VRAM Facing - Top 6 bits of address
 
 ###
+
+# Internal Memory
+
+DECLARE INTERNAL	OAM[[8]][8];			# OAM Ram
+DECLARE INTERNAL	OAMSecondary[[3]][32]		ALIAS	SecondaryY[8]:SecondaryTile[8]:SecondaryX[8]:SecondaryAttrs[8];
+
+DECLARE INTERNAL	OAMBpl0[[3]][8];		# Bpl0 For SpriteN
+DECLARE INTERNAL	OAMBpl1[[3]][8];		# Bpl0 For SpriteN
+DECLARE INTERNAL	OAMCnt[[3]][8];			# Horizontal Counter for SpriteN
+DECLARE INTERNAL	OAMAttr[[3]][8]			ALIAS %0:FlipH[1]:Priority[1]:%000:Palette[2];
 
 # IORegisters
 
@@ -98,7 +102,7 @@ INSTRUCTION	IORegisterRead	"Status"	%010
 
 INSTRUCTION	IORegisterRead	"OAMData"	%100
 {
-	PIN_D<-CALL FetchOAM(OAMAddress);
+	PIN_D<-OAM[[OAMAddress]];
 }
 
 INSTRUCTION	IORegisterRead	"Data"		%111
@@ -134,7 +138,7 @@ INSTRUCTION	IORegisterWrite	"OAMAddress"	%011
 
 INSTRUCTION	IORegisterWrite	"OAMData"	%100
 {
-	CALL StoreOAM(OAMAddress,PIN_D);
+	OAM[[OAMAddress]]<-PIN_D;
 	OAMAddress<-OAMAddress+1;
 }
 
@@ -289,46 +293,32 @@ DECLARE INTERNAL SpriteBp1[8]	ALIAS	$07;
 
 FUNCTION INTERNAL	UpdateSprite	sprNum[3]
 {
-	DECLARE xCount[8];
-
-	xCount<-CALL FetchOAMTmp(sprNum,SpriteCnt);
-
-	IF xCount==0
+	IF OAMCnt[[sprNum]]==0
 	{
 		DECLARE col[5]	ALIAS	%1:pal[2]:bp1[1]:bp0[1];
-		DECLARE bits0[8];
-		DECLARE	bits1[8];
-		DECLARE attrs[8] ALIAS FlipV[1]:FlipH[1]:Priority[1]:%000:Palette[2];
 
-		bits0<-CALL FetchOAMTmp(sprNum,SpriteBp0);
-		bits1<-CALL FetchOAMTmp(sprNum,SpriteBp1);
-		attrs<-CALL FetchOAMTmp(sprNum,SpritePal);
-
-		pal<-Palette;
-		IF FlipH
+		pal<-Palette[[sprNum]];
+		IF FlipH[[sprNum]]
 		{
-			bits0<-ROR(bits0,bp0,0,1);
-			bits1<-ROR(bits1,bp1,0,1);
+			OAMBpl0[[sprNum]]<-ROR(OAMBpl0[[sprNum]],bp0,0,1);
+			OAMBpl1[[sprNum]]<-ROR(OAMBpl1[[sprNum]],bp1,0,1);
 		}
-		IF ~FlipH
+		IF ~FlipH[[sprNum]]
 		{
-			bits0<-ROL(bits0,bp0,0,1);
-			bits1<-ROL(bits1,bp1,0,1);
+			OAMBpl0[[sprNum]]<-ROL(OAMBpl0[[sprNum]],bp0,0,1);
+			OAMBpl1[[sprNum]]<-ROL(OAMBpl1[[sprNum]],bp1,0,1);
 		}
 		
-		CALL StoreOAMTmp(sprNum,SpriteBp0,bits0);
-		CALL StoreOAMTmp(sprNum,SpriteBp1,bits1);
-
 		IF (bp0 | bp1) & (SpriteColour==0)
 		{
 			SpriteColour<-col;
 			SpriteZero<-Sprite0InRange_latch & (sprNum==0);
-			SpriteBack<-Priority;
+			SpriteBack<-Priority[[sprNum]];
 		}
 	}
-	IF xCount!=0
+	IF OAMCnt[[sprNum]]!=0
 	{
-		CALL StoreOAMTmp(sprNum,SpriteCnt,xCount-1);
+		OAMCnt[[sprNum]]<-OAMCnt[[sprNum]]-1;
 	}
 }
 
@@ -400,13 +390,13 @@ FUNCTION INTERNAL	SpriteComputePhase0
 	DECLARE yLocation[9];
 
 	sprite<-hClock;
-	yLocation<-CALL FetchOAM(sprite)+1;
+	yLocation<-OAM[[sprite]]+1;
 	compare<-(vClock-20) - yLocation;
 	SpriteInRange<-compare[3..8]==0;
 	IF SpriteBufCur<8 & SpriteInRange
 	{
 		Sprite0InRange<-Sprite0InRange | (SpriteInRange & (spNum==0));
-		CALL StoreOAMTmp(SpriteBufCur,SpriteY,compare);
+		SecondaryY[[SpriteBufCur]]<-compare;
 	}
 }
 
@@ -418,7 +408,7 @@ FUNCTION INTERNAL	SpriteComputePhase1
 
 	IF SpriteInRange
 	{
-		CALL StoreOAMTmp(SpriteBufCur,SpriteTile,CALL FetchOAM(sprite));
+		SecondaryTile[[SpriteBufCur]]<-OAM[[sprite]];
 	}
 }
 
@@ -430,13 +420,13 @@ FUNCTION INTERNAL	SpriteComputePhase2
 
 	IF SpriteInRange
 	{
-		DECLARE attribsTmp[8] ALIAS FlipV[1]:FlipH[1]:Priority[1]:%000:Palette[2];
-		attribsTmp<-CALL FetchOAM(sprite);
-		CALL StoreOAMTmp(SpriteBufCur,SpriteAttr,attribsTmp);
+		DECLARE attribsTmp[8] ALIAS FlipV[1]:rest[7];
+		attribsTmp<-OAM[[sprite]];
+		SecondaryAttrs[[SpriteBufCur]]<-attribsTmp;
 
 		IF FlipV
 		{
-			CALL StoreOAMTmp(SpriteBufCur,SpriteY,(~CALL FetchOAMTmp(SpriteBufCur,SpriteY))&7);
+			SecondaryY[[SpriteBufCur]]<-(~SecondaryY[[SpriteBufCur]])&7;
 		}
 	}
 }
@@ -449,7 +439,7 @@ FUNCTION INTERNAL	SpriteComputePhase3
 
 	IF SpriteInRange
 	{
-		CALL StoreOAMTmp(SpriteBufCur,SpriteX,CALL FetchOAM(sprite));
+		SecondaryX[[SpriteBufCur]]<-OAM[[sprite]];
 		SpriteBufCur<-SpriteBufCur+1;
 	}
 }
@@ -562,20 +552,20 @@ INSTRUCTION MemoryFetchOperation "Pattern1"		%0100
 
 INSTRUCTION MemoryFetchOperation "SpritePattern0"	%0101
 {
-	DECLARE sprNum[8];
+	DECLARE sprNum[3];
 
 	sprNum<-hClock[3..5];
 
-	CALL StoreOAMTmp(sprNum,SpriteBp0,PIN_AD);
+	OAMBpl0[[sprNum]]<-PIN_AD;
 }
 
 INSTRUCTION MemoryFetchOperation "SpritePattern1"	%0110
 {
-	DECLARE sprNum[8];
+	DECLARE sprNum[3];
 
 	sprNum<-hClock[3..5];
 
-	CALL StoreOAMTmp(sprNum,SpriteBp1,PIN_AD);
+	OAMBpl1[[sprNum]]<-PIN_AD;
 }
 
 INSTRUCTION	PixelClockLine	"Line20"	%000010100
@@ -674,11 +664,11 @@ FUNCTION INTERNAL FetchSpritePattern0	sprNum[3]
 	DECLARE	tmpDB[8] ALIAS tmpTL[4]:%0:tmpFH[3];
 	DECLARE tile[8];
 
-	tile<-CALL FetchOAMTmp(sprNum,SpriteTile);
+	tile<-SecondaryTile[[sprNum]];
 	tmpS<-SprTable;
 	tmpTH<-tile[4..7];
 	tmpTL<-tile[0..3];
-	tmpFH<-CALL FetchOAMTmp(sprNum,SpriteY);
+	tmpFH<-SecondaryY[[sprNum]];
 
 	CALL VRAMAddressSetupALE(tmpPA,tmpDB);
 }
@@ -689,11 +679,11 @@ FUNCTION INTERNAL FetchSpritePattern1	sprNum[3]
 	DECLARE	tmpDB[8] ALIAS tmpTL[4]:%1:tmpFH[3];
 	DECLARE tile[8];
 
-	tile<-CALL FetchOAMTmp(sprNum,SpriteTile);
+	tile<-SecondaryTile[[sprNum]];
 	tmpS<-SprTable;
 	tmpTH<-tile[4..7];
 	tmpTL<-tile[0..3];
-	tmpFH<-CALL FetchOAMTmp(sprNum,SpriteY);
+	tmpFH<-SecondaryY[[sprNum]];
 
 	CALL VRAMAddressSetupALE(tmpPA,tmpDB);
 }
@@ -754,22 +744,22 @@ DECLARE SpriteTmpTransfer[8];
 
 INSTRUCTION	PixelClock	"Sprite%M0"	%100:sprNum[3]:%000
 {
-	SpriteTmpTransfer<-CALL FetchOAMTmp(sprNum,SpriteX);
+	SpriteTmpTransfer<-SecondaryX[[sprNum]];
 }
 
 INSTRUCTION	PixelClock	"Sprite%M0"	%100:sprNum[3]:%001
 {
-	CALL StoreOAMTmp(sprNum,SpriteCnt,SpriteTmpTransfer);
+	OAMCnt[[sprNum]]<-SpriteTmpTransfer;
 }
 
 INSTRUCTION	PixelClock	"Sprite%M0"	%100:sprNum[3]:%010
 {
-	SpriteTmpTransfer<-CALL FetchOAMTmp(sprNum,SpriteAttr);
+	SpriteTmpTransfer<-SecondaryAttrs[[sprNum]];
 }
 
 INSTRUCTION	PixelClock	"Sprite%M0"	%100:sprNum[3]:%011
 {
-	CALL StoreOAMTmp(sprNum,SpritePal,SpriteTmpTransfer);
+	OAMAttr[[sprNum]]<-SpriteTmpTransfer;
 }
 
 INSTRUCTION	PixelClock	"Sprite%M0"	%100:sprNum[3]:%100
