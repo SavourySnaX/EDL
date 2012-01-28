@@ -2381,9 +2381,9 @@ void LoadCart(const char* fileName)
 			exit(-1);
 		}
 		usingMMC1=mapper==1;
-		if ((flags6&0x0E)!=0)
+		if ((flags6&0x0C)!=0)
 		{
-			printf("No Bat/Train/4Scr Support\n");
+			printf("No Train/4Scr Support\n");
 			exit(-1);
 		}
 		if (flags6&0x01)
