@@ -600,17 +600,30 @@ FUNCTION INTERNAL FetchBGSetupPT1
 FUNCTION INTERNAL FetchSpritePattern0	sprNum[3]
 {
 	DECLARE tmpPA[6] ALIAS %0:tmpS[1]:tmpTH[4];
-	DECLARE	tmpDB[8] ALIAS tmpTL[4]:%0:tmpFH[3];
+	DECLARE	tmpDB[8] ALIAS tmpTL[3]:tmpTL8[1]:%0:tmpFH[3];
 	DECLARE tile[8];
 
 	tile<-SecondaryTile[[sprNum]];
 	tmpS<-SprTable;
+	IF Spr16
+	{
+		tmpS<-tile[0..0];
+	}
 	tmpTH<-tile[4..7];
-	tmpTL<-tile[0..3];
+	tmpTL<-tile[1..3];
+	tmpTL8<-tile[0..0];
+	IF Spr16
+	{
+		tmpTL8<-SecondaryY[[sprNum]][3..3];
+	}
 	tmpFH<-SecondaryY[[sprNum]];
 	IF FlipV[[sprNum]]
 	{
 		tmpFH<-~tmpFH;
+		IF Spr16
+		{
+			tmpTL8<-~tmpTL8;
+		}
 	}
 
 	CALL VRAMAddressSetupALE(tmpPA,tmpDB);
@@ -619,17 +632,30 @@ FUNCTION INTERNAL FetchSpritePattern0	sprNum[3]
 FUNCTION INTERNAL FetchSpritePattern1	sprNum[3]
 {
 	DECLARE tmpPA[6] ALIAS %0:tmpS[1]:tmpTH[4];
-	DECLARE	tmpDB[8] ALIAS tmpTL[4]:%1:tmpFH[3];
+	DECLARE	tmpDB[8] ALIAS tmpTL[3]:tmpTL8[1]:%1:tmpFH[3];
 	DECLARE tile[8];
 
 	tile<-SecondaryTile[[sprNum]];
+	IF Spr16
+	{
+		tmpS<-tile[0..0];
+	}
 	tmpS<-SprTable;
 	tmpTH<-tile[4..7];
-	tmpTL<-tile[0..3];
+	tmpTL<-tile[1..3];
+	tmpTL8<-tile[0..0];
+	IF Spr16
+	{
+		tmpTL8<-SecondaryY[[sprNum]][3..3];
+	}
 	tmpFH<-SecondaryY[[sprNum]];
 	IF FlipV[[sprNum]]
 	{
 		tmpFH<-~tmpFH;
+		IF Spr16
+		{
+			tmpTL8<-~tmpTL8;
+		}
 	}
 
 	CALL VRAMAddressSetupALE(tmpPA,tmpDB);
@@ -726,6 +752,10 @@ FUNCTION INTERNAL	ProcessSprite
 		
 		compare<-(vClock-21) - SpriteTmpTransfer;
 		SpriteInRange<-compare[3..8]==0;
+		IF Spr16
+		{
+			SpriteInRange<-compare[4..8]==0;
+		}
 		IF ~SpriteDisableWrites
 		{
 			SecondaryY[[SpriteDstAddr]]<-compare;
@@ -770,6 +800,10 @@ FUNCTION INTERNAL	ProcessSprite
 			SecondaryY[[SpriteDstAddr]]<-SpriteTmpTransfer;
 		}
 		SpriteInRange<-compare[3..8]==0;
+		IF Spr16
+		{
+			SpriteInRange<-compare[4..8]==0;
+		}
 		IF SpriteInRange
 		{
 			# Set Overflow
