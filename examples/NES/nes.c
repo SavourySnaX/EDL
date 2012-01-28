@@ -58,6 +58,9 @@ uint32_t prgRomSize;
 uint8_t *chrRom;
 uint32_t chrRomSize;
 
+uint8_t* bnk0chr;
+uint8_t* bnk1chr;
+
 uint8_t chrRam[8192];
 uint8_t prgRam[8192];
 
@@ -114,9 +117,13 @@ uint8_t PPUGetByte(uint16_t addr)
 {
 //	printf("FETCH FROM : %04X\n",addr);
 	addr&=0x3FFF;
+	if (addr<0x1000)
+	{
+		return bnk0chr[addr&0x0FFF];		// WILL NEED FIXING
+	}
 	if (addr<0x2000)
 	{
-		return chrRom[addr&0x1FFF];		// WILL NEED FIXING
+		return bnk1chr[addr&0x0FFF];		// WILL NEED FIXING
 	}
 	if (addr<0x3F00)
 	{
@@ -135,8 +142,7 @@ void PPUSetByte(uint16_t addr,uint8_t byte)
 	addr&=0x3FFF;
 	if (addr<0x2000)
 	{
-		if (chrRom==chrRam)
-			chrRom[addr]=byte;
+		chrRam[addr]=byte;
 		return;		/// assuming fixed tile ram
 	}
 	if (addr<0x3F00)
@@ -397,6 +403,15 @@ void WriteMMC1_ChrBank0(uint8_t byte)
 	if (MMC1_ChrBank0!=byte)
 		printf("MMC1 char0 bank %02X\n",byte);
 	MMC1_ChrBank0=byte;
+	if (MMC1_Control&0x10)
+	{
+		bnk0chr=&chrRom[0x1000*(byte&0x1F)];
+	}
+	else
+	{
+		bnk0chr=&chrRom[0x2000*(byte&0x1E)];
+		bnk1chr=&chrRom[0x2000*(byte&0x1E)+0x1000];
+	}
 }
 
 void WriteMMC1_ChrBank1(uint8_t byte)
@@ -405,6 +420,10 @@ void WriteMMC1_ChrBank1(uint8_t byte)
 	if (MMC1_ChrBank1!=byte)
 		printf("MMC1 char1 bank %02X\n",byte);
 	MMC1_ChrBank1=byte;
+	if (MMC1_Control&0x10)
+	{
+		bnk1chr=&chrRom[0x1000*(byte&0x1F)];
+	}
 }
 
 void WriteMMC1_PrgBank(uint8_t byte)
@@ -2392,6 +2411,9 @@ void LoadCart(const char* fileName)
 		prgRom=&ptr[16];
 		bnk0prg=prgRom;
 		bnk1prg=&ptr[16+((prgSize-1)*16384)];
+
+		bnk0chr=chrRom;
+		bnk1chr=&chrRom[0x1000];
 	}
 }
 
