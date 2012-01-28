@@ -58,8 +58,10 @@ DECLARE INTERNAL	Address_H[1];		# Address latch for Address Register
 
 DECLARE INTERNAL	ReadData_latch[8];	# Stores VRAM fetch here - Reading through Register 7 will return this value
 
-DECLARE	INTERNAL	hClock[9];		# Horizontal Clock (0-340)
-DECLARE INTERNAL	vClock[9];		# Vertical Clock 0-261
+DECLARE INTERNAL	oddField[1];
+
+DECLARE		hClock[9];		# Horizontal Clock (0-340)
+DECLARE 	vClock[9];		# Vertical Clock 0-261
 
 DECLARE INTERNAL	VramAddress[16]		ALIAS	%0:FV[3]:V[1]:H[1]:VT[5]:HT[5];
 DECLARE INTERNAL	VramAddress_counter[16]	ALIAS	%0:FVl[3]:Vl[1]:Hl[1]:VTl[5]:HTl[5];
@@ -377,8 +379,14 @@ FUNCTION INTERNAL	TickPixelClockStart
 	PIN__INT<-~(NMI&VBlank);
 	IF (vClock>=20) & (vClock<=260)
 	{
-		EXECUTE PixelClock	hClock;		### TMP just to get an update across the entire screen
-		EXECUTE OAMClock	hClock;
+		IF BGShow
+		{
+			EXECUTE PixelClock	hClock;		### TMP just to get an update across the entire screen
+		}
+		IF SprShow
+		{
+			EXECUTE OAMClock	hClock;
+		}
 	}
 	IF (vClock>=21) & (vClock<=260) & SprShow
 	{
@@ -423,6 +431,7 @@ FUNCTION INTERNAL	TickPixelClockEnd
 		IF vClock==262
 		{
 			vClock<-0;
+			oddField<-oddField+1;
 			VBlank<-1;
 		}
 	}
@@ -501,15 +510,16 @@ INSTRUCTION	PixelClockLine	"Line20"	%000010100
 {
 	IF hClock==0
 	{
+		VBlank<-0;
 		Sprite0<-0;
 	}
 	IF (hClock==256) & BGShow
 	{
 		VramAddress_counter<-VramAddress;
 	}
-	IF (hClock==340)
+	IF oddField & (hClock==339) & BGShow
 	{
-		VBlank<-0;
+		hClock<-hClock+1;
 	}
 }
 
