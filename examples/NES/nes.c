@@ -29,6 +29,8 @@ void _AudioAddData(int channel,int16_t dacValue);
 extern uint8_t PPU_Control;
 extern uint8_t PPU_Mask;
 extern uint8_t PPU_Status;
+extern uint16_t PPU_hClock;
+extern uint16_t PPU_vClock;
 
 void PPU_PinSetPIN_RW(uint8_t);
 void PPU_PinSetPIN__DBE(uint8_t);
@@ -744,6 +746,211 @@ void GenerateNTSC(int colourClock);
 
 int NTSCClock;
 
+uint32_t ppuCycleCount=0;
+uint32_t cpuCycleCount=0;
+
+#define SIMPLE_TICK	0
+
+static uint16_t lastPC;
+void TickChips(int MasterClock)
+{
+		uint16_t addr; 
+#if SIMPLE_TICK
+
+	int ColourClock=MasterClock%12;
+	if ((MasterClock%24)==0)
+	{
+		MAIN_PinSetPIN_O0(1);
+		addr = MAIN_PinGetPIN_AB();
+
+		if (MAIN_DEBUG_SYNC)
+		{
+			printf("%04X CYC:%3d SL:%d\n",addr,(PPU_hClock&0x1FF),(PPU_vClock&0x1FF)<20?(PPU_vClock&0x1FF)+241:(PPU_vClock&0x1FF)-21);
+			//ppuCycleCount=0;
+			lastPC=addr;
+
+			if (isBreakpoint(0,lastPC))
+			{
+				stopTheClock=1;
+			}
+		}
+
+		// Phase is 1 (LS139 decode gives us DBE low when Phase 1, Address=001x xxxx xxxx xxxx
+#if USE_EDL_PPU
+		if (1 && ((addr&0x8000)==0) && ((addr&0x4000)==0) && ((addr&0x2000)==0x2000))
+		{
+			PPU_PinSetPIN_RS(addr&0x7);
+			PPU_PinSetPIN_RW(MAIN_PinGetPIN_RW());
+			PPU_PinSetPIN_D(MAIN_PinGetPIN_DB());
+
+			PPU_PinSetPIN__DBE(0);
+			if (MAIN_PinGetPIN_RW())
+			{
+				MAIN_PinSetPIN_DB(PPU_PinGetPIN_D());
+			}
+		}
+		else
+#endif
+		{
+			if (MAIN_PinGetPIN_RW())
+			{
+				uint8_t  data = GetByte(addr);
+				MAIN_PinSetPIN_DB(data);
+			}
+			if (!MAIN_PinGetPIN_RW())
+			{
+				SetByte(addr,MAIN_PinGetPIN_DB());
+			}
+		}
+
+		PPU_PinSetPIN__DBE(1);
+
+		UpdateHardware();
+
+		MAIN_PinSetPIN__IRQ(1);//VIA1_PinGetPIN__IRQ());
+		/*			if (regs2C02[0]&0x80)
+					stopTheClock=1;*/
+		//			printf("NMI Val : %d\n",(~(regs2C02[0]&regs2C02[2])>>7)&0x01);
+#if USE_EDL_PPU
+		MAIN_PinSetPIN__NMI(PPU_PinGetPIN__INT());
+#else
+		MAIN_PinSetPIN__NMI((~(regs2C02[0]&regs2C02[2])>>7)&0x01);
+#endif
+		//			printf("PPU REGS : CONTROL %02X,MASK %02X,STATUS %02X\n",PPU_Control,PPU_Mask,PPU_Status);
+		MAIN_PinSetPIN_O0(0);
+
+		int aa;
+		for (aa=0;aa<3;aa++)
+		{
+		ppuCycleCount++;
+#if USE_EDL_PPU
+		static uint8_t vramLowAddressLatch=0;
+
+		PPU_PinSetPIN_CLK(1);
+		if (PPU_PinGetPIN_ALE()&1)
+		{
+			vramLowAddressLatch=PPU_PinGetPIN_AD();
+		}
+		if ((PPU_PinGetPIN__RE()&1)==0)
+		{
+			uint16_t addr = ((PPU_PinGetPIN_PA()&0x3F)<<8)|vramLowAddressLatch;
+			PPU_PinSetPIN_AD(PPUGetByte(addr));
+		}
+		PPU_PinSetPIN_CLK(0);
+#else
+#endif
+		Tick2C02();
+		}
+	}
+	//			if (ntsc_file /*&& (NTSCClock==0)*/)
+	{
+		GenerateNTSC(ColourClock);
+		if (NTSCClock==2)
+		{
+			WriteNTSC(ColourClock);
+		}
+	}
+#else
+	int cpuClock=MasterClock%24;
+	int ppuClock=MasterClock%8;
+	int ColourClock=MasterClock%12;
+	NTSCClock=MasterClock%3;
+	if (cpuClock==0)
+	{
+		cpuCycleCount++;
+		MAIN_PinSetPIN_O0(1);
+		addr = MAIN_PinGetPIN_AB();
+
+		if (MAIN_DEBUG_SYNC)
+		{
+			//printf("%04X CYC:%3d SL:%d\n",addr,(PPU_hClock&0x1FF),(PPU_vClock&0x1FF)<20?(PPU_vClock&0x1FF)+241:(PPU_vClock&0x1FF)-21);
+			//ppuCycleCount=0;
+			lastPC=addr;
+
+			if (isBreakpoint(0,lastPC))
+			{
+				stopTheClock=1;
+			}
+		}
+
+		// Phase is 1 (LS139 decode gives us DBE low when Phase 1, Address=001x xxxx xxxx xxxx
+#if USE_EDL_PPU
+		if (1 && ((addr&0x8000)==0) && ((addr&0x4000)==0) && ((addr&0x2000)==0x2000))
+		{
+			PPU_PinSetPIN_RS(addr&0x7);
+			PPU_PinSetPIN_RW(MAIN_PinGetPIN_RW());
+			PPU_PinSetPIN_D(MAIN_PinGetPIN_DB());
+
+			PPU_PinSetPIN__DBE(0);
+			if (MAIN_PinGetPIN_RW())
+			{
+				MAIN_PinSetPIN_DB(PPU_PinGetPIN_D());
+			}
+		}
+		else
+#endif
+		{
+			if (MAIN_PinGetPIN_RW())
+			{
+				uint8_t  data = GetByte(addr);
+				MAIN_PinSetPIN_DB(data);
+			}
+			if (!MAIN_PinGetPIN_RW())
+			{
+				SetByte(addr,MAIN_PinGetPIN_DB());
+			}
+		}
+
+		PPU_PinSetPIN__DBE(1);
+
+		UpdateHardware();
+
+		MAIN_PinSetPIN__IRQ(1);//VIA1_PinGetPIN__IRQ());
+		/*			if (regs2C02[0]&0x80)
+					stopTheClock=1;*/
+		//			printf("NMI Val : %d\n",(~(regs2C02[0]&regs2C02[2])>>7)&0x01);
+#if USE_EDL_PPU
+		MAIN_PinSetPIN__NMI(PPU_PinGetPIN__INT());
+#else
+		MAIN_PinSetPIN__NMI((~(regs2C02[0]&regs2C02[2])>>7)&0x01);
+#endif
+		//			printf("PPU REGS : CONTROL %02X,MASK %02X,STATUS %02X\n",PPU_Control,PPU_Mask,PPU_Status);
+		MAIN_PinSetPIN_O0(0);
+
+
+	}
+	if (ppuClock==0)
+	{
+		ppuCycleCount++;
+#if USE_EDL_PPU
+		static uint8_t vramLowAddressLatch=0;
+
+		PPU_PinSetPIN_CLK(1);
+		if (PPU_PinGetPIN_ALE()&1)
+		{
+			vramLowAddressLatch=PPU_PinGetPIN_AD();
+		}
+		if ((PPU_PinGetPIN__RE()&1)==0)
+		{
+			uint16_t addr = ((PPU_PinGetPIN_PA()&0x3F)<<8)|vramLowAddressLatch;
+			PPU_PinSetPIN_AD(PPUGetByte(addr));
+		}
+		PPU_PinSetPIN_CLK(0);
+#else
+#endif
+		Tick2C02();
+	}
+	//			if (ntsc_file /*&& (NTSCClock==0)*/)
+	{
+		GenerateNTSC(ColourClock);
+		if (NTSCClock==2)
+		{
+			WriteNTSC(ColourClock);
+		}
+	}
+#endif
+}
+
 int main(int argc,char**argv)
 {
 	int w,h;
@@ -824,6 +1031,7 @@ int main(int argc,char**argv)
 	MAIN_PC=GetByte(0xFFFC);
 	MAIN_PC|=GetByte(0xFFFD)<<8;
 
+//	MAIN_PC=0xc000;
 // TODO PPU RESET + PROPER CPU RESET
 
 	PPU_PinSetPIN__RST(0);
@@ -832,107 +1040,13 @@ int main(int argc,char**argv)
 
 	while (!glfwGetKey(windows[MAIN_WINDOW],GLFW_KEY_ESC))
 	{
-		static uint16_t lastPC;
-		uint16_t addr; 
 		
 		if ((!stopTheClock) || g_traceStep || g_instructionStep)
 		{
 			// Tick Hardware based on MASTER clocks (or as close as damn it)
 
-			int cpuClock=MasterClock%24;
-			int ppuClock=MasterClock%8;
-			int ColourClock=MasterClock%12;
-			NTSCClock=MasterClock%3;
 
-			if (cpuClock==0)
-			{
-				MAIN_PinSetPIN_O0(1);
-				addr = MAIN_PinGetPIN_AB();
-
-				if (MAIN_DEBUG_SYNC)
-				{
-					lastPC=addr;
-	
-					if (isBreakpoint(0,lastPC))
-					{
-						stopTheClock=1;
-					}
-				}
-	
-				// Phase is 1 (LS139 decode gives us DBE low when Phase 1, Address=001x xxxx xxxx xxxx
-#if USE_EDL_PPU
-				if (1 && ((addr&0x8000)==0) && ((addr&0x4000)==0) && ((addr&0x2000)==0x2000))
-				{
-					PPU_PinSetPIN_RS(addr&0x7);
-					PPU_PinSetPIN_RW(MAIN_PinGetPIN_RW());
-					PPU_PinSetPIN_D(MAIN_PinGetPIN_DB());
-
-					PPU_PinSetPIN__DBE(0);
-					if (MAIN_PinGetPIN_RW())
-					{
-						MAIN_PinSetPIN_DB(PPU_PinGetPIN_D());
-					}
-				}
-				else
-#endif
-				{
-					if (MAIN_PinGetPIN_RW())
-					{
-						uint8_t  data = GetByte(addr);
-						MAIN_PinSetPIN_DB(data);
-					}
-					if (!MAIN_PinGetPIN_RW())
-					{
-						SetByte(addr,MAIN_PinGetPIN_DB());
-					}
-				}
-
-				PPU_PinSetPIN__DBE(1);
-
-				UpdateHardware();
-
-				MAIN_PinSetPIN__IRQ(1);//VIA1_PinGetPIN__IRQ());
-/*			if (regs2C02[0]&0x80)
-				stopTheClock=1;*/
-//			printf("NMI Val : %d\n",(~(regs2C02[0]&regs2C02[2])>>7)&0x01);
-#if USE_EDL_PPU
-				MAIN_PinSetPIN__NMI(PPU_PinGetPIN__INT());
-#else
-				MAIN_PinSetPIN__NMI((~(regs2C02[0]&regs2C02[2])>>7)&0x01);
-#endif
-	//			printf("PPU REGS : CONTROL %02X,MASK %02X,STATUS %02X\n",PPU_Control,PPU_Mask,PPU_Status);
-				MAIN_PinSetPIN_O0(0);
-
-
-			}
-			if (ppuClock==0)
-			{
-#if USE_EDL_PPU
-				static uint8_t vramLowAddressLatch=0;
-
-				PPU_PinSetPIN_CLK(1);
-				if (PPU_PinGetPIN_ALE()&1)
-				{
-					vramLowAddressLatch=PPU_PinGetPIN_AD();
-				}
-				if ((PPU_PinGetPIN__RE()&1)==0)
-				{
-					uint16_t addr = ((PPU_PinGetPIN_PA()&0x3F)<<8)|vramLowAddressLatch;
-					PPU_PinSetPIN_AD(PPUGetByte(addr));
-				}
-				PPU_PinSetPIN_CLK(0);
-#else
-#endif
-				Tick2C02();
-			}
-//			if (ntsc_file /*&& (NTSCClock==0)*/)
-			{
-				GenerateNTSC(ColourClock);
-				if (NTSCClock==2)
-				{
-					WriteNTSC(ColourClock);
-				}
-			}
+			TickChips(MasterClock);//cpuClock,ppuClock,ColourClock,NTSCClock);
 			MasterClock+=1;
 		}
 
@@ -941,6 +1055,7 @@ int main(int argc,char**argv)
 			static int twofields=0;
 			static int normalSpeed=1;
 
+//			stopTheClock=1;
 			if (twofields&1)
 				ntscDecodeTick();
 			if (MasterClock>=341*262*2*4)
@@ -1701,6 +1816,9 @@ void Tick2C02()
 	}
 #endif
 
+	curLine=PPU_vClock&0x1FF;
+	curClock=PPU_hClock&0x1FF;
+
 	/// NTSC
 	{
 		if (/*curLine>17 && */curLine>=8 && curLine<11)
@@ -1816,12 +1934,12 @@ Color 30	 2.743	 1.960	 1.000
 			// background colour
 		}
 	}
+#if !USE_EDL_PPU
 
 //	cClock+=8;		// gives 12 phase stepping for colour clock (which results in 21.47/6)
 	curClock++;
 	if ((curClock==320) && (regs2C02[1]&0x08))
 	{
-#if !USE_EDL_PPU
 		//pretend this is the horizontal blanking pulse?
 		uint16_t tmpV=(PPU_Vc<<8)|(PPU_VTc<<3)|PPU_FVc;
 
@@ -1842,13 +1960,11 @@ Color 30	 2.743	 1.960	 1.000
 		PPU_Hc=PPU_H;
 		PPU_HTc=PPU_HT;
 		PPU_FHl=PPU_FH;
-#endif
 	}
 	if (curClock>=341)
 	{
 		curClock=0;
 		curLine++;
-#if !USE_EDL_PPU
 		lastCollision=0;
 		SP_BUF_CurSprite=0;
 		SP_BUF_RastZeroInRange=SP_BUF_ZeroInRange;
@@ -1857,7 +1973,6 @@ Color 30	 2.743	 1.960	 1.000
 		{
 			regs2C02[2]&=0x7F;
 		}
-#endif
 		if (curLine>=262)
 		{
 			if (ntsc_file)
@@ -1873,6 +1988,7 @@ Color 30	 2.743	 1.960	 1.000
 			regs2C02[2]|=0x80;
 		}
 	}
+#endif
 }
 
 //////////////////////// NOISES //////////////////////////

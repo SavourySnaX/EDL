@@ -182,7 +182,10 @@ void DrawRegister(int chip,uint8_t *table[256],unsigned char* buffer,unsigned in
 		PrintAt(buffer,width,(colour&0x00FF0000)>>16,(colour&0x0000FF00)>>8,(colour&0x000000FF),a&0xf,27+(a/16),"#");
 	}
 
+	extern uint16_t PPU_hClock;
+	extern uint16_t PPU_vClock;
 
+	PrintAt(buffer,width,255,255,255,0,31,"vClock %04X : hClock %04X",PPU_vClock&0x1FF,PPU_hClock&0x1FF);
 }
 
 void UpdateRegisterMain(GLFWwindow window)
