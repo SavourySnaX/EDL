@@ -59,9 +59,12 @@ uint8_t *chrRom;
 uint32_t chrRomSize;
 
 uint8_t chrRam[8192];
+uint8_t prgRam[8192];
 
 uint8_t hMirror;
 uint8_t vMirror;
+
+int usingMMC1=0;
 
 // Step 1. Memory
 
@@ -317,6 +320,9 @@ void ClearKey(int key);
 
 uint8_t controllerData=0;
 
+uint8_t* bnk0prg=NULL;
+uint8_t* bnk1prg=NULL;
+
 uint8_t GetByte(uint16_t addr)
 {
 	if (addr<0x2000)
@@ -327,7 +333,7 @@ uint8_t GetByte(uint16_t addr)
 	{
 		return IORead(addr&0x7);
 	}
-	if (addr<0x8000)
+	if (addr<0x6000)
 	{
 		if (addr==0x4016)
 		{
@@ -341,16 +347,126 @@ uint8_t GetByte(uint16_t addr)
 //		printf("Unkown Read : %08X\n",addr);
 		return 0;
 	}
+	if (addr<0x8000)
+	{
+		return prgRam[addr-0x6000];
+	}
 	if (addr<0xC000)
 	{
-		return prgRom[addr-0x8000];
-	}
-	if (prgRomSize<=16384)
-	{
-		return prgRom[addr-0xC000];
+		return bnk0prg[addr-0x8000];
 	}
 
-	return prgRom[addr-0x8000];
+	return bnk1prg[addr-0xC000];
+}
+
+uint8_t shiftRegister=0;
+uint8_t shiftCount=0;
+
+uint8_t MMC1_Control=0;
+uint8_t MMC1_ChrBank0=0;
+uint8_t MMC1_ChrBank1=0;
+uint8_t MMC1_PrgBank=0;
+
+void WriteMMC1_Control(uint8_t byte)
+{
+	byte&=0x1F;
+	if (MMC1_Control!=byte)
+		printf("MMC1 control new value %02X\n",byte);
+	MMC1_Control=byte;
+	switch (MMC1_Control&3)
+	{
+		case 0:
+		case 1:
+			hMirror=0;
+			vMirror=0;
+			break;
+		case 2:
+			hMirror=0;
+			vMirror=1;
+			break;
+		case 3:
+			hMirror=1;
+			vMirror=0;
+			break;
+	}
+}
+
+void WriteMMC1_ChrBank0(uint8_t byte)
+{
+	byte&=0x1F;
+	if (MMC1_ChrBank0!=byte)
+		printf("MMC1 char0 bank %02X\n",byte);
+	MMC1_ChrBank0=byte;
+}
+
+void WriteMMC1_ChrBank1(uint8_t byte)
+{
+	byte&=0x1F;
+	if (MMC1_ChrBank1!=byte)
+		printf("MMC1 char1 bank %02X\n",byte);
+	MMC1_ChrBank1=byte;
+}
+
+void WriteMMC1_PrgBank(uint8_t byte)
+{
+	//DBBBB  D-PRGRam Disable  - BBBB is bank
+	byte&=0x1F;
+	if (MMC1_PrgBank!=byte)
+		printf("MMC1 prg bank %02X\n",byte);
+	MMC1_PrgBank=byte;
+	switch (MMC1_Control&0x0C)
+	{
+		case 0:
+		case 0x4:
+			bnk0prg=&prgRom[(byte&0xE)*32678];
+			bnk1prg=&prgRom[(byte&0xE)*32678 + 16384];
+			break;
+		case 0x8:
+			bnk1prg=&prgRom[(byte&0xF)*16384];
+			break;
+		case 0xC:
+			bnk0prg=&prgRom[(byte&0xF)*16384];
+			break;
+	}
+}
+
+void WriteToMMC1(uint16_t addr,uint8_t byte)
+{
+	if (byte&0x80)
+	{
+		shiftRegister=0;
+		shiftCount=0;
+		WriteMMC1_Control(MMC1_Control|0x0C);
+	}
+	else
+	{
+		shiftRegister>>=1;
+		shiftRegister&=0x0F;
+		shiftRegister|=(byte&1)<<4;
+		shiftCount++;
+		if (shiftCount==5)
+		{
+			shiftCount=0;
+			addr&=0x6000;
+			addr>>=13;
+			switch(addr)
+			{
+				case 0:
+					WriteMMC1_Control(shiftRegister);
+					break;
+				case 1:
+					WriteMMC1_ChrBank0(shiftRegister);
+					break;
+				case 2:
+					WriteMMC1_ChrBank1(shiftRegister);
+					break;
+				case 3:
+					WriteMMC1_PrgBank(shiftRegister);
+					break;
+			}
+		}
+	}
+
 }
 
 
@@ -366,7 +482,7 @@ void SetByte(uint16_t addr,uint8_t byte)
 		IOWrite(addr&0x7,byte);
 		return;
 	}
-	if (addr<0x8000)
+	if (addr<0x6000)
 	{
 		if (addr>=0x4014 && addr<=0x4017)		// sound channel + controller 2.. todo  - controller 1 will need rewriting when rp2a03 has proper register support
 		{
@@ -415,7 +531,16 @@ void SetByte(uint16_t addr,uint8_t byte)
 //		printf("Unknown Write : %08X\n",addr);
 		return;
 	}
-//	printf("Unmapped Write : %08X\n",addr);
+	if (addr<0x8000)
+	{
+		prgRam[addr-0x6000]=byte;
+		return;
+	}
+	if (usingMMC1)
+	{
+		WriteToMMC1(addr,byte);
+	}
+	//printf("Unmapped Write : %08X\n",addr);
 	return;
 }
 
@@ -2197,6 +2322,7 @@ void LoadCart(const char* fileName)
 	uint8_t prgRamSize;
 	uint8_t flags9;
 	uint8_t flags10;
+	uint8_t mapper;
 
 	ptr=qLoad(fileName,&length);
 	if (ptr)
@@ -2218,6 +2344,8 @@ void LoadCart(const char* fileName)
 		flags9=ptr[9];
 		flags10=ptr[10];
 
+		mapper=(flags7&0xF0)|((flags6&0xF0)>>4);
+
 		printf("prgSize : %08X\n",prgSize*16384);
 		printf("chrSize : %08X\n",chrSize*8192);
 		printf("flags6 : %02X\n",flags6);
@@ -2225,12 +2353,15 @@ void LoadCart(const char* fileName)
 		printf("prgRamSize : %02X\n",prgRamSize);
 		printf("flags9 : %02X\n",flags9);
 		printf("flags10 : %02X\n",flags10);
+		printf("mapper : %02X\n",mapper);
 		
-		if ((flags6&0xF0)!=0 || (flags7&0xF0)!=0)
+
+		if (mapper>1)
 		{
-			printf("Only supports mapper 0!\n");
+			printf("Only supports mapper 0 & 1!\n");
 			exit(-1);
 		}
+		usingMMC1=mapper==1;
 		if ((flags6&0x0E)!=0)
 		{
 			printf("No Bat/Train/4Scr Support\n");
@@ -2247,7 +2378,6 @@ void LoadCart(const char* fileName)
 			vMirror=0;
 		}
 
-
 		prgRomSize=prgSize*16384;
 		if (chrSize==0)
 		{
@@ -2260,6 +2390,8 @@ void LoadCart(const char* fileName)
 			chrRom=&ptr[16+prgRomSize];
 		}
 		prgRom=&ptr[16];
+		bnk0prg=prgRom;
+		bnk1prg=&ptr[16+((prgSize-1)*16384)];
 	}
 }
 
