@@ -401,7 +401,7 @@ FUNCTION INTERNAL	TickPixelClockEnd
 
 	hClock<-hClock+1;
 
-	IF (hClock==320) & BGShow
+	IF (hClock==320) & BGShow & (vClock>=20)
 	{
 		IF vClock>20
 		{
