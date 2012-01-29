@@ -493,6 +493,10 @@ INSTRUCTION	VRAMRequest	"readData"	%010
 INSTRUCTION	VRAMRequest	"writeData"	%100
 {
 	CALL VRAMAddressSetupW(requestData);
+	IF requestAddress[8..13]==$3F
+	{
+		PIN__WE<-1;
+	}
 	requestVRAM<-0;
 }
 
