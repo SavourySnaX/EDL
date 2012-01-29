@@ -16,6 +16,7 @@
 
 #include "gui\debugger.h"
 
+#define ENABLE_TV		0
 #define ENABLE_LOGIC_ANALYSER	0
 
 #define USE_EDL_PPU	1
@@ -1022,6 +1023,7 @@ void TickChips(int MasterClock)
 		Tick2C02();
 	}
 	//			if (ntsc_file /*&& (NTSCClock==0)*/)
+#if ENABLE_TV
 	{
 		GenerateNTSC(ColourClock);
 		if (NTSCClock==2)
@@ -1078,6 +1080,7 @@ int main(int argc,char**argv)
 	glfwMakeContextCurrent(windows[REGISTER_WINDOW]);
 	setupGL(REGISTER_WINDOW,REGISTER_WIDTH,REGISTER_HEIGHT);
 	
+#if ENABLE_TV
 	if( !(windows[NTSC_WINDOW]=glfwOpenWindow( NTSC_WIDTH, NTSC_HEIGHT, GLFW_WINDOWED,"NTSC",NULL)) ) 
 	{ 
 		glfwTerminate(); 
@@ -1088,7 +1091,7 @@ int main(int argc,char**argv)
 
 	glfwMakeContextCurrent(windows[NTSC_WINDOW]);
 	setupGL(NTSC_WINDOW,NTSC_WIDTH,NTSC_HEIGHT);
-
+#endif
 	// Open screen OpenGL window 
 	if( !(windows[MAIN_WINDOW]=glfwOpenWindow( WIDTH, HEIGHT, GLFW_WINDOWED,"nes",NULL)) ) 
 	{ 
@@ -1109,7 +1112,9 @@ int main(int argc,char**argv)
 	glfwSetKeyCallback(kbHandler);
 	glfwSetWindowSizeCallback(sizeHandler);
 	
+#if ENABLE_TV
 	ntscDecodeInit((uint32_t*)videoMemory[NTSC_WINDOW]);
+#endif
 
 	atStart=glfwGetTime();
 	//////////////////
@@ -1158,7 +1163,8 @@ int main(int argc,char**argv)
             		glfwMakeContextCurrent(windows[MAIN_WINDOW]);
 			ShowScreen(MAIN_WINDOW,WIDTH,HEIGHT);
 			glfwSwapBuffers();
-            		
+ 
+#if ENABLE_TV			
 			if (twofields&1)
 			{
 				ntscDecodeTick();
@@ -1166,7 +1172,8 @@ int main(int argc,char**argv)
 			glfwMakeContextCurrent(windows[NTSC_WINDOW]);
 			ShowScreen(NTSC_WINDOW,NTSC_WIDTH,NTSC_HEIGHT);
 			glfwSwapBuffers();
-				
+#endif
+	
 			glfwMakeContextCurrent(windows[REGISTER_WINDOW]);
 			DrawRegisterMain(videoMemory[REGISTER_WINDOW],REGISTER_WIDTH,lastPC,GetByte);
 			UpdateRegisterMain(windows[REGISTER_WINDOW]);
