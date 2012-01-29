@@ -16,8 +16,8 @@
 
 #include "gui\debugger.h"
 
-#define ENABLE_TV		0
-#define ENABLE_LOGIC_ANALYSER	0
+#define ENABLE_TV		1
+#define ENABLE_LOGIC_ANALYSER	1
 
 #include "jake\ntscDecode.h"
 
@@ -33,17 +33,17 @@ extern uint8_t PPU_Status;
 extern uint16_t PPU_hClock;
 extern uint16_t PPU_vClock;
 
-void PPU_PinSetPIN_RW(uint8_t);
-void PPU_PinSetPIN__DBE(uint8_t);
-void PPU_PinSetPIN_RS(uint8_t);
-void PPU_PinSetPIN_D(uint8_t);
-void PPU_PinSetPIN_CLK(uint8_t);
-uint8_t PPU_PinGetPIN_D();
-uint8_t PPU_PinGetPIN_PA();
-uint8_t PPU_PinGetPIN_AD();
-uint8_t PPU_PinGetPIN_ALE();
-uint8_t PPU_PinGetPIN__RE();
-uint8_t PPU_PinGetPIN__WE();
+void PPU_PinSetRW(uint8_t);
+void PPU_PinSet_DBE(uint8_t);
+void PPU_PinSetRS(uint8_t);
+void PPU_PinSetD(uint8_t);
+void PPU_PinSetCLK(uint8_t);
+uint8_t PPU_PinGetD();
+uint8_t PPU_PinGetPA();
+uint8_t PPU_PinGetAD();
+uint8_t PPU_PinGetALE();
+uint8_t PPU_PinGet_RE();
+uint8_t PPU_PinGet_WE();
 
 uint16_t MAIN_PinGetA();
 uint8_t MAIN_PinGetD();
@@ -630,8 +630,8 @@ int MasterClock=0;
 
 FILE* ntsc_file=NULL;
 
-void WriteNTSC(int colourClock);
-void GenerateNTSC(int colourClock);
+void AvgNTSC();				// kicks sample to ntsc tv (1/3 master clock rate)
+void SampleNTSC(int videoLevel);	// adds sample to internal buffer to generate average for above
 
 int NTSCClock;
 
@@ -664,17 +664,17 @@ void ClockCPU(int cpuClock)
 #if ENABLE_LOGIC_ANALYSER
 		RecordPin(2,dbe_signal&1);
 #endif
-		_AudioAddData(0,(dbe_signal&1)?32767:-32768);
+		//_AudioAddData(0,(dbe_signal&1)?32767:-32768);
 
 		{
-			PPU_PinSetPIN_RS(addr&0x7);
-			PPU_PinSetPIN_RW(MAIN_PinGetRW());
-			PPU_PinSetPIN_D(MAIN_PinGetD());
+			PPU_PinSetRS(addr&0x7);
+			PPU_PinSetRW(MAIN_PinGetRW());
+			PPU_PinSetD(MAIN_PinGetD());
 
-			PPU_PinSetPIN__DBE(dbe_signal);
+			PPU_PinSet_DBE(dbe_signal);
 			if (MAIN_PinGetRW())
 			{
-				MAIN_PinSetD(PPU_PinGetPIN_D());
+				MAIN_PinSetD(PPU_PinGetD());
 			}
 		}
 		{
@@ -699,60 +699,61 @@ void ClockCPU(int cpuClock)
 		}
 
 		MAIN_PinSet_IRQ(1);
-		MAIN_PinSet_NMI(PPU_PinGetPIN__INT());
+		MAIN_PinSet_NMI(PPU_PinGet_INT());
 	}
 
-#if ENABLE_LOGIC_ANALYSER
-	UpdatePinTick();
-#endif
 }
 
 void ClockPPU(int ppuClock)
 {
-	if (ppuClock==0)
+//	if (ppuClock==0)
 	{
 		static uint8_t vramLowAddressLatch=0;
 
-		PPU_PinSetPIN_CLK(1);
-		if (PPU_PinGetPIN_ALE()&1)
+		PPU_PinSetCLK(ppuClock&1);
+		if (PPU_PinGetALE()&1)
 		{
-			vramLowAddressLatch=PPU_PinGetPIN_AD();
+			vramLowAddressLatch=PPU_PinGetAD();
 		}
-		if ((PPU_PinGetPIN__RE()&1)==0)
+		if ((PPU_PinGet_RE()&1)==0)
 		{
-			uint16_t addr = ((PPU_PinGetPIN_PA()&0x3F)<<8)|vramLowAddressLatch;
-			PPU_PinSetPIN_AD(PPUGetByte(addr));
+			uint16_t addr = ((PPU_PinGetPA()&0x3F)<<8)|vramLowAddressLatch;
+			PPU_PinSetAD(PPUGetByte(addr));
 		}
-		if ((PPU_PinGetPIN__WE()&1)==0)
+		if ((PPU_PinGet_WE()&1)==0)
 		{
-			uint16_t addr = ((PPU_PinGetPIN_PA()&0x3F)<<8)|vramLowAddressLatch;
-			PPUSetByte(addr,PPU_PinGetPIN_AD());
+			uint16_t addr = ((PPU_PinGetPA()&0x3F)<<8)|vramLowAddressLatch;
+			PPUSetByte(addr,PPU_PinGetAD());
 		}
-		PPU_PinSetPIN_CLK(0);
 
-		Tick2C02();
 	}
 
 }
 
 void TickChips(int MasterClock)
 {
-	int cpuClock=MasterClock;//>>1;		// Master clock assumed to be double real speed for now
+	int cpuClock=MasterClock%24;
 	int ppuClock=MasterClock%8;
 	int ColourClock=MasterClock%12;
 	NTSCClock=MasterClock%3;
 
-	ClockCPU(cpuClock);
-	ClockPPU(ppuClock);
+	ClockCPU(MasterClock);
+	ClockPPU(MasterClock);
+//	if (ppuClock==0)
+//		Tick2C02();
+
 	//			if (ntsc_file /*&& (NTSCClock==0)*/)
 #if ENABLE_TV
 	{
-		GenerateNTSC(ColourClock);
+		SampleNTSC(PPU_PinGetVIDEO());
 		if (NTSCClock==2)
 		{
-			WriteNTSC(ColourClock);
+			AvgNTSC();
 		}
 	}
+#endif
+#if ENABLE_LOGIC_ANALYSER
+	UpdatePinTick();
 #endif
 }
 
@@ -854,9 +855,9 @@ int main(int argc,char**argv)
 //	MAIN_PC=0xc000;
 // TODO PPU RESET + PROPER CPU RESET
 
-	PPU_PinSetPIN__RST(0);
-	PPU_PinSetPIN__RST(1);
-	PPU_PinSetPIN__DBE(1);
+	PPU_PinSet_RST(0);
+	PPU_PinSet_RST(1);
+	PPU_PinSet_DBE(1);
 
 	while (!glfwGetKey(windows[MAIN_WINDOW],GLFW_KEY_ESC))
 	{
@@ -1039,35 +1040,38 @@ uint8_t activeNTSCSignalCol;
 
 uint16_t avgNTSC[3];
 
-void GenerateNTSC(int colourClock)
+void SampleNTSC(int actualLevel)
 {
+/*
 	int range = activeNTSCSignalHi-activeNTSCSignalLow;
 	int inRangeR=((colourClock+0+5)%12)<6;
 	int inRangeG=((colourClock+4+5)%12)<6;
 	int inRangeB=((colourClock+8+5)%12)<6;
 	int actualLevel=(range*TopBottomPercentage[(colourClock+activeNTSCSignalCol)%12])/128;
 
-/*	if (((regs2C02[1]&0x20 && inRangeR) ||
+	if (((regs2C02[1]&0x20 && inRangeR) ||
 	    (regs2C02[1]&0x40 && inRangeG) ||
 	    (regs2C02[1]&0x80 && inRangeB)) && activeNTSCDisplay)
 	{
 		actualLevel*=.546f;
 		actualLevel-=SIGNAL_RANGE*.0902f;
-	}*/
+	}
 //	else
 //		actualLevel+=15;
 
 	actualLevel+=activeNTSCSignalLow;
 	if (actualLevel<0)
 		printf("Level : %d\n",actualLevel);
-
+*/
+//	printf("Level : %02X\n",actualLevel);
 	avgNTSC[NTSCClock]=actualLevel;
 }
 
-void WriteNTSC(int colourClock)
+void AvgNTSC()
 {
 	uint8_t actualLevel=(avgNTSC[0]+avgNTSC[1]+avgNTSC[2])/3;
 	ntscDecodeAddSample(actualLevel);
+	RecordPin(3,actualLevel);
 //	fwrite(&actualLevel,1,1,ntsc_file);
 }
 

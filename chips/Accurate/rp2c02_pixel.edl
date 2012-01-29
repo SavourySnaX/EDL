@@ -1,0 +1,1084 @@
+# Ricoh RP2C02 (as used in the NTSC model NES) - Accurate Version 
+#
+#  This is the pixel generation portion (includes internal registers)
+#
+
+## Step 1 - Port video logic directly across and use External Function To Write Video To Texture
+
+C_FUNC_EXTERN		SetVideo		[8],[8],[8];	# X,Y,PaletteValue - Used to provide RGB style output
+
+PIN IN			PIN__RST[1];			# Reset Pin
+
+PIN IN			PIN_CLK[1];			# 5.37Mhz
+
+PIN OUT			PIN__INT[1];			# CPU Facing - Connected to NMI pin on CPU
+PIN IN			PIN_RW[1];			# CPU Facing - Connected to 2A03 RW pin
+PIN BIDIRECTIONAL	PIN_D[8];			# CPU Facing - Data Bus
+PIN IN			PIN_RS[3];			# CPU Facing - Register Select (internal registers)
+PIN IN			PIN__DBE[1];			# CPU Facing - Data Bus Enable
+
+PIN OUT			PIN_ALE[1];			# VRAM Facing - Address Low Enable
+PIN OUT			PIN__WE[1];			# VRAM Facing - Write Enable
+PIN OUT			PIN__RE[1];			# VRAM Facing - Read Enable
+PIN BIDIRECTIONAL	PIN_AD[8];			# VRAM Facing - Data Lines (used for Low 8 bits of address as well)
+PIN OUT			PIN_PA[6];			# VRAM Facing - Top 6 bits of address
+
+PIN OUT			PIN_HCLOCK[9];
+PIN OUT			PIN_VCLOCK[9];
+PIN OUT			PIN_ACTIVECOL[6];
+PIN OUT			PIN_BKGCOL[6];
+###
+
+# Internal Memory
+
+DECLARE	INTERNAL	PaletteRAM[[5]][8]		ALIAS	%00:PaletteY[2]:PalettePhase[4];	
+
+DECLARE INTERNAL	OAM[[8]][8];			# OAM Ram
+DECLARE INTERNAL	OAMSecondary[[3]][32]		ALIAS	SecondaryY[8]:SecondaryTile[8]:SecondaryX[8]:SecondaryAttrs[8];
+
+DECLARE INTERNAL	OAMBpl0[[3]][8];		# Bpl0 For SpriteN
+DECLARE INTERNAL	OAMBpl1[[3]][8];		# Bpl0 For SpriteN
+DECLARE INTERNAL	OAMCnt[[3]][8];			# Horizontal Counter for SpriteN
+DECLARE INTERNAL	OAMAttr[[3]][8]			ALIAS FlipV[1]:FlipH[1]:Priority[1]:%000:Palette[2];
+
+# IORegisters
+
+DECLARE INTERNAL 	Control[8]		ALIAS	NMI[1]:Master[1]:Spr16[1]:BGTable[1]:SprTable[1]:VInc32[1]:BaseV[1]:BaseH[1];
+DECLARE INTERNAL 	Mask[8]			ALIAS	EmphB[1]:EmphG[1]:EmphR[1]:SprShow[1]:BGShow[1]:SprCol0[1]:BGCol0[1]:Gray[1];
+DECLARE INTERNAL 	Status[8]		ALIAS	VBlank[1]:Sprite0[1]:SpriteOver[1]:%00000;	# Lower 5 bits are floating in actuality
+DECLARE INTERNAL	OAMAddress[8];
+
+DECLARE INTERNAL	Scroll_H[1];		# Address latch for Scroll Register
+DECLARE INTERNAL	Address_H[1];		# Address latch for Address Register
+
+# Internal Registers
+
+DECLARE INTERNAL	ReadData_latch[8];	# Stores VRAM fetch here - Reading through Register 7 will return this value
+
+DECLARE INTERNAL	oddField[1];
+
+DECLARE		hClock[9];		# Horizontal Clock (0-340)
+DECLARE 	vClock[9];		# Vertical Clock 0-261
+
+DECLARE INTERNAL	VramAddress[16]		ALIAS	%0:FV[3]:V[1]:H[1]:VT[5]:HT[5];
+DECLARE INTERNAL	VramAddress_counter[16]	ALIAS	%0:FVl[3]:Vl[1]:Hl[1]:VTl[5]:HTl[5];
+DECLARE	INTERNAL	FH[3];
+DECLARE INTERNAL	FHl[3];
+
+DECLARE INTERNAL	tile_latch[8];
+
+DECLARE INTERNAL	attr_shift0[16]	ALIAS	attr_shift0_upper[8]:attr_shift0_lower[8];
+DECLARE INTERNAL	attr_shift1[16]	ALIAS	attr_shift1_upper[8]:attr_shift1_lower[8];
+DECLARE INTERNAL	bits_shift0[16]	ALIAS	bits_shift0_upper[8]:bits_shift0_lower[8];
+DECLARE INTERNAL	bits_shift1[16]	ALIAS	bits_shift1_upper[8]:bits_shift1_lower[8];
+
+DECLARE INTERNAL	attr_latch0[8];
+DECLARE INTERNAL	attr_latch1[8];
+DECLARE INTERNAL	bits_latch0[8];
+DECLARE INTERNAL	bits_latch1[8];
+
+DECLARE INTERNAL	fetchOperation[4];	# Used to route memory fetched from VRAM facing bus to correct internal location
+
+DECLARE INTERNAL	requestVRAM[3];
+DECLARE INTERNAL	requestAddress[16];
+DECLARE INTERNAL	requestData[8];
+
+### 
+
+FUNCTION INTERNAL VRAMAddressSetupALE	upperAddress[6],lowerAddress[8]
+{
+	PIN_PA<-upperAddress;
+	PIN_AD<-lowerAddress;
+	PIN_ALE<-1;
+	PIN__RE<-1;
+	PIN__WE<-1;
+}
+
+FUNCTION INTERNAL VRAMAddressSetupR	fetch[4]
+{
+	PIN_ALE<-0;
+	PIN__RE<-0;
+	PIN__WE<-1;
+	fetchOperation<-fetch;
+}
+
+FUNCTION INTERNAL VRAMAddressSetupW	data[8]
+{
+	PIN_AD<-data;
+	PIN_ALE<-0;
+	PIN__RE<-1;
+	PIN__WE<-0;
+}
+
+
+FUNCTION INTERNAL	RegisterRead
+{
+	EXECUTE	IORegisterRead	PIN_RS;
+}
+
+FUNCTION INTERNAL	RegisterWrite
+{
+	EXECUTE	IORegisterWrite	PIN_RS;
+}
+
+INSTRUCTION	IORegisterRead	"Status"	%010
+{
+	PIN_D<-Status;
+	VBlank<-0;
+	Scroll_H<-0;
+	Address_H<-0;
+}
+
+INSTRUCTION	IORegisterRead	"OAMData"	%100
+{
+	PIN_D<-OAM[[OAMAddress]];
+}
+
+INSTRUCTION	IORegisterRead	"Data"		%111
+{
+	PIN_D<-ReadData_latch;
+	requestVRAM<-%001;
+	requestAddress<-VramAddress_counter;
+	IF VramAddress_counter[8..13]==$3F
+	{
+		PIN_D<-PaletteRAM[[VramAddress_counter]];
+	}
+	IF VInc32
+	{
+		VramAddress_counter<-VramAddress_counter+32;
+	}
+	IF ~VInc32
+	{
+		VramAddress_counter<-VramAddress_counter+1;
+	}
+}
+
+INSTRUCTION	IORegisterWrite	"Control"	%000
+{
+	Control<-PIN_D;
+	V<-BaseV;
+	H<-BaseH;
+}
+
+INSTRUCTION	IORegisterWrite	"Mask"		%001
+{
+	Mask<-PIN_D;
+}
+
+INSTRUCTION	IORegisterWrite	"OAMAddress"	%011
+{
+	OAMAddress<-PIN_D;
+}
+
+INSTRUCTION	IORegisterWrite	"OAMData"	%100
+{
+	OAM[[OAMAddress]]<-PIN_D;
+	OAMAddress<-OAMAddress+1;
+}
+
+INSTRUCTION	IORegisterWrite	"Scroll"	%101
+{
+	IF Scroll_H
+	{
+		PIN_D[0..2]->FV;
+		PIN_D[3..7]->VT;
+	}
+	IF ~Scroll_H
+	{
+		PIN_D[0..2]->FH;
+		PIN_D[3..7]->HT;
+	}
+	Scroll_H<-Scroll_H+1;
+}
+
+INSTRUCTION	IORegisterWrite	"Address"	%110
+{
+	IF Address_H
+	{
+		DECLARE tmp[16]	ALIAS tmpH[8]:tmpL[8];
+		tmp<-VramAddress;
+		tmpL<-PIN_D;
+		VramAddress<-tmp;
+		VramAddress_counter<-VramAddress;
+	}
+	IF ~Address_H
+	{
+		DECLARE tmp[16]	ALIAS tmpH[8]:tmpL[8];
+		tmp<-VramAddress;
+		tmpH<-PIN_D&$3F;
+		VramAddress<-tmp;
+	}
+
+	Address_H<-Address_H+1;
+}
+
+INSTRUCTION	IORegisterWrite	"Data"		%111
+{
+	requestVRAM<-%011;
+	requestAddress<-VramAddress_counter;
+	requestData<-PIN_D;
+	IF VramAddress_counter[8..13]==$3F
+	{
+		PaletteRAM[[VramAddress_counter]]<-PIN_D;
+		IF VramAddress_counter[0..3]==$0
+		{
+			PaletteRAM[[0]]<-PIN_D;
+			PIN_BKGCOL<-PIN_D;
+		}
+	}
+	IF VInc32
+	{
+		VramAddress_counter<-VramAddress_counter+32;
+	}
+	IF ~VInc32
+	{
+		VramAddress_counter<-VramAddress_counter+1;
+	}
+}
+
+HANDLER		PIN__DBE	TRANSITION(1,0)
+{
+	IF PIN_RW
+	{
+		CALL RegisterRead();
+	}
+	IF ~PIN_RW
+	{
+		CALL RegisterWrite();
+	}
+}
+
+FUNCTION INTERNAL	IncrementVScroll
+{
+	DECLARE VScroll[9] ALIAS SV[1]:SVT[5]:SFV[3];
+
+	SV<-Vl;
+	SVT<-VTl;
+	SFV<-FVl;
+
+	IF (SVT==29) & (SFV==7)
+	{
+		VScroll<-VScroll+16;
+	}
+	VScroll<-VScroll+1;
+
+	Vl<-SV;
+	VTl<-SVT;
+	FVl<-SFV;
+}
+
+FUNCTION INTERNAL	IncrementHScroll
+{
+	DECLARE HScroll[6]	ALIAS	SH[1]:SHT[5];
+
+	SH<-Hl;
+	SHT<-HTl;
+
+	HScroll<-HScroll+1;
+
+	Hl<-SH;
+	HTl<-SHT;
+}
+
+FUNCTION INTERNAL	result[8]	FlipBits	input[8]			### Temporary, plan to reverse shift order to avoid need
+{
+	DECLARE tI[8]	ALIAS	aI[1]:bI[1]:cI[1]:dI[1]:eI[1]:fI[1]:gI[1]:hI[1];
+	DECLARE tO[8]	ALIAS	hO[1]:gO[1]:fO[1]:eO[1]:dO[1]:cO[1]:bO[1]:aO[1];
+	
+	tI<-input;
+
+	aO<-aI;
+	bO<-bI;
+	cO<-cI;
+	dO<-dI;
+	eO<-eI;
+	fO<-fI;
+	gO<-gI;
+	hO<-hI;
+
+	result<-tO;
+}
+
+FUNCTION INTERNAL	LoadShiftRegisters
+{
+	bits_shift0_upper<-bits_latch0;
+	bits_shift1_upper<-bits_latch1;
+	attr_shift0_upper<-attr_latch0;
+	attr_shift1_upper<-attr_latch1;
+}
+
+FUNCTION INTERNAL	UpdateShiftRegisters
+{
+	DECLARE c[16];
+
+	bits_shift0<-ROR(bits_shift0,c,0,1);
+	bits_shift1<-ROR(bits_shift1,c,0,1);
+	attr_shift0<-ROR(attr_shift0,c,0,1);
+	attr_shift1<-ROR(attr_shift1,c,0,1);
+}
+	
+DECLARE INTERNAL SpriteCollision[1];
+DECLARE INTERNAL SpriteColour[5];
+DECLARE INTERNAL SpriteZero[1];
+DECLARE INTERNAL SpriteBack[1];
+DECLARE INTERNAL Sprite0InRange[1];
+DECLARE INTERNAL Sprite0InRange_latch[1];
+DECLARE INTERNAL SpriteBufCur[4];
+
+FUNCTION INTERNAL	UpdateSprite	sprNum[3]
+{
+	IF OAMCnt[[sprNum]]==0
+	{
+		DECLARE col[5]	ALIAS	%1:pal[2]:bp1[1]:bp0[1];
+
+		pal<-Palette[[sprNum]];
+		IF FlipH[[sprNum]]
+		{
+			OAMBpl0[[sprNum]]<-ROR(OAMBpl0[[sprNum]],bp0,0,1);
+			OAMBpl1[[sprNum]]<-ROR(OAMBpl1[[sprNum]],bp1,0,1);
+		}
+		IF ~FlipH[[sprNum]]
+		{
+			OAMBpl0[[sprNum]]<-ROL(OAMBpl0[[sprNum]],bp0,0,1);
+			OAMBpl1[[sprNum]]<-ROL(OAMBpl1[[sprNum]],bp1,0,1);
+		}
+		
+		IF (bp0 | bp1) & (SpriteColour==0)
+		{
+			SpriteColour<-col;
+			SpriteZero<-Sprite0InRange_latch & (sprNum==0);
+			SpriteBack<-Priority[[sprNum]];
+		}
+	}
+	IF OAMCnt[[sprNum]]!=0
+	{
+		OAMCnt[[sprNum]]<-OAMCnt[[sprNum]]-1;
+	}
+}
+
+FUNCTION INTERNAL	MultiplexSprite
+{
+	SpriteColour<-0;
+	IF hClock<256
+	{
+		CALL UpdateSprite(0);
+		CALL UpdateSprite(1);
+		CALL UpdateSprite(2);
+		CALL UpdateSprite(3);
+		CALL UpdateSprite(4);
+		CALL UpdateSprite(5);
+		CALL UpdateSprite(6);
+		CALL UpdateSprite(7);
+	}
+}
+
+FUNCTION INTERNAL	Rasterise
+{
+	IF hClock<256
+	{
+		DECLARE actualCol[6];
+		DECLARE c[16];
+		DECLARE shift[16];
+		DECLARE fMask[16];
+
+		DECLARE	col[4] ALIAS at1[1]:at0[1]:bp1[1]:bp0[1];
+
+		shift<-FHl;
+		fMask<-ROL($01,c,$00,shift);
+
+		bp0<-ROR(fMask & bits_shift0,c,0,shift);
+		bp1<-ROR(fMask & bits_shift1,c,0,shift);
+		at0<-ROR(fMask & attr_shift0,c,0,shift);
+		at1<-ROR(fMask & attr_shift1,c,0,shift);
+		
+		CALL UpdateShiftRegisters();
+
+		IF bp0|bp1
+		{
+			IF SpriteColour!=0 & SpriteZero & ~SpriteCollision
+			{
+				SpriteCollision<-1;
+				Sprite0<-1;
+			}
+			actualCol<-col;
+			IF SpriteColour!=0 & (~SpriteBack)
+			{
+				actualCol<-SpriteColour;
+			}
+		}
+		IF ~(bp0|bp1)
+		{
+			actualCol<-SpriteColour;
+		}
+		
+		IF actualCol[0..1]==0
+		{
+			actualCol<-0;
+		}
+		actualCol<-PaletteRAM[[actualCol]];
+		PIN_ACTIVECOL<-actualCol;
+		CALL SetVideo(hClock,(vClock-21),actualCol);
+	}
+
+	IF (hClock>=320) & (hClock<=335)
+	{
+		CALL UpdateShiftRegisters();
+	}
+}
+
+FUNCTION INTERNAL	RasteriseOff
+{
+	IF hClock<256
+	{
+		DECLARE actualCol[6];
+
+		IF (VramAddress_counter&$3FFF)>$3EFF
+		{
+			actualCol<-VramAddress_counter[0..4];
+		}
+		actualCol<-PaletteRAM[[actualCol]];
+		PIN_ACTIVECOL<-actualCol;
+		CALL SetVideo(hClock,(vClock-21),actualCol);
+	}
+}
+
+FUNCTION INTERNAL	TickPixelClockStart
+{
+	PIN__INT<-~(NMI&VBlank);
+	PIN_VCLOCK<-vClock;
+	PIN_HCLOCK<-hClock;
+
+	EXECUTE VRAMRequest	requestVRAM;
+
+	IF (vClock>=20) & (vClock<=260)
+	{
+		IF BGShow
+		{
+			EXECUTE PixelClock	hClock;
+		}
+		IF SprShow
+		{
+			EXECUTE OAMClock	hClock;
+		}
+	}
+	IF (vClock>=21) & (vClock<=260) & SprShow
+	{
+		CALL MultiplexSprite();
+	}
+	IF (vClock>=21) & (vClock<=260) 
+	{
+		IF BGShow
+		{
+			CALL Rasterise();
+		}
+		IF ~BGShow
+		{
+			CALL RasteriseOff();
+		}
+	}
+	EXECUTE PixelClockLine vClock;
+}
+
+INSTRUCTION	VRAMRequest	"noop"		%000
+{
+}
+
+INSTRUCTION	VRAMRequest	"Address"	dontcare[2]:%1
+{
+	CALL VRAMAddressSetupALE(requestAddress[8..13],requestAddress[0..7]);
+	requestVRAM<-requestVRAM+1;
+}
+
+INSTRUCTION	VRAMRequest	"readData"	%010
+{
+	CALL VRAMAddressSetupR(7);
+	requestVRAM<-0;
+}
+
+INSTRUCTION	VRAMRequest	"writeData"	%100
+{
+	CALL VRAMAddressSetupW(requestData);
+	IF requestAddress[8..13]==$3F
+	{
+		PIN__WE<-1;
+	}
+	requestVRAM<-0;
+}
+
+FUNCTION INTERNAL	TickPixelClockEnd
+{
+	IF ~PIN__RE
+	{
+		EXECUTE MemoryFetchOperation	fetchOperation;
+		PIN__RE<-1;
+	}
+	IF ~PIN__WE
+	{
+		PIN__WE<-1;
+	}
+
+	hClock<-hClock+1;
+
+	IF (hClock==320) & BGShow & (vClock>=20)
+	{
+		IF vClock>20
+		{
+			CALL IncrementVScroll();
+		}
+		Hl<-H;
+		HTl<-HT;
+		FHl<-FH;
+	}
+	IF hClock==341
+	{
+		hClock<-0;
+		vClock<-vClock+1;
+		
+		SpriteCollision<-0;
+		SpriteBufCur<-0;
+		Sprite0InRange_latch<-Sprite0InRange;
+		Sprite0InRange<-0;
+		IF vClock==262
+		{
+			vClock<-0;
+			oddField<-oddField+1;
+			VBlank<-1;
+		}
+	}
+}
+
+INSTRUCTION MemoryFetchOperation "NameTable"		%0001
+{
+	IF BGShow
+	{
+		tile_latch<-PIN_AD;
+	}
+}
+
+INSTRUCTION MemoryFetchOperation "AttrTable"		%0010
+{
+	IF BGShow
+	{
+		DECLARE c[8];
+		DECLARE attrShift[8] ALIAS %00000:attrV[1]:attrH[1]:%0;
+
+		attrV<-VTl[1..1];
+		attrH<-HTl[1..1];
+
+# Below takes the relevant two bits from the attribute and then duplicates them out (planar) across 2 registers
+
+		attr_latch0<-ROR(PIN_AD,c,0,attrShift) & $03;
+		attr_latch0<-ROL(attr_latch0,c,0,2)|attr_latch0;
+		attr_latch0<-ROL(attr_latch0,c,0,4)|attr_latch0;
+
+		attr_latch1<-attr_latch0&$AA;
+		attr_latch1<-ROR(attr_latch1,c,0,1)|attr_latch1;
+		attr_latch0<-attr_latch0&$55;
+		attr_latch0<-ROL(attr_latch0,c,0,1)|attr_latch0;
+	}
+}
+
+INSTRUCTION MemoryFetchOperation "Pattern0"		%0011
+{
+	IF BGShow
+	{
+		bits_latch0<-CALL FlipBits(PIN_AD);
+	}
+}
+
+INSTRUCTION MemoryFetchOperation "Pattern1"		%0100
+{
+	IF BGShow
+	{
+		bits_latch1<-CALL FlipBits(PIN_AD);
+
+		CALL LoadShiftRegisters();
+
+		CALL IncrementHScroll();
+	}
+}
+
+INSTRUCTION MemoryFetchOperation "SpritePattern0"	%0101
+{
+	DECLARE sprNum[3];
+
+	sprNum<-hClock[3..5];
+
+	OAMBpl0[[sprNum]]<-PIN_AD;
+}
+
+INSTRUCTION MemoryFetchOperation "SpritePattern1"	%0110
+{
+	DECLARE sprNum[3];
+
+	sprNum<-hClock[3..5];
+
+	OAMBpl1[[sprNum]]<-PIN_AD;
+}
+
+INSTRUCTION MemoryFetchOperation "VRAMRead"		%0111
+{
+	ReadData_latch<-PIN_AD;
+}
+
+INSTRUCTION	PixelClockLine	"Line20"	%000010100
+{
+	IF hClock==0
+	{
+		VBlank<-0;
+		Sprite0<-0;
+	}
+	IF (hClock==256) & BGShow
+	{
+		VramAddress_counter<-VramAddress;
+	}
+	IF oddField & (hClock==339) & BGShow
+	{
+		hClock<-hClock+1;
+	}
+}
+
+
+
+FUNCTION INTERNAL FetchBGSetupNT
+{
+	DECLARE tmpPA[6] ALIAS %10:tmp[4];
+	DECLARE tmpDB[8];
+	tmp<-VramAddress_counter[8..11];
+	tmpDB<-VramAddress_counter[0..7];
+
+	CALL VRAMAddressSetupALE(tmpPA,tmpDB);
+}
+
+FUNCTION INTERNAL FetchBGSetupAT
+{
+	DECLARE tmpPA[6] ALIAS %10:tmp[2]:%11;
+	DECLARE tmpDB[8] ALIAS %11:tmpV[3]:tmpH[3];
+	tmp<-VramAddress_counter[10..11];
+	tmpV<-VTl[2..4];
+	tmpH<-HTl[2..4];
+
+	CALL VRAMAddressSetupALE(tmpPA,tmpDB);
+}
+
+FUNCTION INTERNAL FetchBGSetupPT0
+{
+	DECLARE tmpPA[6] ALIAS %0:tmpS[1]:tmpTH[4];
+	DECLARE	tmpDB[8] ALIAS tmpTL[4]:%0:tmpFH[3];
+
+	tmpS<-BGTable;
+	tmpTH<-tile_latch[4..7];
+	tmpTL<-tile_latch[0..3];
+	tmpFH<-FVl;
+
+	CALL VRAMAddressSetupALE(tmpPA,tmpDB);
+}
+
+FUNCTION INTERNAL FetchBGSetupPT1
+{
+	DECLARE tmpPA[6] ALIAS %0:tmpS[1]:tmpTH[4];
+	DECLARE	tmpDB[8] ALIAS tmpTL[4]:%1:tmpFH[3];
+
+	tmpS<-BGTable;
+	tmpTH<-tile_latch[4..7];
+	tmpTL<-tile_latch[0..3];
+	tmpFH<-FVl;
+
+	CALL VRAMAddressSetupALE(tmpPA,tmpDB);
+}
+
+FUNCTION INTERNAL FetchSpritePattern0	sprNum[3]
+{
+	DECLARE tmpPA[6] ALIAS %0:tmpS[1]:tmpTH[4];
+	DECLARE	tmpDB[8] ALIAS tmpTL[3]:tmpTL8[1]:%0:tmpFH[3];
+	DECLARE tile[8];
+
+	tile<-SecondaryTile[[sprNum]];
+	tmpS<-SprTable;
+	IF Spr16
+	{
+		tmpS<-tile[0..0];
+	}
+	tmpTH<-tile[4..7];
+	tmpTL<-tile[1..3];
+	tmpTL8<-tile[0..0];
+	IF Spr16
+	{
+		tmpTL8<-SecondaryY[[sprNum]][3..3];
+	}
+	tmpFH<-SecondaryY[[sprNum]];
+	IF FlipV[[sprNum]]
+	{
+		tmpFH<-~tmpFH;
+		IF Spr16
+		{
+			tmpTL8<-~tmpTL8;
+		}
+	}
+
+	CALL VRAMAddressSetupALE(tmpPA,tmpDB);
+}
+
+FUNCTION INTERNAL FetchSpritePattern1	sprNum[3]
+{
+	DECLARE tmpPA[6] ALIAS %0:tmpS[1]:tmpTH[4];
+	DECLARE	tmpDB[8] ALIAS tmpTL[3]:tmpTL8[1]:%1:tmpFH[3];
+	DECLARE tile[8];
+
+	tile<-SecondaryTile[[sprNum]];
+	IF Spr16
+	{
+		tmpS<-tile[0..0];
+	}
+	tmpS<-SprTable;
+	tmpTH<-tile[4..7];
+	tmpTL<-tile[1..3];
+	tmpTL8<-tile[0..0];
+	IF Spr16
+	{
+		tmpTL8<-SecondaryY[[sprNum]][3..3];
+	}
+	tmpFH<-SecondaryY[[sprNum]];
+	IF FlipV[[sprNum]]
+	{
+		tmpFH<-~tmpFH;
+		IF Spr16
+		{
+			tmpTL8<-~tmpTL8;
+		}
+	}
+
+	CALL VRAMAddressSetupALE(tmpPA,tmpDB);
+}
+
+# Clocks 0-255  (BG)
+
+INSTRUCTION	PixelClock	"FetchNT0"	%0:dontCare[5]:%000
+{
+	CALL FetchBGSetupNT();
+}
+
+INSTRUCTION	PixelClock	"FetchNT1"	%0:dontCare[5]:%001
+{
+	CALL VRAMAddressSetupR(1);
+}
+
+INSTRUCTION	PixelClock	"FetchAT0"	%0:dontCare[5]:%010
+{
+	CALL FetchBGSetupAT();
+}
+
+INSTRUCTION	PixelClock	"FetchAT1"	%0:dontCare[5]:%011
+{
+	CALL VRAMAddressSetupR(2);
+}
+
+INSTRUCTION	PixelClock	"FetchPT00"	%0:dontCare[5]:%100
+{
+	CALL FetchBGSetupPT0();
+}
+
+INSTRUCTION	PixelClock	"FetchPT01"	%0:dontCare[5]:%101
+{
+	CALL VRAMAddressSetupR(3);
+}
+
+INSTRUCTION	PixelClock	"FetchPT10"	%0:dontCare[5]:%110
+{
+	CALL FetchBGSetupPT1();
+}
+
+INSTRUCTION	PixelClock	"FetchPT11"	%0:dontCare[5]:%111
+{
+	CALL VRAMAddressSetupR(4);
+}
+
+# Clocks 0-63 (Sprites)
+
+DECLARE SpriteTmpTransfer[8];
+
+INSTRUCTION	OAMClock	"ClearOAM"	%000:oamRamAddr[5]:%0
+{
+	SpriteTmpTransfer<-$FF;
+}
+
+INSTRUCTION	OAMClock	"ClearOAM"	%000:oamRamAddr[3]:%001
+{
+	SecondaryY[[oamRamAddr]]<-SpriteTmpTransfer;
+}
+
+INSTRUCTION	OAMClock	"ClearOAM"	%000:oamRamAddr[3]:%011
+{
+	SecondaryTile[[oamRamAddr]]<-SpriteTmpTransfer;
+}
+
+INSTRUCTION	OAMClock	"ClearOAM"	%000:oamRamAddr[3]:%101
+{
+	SecondaryAttrs[[oamRamAddr]]<-SpriteTmpTransfer;
+}
+
+INSTRUCTION	OAMClock	"ClearOAM"	%000:oamRamAddr[3]:%111
+{
+	SecondaryX[[oamRamAddr]]<-SpriteTmpTransfer;
+}
+
+DECLARE SpriteComputePhase[8];
+DECLARE SpriteComputePhaseNext[8];
+DECLARE SpriteSrcAddr[8]	ALIAS	SpriteN[6]:SpriteM[2];
+DECLARE SpriteDstAddr[4];
+DECLARE SpriteDisableWrites[1];
+
+FUNCTION INTERNAL	ProcessSprite
+{
+	IF SpriteComputePhase==0
+	{
+		SpriteTmpTransfer<-OAM[[SpriteSrcAddr]];
+		SpriteComputePhaseNext<-1;
+	}
+	IF SpriteComputePhase==1
+	{
+		DECLARE compare[9];
+		DECLARE SpriteInRange[1];
+		
+		compare<-(vClock-21) - SpriteTmpTransfer;
+		SpriteInRange<-compare[3..8]==0;
+		IF Spr16
+		{
+			SpriteInRange<-compare[4..8]==0;
+		}
+		IF ~SpriteDisableWrites
+		{
+			SecondaryY[[SpriteDstAddr]]<-compare;
+		}
+		IF SpriteInRange
+		{
+			Sprite0InRange<-Sprite0InRange | (SpriteInRange & (SpriteSrcAddr==0));
+			SpriteM<-SpriteM+1;
+			SpriteComputePhaseNext<-10;
+		}
+		IF ~SpriteInRange
+		{
+			SpriteComputePhaseNext<-2;
+		}
+	}
+	IF SpriteComputePhase==2
+	{
+		SpriteN<-SpriteN+1;
+		IF SpriteN==0
+		{
+			SpriteComputePhaseNext<-99;
+		}
+		IF SpriteDstAddr<8
+		{
+			SpriteComputePhaseNext<-0;
+		}
+		IF SpriteDstAddr==8
+		{
+			SpriteDisableWrites<-1;
+			SpriteComputePhaseNext<-3;
+		}
+	}
+
+	IF SpriteComputePhase==3
+	{
+		DECLARE compare[9];
+		DECLARE SpriteInRange[1];
+		
+		compare<-(vClock-21) - SpriteTmpTransfer;
+		IF ~SpriteDisableWrites
+		{
+			SecondaryY[[SpriteDstAddr]]<-SpriteTmpTransfer;
+		}
+		SpriteInRange<-compare[3..8]==0;
+		IF Spr16
+		{
+			SpriteInRange<-compare[4..8]==0;
+		}
+		IF SpriteInRange
+		{
+			# Set Overflow
+			SpriteM<-SpriteM+1;
+			SpriteComputePhaseNext<-10;
+		}
+		IF ~SpriteInRange
+		{
+			SpriteM<-SpriteM+1;
+			SpriteComputePhaseNext<-2;
+		}
+	}
+
+	IF SpriteComputePhase==10
+	{
+		SpriteTmpTransfer<-OAM[[SpriteSrcAddr]];
+		SpriteComputePhaseNext<-11;
+	}
+	IF SpriteComputePhase==11
+	{
+		IF ~SpriteDisableWrites
+		{
+			SecondaryTile[[SpriteDstAddr]]<-SpriteTmpTransfer;
+		}
+		SpriteM<-SpriteM+1;
+		SpriteComputePhaseNext<-12;
+	}
+	IF SpriteComputePhase==12
+	{
+		SpriteTmpTransfer<-OAM[[SpriteSrcAddr]];
+		SpriteComputePhaseNext<-13;
+	}
+	IF SpriteComputePhase==13
+	{
+		IF ~SpriteDisableWrites
+		{
+			SecondaryAttrs[[SpriteDstAddr]]<-SpriteTmpTransfer;
+		}
+		SpriteM<-SpriteM+1;
+		SpriteComputePhaseNext<-14;
+	}
+	IF SpriteComputePhase==14
+	{
+		SpriteTmpTransfer<-OAM[[SpriteSrcAddr]];
+		SpriteComputePhaseNext<-15;
+	}
+	IF SpriteComputePhase==15
+	{
+		IF ~SpriteDisableWrites
+		{
+			SecondaryX[[SpriteDstAddr]]<-SpriteTmpTransfer;
+		}
+		SpriteM<-SpriteM+1;
+		SpriteDstAddr<-SpriteDstAddr+1;
+		SpriteComputePhaseNext<-2;
+	}
+
+	SpriteComputePhase<-SpriteComputePhaseNext;
+}
+
+# Clocks 64-255 (Sprites)
+
+MAPPING RemainingClocks[2]
+{
+	%01	""	0;
+	%10	""	1;
+	%11	""	2;
+}
+
+INSTRUCTION	OAMClock	"SpriteCompute"	%0:RemainingClocks:dontCare[6]
+{
+	IF (dontCare==0) & (RemainingClocks==0)
+	{
+		SpriteComputePhase<-0;
+		SpriteSrcAddr<-0;
+		SpriteDstAddr<-0;
+		SpriteDisableWrites<-0;
+	}
+	CALL ProcessSprite();
+}
+
+# Clocks 256-319
+
+
+INSTRUCTION	OAMClock	"Sprite%M0"	%100:sprNum[3]:%000
+{
+	SpriteTmpTransfer<-SecondaryX[[sprNum]];
+}
+
+INSTRUCTION	OAMClock	"Sprite%M0"	%100:sprNum[3]:%001
+{
+	OAMCnt[[sprNum]]<-SpriteTmpTransfer;
+}
+
+INSTRUCTION	OAMClock	"Sprite%M0"	%100:sprNum[3]:%010
+{
+	SpriteTmpTransfer<-SecondaryAttrs[[sprNum]];
+}
+
+INSTRUCTION	OAMClock	"Sprite%M0"	%100:sprNum[3]:%011
+{
+	OAMAttr[[sprNum]]<-SpriteTmpTransfer;
+}
+
+INSTRUCTION	OAMClock	"Sprite%M0"	%100:sprNum[3]:%100
+{
+	CALL FetchSpritePattern0(sprNum);
+}
+
+INSTRUCTION	OAMClock	"Sprite%M0"	%100:SprNum[3]:%101
+{
+	CALL VRAMAddressSetupR(5);
+}
+
+INSTRUCTION	OAMClock	"Sprite%M0"	%100:sprNum[3]:%110
+{
+	CALL FetchSpritePattern1(sprNum);
+}
+
+INSTRUCTION	OAMClock	"Sprite%M0"	%100:sprNum[3]:%111
+{
+	CALL VRAMAddressSetupR(6);
+}
+
+# Handles extra fetches for first 2 columns Clocks 320-335
+
+INSTRUCTION	PixelClock	"FetchNT0"	%10100:dontCare[1]:%000
+{
+	CALL FetchBGSetupNT();
+}
+
+INSTRUCTION	PixelClock	"FetchNT1"	%10100:dontCare[1]:%001
+{
+	CALL VRAMAddressSetupR(1);
+}
+
+INSTRUCTION	PixelClock	"FetchAT0"	%10100:dontCare[1]:%010
+{
+	CALL FetchBGSetupAT();
+}
+
+INSTRUCTION	PixelClock	"FetchAT1"	%10100:dontCare[1]:%011
+{
+	CALL VRAMAddressSetupR(2);
+}
+
+INSTRUCTION	PixelClock	"FetchPT00"	%10100:dontCare[1]:%100
+{
+	CALL FetchBGSetupPT0();
+}
+
+INSTRUCTION	PixelClock	"FetchPT01"	%10100:dontCare[1]:%101
+{
+	CALL VRAMAddressSetupR(3);
+}
+
+INSTRUCTION	PixelClock	"FetchPT10"	%10100:dontCare[1]:%110
+{
+	CALL FetchBGSetupPT1();
+}
+
+INSTRUCTION	PixelClock	"FetchPT11"	%10100:dontCare[1]:%111
+{
+	CALL VRAMAddressSetupR(4);
+}
+
+HANDLER		PIN_CLK	TRANSITION(0,1)			### CURRENTLY ASSUMING PIXEL CLOCK RATE IN!!!!
+{
+	CALL TickPixelClockStart();
+}
+
+HANDLER		PIN_CLK TRANSITION(1,0)
+{
+	CALL TickPixelClockEnd();
+}
+
+HANDLER		PIN__RST	ALWAYS
+{
+	IF ~PIN__RST
+	{
+		PIN__INT<-1;
+		Address_H<-0;
+		Scroll_H<-0;
+		PIN_ALE<-0;
+		PIN__RE<-1;
+		PIN__WE<-1;
+	}
+}
