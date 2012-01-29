@@ -6,13 +6,9 @@
 # SYNC pins not present
 #
 
-
 ## Step 1 - Port video logic directly across and use External Function To Write Video To Texture
 
 C_FUNC_EXTERN		SetVideo		[8],[8],[8];	# X,Y,ColIndex (Based on possible colours from NES)
-
-C_FUNC_EXTERN	[8]	GetByte			[16];
-C_FUNC_EXTERN		SetByte			[16],[8];
 
 PIN IN			PIN__RST[1];			# Reset Pin
 
@@ -35,6 +31,8 @@ PIN OUT			PIN_PA[6];			# VRAM Facing - Top 6 bits of address
 ###
 
 # Internal Memory
+
+DECLARE	INTERNAL	PaletteRAM[[5]][8]		ALIAS	%00:PaletteY[2]:PalettePhase[4];	
 
 DECLARE INTERNAL	OAM[[8]][8];			# OAM Ram
 DECLARE INTERNAL	OAMSecondary[[3]][32]		ALIAS	SecondaryY[8]:SecondaryTile[8]:SecondaryX[8]:SecondaryAttrs[8];
@@ -82,7 +80,37 @@ DECLARE INTERNAL	bits_latch1[8];
 
 DECLARE INTERNAL	fetchOperation[4];	# Used to route memory fetched from VRAM facing bus to correct internal location
 
+DECLARE INTERNAL	requestVRAM[3];
+DECLARE INTERNAL	requestAddress[16];
+DECLARE INTERNAL	requestData[8];
+
 ### 
+
+FUNCTION INTERNAL VRAMAddressSetupALE	upperAddress[6],lowerAddress[8]
+{
+	PIN_PA<-upperAddress;
+	PIN_AD<-lowerAddress;
+	PIN_ALE<-1;
+	PIN__RE<-1;
+	PIN__WE<-1;
+}
+
+FUNCTION INTERNAL VRAMAddressSetupR	fetch[4]
+{
+	PIN_ALE<-0;
+	PIN__RE<-0;
+	PIN__WE<-1;
+	fetchOperation<-fetch;
+}
+
+FUNCTION INTERNAL VRAMAddressSetupW	data[8]
+{
+	PIN_AD<-data;
+	PIN_ALE<-0;
+	PIN__RE<-1;
+	PIN__WE<-0;
+}
+
 
 FUNCTION INTERNAL	RegisterRead
 {
@@ -110,7 +138,12 @@ INSTRUCTION	IORegisterRead	"OAMData"	%100
 INSTRUCTION	IORegisterRead	"Data"		%111
 {
 	PIN_D<-ReadData_latch;
-	ReadData_latch<-CALL GetByte(VramAddress_counter);
+	requestVRAM<-%001;
+	requestAddress<-VramAddress_counter;
+	IF VramAddress_counter[8..13]==$3F
+	{
+		PIN_D<-PaletteRAM[[VramAddress_counter]];
+	}
 	IF VInc32
 	{
 		VramAddress_counter<-VramAddress_counter+32;
@@ -182,7 +215,17 @@ INSTRUCTION	IORegisterWrite	"Address"	%110
 
 INSTRUCTION	IORegisterWrite	"Data"		%111
 {
-	CALL SetByte(VramAddress_counter,PIN_D);
+	requestVRAM<-%011;
+	requestAddress<-VramAddress_counter;
+	requestData<-PIN_D;
+	IF VramAddress_counter[8..13]==$3F
+	{
+		PaletteRAM[[VramAddress_counter]]<-PIN_D;
+		IF VramAddress_counter[0..4]==$10
+		{
+			PaletteRAM[[0]]<-PIN_D;
+		}
+	}
 	IF VInc32
 	{
 		VramAddress_counter<-VramAddress_counter+32;
@@ -333,6 +376,7 @@ FUNCTION INTERNAL	Rasterise
 {
 	IF hClock<256
 	{
+		DECLARE actualCol[6];
 		DECLARE c[16];
 		DECLARE shift[16];
 		DECLARE fMask[16];
@@ -356,16 +400,22 @@ FUNCTION INTERNAL	Rasterise
 				SpriteCollision<-1;
 				Sprite0<-1;
 			}
-			CALL SetVideo(hClock,(vClock-21),col);
+			actualCol<-col;
 			IF SpriteColour!=0 & (~SpriteBack)
 			{
-				CALL SetVideo(hClock,(vClock-21),SpriteColour);
+				actualCol<-SpriteColour;
 			}
 		}
 		IF ~(bp0|bp1)
 		{
-			CALL SetVideo(hClock,(vClock-21),SpriteColour);
+			actualCol<-SpriteColour;
 		}
+		
+		IF actualCol[0..1]==0
+		{
+			actualCol<-0;
+		}
+		CALL SetVideo(hClock,(vClock-21),PaletteRAM[[actualCol]]);
 	}
 
 	IF (hClock>=320) & (hClock<=335)
@@ -374,14 +424,32 @@ FUNCTION INTERNAL	Rasterise
 	}
 }
 
+FUNCTION INTERNAL	RasteriseOff
+{
+	IF hClock<256
+	{
+		DECLARE actualCol[6];
+
+		IF (VramAddress_counter&$3FFF)>$3EFF
+		{
+			actualCol<-VramAddress_counter[0..4];
+		}
+		actualCol<-PaletteRAM[[actualCol]];
+		CALL SetVideo(hClock,(vClock-21),actualCol);
+	}
+}
+
 FUNCTION INTERNAL	TickPixelClockStart
 {
 	PIN__INT<-~(NMI&VBlank);
+
+	EXECUTE VRAMRequest	requestVRAM;
+
 	IF (vClock>=20) & (vClock<=260)
 	{
 		IF BGShow
 		{
-			EXECUTE PixelClock	hClock;		### TMP just to get an update across the entire screen
+			EXECUTE PixelClock	hClock;
 		}
 		IF SprShow
 		{
@@ -392,11 +460,40 @@ FUNCTION INTERNAL	TickPixelClockStart
 	{
 		CALL MultiplexSprite();
 	}
-	IF (vClock>=21) & (vClock<=260) & BGShow
+	IF (vClock>=21) & (vClock<=260) 
 	{
-		CALL Rasterise();
+		IF BGShow
+		{
+			CALL Rasterise();
+		}
+		IF ~BGShow
+		{
+			CALL RasteriseOff();
+		}
 	}
 	EXECUTE PixelClockLine vClock;
+}
+
+INSTRUCTION	VRAMRequest	"noop"		%000
+{
+}
+
+INSTRUCTION	VRAMRequest	"Address"	dontcare[2]:%1
+{
+	CALL VRAMAddressSetupALE(requestAddress[8..13],requestAddress[0..7]);
+	requestVRAM<-requestVRAM+1;
+}
+
+INSTRUCTION	VRAMRequest	"readData"	%010
+{
+	CALL VRAMAddressSetupR(7);
+	requestVRAM<-0;
+}
+
+INSTRUCTION	VRAMRequest	"writeData"	%100
+{
+	CALL VRAMAddressSetupW(requestData);
+	requestVRAM<-0;
 }
 
 FUNCTION INTERNAL	TickPixelClockEnd
@@ -405,6 +502,10 @@ FUNCTION INTERNAL	TickPixelClockEnd
 	{
 		EXECUTE MemoryFetchOperation	fetchOperation;
 		PIN__RE<-1;
+	}
+	IF ~PIN__WE
+	{
+		PIN__WE<-1;
 	}
 
 	hClock<-hClock+1;
@@ -506,6 +607,11 @@ INSTRUCTION MemoryFetchOperation "SpritePattern1"	%0110
 	OAMBpl1[[sprNum]]<-PIN_AD;
 }
 
+INSTRUCTION MemoryFetchOperation "VRAMRead"		%0111
+{
+	ReadData_latch<-PIN_AD;
+}
+
 INSTRUCTION	PixelClockLine	"Line20"	%000010100
 {
 	IF hClock==0
@@ -524,31 +630,6 @@ INSTRUCTION	PixelClockLine	"Line20"	%000010100
 }
 
 
-
-FUNCTION INTERNAL VRAMAddressSetupALE	upperAddress[6],lowerAddress[8]
-{
-	PIN_PA<-upperAddress;
-	PIN_AD<-lowerAddress;
-	PIN_ALE<-1;
-	PIN__RE<-1;
-	PIN__WE<-1;
-}
-
-FUNCTION INTERNAL VRAMAddressSetupR	fetch[4]
-{
-	PIN_ALE<-0;
-	PIN__RE<-0;
-	PIN__WE<-1;
-	fetchOperation<-fetch;
-}
-
-FUNCTION INTERNAL VRAMAddressSetupW	data[8]
-{
-	PIN_AD<-data;
-	PIN_ALE<-0;
-	PIN__RE<-1;
-	PIN__WE<-0;
-}
 
 FUNCTION INTERNAL FetchBGSetupNT
 {

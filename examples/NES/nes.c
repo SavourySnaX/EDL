@@ -1012,6 +1012,11 @@ void ClockPPU(int ppuClock)
 			uint16_t addr = ((PPU_PinGetPIN_PA()&0x3F)<<8)|vramLowAddressLatch;
 			PPU_PinSetPIN_AD(PPUGetByte(addr));
 		}
+		if ((PPU_PinGetPIN__WE()&1)==0)
+		{
+			uint16_t addr = ((PPU_PinGetPIN_PA()&0x3F)<<8)|vramLowAddressLatch;
+			PPUSetByte(addr,PPU_PinGetPIN_AD());
+		}
 		PPU_PinSetPIN_CLK(0);
 #else
 #endif
@@ -1722,23 +1727,8 @@ void PPU_SetVideo(uint8_t x,uint8_t y,uint8_t col)
 {
 	uint32_t* outputTexture = (uint32_t*)videoMemory[MAIN_WINDOW];
 
-
-//	printf("%02X,%02X  %02X\n",x,y,col&0xF);
-	//if (x>=8)
-	{
-		if (col&3)
-		{
-			outputTexture[y*WIDTH+x]=nesColours[palIndex[col&0x1F]];
-			lastPixelValue=palIndex[col];
-	//		outputTexture[y*WIDTH+x]=0xFFFFFFFF;//nesColours[palIndex[col&0x1F]];
-		}
-		else
-		{
-			outputTexture[y*WIDTH+x]=nesColours[palIndex[0]];
-			lastPixelValue=palIndex[0];
-	//		outputTexture[y*WIDTH+x]=0;//nesColours[palIndex[0]];
-		}
-	}
+	outputTexture[y*WIDTH+x]=nesColours[col];
+	lastPixelValue=col;
 }
 
 void Tick2C02()
@@ -2389,20 +2379,4 @@ void LoadCart(const char* fileName)
 		bnk0chr=chrRom;
 		bnk1chr=&chrRom[0x1000];
 	}
-}
-
-///////////////////////////////////////////
-
-// Testing Bed for PPU on a chip
-
-void PPU_SetByte(uint16_t addr,uint8_t value)
-{
-	PPUSetByte(addr,value);
-	//printf("Store To : %04X (%02X)\n",addr,value);	
-}
-
-uint8_t PPU_GetByte(uint16_t addr)
-{
-	//printf("Fetch From : %04X\n",addr);
-	return PPUGetByte(addr);
 }
