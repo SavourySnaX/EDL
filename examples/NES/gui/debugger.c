@@ -99,24 +99,6 @@ extern uint16_t	MAIN_SP;
 extern uint16_t	MAIN_PC;
 extern uint8_t	MAIN_P;
 
-extern uint8_t palIndex[0x20];
-
-uint32_t nesColours[0x40];
-extern uint16_t	 PPU_FV;		// 3 bits
-extern uint16_t	 PPU_FVc;
-extern uint16_t	 PPU_V;			// 1 bit
-extern uint16_t	 PPU_Vc;
-extern uint16_t	 PPU_H;			// 1 bit
-extern uint16_t	 PPU_Hc;
-extern uint16_t	 PPU_VT;		// 5 bits
-extern uint16_t	 PPU_VTc;
-extern uint16_t	 PPU_HT;		// 5 bits
-extern uint16_t	 PPU_HTc;
-extern uint16_t  PPU_FH;		// 3 bits
-extern uint16_t	 PPU_S;			// 1 bits
-extern uint16_t	 PPU_PAR;		// 8 bits
-extern uint16_t	 PPU_AR;		// 2 bits
-
 void DrawRegister(int chip,uint8_t *table[256],unsigned char* buffer,unsigned int width,uint16_t address,uint8_t (*GetMem)(uint16_t),const char *(*decode)(uint8_t *table[256],unsigned int address,int *count,int realLength))
 {
 	int a;
@@ -155,37 +137,6 @@ void DrawRegister(int chip,uint8_t *table[256],unsigned char* buffer,unsigned in
 
 		address+=opcodeLength;
 	}
-/*
-	if (chip==0)
-	{
-		uint16_t nameTableAddressC=0x2000;
-		uint16_t nameTableAddressL=0x2000;
-
-		nameTableAddressC|=PPU_Vc<<11;
-		nameTableAddressC|=PPU_Hc<<10;
-		nameTableAddressC|=PPU_VTc<<5;
-		nameTableAddressC|=PPU_HTc;
-		nameTableAddressL|=PPU_V<<11;
-		nameTableAddressL|=PPU_H<<10;
-		nameTableAddressL|=PPU_VT<<5;
-		nameTableAddressL|=PPU_HT;
-		
-		PrintAt(buffer,width,255,255,255,0,25,"%04X %04X %02X",nameTableAddressC,nameTableAddressL,PPU_HTc);
-	}
-*/
-	for (a=0;a<32;a++)
-	{
-		uint32_t colour;
-		colour = nesColours[palIndex[a]];
-		if ((a&0x3)==0)
-			colour = nesColours[palIndex[0]];
-		PrintAt(buffer,width,(colour&0x00FF0000)>>16,(colour&0x0000FF00)>>8,(colour&0x000000FF),a&0xf,27+(a/16),"#");
-	}
-
-	extern uint16_t PPU_hClock;
-	extern uint16_t PPU_vClock;
-
-	PrintAt(buffer,width,255,255,255,0,31,"vClock %04X : hClock %04X",PPU_vClock&0x1FF,PPU_hClock&0x1FF);
 }
 
 void UpdateRegisterMain(GLFWwindow window)

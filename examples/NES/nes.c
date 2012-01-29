@@ -19,8 +19,6 @@
 #define ENABLE_TV		0
 #define ENABLE_LOGIC_ANALYSER	0
 
-#define USE_EDL_PPU	1
-
 #include "jake\ntscDecode.h"
 
 
@@ -95,29 +93,9 @@ int InitialiseMemory()
 
 uint8_t internalRam[0x800];
 uint8_t ppuRam[0x800];
-uint8_t sprRam[0x100];
-uint8_t regs2C02[8]={0,0,0,0,0,0,0,0};
-//uint16_t ppuAddr;
-
-uint16_t PPU_FV;		// 3 bits
-uint16_t PPU_FVc;
-uint16_t PPU_V;			// 1 bit
-uint16_t PPU_Vc;
-uint16_t PPU_H;			// 1 bit
-uint16_t PPU_Hc;
-uint16_t PPU_VT;		// 5 bits
-uint16_t PPU_VTc;
-uint16_t PPU_HT;		// 5 bits
-uint16_t PPU_HTc;
-uint16_t PPU_FH;		// 3 bits
-uint16_t PPU_FHl;		// 3 bits		// latched cant change during scanline render
-uint16_t PPU_S;			// 1 bits
-
-uint8_t palIndex[0x20];
 
 uint8_t PPUGetByte(uint16_t addr)
 {
-//	printf("FETCH FROM : %04X\n",addr);
 	addr&=0x3FFF;
 	if (addr<0x1000)
 	{
@@ -127,202 +105,29 @@ uint8_t PPUGetByte(uint16_t addr)
 	{
 		return bnk1chr[addr&0x0FFF];		// WILL NEED FIXING
 	}
-	if (addr<0x3F00)
-	{
-		uint16_t chrAddr=(addr-0x2000)&0x3FF;
-		if (hMirror)
-			chrAddr|=(addr&0x0800)>>1;
-		if (vMirror)
-			chrAddr|=(addr&0x0400);
-		return ppuRam[chrAddr];		// WILL NEED FIXING
-	}
-	return palIndex[addr&0x1F];/// PALLETTE
+	uint16_t chrAddr=(addr-0x2000)&0x3FF;
+	if (hMirror)
+		chrAddr|=(addr&0x0800)>>1;
+	if (vMirror)
+		chrAddr|=(addr&0x0400);
+	return ppuRam[chrAddr];		// WILL NEED FIXING
 }
 void PPUSetByte(uint16_t addr,uint8_t byte)
 {
-	//printf("STORE TO : %04X (%02X)\n",addr,byte);
 	addr&=0x3FFF;
 	if (addr<0x2000)
 	{
 		chrRam[addr]=byte;
 		return;		/// assuming fixed tile ram
 	}
-	if (addr<0x3F00)
-	{
-		uint16_t chrAddr=(addr-0x2000)&0x3FF;
-		if (hMirror)
-			chrAddr|=(addr&0x0800)>>1;
-		if (vMirror)
-			chrAddr|=(addr&0x0400);
-		ppuRam[chrAddr]=byte;
-		return;
-	}
-	switch (addr&0x1F)
-	{
-		case 0:
-		case 0x10:
-			palIndex[0x00]=byte&0x3F;
-			return;
-		default:
-			palIndex[addr&0x1F]=byte&0x3F;
-			return;
-	}
+	uint16_t chrAddr=(addr-0x2000)&0x3FF;
+	if (hMirror)
+		chrAddr|=(addr&0x0800)>>1;
+	if (vMirror)
+		chrAddr|=(addr&0x0400);
+	ppuRam[chrAddr]=byte;
 }
 
-uint8_t IORead(uint8_t addr)
-{
-	uint8_t value=regs2C02[addr];
-	uint8_t ppuCmp=PPU_PinGetPIN_D();
-	if (ppuCmp!=value)
-	{
-//		printf("Mismatch : %02X : %02X!=%02X\n",addr,value,ppuCmp);
-	}
-	switch (addr)
-	{
-		case 0:
-		printf("IO Read : %d\n",addr&0x7);
-			break;
-		case 1:
-		printf("IO Read : %d\n",addr&0x7);
-			break;
-		case 2:
-			regs2C02[addr]&=0x7F;
-			regs2C02[6]=0;	// reset address latch
-			regs2C02[5]=0;	// reset address latch
-			break;
-		case 3:
-		printf("IO Read : %d\n",addr&0x7);
-			break;
-		case 4:
-			return sprRam[regs2C02[3]];
-		case 5:
-		printf("IO Read : %d\n",addr&0x7);
-			break;
-		case 6:
-		printf("IO Read : %d\n",addr&0x7);
-			break;
-		case 7:
-			{
-			uint16_t ppuAddr=(PPU_FVc<<12)|(PPU_Vc<<11)|(PPU_Hc<<10)|(PPU_VTc<<5)|PPU_HTc;
-			regs2C02[addr]=PPUGetByte(ppuAddr);
-			if ((ppuAddr&0x3FFF)>0x3eFF)
-			{
-				value=regs2C02[addr];
-			}
-			if (regs2C02[0]&0x04)
-			{
-				ppuAddr+=32;
-			}
-			else
-			{
-				ppuAddr+=1;
-			}
-			PPU_FVc=(ppuAddr&0x7000)>>12;
-			PPU_Vc=(ppuAddr&0x0800)>>11;
-			PPU_Hc=(ppuAddr&0x0400)>>10;
-			PPU_VTc=(ppuAddr&0x03E0)>>5;
-			PPU_HTc=(ppuAddr&0x001F);
-/*			if (regs2C02[0]&0x04)
-				ppuAddr+=32;
-			else
-				ppuAddr++;*/
-			}
-			break;
-	}
-	return value;
-}
-
-void IOWrite(uint8_t addr,uint8_t byte)
-{
-	switch (addr)
-	{
-		case 0:
-			PPU_V=(byte&0x02)>>1;
-			PPU_H=(byte&0x01);
-			PPU_S=(byte&0x10)>>4;
-		case 1:
-//			if (addr==1)
-//				printf("001-Byte : %02X\n",byte);
-		case 3:
-			regs2C02[addr]=byte;
-			break;
-		case 4:
-			sprRam[regs2C02[3]]=byte;
-			regs2C02[3]++;
-			break;
-		case 7:
-			{
-			//vram write
-			uint16_t ppuAddr=(PPU_FVc<<12)|(PPU_Vc<<11)|(PPU_Hc<<10)|(PPU_VTc<<5)|PPU_HTc;
-			PPUSetByte(ppuAddr,byte);
-			if (regs2C02[0]&0x04)
-			{
-				ppuAddr+=32;
-			}
-			else
-			{
-				ppuAddr+=1;
-			}
-			PPU_FVc=(ppuAddr&0x7000)>>12;
-			PPU_Vc=(ppuAddr&0x0800)>>11;
-			PPU_Hc=(ppuAddr&0x0400)>>10;
-			PPU_VTc=(ppuAddr&0x03E0)>>5;
-			PPU_HTc=(ppuAddr&0x001F);
-/*			if (regs2C02[0]&0x04)
-				ppuAddr+=32;
-			else
-				ppuAddr++;*/
-			}
-			break;
-		case 5:
-			if (regs2C02[addr])
-			{
-				//second write
-				PPU_FV=(byte&0x7);
-				PPU_VT=(byte&0xF8)>>3;
-				regs2C02[addr]=0;
-			}
-			else
-			{
-				PPU_HT=(byte&0xF8)>>3;
-				PPU_FH=(byte&0x07);
-				regs2C02[addr]=1;
-			}
-			break;
-		case 6:
-			if (regs2C02[addr])
-			{
-				//second write
-				PPU_VT&=0x18;
-				PPU_VT|=(byte&0xE0)>>5;
-				PPU_HT=(byte&0x1F);
-
-				PPU_FVc=PPU_FV;
-				PPU_Vc=PPU_V;
-				PPU_Hc=PPU_H;
-				PPU_VTc=PPU_VT;
-				PPU_HTc=PPU_HT;
-
-//				ppuAddr&=0xFF00;
-//				ppuAddr|=byte;
-				regs2C02[addr]=0;
-			}
-			else
-			{
-				//first write
-				PPU_FV=(byte&0x30)>>4;
-				PPU_V=(byte&0x08)>>3;
-				PPU_H=(byte&0x04)>>2;
-				PPU_VT&=0x07;
-				PPU_VT|=(byte&0x3)<<3;
-//				ppuAddr&=0x00FF;
-//				ppuAddr|=(byte&0x3F)<<8;
-				regs2C02[addr]=1;
-			}
-			break;
-	}
-	return;
-}
 int KeyDown(int key);
 void ClearKey(int key);
 
@@ -339,9 +144,7 @@ uint8_t GetByte(uint16_t addr)
 	}
 	if (addr<0x4000)
 	{
-#if !USE_EDL_PPU
-		return IORead(addr&0x7);
-#endif
+		return;
 	}
 	if (addr<0x6000)
 	{
@@ -502,9 +305,6 @@ void SetByte(uint16_t addr,uint8_t byte)
 	}
 	if (addr<0x4000)
 	{
-#if !USE_EDL_PPU
-		IOWrite(addr&0x7,byte);
-#endif
 		return;
 	}
 	if (addr<0x6000)
@@ -592,26 +392,6 @@ uint32_t MAIN_missing(uint32_t opcode)
 	stopTheClock=1;
 }
 
-void DUMP_REGISTERS()
-{
-	printf("--------\n");
-	printf("FLAGS = N  V  -  B  D  I  Z  C\n");
-	printf("        %s  %s  %s  %s  %s  %s  %s  %s\n",
-			MAIN_P&0x80 ? "1" : "0",
-			MAIN_P&0x40 ? "1" : "0",
-			MAIN_P&0x20 ? "1" : "0",
-			MAIN_P&0x10 ? "1" : "0",
-			MAIN_P&0x08 ? "1" : "0",
-			MAIN_P&0x04 ? "1" : "0",
-			MAIN_P&0x02 ? "1" : "0",
-			MAIN_P&0x01 ? "1" : "0");
-	printf("A = %02X\n",MAIN_A);
-	printf("X = %02X\n",MAIN_X);
-	printf("Y = %02X\n",MAIN_Y);
-	printf("SP= %04X\n",MAIN_SP);
-	printf("--------\n");
-}
-
 const char* decodeDisasm(uint8_t *table[256],unsigned int address,int *count,int realLength)
 {
 	static char temporaryBuffer[2048];
@@ -676,42 +456,6 @@ const char* decodeDisasm(uint8_t *table[256],unsigned int address,int *count,int
 		*count=counting;
 	}
 	return temporaryBuffer;
-}
-
-int Disassemble(unsigned int address,int registers)
-{
-	int a;
-	int numBytes=0;
-	const char* retVal = decodeDisasm(MAIN_DIS_,address,&numBytes,255);
-
-	if (strcmp(retVal,"UNKNOWN OPCODE")==0)
-	{
-		printf("UNKNOWN AT : %04X\n",address);
-		for (a=0;a<numBytes+1;a++)
-		{
-			printf("%02X ",GetByte(address+a));
-		}
-		printf("\n");
-		exit(-1);
-	}
-
-	if (registers)
-	{
-		DUMP_REGISTERS();
-	}
-	printf("%04X :",address);
-
-	for (a=0;a<numBytes+1;a++)
-	{
-		printf("%02X ",GetByte(address+a));
-	}
-	for (a=0;a<8-(numBytes+1);a++)
-	{
-		printf("   ");
-	}
-	printf("%s\n",retVal);
-
-	return numBytes+1;
 }
 
 int g_instructionStep=0;
@@ -880,15 +624,6 @@ void sizeHandler(GLFWwindow window,int xs,int ys)
 
 void LoadCart(const char* fileName);
 
-void UpdateJoy()
-{
-}
-
-void UpdateHardware()
-{
-	UpdateJoy();
-}
-
 int dumpNTSC=0;
 
 int MasterClock=0;
@@ -899,9 +634,6 @@ void WriteNTSC(int colourClock);
 void GenerateNTSC(int colourClock);
 
 int NTSCClock;
-
-uint32_t ppuCycleCount=0;
-uint32_t cpuCycleCount=0;
 
 static uint16_t lastPC;
 
@@ -919,8 +651,6 @@ void ClockCPU(int cpuClock)
 
 		if (MAIN_DEBUG_SYNC)
 		{
-			//printf("%04X CYC:%3d SL:%d\n",addr,(PPU_hClock&0x1FF),(PPU_vClock&0x1FF)<20?(PPU_vClock&0x1FF)+241:(PPU_vClock&0x1FF)-21);
-			//ppuCycleCount=0;
 			lastPC=addr;
 
 			if (isBreakpoint(0,lastPC))
@@ -935,8 +665,7 @@ void ClockCPU(int cpuClock)
 		RecordPin(2,dbe_signal&1);
 #endif
 		_AudioAddData(0,(dbe_signal&1)?32767:-32768);
-#if USE_EDL_PPU
-//		if (1/*MAIN_PinGetM2()*/ && ((addr&0x8000)==0) && ((addr&0x4000)==0) && ((addr&0x2000)==0x2000))
+
 		{
 			PPU_PinSetPIN_RS(addr&0x7);
 			PPU_PinSetPIN_RW(MAIN_PinGetRW());
@@ -948,8 +677,6 @@ void ClockCPU(int cpuClock)
 				MAIN_PinSetD(PPU_PinGetPIN_D());
 			}
 		}
-//		else
-#endif
 		{
 			// Because we are not yet handling ram/rom etc as chips - the below check takes care of making sure we only get a single access
 			static int lastM2=1111;
@@ -970,23 +697,9 @@ void ClockCPU(int cpuClock)
 				}
 			}
 		}
-	//	PPU_PinSetPIN__DBE(dbe_signal);
 
-		UpdateHardware();
-
-		MAIN_PinSet_IRQ(1);//VIA1_PinGetPIN__IRQ());
-		/*			if (regs2C02[0]&0x80)
-					stopTheClock=1;*/
-		//			printf("NMI Val : %d\n",(~(regs2C02[0]&regs2C02[2])>>7)&0x01);
-#if USE_EDL_PPU
+		MAIN_PinSet_IRQ(1);
 		MAIN_PinSet_NMI(PPU_PinGetPIN__INT());
-#else
-		MAIN_PinSet_NMI((~(regs2C02[0]&regs2C02[2])>>7)&0x01);
-#endif
-		//			printf("PPU REGS : CONTROL %02X,MASK %02X,STATUS %02X\n",PPU_Control,PPU_Mask,PPU_Status);
-		//MAIN_PinSetCLK(0);
-
-
 	}
 
 #if ENABLE_LOGIC_ANALYSER
@@ -998,8 +711,6 @@ void ClockPPU(int ppuClock)
 {
 	if (ppuClock==0)
 	{
-		ppuCycleCount++;
-#if USE_EDL_PPU
 		static uint8_t vramLowAddressLatch=0;
 
 		PPU_PinSetPIN_CLK(1);
@@ -1018,8 +729,7 @@ void ClockPPU(int ppuClock)
 			PPUSetByte(addr,PPU_PinGetPIN_AD());
 		}
 		PPU_PinSetPIN_CLK(0);
-#else
-#endif
+
 		Tick2C02();
 	}
 
@@ -1248,9 +958,6 @@ int main(int argc,char**argv)
 	return 0;
 }
 
-uint16_t curLine=0;
-uint16_t curClock=0;
-
 uint32_t nesColours[0x40]=
 {
 0x7C7C7C,
@@ -1318,373 +1025,14 @@ uint32_t nesColours[0x40]=
 0x000000,
 0x000000
 };
-uint8_t nesColoursBW[0x40];
-
-void YFROMRGB()
-{
-	int a;
-	for (a=0;a<0x40;a++)
-	{
-		uint8_t r=nesColours[a]>>16;
-		uint8_t g=nesColours[a]>>8;
-		uint8_t b=nesColours[a];
-
-		nesColoursBW[a]=r*0.229f  +  g*0.587f   + b*0.114f;
-	}
-}
-
-uint8_t tileData1_temp;
-uint16_t tileData1_latch;
-uint16_t tileData2_latch;
-uint16_t attr1_latch;
-uint16_t attr2_latch;
-
-uint8_t attr1_temp;
-uint8_t attr2_temp;
-//uint8_t attr_latch;
-//uint8_t attr_latch_1;
-uint8_t tile_latch;
-
-uint8_t flipBits(uint8_t a)
-{
-	int c;
-	uint8_t b=0;
-
-	for (c=0;c<8;c++)
-	{
-		b<<=1;
-		b|=a&1;
-		a>>=1;
-	}
-
-	return b;
-}
-		
-
-void FetchBGData(int y,int x)
-{
-	switch (curClock&7)
-	{
-		case 0:
-			break;		// Will need changing when half address bus is used
-		case 1:
-			// Get Name table byte
-			{
-				uint16_t nameTableAddress=0x2000;
-
-				nameTableAddress|=PPU_Vc<<11;
-				nameTableAddress|=PPU_Hc<<10;
-				nameTableAddress|=PPU_VTc<<5;
-				nameTableAddress|=PPU_HTc;
-//					printf("Address To Fetch From %04X\n",nameTableAddress);
-				uint8_t tile = PPUGetByte(nameTableAddress);
-				tile_latch=tile;
-			}
-			break;
-		case 2:
-			break;
-		case 3:
-			{
-				uint16_t attrAddress=0x23C0;
-				attrAddress|=PPU_Vc<<11;
-				attrAddress|=PPU_Hc<<10;
-				attrAddress|=(PPU_VTc&0x1C)<<1;
-				attrAddress|=(PPU_HTc&0x1C)>>2;
-//					printf("Address To Fetch From %04X\n",attrAddress);
-				attr1_temp = PPUGetByte(attrAddress);
-					
-				uint8_t attrshift=(PPU_VTc&0x02)<<1;
-				attrshift|=PPU_HTc&0x02;
-
-				attr1_temp>>=attrshift;
-				attr1_temp&=3;
-
-				attr1_temp|=attr1_temp<<2;
-				attr1_temp|=attr1_temp<<4;
-
-				attr2_temp=attr1_temp&0xAA;
-				attr2_temp|=attr2_temp>>1;
-
-				attr1_temp=attr1_temp&0x55;
-				attr1_temp|=attr1_temp<<1;
-/*
-				{
-					printf("Attr : %02X,%02X\n",attr1_temp,attr2_temp);
-				}
-*/
-			}
-			break;
-		case 4:
-			break;
-		case 5:
-			{
-				uint16_t patternTable=0x0000;
-				patternTable|=PPU_S<<12;
-				patternTable|=tile_latch<<4;
-				patternTable|=PPU_FVc&7;
-//					printf("Address To Fetch From %04X\n",patternTable);
-				tileData1_temp=flipBits(PPUGetByte(patternTable));
-			}
-			break;
-		case 6:
-			break;
-		case 7:
-			{
-				uint16_t patternTable=0x0008;
-				patternTable|=PPU_S<<12;
-				patternTable|=tile_latch<<4;
-				patternTable|=PPU_FVc&7;
-//					printf("Address To Fetch From %04X\n",patternTable);
-				tileData2_latch&=0x00FF;
-				tileData2_latch|=flipBits(PPUGetByte(patternTable))<<8;
-				tileData1_latch&=0x00FF;
-				tileData1_latch|=tileData1_temp<<8;
-				attr1_latch&=0x00FF;
-				attr1_latch|=attr1_temp<<8;
-				attr2_latch&=0x00FF;
-				attr2_latch|=attr2_temp<<8;
-
-				uint8_t tmpH=(PPU_Hc<<5)|PPU_HTc;
-				tmpH++;
-				PPU_Hc=(tmpH&0x20)>>5;
-				PPU_HTc=(tmpH&0x1F);
-			}
-			break;
-	}
-}
-
-uint8_t	SP_BUF_Tile[8];
-uint8_t	SP_BUF_XCoord[8];
-uint8_t	SP_BUF_Attribs[8];
-uint8_t SP_BUF_Yline[8];
-
-uint8_t SP_BUF_BitMap0[8];
-uint8_t SP_BUF_BitMap1[8];
-uint8_t SP_BUF_XCounter[8];
-uint8_t SP_BUF_RastAttribs[8];
-
-uint8_t SP_BUF_SpriteInRange;
-uint8_t SP_BUF_CurSprite;
-uint8_t SP_BUF_ZeroInRange;
-
-uint8_t SP_BUF_RastZeroInRange;
-
-void SpriteCompute(uint8_t clock,uint16_t cLine)
-{
-	uint8_t spNum=clock>>2;
-
-	uint8_t spPhase=clock&3;
-	uint16_t spSize=8;			// TODO - Fix for 16 high
-
-	switch (spPhase)
-	{
-	case 0:
-		{
-			uint16_t compare=cLine-(sprRam[spNum*4+0]+1);
-	
-			SP_BUF_SpriteInRange=compare<spSize;
-			SP_BUF_ZeroInRange|=SP_BUF_SpriteInRange && (spNum==0);
-			if (SP_BUF_CurSprite<8)
-			{
-				SP_BUF_Yline[SP_BUF_CurSprite]=compare;
-			}
-			else
-			{
-//				if (SP_BUF_SpriteInRange)
-//					printf("Overflow %d\n",cLine);
-				SP_BUF_SpriteInRange=0;
-			}
-		}
-		break;
-	case 1:
-		if (SP_BUF_SpriteInRange)
-		{
-			SP_BUF_Tile[SP_BUF_CurSprite]=sprRam[spNum*4+1];
-			SP_BUF_Attribs[SP_BUF_CurSprite]=sprRam[spNum*4+2];
-		}
-		break;
-	case 2:
-		if (SP_BUF_SpriteInRange)
-		{
-			if (SP_BUF_Attribs[SP_BUF_CurSprite]&0x80)
-			{
-				SP_BUF_Yline[SP_BUF_CurSprite]=(~SP_BUF_Yline[SP_BUF_CurSprite])&0x07;
-			}
-		}
-		break;
-	case 3:
-		if (SP_BUF_SpriteInRange)
-		{
-			SP_BUF_XCoord[SP_BUF_CurSprite]=sprRam[spNum*4+3];
-			SP_BUF_CurSprite++;
-		}
-		break;
-	}
-}
-
-void SpriteFetch(uint16_t curClock)
-{
-	curClock-=256;
-	uint8_t curFetch=curClock>>3;
-	switch(curClock&7)
-	{
-		case 0:
-			break;
-		case 1:
-			SP_BUF_XCounter[curFetch]=SP_BUF_XCoord[curFetch];
-			//dummy fetch
-			break;
-		case 2:
-			break;
-		case 3:
-			SP_BUF_RastAttribs[curFetch]=SP_BUF_Attribs[curFetch];
-			//dummy fetch
-			break;
-		case 4:
-			break;
-		case 5:
-			if (curFetch<SP_BUF_CurSprite)
-			{
-				uint16_t tilePos=(SP_BUF_Tile[curFetch]<<4)+SP_BUF_Yline[curFetch];
-				if (regs2C02[0]&0x08)
-				{
-					tilePos+=0x1000;
-				}
-//			printf("Tile %02X : Addr %04X\n",SP_BUF_Tile[curFetch],tilePos);
-				SP_BUF_BitMap0[curFetch]=/*0xFF;*/PPUGetByte(tilePos);
-			}
-			else
-			{
-				SP_BUF_BitMap0[curFetch]=0;
-			}
-			break;
-		case 6:
-			break;
-		case 7:
-			if (curFetch<SP_BUF_CurSprite)
-			{
-				uint16_t tilePos=(SP_BUF_Tile[curFetch]<<4)+SP_BUF_Yline[curFetch]+8;
-				if (regs2C02[0]&0x08)
-				{
-					tilePos+=0x1000;
-				}
-				SP_BUF_BitMap1[curFetch]=/*0xFF;*/PPUGetByte(tilePos);
-			}
-			else
-			{
-				SP_BUF_BitMap1[curFetch]=0;
-			}
-			break;
-
-	}
-}
-
-uint8_t spColour;
-uint8_t spZero;
-uint8_t spBack;
-
-void SpriteRender(uint8_t curClock)
-{
-	int a;
-
-	spColour=0;
-	for (a=0;a<8;a++)
-	{
-		if (SP_BUF_XCounter[a]==0)
-		{
-			uint8_t col0,col1,col23;
-			//calculate sprite data
-			if (SP_BUF_RastAttribs[a]&0x40)
-			{
-				col0=(SP_BUF_BitMap0[a]&0x01);
-				col1=(SP_BUF_BitMap1[a]&0x01)<<1;
-				col23=(SP_BUF_RastAttribs[a]&0x03)<<2;
-
-				SP_BUF_BitMap0[a]>>=1;
-				SP_BUF_BitMap1[a]>>=1;
-			}
-			else
-			{
-				col0=(SP_BUF_BitMap0[a]&0x80)>>7;
-				col1=(SP_BUF_BitMap1[a]&0x80)>>6;
-				col23=(SP_BUF_RastAttribs[a]&0x03)<<2;
-
-				SP_BUF_BitMap0[a]<<=1;
-				SP_BUF_BitMap1[a]<<=1;
-			}
-			if ((col0|col1)&&(spColour==0) && (curClock>7||regs2C02[1]&0x04))
-			{
-				spColour=0x10|col0|col1|col23;
-				spZero=SP_BUF_RastZeroInRange && (a==0);
-				spBack=SP_BUF_RastAttribs[a]&0x20;
-			}
-		}
-		else
-		{
-			SP_BUF_XCounter[a]--;
-		}
-	}
-}
-
 uint8_t lastPixelValue;
 
-int dumpStart=0;
-
-static int offsoffs=0;
-	
-//static int wave[4]={0,20,0,-20};
-//-----888888-
-
-static int colourBurstWave0[12]={0,0,0,0,0,0,0,0,0,0,0,0};
-static int colourBurstWave1[12]={1,1,1,1,1,1,-1,-1,-1,-1,-1,-1};
-static int colourBurstWave2[12]={1,1,1,1,1,-1,-1,-1,-1,-1,-1,1};
-static int colourBurstWave3[12]={1,1,1,1,-1,-1,-1,-1,-1,-1,1,1};
-static int colourBurstWave4[12]={1,1,1,-1,-1,-1,-1,-1,-1,1,1,1};
-static int colourBurstWave5[12]={1,1,-1,-1,-1,-1,-1,-1,1,1,1,1};
-static int colourBurstWave6[12]={1,-1,-1,-1,-1,-1,-1,1,1,1,1,1};
-static int colourBurstWave7[12]={-1,-1,-1,-1,-1,-1,1,1,1,1,1,1};
-static int colourBurstWave8[12]={-1,-1,-1,-1,-1,1,1,1,1,1,1,-1};
-static int colourBurstWave9[12]={-1,-1,-1,-1,1,1,1,1,1,1,-1,-1};
-static int colourBurstWaveA[12]={-1,-1,-1,1,1,1,1,1,1,-1,-1,-1};
-static int colourBurstWaveB[12]={-1,-1,1,1,1,1,1,1,-1,-1,-1,-1};
-static int colourBurstWaveC[12]={-1,1,1,1,1,1,1,-1,-1,-1,-1,-1};
-
-//static int waveGuide={-4,-3,-1,1,3,4,3,1,-1,-3};
-
-//static int TopBottomPercentage={0,100,0,100,0,100,0,100,0,100,0,100,0,100,0,100}
-//static int TopBottomPercentage[12]={64,80,96,128,96,80,64,32,16,0,16,32};
 static int TopBottomPercentage[12]={64,104,128,128,128,104,64,24,0,0,0,24};
 
-static int cClock=0;
-
-void DumpNTSCComposite(uint8_t level,uint8_t col,uint8_t low,uint8_t high)
-{
-	static int _3rds=0;
-	int actualLevel=((cClock+col+level)%12)<6?low:high;
-//	int actualLevel=low;
-
-	cClock+=8;
-
-	fwrite(&actualLevel,1,1,ntsc_file);
-	fwrite(&actualLevel,1,1,ntsc_file);
-
-	_3rds+=2;
-	if (_3rds>=3)
-	{
-		//actualLevel=((cClock+col+level)%12)<6?low:high;
-		_3rds-=3;
-		fwrite(&actualLevel,1,1,ntsc_file);
-	}
-
-}
 uint8_t activeNTSCSignalLow;
 uint8_t activeNTSCSignalHi;
 uint8_t activeNTSCDisplay=1;
 uint8_t activeNTSCSignalCol;
-
-uint8_t activeNTSCBase;
-uint8_t	activeNTSCAmplitude;
-uint8_t activeNTSCPhase;
 
 #define SIGNAL_OFFSET	(60)
 #define SIGNAL_RANGE	(130)
@@ -1699,13 +1047,13 @@ void GenerateNTSC(int colourClock)
 	int inRangeB=((colourClock+8+5)%12)<6;
 	int actualLevel=(range*TopBottomPercentage[(colourClock+activeNTSCSignalCol)%12])/128;
 
-	if (((regs2C02[1]&0x20 && inRangeR) ||
+/*	if (((regs2C02[1]&0x20 && inRangeR) ||
 	    (regs2C02[1]&0x40 && inRangeG) ||
 	    (regs2C02[1]&0x80 && inRangeB)) && activeNTSCDisplay)
 	{
 		actualLevel*=.546f;
 		actualLevel-=SIGNAL_RANGE*.0902f;
-	}
+	}*/
 //	else
 //		actualLevel+=15;
 
@@ -1734,195 +1082,8 @@ void PPU_SetVideo(uint8_t x,uint8_t y,uint8_t col)
 void Tick2C02()
 {
 	static int triCnt=0;
-#if !USE_EDL_PPU
-	static int field=0;
-	uint32_t* outputTexture = (uint32_t*)videoMemory[MAIN_WINDOW];
-	int a;
-
-	static uint16_t lastCollision=0;
-
-	static firstEver=1;
-	if (firstEver)
-	{
-		YFROMRGB();
-		firstEver=0;
-	}
-
-
-/*	triCnt++;
-	if (triCnt==2)
-		triCnt=0;*/
-
-	if (curLine<20)
-	{
-		if (curLine==0 && curClock==0)
-		{
-			offsoffs++;
-			if (!dumpStart)
-			{
-				dumpStart=dumpNTSC;
-				if (dumpStart)
-				{
-					triCnt=2;//*5000;
-					ntsc_file=fopen("out.ntsc","wb+");
-				}
-				else
-				{
-					ntsc_file=NULL;
-				}
-				dumpNTSC=0;
-			}
-		}
-		// IDLE PPU
-	}
-	else
-	{
-		if (curLine==20)
-		{
-			if (curClock<256 && (regs2C02[1]&0x10))
-			{
-				SpriteCompute(curClock,curLine-20);
-			}
-
-			if (curClock==0)
-			{
-				regs2C02[2]&=0xBF;
-			}
-			if (curClock==256 && regs2C02[1]&0x08)
-			{
-				PPU_FVc=PPU_FV;
-				PPU_Vc=PPU_V;
-				PPU_Hc=PPU_H;
-				PPU_VTc=PPU_VT;
-				PPU_HTc=PPU_HT;
-			}
-			// DUMMY line
-			if ((curClock<256) && (regs2C02[1]&0x08))
-			{
-				FetchBGData(20,curClock+16);
-			}
-
-			if ((curClock>=320) && (curClock<=335) && (regs2C02[1]&0x08))
-			{
-				FetchBGData(20,curClock-320);
-				tileData1_latch>>=8;
-				tileData2_latch>>=8;
-				attr1_latch>>=8;
-				attr2_latch>>=8;
-			}
-			/*
-			if (curClock==340)
-				field++;
-			if ((curClock==340)&&(field&1))
-				curClock++;*/
-		}
-		else
-		{
-			if (curLine<261)
-			{
-				if (curClock<256 && (regs2C02[1]&0x10))
-				{
-					SpriteCompute(curClock,curLine-20);
-					SpriteRender(curClock);
-				}
-
-				if ((curClock<256) && (regs2C02[1]&0x08) && ((curClock>7) || (regs2C02[1]&0x02)))
-				{
-					uint8_t shift=PPU_FHl;
-
-					uint16_t fetchMask=0x0001;
-					fetchMask<<=shift;
-
-					uint8_t col1 = fetchMask & tileData1_latch;
-					uint8_t col2 = fetchMask & tileData2_latch;
-					uint8_t col3 = fetchMask & attr1_latch;
-					uint8_t col4 = fetchMask & attr2_latch;
-					col1>>=shift;
-					col2>>=shift;
-					col3>>=shift;
-					col4>>=shift;
-					
-					col1<<=0;
-					col2<<=1;
-					col3<<=2;
-					col4<<=3;
-
-					tileData1_latch>>=1;
-					tileData2_latch>>=1;
-					attr1_latch>>=1;
-					attr2_latch>>=1;
-
-					uint8_t colbpl = col1|col2;
-
-					uint8_t attrshift=(PPU_VTc&0x02)<<1;
-					attrshift|=PPU_HTc&0x02;
-
-					uint8_t col=colbpl|col3|col4;
-					if (colbpl==0)
-					{
-						lastPixelValue=palIndex[spColour];
-						outputTexture[(curLine-21)*WIDTH+curClock]=nesColours[palIndex[spColour]];
-					}
-					else
-					{
-						//printf("MM %02X\n",col&0xF);
-						if (spZero && lastCollision==0 && spColour)
-						{
-							lastCollision=1;
-							regs2C02[2]|=0x40;
-						}
-						if (!spBack && spColour)
-						{
-							lastPixelValue=palIndex[spColour];
-							outputTexture[(curLine-21)*WIDTH + curClock]=nesColours[palIndex[spColour]];
-						}
-						else
-						{
-							lastPixelValue=palIndex[col];
-							outputTexture[(curLine-21)*WIDTH + curClock]=nesColours[palIndex[col]];
-						}
-					}
-					//spColour=0;
-				}
-				if ((curClock<256) && ((regs2C02[1]&0x08)==0))
-				{
-					uint16_t ppuAddr=(PPU_FVc<<12)|(PPU_Vc<<11)|(PPU_Hc<<10)|(PPU_VTc<<5)|PPU_HTc;
-					ppuAddr&=0x3FFF;
-					if (ppuAddr>0x3EFF)
-					{
-						lastPixelValue=palIndex[ppuAddr&0x1F];
-						outputTexture[(curLine-21)*WIDTH + curClock]=nesColours[lastPixelValue];
-					}
-				}
-
-				if ((curClock<256) && (regs2C02[1]&0x08))
-				{
-					FetchBGData(curLine-21,curClock+16);
-				}
-				if ((curClock>=256) && (curClock<=319) && (regs2C02[1]&0x10))
-				{
-					SpriteFetch(curClock);
-				}
-				if ((curClock>=320) && (curClock<=335) && (regs2C02[1]&0x08))
-				{
-					FetchBGData(curLine-20,curClock-320);
-					if (curClock==328)
-					{
-						tileData1_latch>>=8;
-						tileData2_latch>>=8;
-						attr1_latch>>=8;
-						attr2_latch>>=8;
-					}
-				}
-
-			}
-			else
-			{
-				// IDLE PPU
-			}
-		}
-	}
-#endif
+	uint16_t curLine=0;
+	uint16_t curClock=0;
 
 	curLine=PPU_vClock&0x1FF;
 	curClock=PPU_hClock&0x1FF;
@@ -2042,61 +1203,6 @@ Color 30	 2.743	 1.960	 1.000
 			// background colour
 		}
 	}
-#if !USE_EDL_PPU
-
-//	cClock+=8;		// gives 12 phase stepping for colour clock (which results in 21.47/6)
-	curClock++;
-	if ((curClock==320) && (regs2C02[1]&0x08))
-	{
-		//pretend this is the horizontal blanking pulse?
-		uint16_t tmpV=(PPU_Vc<<8)|(PPU_VTc<<3)|PPU_FVc;
-
-		if (curLine>=21)
-		{
-			// Check for VT overflow this operation
-			if (PPU_FVc==7 && PPU_VTc==29)
-			{
-				tmpV+=8+8;
-			}
-			tmpV++;
-		}
-		PPU_Vc=(tmpV&0x100)>>8;
-		PPU_VTc=(tmpV&0xF8)>>3;
-		PPU_FVc=(tmpV&0x07);
-
-		// RELOAD here apparantly
-		PPU_Hc=PPU_H;
-		PPU_HTc=PPU_HT;
-		PPU_FHl=PPU_FH;
-	}
-	if (curClock>=341)
-	{
-		curClock=0;
-		curLine++;
-		lastCollision=0;
-		SP_BUF_CurSprite=0;
-		SP_BUF_RastZeroInRange=SP_BUF_ZeroInRange;
-		SP_BUF_ZeroInRange=0;
-		if (curLine==20)
-		{
-			regs2C02[2]&=0x7F;
-		}
-		if (curLine>=262)
-		{
-			if (ntsc_file)
-			{
-				triCnt--;
-				if (triCnt==0)
-				{
-					fclose(ntsc_file);
-					dumpStart=0;
-				}
-			}
-			curLine=0;
-			regs2C02[2]|=0x80;
-		}
-	}
-#endif
 }
 
 //////////////////////// NOISES //////////////////////////
