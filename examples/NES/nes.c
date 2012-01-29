@@ -44,14 +44,13 @@ uint8_t PPU_PinGetPIN_ALE();
 uint8_t PPU_PinGetPIN__RE();
 uint8_t PPU_PinGetPIN__WE();
 
-uint16_t MAIN_PinGetPIN_AB();
-uint8_t MAIN_PinGetPIN_DB();
-void MAIN_PinSetPIN_DB(uint8_t);
-void MAIN_PinSetPIN_O0(uint8_t);
-void MAIN_PinSetPIN_SO(uint8_t);
-uint8_t MAIN_PinGetPIN_RW();
-void MAIN_PinSetPIN__IRQ(uint8_t);
-void MAIN_PinSetPIN__RES(uint8_t);
+uint16_t MAIN_PinGetA();
+uint8_t MAIN_PinGetD();
+void MAIN_PinSetD(uint8_t);
+void MAIN_PinSetCLK(uint8_t);
+uint8_t MAIN_PinGetRW();
+void MAIN_PinSet_IRQ(uint8_t);
+void MAIN_PinSet_RES(uint8_t);
 
 uint8_t *prgRom;
 uint32_t prgRomSize;
@@ -337,7 +336,9 @@ uint8_t GetByte(uint16_t addr)
 	}
 	if (addr<0x4000)
 	{
+#if !USE_EDL_PPU
 		return IORead(addr&0x7);
+#endif
 	}
 	if (addr<0x6000)
 	{
@@ -498,7 +499,9 @@ void SetByte(uint16_t addr,uint8_t byte)
 	}
 	if (addr<0x4000)
 	{
+#if !USE_EDL_PPU
 		IOWrite(addr&0x7,byte);
+#endif
 		return;
 	}
 	if (addr<0x6000)
@@ -893,117 +896,15 @@ int NTSCClock;
 uint32_t ppuCycleCount=0;
 uint32_t cpuCycleCount=0;
 
-#define SIMPLE_TICK	0
-
 static uint16_t lastPC;
-void TickChips(int MasterClock)
+
+void ClockCPU(int cpuClock)
 {
-		uint16_t addr; 
-#if SIMPLE_TICK
-
-	int ColourClock=MasterClock%12;
-	if ((MasterClock%24)==0)
+	uint16_t addr; 
+	//if (cpuClock==0)
 	{
-		MAIN_PinSetPIN_O0(1);
-		addr = MAIN_PinGetPIN_AB();
-
-		if (MAIN_DEBUG_SYNC)
-		{
-			printf("%04X CYC:%3d SL:%d\n",addr,(PPU_hClock&0x1FF),(PPU_vClock&0x1FF)<20?(PPU_vClock&0x1FF)+241:(PPU_vClock&0x1FF)-21);
-			//ppuCycleCount=0;
-			lastPC=addr;
-
-			if (isBreakpoint(0,lastPC))
-			{
-				stopTheClock=1;
-			}
-		}
-
-		// Phase is 1 (LS139 decode gives us DBE low when Phase 1, Address=001x xxxx xxxx xxxx
-#if USE_EDL_PPU
-		if (1 && ((addr&0x8000)==0) && ((addr&0x4000)==0) && ((addr&0x2000)==0x2000))
-		{
-			PPU_PinSetPIN_RS(addr&0x7);
-			PPU_PinSetPIN_RW(MAIN_PinGetPIN_RW());
-			PPU_PinSetPIN_D(MAIN_PinGetPIN_DB());
-
-			PPU_PinSetPIN__DBE(0);
-			if (MAIN_PinGetPIN_RW())
-			{
-				MAIN_PinSetPIN_DB(PPU_PinGetPIN_D());
-			}
-		}
-		else
-#endif
-		{
-			if (MAIN_PinGetPIN_RW())
-			{
-				uint8_t  data = GetByte(addr);
-				MAIN_PinSetPIN_DB(data);
-			}
-			if (!MAIN_PinGetPIN_RW())
-			{
-				SetByte(addr,MAIN_PinGetPIN_DB());
-			}
-		}
-
-		PPU_PinSetPIN__DBE(1);
-
-		UpdateHardware();
-
-		MAIN_PinSetPIN__IRQ(1);//VIA1_PinGetPIN__IRQ());
-		/*			if (regs2C02[0]&0x80)
-					stopTheClock=1;*/
-		//			printf("NMI Val : %d\n",(~(regs2C02[0]&regs2C02[2])>>7)&0x01);
-#if USE_EDL_PPU
-		MAIN_PinSetPIN__NMI(PPU_PinGetPIN__INT());
-#else
-		MAIN_PinSetPIN__NMI((~(regs2C02[0]&regs2C02[2])>>7)&0x01);
-#endif
-		//			printf("PPU REGS : CONTROL %02X,MASK %02X,STATUS %02X\n",PPU_Control,PPU_Mask,PPU_Status);
-		MAIN_PinSetPIN_O0(0);
-
-		int aa;
-		for (aa=0;aa<3;aa++)
-		{
-		ppuCycleCount++;
-#if USE_EDL_PPU
-		static uint8_t vramLowAddressLatch=0;
-
-		PPU_PinSetPIN_CLK(1);
-		if (PPU_PinGetPIN_ALE()&1)
-		{
-			vramLowAddressLatch=PPU_PinGetPIN_AD();
-		}
-		if ((PPU_PinGetPIN__RE()&1)==0)
-		{
-			uint16_t addr = ((PPU_PinGetPIN_PA()&0x3F)<<8)|vramLowAddressLatch;
-			PPU_PinSetPIN_AD(PPUGetByte(addr));
-		}
-		PPU_PinSetPIN_CLK(0);
-#else
-#endif
-		Tick2C02();
-		}
-	}
-	//			if (ntsc_file /*&& (NTSCClock==0)*/)
-	{
-		GenerateNTSC(ColourClock);
-		if (NTSCClock==2)
-		{
-			WriteNTSC(ColourClock);
-		}
-	}
-#else
-	int cpuClock=MasterClock%24;
-	int ppuClock=MasterClock%8;
-	int ColourClock=MasterClock%12;
-	NTSCClock=MasterClock%3;
-	if (cpuClock==0)
-	{
-		cpuCycleCount++;
-		MAIN_PinSetPIN_O0(1);
-		addr = MAIN_PinGetPIN_AB();
+		MAIN_PinSetCLK(cpuClock&1);
+		addr = MAIN_PinGetA();
 
 		if (MAIN_DEBUG_SYNC)
 		{
@@ -1018,51 +919,72 @@ void TickChips(int MasterClock)
 		}
 
 		// Phase is 1 (LS139 decode gives us DBE low when Phase 1, Address=001x xxxx xxxx xxxx
+		uint8_t dbe_signal=(MAIN_PinGetM2()&1) && ((addr&0x8000)==0) && ((addr&0x4000)==0) && ((addr&0x2000)==0x2000)?0:1;
 #if USE_EDL_PPU
-		if (1 && ((addr&0x8000)==0) && ((addr&0x4000)==0) && ((addr&0x2000)==0x2000))
+//		if (1/*MAIN_PinGetM2()*/ && ((addr&0x8000)==0) && ((addr&0x4000)==0) && ((addr&0x2000)==0x2000))
 		{
 			PPU_PinSetPIN_RS(addr&0x7);
-			PPU_PinSetPIN_RW(MAIN_PinGetPIN_RW());
-			PPU_PinSetPIN_D(MAIN_PinGetPIN_DB());
+			PPU_PinSetPIN_RW(MAIN_PinGetRW());
+			PPU_PinSetPIN_D(MAIN_PinGetD());
 
-			PPU_PinSetPIN__DBE(0);
-			if (MAIN_PinGetPIN_RW())
+			PPU_PinSetPIN__DBE(dbe_signal);
+			if (MAIN_PinGetRW())
 			{
-				MAIN_PinSetPIN_DB(PPU_PinGetPIN_D());
+				MAIN_PinSetD(PPU_PinGetPIN_D());
 			}
 		}
-		else
+//		else
 #endif
 		{
-			if (MAIN_PinGetPIN_RW())
+			// Because we are not yet handling ram/rom etc as chips - the below check takes care of making sure we only get a single access
+			static int lastM2=1111;
+			if (lastM2!=(MAIN_PinGetM2()&1))
 			{
-				uint8_t  data = GetByte(addr);
-				MAIN_PinSetPIN_DB(data);
-			}
-			if (!MAIN_PinGetPIN_RW())
-			{
-				SetByte(addr,MAIN_PinGetPIN_DB());
+				lastM2=MAIN_PinGetM2()&1;
+				if (lastM2==1 && dbe_signal)
+				{
+					if (MAIN_PinGetRW())
+					{
+						uint8_t  data = GetByte(addr);
+						MAIN_PinSetD(data);
+					}
+					if (!MAIN_PinGetRW())
+					{
+						SetByte(addr,MAIN_PinGetD());
+					}
+				}
 			}
 		}
-
-		PPU_PinSetPIN__DBE(1);
+	//	PPU_PinSetPIN__DBE(dbe_signal);
 
 		UpdateHardware();
 
-		MAIN_PinSetPIN__IRQ(1);//VIA1_PinGetPIN__IRQ());
+		MAIN_PinSet_IRQ(1);//VIA1_PinGetPIN__IRQ());
 		/*			if (regs2C02[0]&0x80)
 					stopTheClock=1;*/
 		//			printf("NMI Val : %d\n",(~(regs2C02[0]&regs2C02[2])>>7)&0x01);
 #if USE_EDL_PPU
-		MAIN_PinSetPIN__NMI(PPU_PinGetPIN__INT());
+		MAIN_PinSet_NMI(PPU_PinGetPIN__INT());
 #else
-		MAIN_PinSetPIN__NMI((~(regs2C02[0]&regs2C02[2])>>7)&0x01);
+		MAIN_PinSet_NMI((~(regs2C02[0]&regs2C02[2])>>7)&0x01);
 #endif
 		//			printf("PPU REGS : CONTROL %02X,MASK %02X,STATUS %02X\n",PPU_Control,PPU_Mask,PPU_Status);
-		MAIN_PinSetPIN_O0(0);
+		//MAIN_PinSetCLK(0);
 
 
 	}
+
+#endif
+}
+
+void TickChips(int MasterClock)
+{
+	int cpuClock=MasterClock;//>>1;		// Master clock assumed to be double real speed for now
+	int ppuClock=MasterClock%8;
+	int ColourClock=MasterClock%12;
+	NTSCClock=MasterClock%3;
+
+	ClockCPU(cpuClock);
 	if (ppuClock==0)
 	{
 		ppuCycleCount++;
@@ -1168,9 +1090,8 @@ int main(int argc,char**argv)
 	if (InitialiseMemory())
 		return -1;
 
-	MAIN_PinSetPIN_SO(1);
-	MAIN_PinSetPIN__IRQ(1);
-	MAIN_PinSetPIN__NMI(1);
+	MAIN_PinSet_IRQ(1);
+	MAIN_PinSet_NMI(1);
 
 	MAIN_PC=GetByte(0xFFFC);
 	MAIN_PC|=GetByte(0xFFFD)<<8;
