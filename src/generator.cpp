@@ -468,7 +468,7 @@ Value* CIdentifier::codeGen(CodeGenContext& context)
 		{
 			// At this point, we need to get PinGet method and call it.
 			
-			Function* function=context.LookupFunctionInExternalModule(module,"PinGet"+name);
+			Function* function=context.LookupFunctionInExternalModule(module,context.symbolPrepend+"PinGet"+name);
 
 			std::vector<Value*> args;
 			return CallInst::Create(function,args,"pinValue",context.currentBlock());
@@ -1116,7 +1116,7 @@ Value* CAssignment::generateAssignment(BitVariable& to,const CIdentifier& toIden
 		else
 		{
 			// At this point, we need to get PinSet method and call it.
-			Function* function = context.LookupFunctionInExternalModule(toIdent.module,"PinSet"+toIdent.name);
+			Function* function = context.LookupFunctionInExternalModule(toIdent.module,context.symbolPrepend+"PinSet"+toIdent.name);
 
 			std::vector<Value*> args;
 			args.push_back(final);
@@ -1663,7 +1663,7 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 				type=ArrayType::get(Type::getIntNTy(getGlobalContext(),size.integer.getLimitedValue()),power2.getLimitedValue());
 			}
 
-			if (internal || !context.isRoot)
+			if (internal /*|| !context.isRoot*/)
 			{
 				temp.value = new GlobalVariable(*context.module,type, false, GlobalValue::PrivateLinkage,NULL,context.symbolPrepend+id.name);
 			}
