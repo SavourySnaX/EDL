@@ -16,6 +16,8 @@
 
 #include "gui\debugger.h"
 
+#define ENABLE_LOGIC_ANALYSER	0
+
 #define USE_EDL_PPU	1
 
 #include "jake\ntscDecode.h"
@@ -723,11 +725,15 @@ int g_traceStep=0;
 #define NTSC_WIDTH	(NTSC_SAMPLES_PER_LINE)
 #define NTSC_HEIGHT	(NTSC_LINES_PER_FRAME)
 
+#define TIMING_WIDTH	640*2
+#define TIMING_HEIGHT	280
+
 #define MAX_WINDOWS		(8)
 
 #define MAIN_WINDOW		0
 #define NTSC_WINDOW		1
 #define REGISTER_WINDOW		2
+#define TIMING_WINDOW		3
 
 GLFWwindow windows[MAX_WINDOWS];
 unsigned char *videoMemory[MAX_WINDOWS];
@@ -904,6 +910,10 @@ void ClockCPU(int cpuClock)
 	//if (cpuClock==0)
 	{
 		MAIN_PinSetCLK(cpuClock&1);
+#if ENABLE_LOGIC_ANALYSER
+		RecordPin(0,cpuClock&1);
+		RecordPin(1,MAIN_PinGetM2()&1);
+#endif
 		addr = MAIN_PinGetA();
 
 		if (MAIN_DEBUG_SYNC)
@@ -920,6 +930,9 @@ void ClockCPU(int cpuClock)
 
 		// Phase is 1 (LS139 decode gives us DBE low when Phase 1, Address=001x xxxx xxxx xxxx
 		uint8_t dbe_signal=(MAIN_PinGetM2()&1) && ((addr&0x8000)==0) && ((addr&0x4000)==0) && ((addr&0x2000)==0x2000)?0:1;
+#if ENABLE_LOGIC_ANALYSER
+		RecordPin(2,dbe_signal&1);
+#endif
 #if USE_EDL_PPU
 //		if (1/*MAIN_PinGetM2()*/ && ((addr&0x8000)==0) && ((addr&0x4000)==0) && ((addr&0x2000)==0x2000))
 		{
@@ -974,6 +987,8 @@ void ClockCPU(int cpuClock)
 
 	}
 
+#if ENABLE_LOGIC_ANALYSER
+	UpdatePinTick();
 #endif
 }
 
@@ -1038,6 +1053,19 @@ int main(int argc,char**argv)
 	/// Initialize GLFW 
 	glfwInit(); 
 
+#if ENABLE_LOGIC_ANALYSER
+	// Open timing OpenGL window 
+	if( !(windows[TIMING_WINDOW]=glfwOpenWindow( TIMING_WIDTH, TIMING_HEIGHT, GLFW_WINDOWED,"Logic Analyser",NULL)) ) 
+	{ 
+		glfwTerminate(); 
+		return 1; 
+	} 
+
+	glfwSetWindowPos(windows[TIMING_WINDOW],0,640);
+
+	glfwMakeContextCurrent(windows[TIMING_WINDOW]);
+	setupGL(TIMING_WINDOW,TIMING_WIDTH,TIMING_HEIGHT);
+#endif
 	// Open registers OpenGL window 
 	if( !(windows[REGISTER_WINDOW]=glfwOpenWindow( REGISTER_WIDTH, REGISTER_HEIGHT, GLFW_WINDOWED,"Main CPU",NULL)) ) 
 	{ 
@@ -1117,12 +1145,10 @@ int main(int argc,char**argv)
 
 		if (MasterClock>=341*262*2*4 || stopTheClock)
 		{
-			static int twofields=0;
+			static int twofields=1;
 			static int normalSpeed=1;
 
 //			stopTheClock=1;
-			if (twofields&1)
-				ntscDecodeTick();
 			if (MasterClock>=341*262*2*4)
 			{
 				twofields++;
@@ -1133,6 +1159,10 @@ int main(int argc,char**argv)
 			ShowScreen(MAIN_WINDOW,WIDTH,HEIGHT);
 			glfwSwapBuffers();
             		
+			if (twofields&1)
+			{
+				ntscDecodeTick();
+			}
 			glfwMakeContextCurrent(windows[NTSC_WINDOW]);
 			ShowScreen(NTSC_WINDOW,NTSC_WIDTH,NTSC_HEIGHT);
 			glfwSwapBuffers();
@@ -1143,6 +1173,14 @@ int main(int argc,char**argv)
 			ShowScreen(REGISTER_WINDOW,REGISTER_WIDTH,REGISTER_HEIGHT);
 			glfwSwapBuffers();
 			
+#if ENABLE_LOGIC_ANALYSER			
+			glfwMakeContextCurrent(windows[TIMING_WINDOW]);
+			DrawTiming(videoMemory[TIMING_WINDOW],TIMING_WIDTH);
+			UpdateTimingWindow(windows[TIMING_WINDOW]);
+			ShowScreen(TIMING_WINDOW,TIMING_WIDTH,TIMING_HEIGHT);
+			glfwSwapBuffers();
+#endif
+
 			glfwPollEvents();
 			
 			if (CheckKey(GLFW_KEY_INSERT))
