@@ -934,6 +934,7 @@ void ClockCPU(int cpuClock)
 #if ENABLE_LOGIC_ANALYSER
 		RecordPin(2,dbe_signal&1);
 #endif
+		_AudioAddData(0,(dbe_signal&1)?32767:-32768);
 #if USE_EDL_PPU
 //		if (1/*MAIN_PinGetM2()*/ && ((addr&0x8000)==0) && ((addr&0x4000)==0) && ((addr&0x2000)==0x2000))
 		{
@@ -1146,6 +1147,7 @@ int main(int argc,char**argv)
 
 			TickChips(MasterClock);//cpuClock,ppuClock,ColourClock,NTSCClock);
 			MasterClock+=1;
+			UpdateAudio();
 		}
 
 		if (MasterClock>=341*262*2*4 || stopTheClock)
@@ -2166,7 +2168,7 @@ ALboolean ALFWShutdownOpenAL()
 
 int curPlayBuffer=0;
 
-#define BUFFER_LEN		(44100/50)
+#define BUFFER_LEN		(44100/60)
 
 BUFFER_FORMAT audioBuffer[BUFFER_LEN];
 int amountAdded=0;
@@ -2210,14 +2212,14 @@ void _AudioAddData(int channel,int16_t dacValue)
 }
 
 uint32_t tickCnt=0;
-uint32_t tickRate=((22152*4096)/(44100/50));
+uint32_t tickRate=((341*262*2*4)/(44100/60));
 
 /* audio ticked at same clock as everything else... so need a step down */
 void UpdateAudio()
 {
-	tickCnt+=1*4096;
+	tickCnt+=1;
 	
-	if (tickCnt>=tickRate*50)
+	if (tickCnt>=tickRate*60)
 	{
 		tickCnt-=tickRate;
 
