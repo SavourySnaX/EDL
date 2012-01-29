@@ -994,14 +994,8 @@ void ClockCPU(int cpuClock)
 #endif
 }
 
-void TickChips(int MasterClock)
+void ClockPPU(int ppuClock)
 {
-	int cpuClock=MasterClock;//>>1;		// Master clock assumed to be double real speed for now
-	int ppuClock=MasterClock%8;
-	int ColourClock=MasterClock%12;
-	NTSCClock=MasterClock%3;
-
-	ClockCPU(cpuClock);
 	if (ppuClock==0)
 	{
 		ppuCycleCount++;
@@ -1023,6 +1017,18 @@ void TickChips(int MasterClock)
 #endif
 		Tick2C02();
 	}
+
+}
+
+void TickChips(int MasterClock)
+{
+	int cpuClock=MasterClock;//>>1;		// Master clock assumed to be double real speed for now
+	int ppuClock=MasterClock%8;
+	int ColourClock=MasterClock%12;
+	NTSCClock=MasterClock%3;
+
+	ClockCPU(cpuClock);
+	ClockPPU(ppuClock);
 	//			if (ntsc_file /*&& (NTSCClock==0)*/)
 #if ENABLE_TV
 	{
