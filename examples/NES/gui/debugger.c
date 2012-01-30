@@ -4,6 +4,7 @@
 #include <stdarg.h>
 #include <string.h>
 #include <stdint.h>
+#include <stdio.h>
 
 #include "font.h"
 
@@ -186,17 +187,18 @@ void DrawRegisterMain(unsigned char* buffer,unsigned int width,uint16_t address,
 	DrawRegister(0,MAIN_DIS_,buffer,width,address,GetMem,decodeDisasm);
 }
 
-#define MAX_CAPTURE		(65536)
-#define MAX_PINS		(4)
+#define MAX_CAPTURE		(341*262*2*4)
+#define MAX_PINS		(5)
 
 unsigned char lohi[MAX_PINS][MAX_CAPTURE];
 
 int bufferPosition=0;
 uint32_t timeStretch=0x10000;
+uint32_t timeOffset=0;
 
 void RecordPin(int pinPos,uint8_t pinVal)
 {
-	if (pinPos==3)
+	if (pinPos>=3)
 	{
 		lohi[pinPos][bufferPosition]=pinVal;
 	}
@@ -209,6 +211,74 @@ void UpdatePinTick()
 	bufferPosition++;
 	if (bufferPosition>=MAX_CAPTURE)
 		bufferPosition=0;
+}
+
+uint32_t cols[2]={0x00FFFFFF,0x00808080};
+
+void DrawTimingA(unsigned char* buffer,unsigned int width)
+{
+	int a,b,c;
+	int pulsepos;
+	int pulsestart;
+	uint32_t* argb=(uint32_t*)buffer;
+/*
+	pulsepos=(bufferPosition-(512*2-1))<<16;
+	if ((pulsepos>>16)<0)
+	{
+		pulsepos+=MAX_CAPTURE<<16;
+	}
+	pulsestart=pulsepos;
+*/
+	pulsepos=bufferPosition<<16;
+	pulsepos+=timeOffset;
+	if ((pulsepos>>16)>MAX_CAPTURE)
+	{
+		pulsepos-=MAX_CAPTURE<<16;
+	}
+	pulsestart=pulsepos;
+	// Clear graph space
+	
+	for (b=0;b<512*2;b++)
+	{
+		for (c=50;c<256+50;c++)
+		{
+			argb[80+b+c*width]=0;
+		}
+	}
+
+	uint32_t level;
+	for (a=3;a<MAX_PINS;a++)
+	{
+		pulsepos=pulsestart;
+		uint32_t lastLevel=50+(255-(lohi[a][pulsepos>>16]));
+		for (b=0;b<512*2;b++)
+		{
+			int c;
+			int low;
+			int high;
+
+			level = 50+(255-(lohi[a][pulsepos>>16]));
+			low=lastLevel;
+			high=level;
+			if (low>high)
+			{
+				low=level;
+				high=lastLevel;
+			}
+			for (c=low;c<=high;c++)
+			{
+				argb[80+b+c*width]=cols[a-3];
+			}
+
+			pulsepos+=timeStretch;
+			if ((pulsepos>>16)>=MAX_CAPTURE)
+			{
+				pulsepos=0;
+			}
+
+			lastLevel=level;
+		}
+	}
 }
 
 void DrawTiming(unsigned char* buffer,unsigned int width)
@@ -230,45 +300,38 @@ void DrawTiming(unsigned char* buffer,unsigned int width)
 //	PrintAt(buffer,width,255,255,255,0,30,"SID 3");
 
 	pulsepos=bufferPosition<<16;
-	prevpulsepos=bufferPosition<<16;
-
-	for (a=0;a<MAX_PINS;a++)
+	pulsepos+=timeOffset;
+	if ((pulsepos>>16)>MAX_CAPTURE)
 	{
-		for (b=0;b<512;b++)
+		pulsepos-=MAX_CAPTURE<<16;
+	}
+	prevpulsepos=pulsepos;
+
+	DrawTimingA(buffer,width);
+
+	for (a=0;a<MAX_PINS-2;a++)
+	{
+		for (b=0;b<512*2;b++)
 		{
-			if (a!=3)
+			if (lohi[a][pulsepos>>16])
 			{
-				if (lohi[a][pulsepos>>16])
-				{
-					buffer[(80+b+(a*8*3+5)*width)*4+0]=0xFF;
-					buffer[(80+b+(a*8*3+5)*width)*4+1]=0xFF;
-					buffer[(80+b+(a*8*3+5)*width)*4+2]=0xFF;
-					buffer[(80+b+(a*8*3+8*2+1)*width)*4+0]=0x00;
-					buffer[(80+b+(a*8*3+8*2+1)*width)*4+1]=0x00;
-					buffer[(80+b+(a*8*3+8*2+1)*width)*4+2]=0x00;
-				}
-				else
-				{
-					buffer[(80+b+(a*8*3+5)*width)*4+0]=0x00;
-					buffer[(80+b+(a*8*3+5)*width)*4+1]=0x00;
-					buffer[(80+b+(a*8*3+5)*width)*4+2]=0x00;
-					buffer[(80+b+(a*8*3+8*2+1)*width)*4+0]=0xFF;
-					buffer[(80+b+(a*8*3+8*2+1)*width)*4+1]=0xFF;
-					buffer[(80+b+(a*8*3+8*2+1)*width)*4+2]=0xFF;
-				}
+				buffer[(80+b+(a*8*3+5)*width)*4+0]=0xFF;
+				buffer[(80+b+(a*8*3+5)*width)*4+1]=0xFF;
+				buffer[(80+b+(a*8*3+5)*width)*4+2]=0xFF;
+				buffer[(80+b+(a*8*3+8*2+1)*width)*4+0]=0x00;
+				buffer[(80+b+(a*8*3+8*2+1)*width)*4+1]=0x00;
+				buffer[(80+b+(a*8*3+8*2+1)*width)*4+2]=0x00;
 			}
 			else
 			{
-				buffer[(80+b+(a*8*3+5+(lohi[a][pulsepos>>16]))*width)*4+0]=0xFF;
-				buffer[(80+b+(a*8*3+5+(lohi[a][pulsepos>>16]))*width)*4+1]=0xFF;
-				buffer[(80+b+(a*8*3+5+(lohi[a][pulsepos>>16]))*width)*4+2]=0xFF;
-//				buffer[(80+b+(a*8*3+8*2+1)*width)*4+0]=0x00;
-//				buffer[(80+b+(a*8*3+8*2+1)*width)*4+1]=0x00;
-//				buffer[(80+b+(a*8*3+8*2+1)*width)*4+2]=0x00;
+				buffer[(80+b+(a*8*3+5)*width)*4+0]=0x00;
+				buffer[(80+b+(a*8*3+5)*width)*4+1]=0x00;
+				buffer[(80+b+(a*8*3+5)*width)*4+2]=0x00;
+				buffer[(80+b+(a*8*3+8*2+1)*width)*4+0]=0xFF;
+				buffer[(80+b+(a*8*3+8*2+1)*width)*4+1]=0xFF;
+				buffer[(80+b+(a*8*3+8*2+1)*width)*4+2]=0xFF;
 			}
 
-			if (a!=3)
-			{
 			if (b!=0 && lohi[a][prevpulsepos>>16]!=lohi[a][pulsepos>>16])
 			{
 				int c;
@@ -289,7 +352,6 @@ void DrawTiming(unsigned char* buffer,unsigned int width)
 					buffer[(80+b+(a*8*3+c)*width)*4+2]=0x00;
 				}
 			}
-			}
 			prevpulsepos=pulsepos;
 			pulsepos+=timeStretch;
 			if ((pulsepos>>16)>=MAX_CAPTURE)
@@ -299,6 +361,8 @@ void DrawTiming(unsigned char* buffer,unsigned int width)
 		}
 	}
 }
+
+int KeyDownWindow(int key,GLFWwindow window);
 
 void UpdateTimingWindow(GLFWwindow window)
 {
@@ -316,6 +380,16 @@ void UpdateTimingWindow(GLFWwindow window)
 			timeStretch<<=1;
 		ClearKey(GLFW_KEY_UP);
 	}
+
+	if (KeyDownWindow(GLFW_KEY_LEFT,window))
+	{
+		timeOffset-=1<<16;
+	}
+	if (KeyDownWindow(GLFW_KEY_RIGHT,window))
+	{
+		timeOffset+=1<<16;
+	}
+
 }
 
 

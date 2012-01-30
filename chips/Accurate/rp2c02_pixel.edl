@@ -632,10 +632,10 @@ INSTRUCTION	PixelClockLine	"Line20"	%000010100
 	{
 		VramAddress_counter<-VramAddress;
 	}
-	IF oddField & (hClock==339) & BGShow
-	{
-		hClock<-hClock+1;
-	}
+#	IF oddField & (hClock==339) & BGShow
+#	{
+#		hClock<-hClock+1;
+#	}
 }
 
 

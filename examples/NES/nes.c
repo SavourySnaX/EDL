@@ -44,6 +44,7 @@ uint8_t PPU_PinGetAD();
 uint8_t PPU_PinGetALE();
 uint8_t PPU_PinGet_RE();
 uint8_t PPU_PinGet_WE();
+uint8_t PPU_PinGetVIDEO();
 
 uint16_t MAIN_PinGetA();
 uint8_t MAIN_PinGetD();
@@ -471,7 +472,7 @@ int g_traceStep=0;
 #define NTSC_HEIGHT	(NTSC_LINES_PER_FRAME)
 
 #define TIMING_WIDTH	640*2
-#define TIMING_HEIGHT	280
+#define TIMING_HEIGHT	320
 
 #define MAX_WINDOWS		(8)
 
@@ -583,6 +584,11 @@ int KeyDown(int key)
 	return keyArray[key].curState==GLFW_PRESS;
 }
 
+int KeyDownWindow(int key,GLFWwindow window)
+{
+	return (keyArray[key].curState==GLFW_PRESS) && (keyArray[key].window==window);
+}
+
 int CheckKey(int key)
 {
 	return keyArray[key].debounced;
@@ -631,7 +637,7 @@ int MasterClock=0;
 FILE* ntsc_file=NULL;
 
 void AvgNTSC();				// kicks sample to ntsc tv (1/3 master clock rate)
-void SampleNTSC(int videoLevel);	// adds sample to internal buffer to generate average for above
+void SampleNTSC(uint8_t videoLevel);	// adds sample to internal buffer to generate average for above
 
 int NTSCClock;
 
@@ -730,6 +736,9 @@ void ClockPPU(int ppuClock)
 
 }
 
+void GenerateNTSC(int colourClock);
+void writeNTSC();
+
 void TickChips(int MasterClock)
 {
 	int cpuClock=MasterClock%24;
@@ -739,12 +748,15 @@ void TickChips(int MasterClock)
 
 	ClockCPU(MasterClock);
 	ClockPPU(MasterClock);
-//	if (ppuClock==0)
-//		Tick2C02();
+	if (ppuClock==0)
+		Tick2C02();
 
 	//			if (ntsc_file /*&& (NTSCClock==0)*/)
 #if ENABLE_TV
 	{
+		GenerateNTSC(ColourClock);
+		if (NTSCClock==2)
+			writeNTSC();
 		SampleNTSC(PPU_PinGetVIDEO());
 		if (NTSCClock==2)
 		{
@@ -1039,8 +1051,46 @@ uint8_t activeNTSCSignalCol;
 #define SIGNAL_RANGE	(130)
 
 uint16_t avgNTSC[3];
+uint16_t sampleOld[3];
 
-void SampleNTSC(int actualLevel)
+void GenerateNTSC(int colourClock)
+{
+
+	int range = activeNTSCSignalHi-activeNTSCSignalLow;
+	int inRangeR=((colourClock+0+5)%12)<6;
+	int inRangeG=((colourClock+4+5)%12)<6;
+	int inRangeB=((colourClock+8+5)%12)<6;
+	int actualLevel=(range*TopBottomPercentage[(colourClock+activeNTSCSignalCol)%12])/128;
+/*
+	if (((regs2C02[1]&0x20 && inRangeR) ||
+	    (regs2C02[1]&0x40 && inRangeG) ||
+	    (regs2C02[1]&0x80 && inRangeB)) && activeNTSCDisplay)
+	{
+		actualLevel*=.546f;
+		actualLevel-=SIGNAL_RANGE*.0902f;
+	}
+//	else
+//		actualLevel+=15;
+*/
+	actualLevel+=activeNTSCSignalLow;
+//	if (actualLevel<0)
+//		printf("Level : %d\n",actualLevel);
+
+//	printf("Level : %02X\n",actualLevel);
+	sampleOld[NTSCClock]=actualLevel;
+	RecordPin(4,actualLevel);
+}
+
+void writeNTSC()
+{
+	uint8_t actualLevel=(sampleOld[0]+sampleOld[1]+sampleOld[2])/3;
+	ntscDecodeAddSample(actualLevel);
+//	printf("OLD : %d\n",actualLevel);
+//	fwrite(&actualLevel,1,1,ntsc_file);
+}
+
+
+void SampleNTSC(uint8_t actualLevel)
 {
 /*
 	int range = activeNTSCSignalHi-activeNTSCSignalLow;
@@ -1065,13 +1115,15 @@ void SampleNTSC(int actualLevel)
 */
 //	printf("Level : %02X\n",actualLevel);
 	avgNTSC[NTSCClock]=actualLevel;
+	RecordPin(3,actualLevel);
+	//printf("SAM : %d\n",actualLevel);
 }
 
 void AvgNTSC()
 {
 	uint8_t actualLevel=(avgNTSC[0]+avgNTSC[1]+avgNTSC[2])/3;
-	ntscDecodeAddSample(actualLevel);
-	RecordPin(3,actualLevel);
+//	ntscDecodeAddSample(actualLevel);
+//	printf("AVG : %d\n",actualLevel);
 //	fwrite(&actualLevel,1,1,ntsc_file);
 }
 
@@ -1206,6 +1258,8 @@ Color 30	 2.743	 1.960	 1.000
 			activeNTSCSignalHi=70;
 			// background colour
 		}
+		else
+			printf("hiccup\n");
 	}
 }
 
