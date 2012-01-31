@@ -187,14 +187,14 @@ void DrawRegisterMain(unsigned char* buffer,unsigned int width,uint16_t address,
 	DrawRegister(0,MAIN_DIS_,buffer,width,address,GetMem,decodeDisasm);
 }
 
-#define MAX_CAPTURE		(341*262*2*4)
+#define MAX_CAPTURE		(341*262*2*4*3)
 #define MAX_PINS		(5)
 
 unsigned char lohi[MAX_PINS][MAX_CAPTURE];
 
 int bufferPosition=0;
-uint32_t timeStretch=0x10000;
-uint32_t timeOffset=0;
+uint64_t timeStretch=0x10000;
+uint64_t timeOffset=0;
 
 void RecordPin(int pinPos,uint8_t pinVal)
 {
@@ -218,8 +218,8 @@ uint32_t cols[2]={0x00FFFFFF,0x00808080};
 void DrawTimingA(unsigned char* buffer,unsigned int width)
 {
 	int a,b,c;
-	int pulsepos;
-	int pulsestart;
+	uint64_t pulsepos;
+	uint64_t pulsestart;
 	uint32_t* argb=(uint32_t*)buffer;
 /*
 	pulsepos=(bufferPosition-(512*2-1))<<16;
@@ -284,8 +284,8 @@ void DrawTimingA(unsigned char* buffer,unsigned int width)
 void DrawTiming(unsigned char* buffer,unsigned int width)
 {
 	int a,b;
-	unsigned int pulsepos;
-	unsigned int prevpulsepos;
+	uint64_t pulsepos;
+	uint64_t prevpulsepos;
 
 	PrintAt(buffer,width,255,255,255,0,0,"CLK (CPU)");
 	PrintAt(buffer,width,255,255,255,0,3,"M2  (CPU)");

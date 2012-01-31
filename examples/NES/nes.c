@@ -16,8 +16,11 @@
 
 #include "gui\debugger.h"
 
-#define ENABLE_TV		1
-#define ENABLE_LOGIC_ANALYSER	1
+#define IS_COMPAT		0
+
+#define ENABLE_TV		0
+#define ENABLE_LOGIC_ANALYSER	0
+#define ENABLE_DEBUGGER		1
 
 #include "jake\ntscDecode.h"
 
@@ -59,8 +62,14 @@ uint32_t prgRomSize;
 uint8_t *chrRom;
 uint32_t chrRomSize;
 
-uint8_t* bnk0chr;
-uint8_t* bnk1chr;
+uint8_t* bnk00chr;
+uint8_t* bnk01chr;
+uint8_t* bnk02chr;
+uint8_t* bnk03chr;
+uint8_t* bnk10chr;
+uint8_t* bnk11chr;
+uint8_t* bnk12chr;
+uint8_t* bnk13chr;
 
 uint8_t chrRam[8192];
 uint8_t prgRam[8192];
@@ -69,6 +78,9 @@ uint8_t hMirror;
 uint8_t vMirror;
 
 int usingMMC1=0;
+int usingMMC3=0;
+int usingUxROM=0;
+int usingCNROM=0;
 
 // Step 1. Memory
 
@@ -98,13 +110,37 @@ uint8_t ppuRam[0x800];
 uint8_t PPUGetByte(uint16_t addr)
 {
 	addr&=0x3FFF;
+	if (addr<0x400)
+	{
+		return bnk00chr[addr&0x03FF];
+	}
+	if (addr<0x800)
+	{
+		return bnk01chr[addr&0x03FF];
+	}
+	if (addr<0xC00)
+	{
+		return bnk02chr[addr&0x03FF];
+	}
 	if (addr<0x1000)
 	{
-		return bnk0chr[addr&0x0FFF];		// WILL NEED FIXING
+		return bnk03chr[addr&0x03FF];
+	}
+	if (addr<0x1400)
+	{
+		return bnk10chr[addr&0x03FF];
+	}
+	if (addr<0x1800)
+	{
+		return bnk11chr[addr&0x03FF];
+	}
+	if (addr<0x1C00)
+	{
+		return bnk12chr[addr&0x03FF];
 	}
 	if (addr<0x2000)
 	{
-		return bnk1chr[addr&0x0FFF];		// WILL NEED FIXING
+		return bnk13chr[addr&0x03FF];
 	}
 	uint16_t chrAddr=(addr-0x2000)&0x3FF;
 	if (hMirror)
@@ -119,7 +155,7 @@ void PPUSetByte(uint16_t addr,uint8_t byte)
 	if (addr<0x2000)
 	{
 		chrRam[addr]=byte;
-		return;		/// assuming fixed tile ram
+		return;		/// assuming fixed tile ram		<---- this might need to be pageable! but doubtful
 	}
 	uint16_t chrAddr=(addr-0x2000)&0x3FF;
 	if (hMirror)
@@ -136,6 +172,8 @@ uint8_t controllerData=0;
 
 uint8_t* bnk0prg=NULL;
 uint8_t* bnk1prg=NULL;
+uint8_t* bnk2prg=NULL;
+uint8_t* bnk3prg=NULL;
 
 uint8_t GetByte(uint16_t addr)
 {
@@ -165,12 +203,20 @@ uint8_t GetByte(uint16_t addr)
 	{
 		return prgRam[addr-0x6000];
 	}
-	if (addr<0xC000)
+	if (addr<0xA000)
 	{
 		return bnk0prg[addr-0x8000];
 	}
+	if (addr<0xC000)
+	{
+		return bnk1prg[addr-0xA000];
+	}
+	if (addr<0xE000)
+	{
+		return bnk2prg[addr-0xC000];
+	}
 
-	return bnk1prg[addr-0xC000];
+	return bnk3prg[addr-0xE000];
 }
 
 uint8_t shiftRegister=0;
@@ -181,7 +227,7 @@ uint8_t MMC1_ChrBank0=0;
 uint8_t MMC1_ChrBank1=0;
 uint8_t MMC1_PrgBank=0;
 
-void WriteMMC1_Control(uint8_t byte)
+void WriteMMC1_Control(uint8_t byte)	//NB need to set bank configs up here as well!!!
 {
 	byte&=0x1F;
 	if (MMC1_Control!=byte)
@@ -213,12 +259,21 @@ void WriteMMC1_ChrBank0(uint8_t byte)
 	MMC1_ChrBank0=byte;
 	if (MMC1_Control&0x10)
 	{
-		bnk0chr=&chrRom[0x1000*(byte&0x1F)];
+		bnk00chr=&chrRom[0x1000*(byte&0x1F)];
+		bnk01chr=&chrRom[0x1000*(byte&0x1F)+0x400];
+		bnk02chr=&chrRom[0x1000*(byte&0x1F)+0x800];
+		bnk03chr=&chrRom[0x1000*(byte&0x1F)+0xC00];
 	}
 	else
 	{
-		bnk0chr=&chrRom[0x2000*(byte&0x1E)];
-		bnk1chr=&chrRom[0x2000*(byte&0x1E)+0x1000];
+		bnk00chr=&chrRom[0x2000*(byte&0x1E)];
+		bnk01chr=&chrRom[0x2000*(byte&0x1E)+0x400];
+		bnk02chr=&chrRom[0x2000*(byte&0x1E)+0x800];
+		bnk03chr=&chrRom[0x2000*(byte&0x1E)+0xC00];
+		bnk10chr=&chrRom[0x2000*(byte&0x1E)+0x1000];
+		bnk11chr=&chrRom[0x2000*(byte&0x1E)+0x1400];
+		bnk12chr=&chrRom[0x2000*(byte&0x1E)+0x1800];
+		bnk13chr=&chrRom[0x2000*(byte&0x1E)+0x1C00];
 	}
 }
 
@@ -230,7 +285,10 @@ void WriteMMC1_ChrBank1(uint8_t byte)
 	MMC1_ChrBank1=byte;
 	if (MMC1_Control&0x10)
 	{
-		bnk1chr=&chrRom[0x1000*(byte&0x1F)];
+		bnk10chr=&chrRom[0x1000*(byte&0x1F)];
+		bnk11chr=&chrRom[0x1000*(byte&0x1F)+0x400];
+		bnk12chr=&chrRom[0x1000*(byte&0x1F)+0x800];
+		bnk13chr=&chrRom[0x1000*(byte&0x1F)+0xC00];
 	}
 }
 
@@ -246,16 +304,41 @@ void WriteMMC1_PrgBank(uint8_t byte)
 		case 0:
 		case 0x4:
 			bnk0prg=&prgRom[(byte&0xE)*32678];
-			bnk1prg=&prgRom[(byte&0xE)*32678 + 16384];
+			bnk1prg=&prgRom[(byte&0xE)*32678 + 8192];
+			bnk2prg=&prgRom[(byte&0xE)*32678 + 16384];
+			bnk3prg=&prgRom[(byte&0xE)*32678 + 16384 + 8192];
 			break;
 		case 0x8:
-			bnk1prg=&prgRom[(byte&0xF)*16384];
+			bnk2prg=&prgRom[(byte&0xF)*16384];
+			bnk3prg=&prgRom[(byte&0xF)*16384+8192];
 			break;
 		case 0xC:
 			bnk0prg=&prgRom[(byte&0xF)*16384];
+			bnk1prg=&prgRom[(byte&0xF)*16384+8192];
 			break;
 	}
 }
+
+void WriteToUxROM(uint16_t addr,uint8_t byte)
+{
+	byte&=0x7;
+	bnk0prg=&prgRom[byte*16384];
+	bnk1prg=&prgRom[byte*16384+8192];
+}
+
+void WriteToCNROM(uint16_t addr,uint8_t byte)
+{
+	byte&=0x3;
+	bnk00chr=&chrRom[byte*0x2000];
+	bnk01chr=&chrRom[byte*0x2000+0x400];
+	bnk02chr=&chrRom[byte*0x2000+0x800];
+	bnk03chr=&chrRom[byte*0x2000+0xC00];
+	bnk10chr=&chrRom[byte*0x2000+0x1000];
+	bnk11chr=&chrRom[byte*0x2000+0x1400];
+	bnk12chr=&chrRom[byte*0x2000+0x1800];
+	bnk13chr=&chrRom[byte*0x2000+0x1C00];
+}
+
 
 void WriteToMMC1(uint16_t addr,uint8_t byte)
 {
@@ -296,6 +379,114 @@ void WriteToMMC1(uint16_t addr,uint8_t byte)
 
 }
 
+uint8_t MMC3_BankSel;
+uint8_t MMC3_BankData[8]={0,0,0,0,0,0,0,0};
+
+void WriteMMC3_SwitchPrg()
+{
+	if (MMC3_BankSel&0x40)
+	{
+		// -2|R7|R6|-1
+		bnk0prg=&prgRom[(prgRomSize-16384)];
+		bnk1prg=&prgRom[MMC3_BankData[7]*8192];
+		bnk2prg=&prgRom[MMC3_BankData[6]*8192];
+		bnk3prg=&prgRom[(prgRomSize-16384)+8192];
+	}
+	else
+	{
+		// R6|R7|-2|-1
+		bnk0prg=&prgRom[MMC3_BankData[6]*8192];
+		bnk1prg=&prgRom[MMC3_BankData[7]*8192];
+		bnk2prg=&prgRom[(prgRomSize-16384)];
+		bnk3prg=&prgRom[(prgRomSize-16384)+8192];
+	}
+
+}
+
+void WriteMMC3_SwitchChr()
+{
+	if (MMC3_BankSel&0x80)
+	{
+		// R2|R3|R4|R5|R0|R0+|R1|R1+
+		bnk00chr=&chrRom[MMC3_BankData[2]*1024];
+		bnk01chr=&chrRom[MMC3_BankData[3]*1024];
+		bnk02chr=&chrRom[MMC3_BankData[4]*1024];
+		bnk03chr=&chrRom[MMC3_BankData[5]*1024];
+		bnk10chr=&chrRom[MMC3_BankData[0]*2048];
+		bnk11chr=&chrRom[MMC3_BankData[0]*2048+0x400];
+		bnk12chr=&chrRom[MMC3_BankData[1]*2048];
+		bnk13chr=&chrRom[MMC3_BankData[1]*2048+0x400];
+	}
+	else
+	{
+		// R0|R0+|R1|R1+|R2|R3|R4|R5
+		bnk00chr=&chrRom[MMC3_BankData[0]*2048];
+		bnk01chr=&chrRom[MMC3_BankData[0]*2048+0x400];
+		bnk02chr=&chrRom[MMC3_BankData[1]*2048];
+		bnk03chr=&chrRom[MMC3_BankData[1]*2048+0x400];
+		bnk10chr=&chrRom[MMC3_BankData[2]*1024];
+		bnk11chr=&chrRom[MMC3_BankData[3]*1024];
+		bnk12chr=&chrRom[MMC3_BankData[4]*1024];
+		bnk13chr=&chrRom[MMC3_BankData[5]*1024];
+	}
+}
+
+void WriteMMC3_BankSelect(uint8_t byte)
+{
+	MMC3_BankSel=byte;
+
+	WriteMMC3_SwitchPrg();
+//	WriteMMC3_SwitchChr();
+}
+
+void WriteMMC3_BankData(uint8_t byte)
+{
+	MMC3_BankData[MMC3_BankSel&7]=byte;
+	if ((MMC3_BankSel&7)<6)
+	{
+		//WriteMMC3_SwitchChr();
+	}
+	else
+	{
+		WriteMMC3_SwitchPrg();
+	}
+}
+
+void WriteMMC3_Mirroring(uint8_t byte)
+{
+	if (byte&1)
+	{
+		hMirror=1;
+		vMirror=0;
+	}
+	else
+	{
+		hMirror=0;
+		vMirror=1;
+	}
+}
+
+
+void WriteToMMC3(uint16_t addr,uint8_t byte)
+{
+	printf("MMC3 Write : %04X,%02X\n",addr,byte);
+	addr&=0xE001;
+	switch (addr)
+	{
+		case 0x8000:
+			WriteMMC3_BankSelect(byte);
+			break;
+		case 0x8001:
+			WriteMMC3_BankData(byte);
+			break;
+		case 0xA000:
+			WriteMMC3_Mirroring(byte);
+			break;
+		default:
+//			printf("MMC3 Write : %04X,%02X\n",addr,byte);
+			break;
+	}
+}
 
 void SetByte(uint16_t addr,uint8_t byte)
 {
@@ -362,9 +553,21 @@ void SetByte(uint16_t addr,uint8_t byte)
 		prgRam[addr-0x6000]=byte;
 		return;
 	}
+	if (usingUxROM)
+	{
+		WriteToUxROM(addr,byte);
+	}
+	if (usingCNROM)
+	{
+		WriteToCNROM(addr,byte);
+	}
 	if (usingMMC1)
 	{
 		WriteToMMC1(addr,byte);
+	}
+	if (usingMMC3)
+	{
+		WriteToMMC3(addr,byte);
 	}
 	//printf("Unmapped Write : %08X\n",addr);
 	return;
@@ -748,11 +951,11 @@ void TickChips(int MasterClock)
 
 	ClockCPU(MasterClock);
 	ClockPPU(MasterClock);
+#if ENABLE_TV
 	if (ppuClock==0)
 		Tick2C02();
 
 	//			if (ntsc_file /*&& (NTSCClock==0)*/)
-#if ENABLE_TV
 	{
 		GenerateNTSC(ColourClock);
 		if (NTSCClock==2)
@@ -779,6 +982,9 @@ int main(int argc,char**argv)
 	{
 		printf("Loading %s\n",argv[1]);
 		LoadCart(argv[1]);
+#if IS_COMPAT
+		exit(0);
+#endif
 	}
 	else
 	{
@@ -803,6 +1009,8 @@ int main(int argc,char**argv)
 	glfwMakeContextCurrent(windows[TIMING_WINDOW]);
 	setupGL(TIMING_WINDOW,TIMING_WIDTH,TIMING_HEIGHT);
 #endif
+
+#if ENABLE_DEBUGGER
 	// Open registers OpenGL window 
 	if( !(windows[REGISTER_WINDOW]=glfwOpenWindow( REGISTER_WIDTH, REGISTER_HEIGHT, GLFW_WINDOWED,"Main CPU",NULL)) ) 
 	{ 
@@ -814,7 +1022,8 @@ int main(int argc,char**argv)
 
 	glfwMakeContextCurrent(windows[REGISTER_WINDOW]);
 	setupGL(REGISTER_WINDOW,REGISTER_WIDTH,REGISTER_HEIGHT);
-	
+#endif
+
 #if ENABLE_TV
 	if( !(windows[NTSC_WINDOW]=glfwOpenWindow( NTSC_WIDTH, NTSC_HEIGHT, GLFW_WINDOWED,"NTSC",NULL)) ) 
 	{ 
@@ -910,12 +1119,14 @@ int main(int argc,char**argv)
 			glfwSwapBuffers();
 #endif
 	
+#if ENABLE_DEBUGGER
 			glfwMakeContextCurrent(windows[REGISTER_WINDOW]);
 			DrawRegisterMain(videoMemory[REGISTER_WINDOW],REGISTER_WIDTH,lastPC,GetByte);
 			UpdateRegisterMain(windows[REGISTER_WINDOW]);
 			ShowScreen(REGISTER_WINDOW,REGISTER_WIDTH,REGISTER_HEIGHT);
 			glfwSwapBuffers();
-			
+#endif
+
 #if ENABLE_LOGIC_ANALYSER			
 			glfwMakeContextCurrent(windows[TIMING_WINDOW]);
 			DrawTiming(videoMemory[TIMING_WINDOW],TIMING_WIDTH);
@@ -1078,7 +1289,9 @@ void GenerateNTSC(int colourClock)
 
 //	printf("Level : %02X\n",actualLevel);
 	sampleOld[NTSCClock]=actualLevel;
+#if ENABLE_LOGIC_ANALYSER
 	RecordPin(4,actualLevel);
+#endif
 }
 
 void writeNTSC()
@@ -1115,7 +1328,9 @@ void SampleNTSC(uint8_t actualLevel)
 */
 //	printf("Level : %02X\n",actualLevel);
 	avgNTSC[NTSCClock]=actualLevel;
+#if ENABLE_LOGIC_ANALYSER
 	RecordPin(3,actualLevel);
+#endif
 	//printf("SAM : %d\n",actualLevel);
 }
 
@@ -1503,12 +1718,15 @@ void LoadCart(const char* fileName)
 		printf("mapper : %02X\n",mapper);
 		
 
-		if (mapper>1)
+		if (mapper>4)
 		{
-			printf("Only supports mapper 0 & 1!\n");
+			printf("Only supports mapper 0-4!\n");
 			exit(-1);
 		}
 		usingMMC1=mapper==1;
+		usingUxROM=mapper==2;
+		usingCNROM=mapper==3;
+		usingMMC3=mapper==4;
 		if ((flags6&0x0C)!=0)
 		{
 			printf("No Train/4Scr Support\n");
@@ -1538,9 +1756,17 @@ void LoadCart(const char* fileName)
 		}
 		prgRom=&ptr[16];
 		bnk0prg=prgRom;
-		bnk1prg=&ptr[16+((prgSize-1)*16384)];
+		bnk1prg=prgRom+8192;
+		bnk2prg=&ptr[16+((prgSize-1)*16384)];
+		bnk3prg=bnk2prg+8192;
 
-		bnk0chr=chrRom;
-		bnk1chr=&chrRom[0x1000];
+		bnk00chr=chrRom;
+		bnk01chr=chrRom+0x400;
+		bnk02chr=chrRom+0x800;
+		bnk03chr=chrRom+0xC00;
+		bnk10chr=chrRom+0x1000;
+		bnk11chr=chrRom+0x1400;
+		bnk12chr=chrRom+0x1800;
+		bnk13chr=chrRom+0x1C00;
 	}
 }
