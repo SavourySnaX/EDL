@@ -18,12 +18,13 @@
 
 #define IS_COMPAT		0
 
-#define ENABLE_TV		0
+#define ENABLE_TV		1
 #define ENABLE_LOGIC_ANALYSER	0
 #define ENABLE_DEBUGGER		1
 
 #include "jake\ntscDecode.h"
 
+int edlVideoGeneration=1;
 
 void AudioKill();
 void AudioInitialise();
@@ -952,7 +953,7 @@ void TickChips(int MasterClock)
 	ClockCPU(MasterClock);
 	ClockPPU(MasterClock);
 #if ENABLE_TV
-	if (ppuClock==0)
+//	if (ppuClock==0)
 		Tick2C02();
 
 	//			if (ntsc_file /*&& (NTSCClock==0)*/)
@@ -1137,6 +1138,11 @@ int main(int argc,char**argv)
 
 			glfwPollEvents();
 			
+			if (CheckKey(GLFW_KEY_F1))
+			{
+				ClearKey(GLFW_KEY_F1);
+				edlVideoGeneration^=1;
+			}
 			if (CheckKey(GLFW_KEY_INSERT))
 			{
 				ClearKey(GLFW_KEY_INSERT);
@@ -1264,9 +1270,12 @@ uint8_t activeNTSCSignalCol;
 uint16_t avgNTSC[3];
 uint16_t sampleOld[3];
 
+uint16_t waveTable[16]={0,0,1,1,2,2,3,3,2,2,1,1};
+
 void GenerateNTSC(int colourClock)
 {
 
+#if 0
 	int range = activeNTSCSignalHi-activeNTSCSignalLow;
 	int inRangeR=((colourClock+0+5)%12)<6;
 	int inRangeG=((colourClock+4+5)%12)<6;
@@ -1288,6 +1297,13 @@ void GenerateNTSC(int colourClock)
 //		printf("Level : %d\n",actualLevel);
 
 //	printf("Level : %02X\n",actualLevel);
+#else
+	int actualLevel=activeNTSCSignalHi-activeNTSCSignalLow;
+
+	actualLevel>>=waveTable[(colourClock+activeNTSCSignalCol)%12];
+	
+	actualLevel+=activeNTSCSignalLow;
+#endif
 	sampleOld[NTSCClock]=actualLevel;
 #if ENABLE_LOGIC_ANALYSER
 	RecordPin(4,actualLevel);
@@ -1297,7 +1313,8 @@ void GenerateNTSC(int colourClock)
 void writeNTSC()
 {
 	uint8_t actualLevel=(sampleOld[0]+sampleOld[1]+sampleOld[2])/3;
-	ntscDecodeAddSample(actualLevel);
+	if (!edlVideoGeneration)
+		ntscDecodeAddSample(actualLevel);
 //	printf("OLD : %d\n",actualLevel);
 //	fwrite(&actualLevel,1,1,ntsc_file);
 }
@@ -1337,7 +1354,8 @@ void SampleNTSC(uint8_t actualLevel)
 void AvgNTSC()
 {
 	uint8_t actualLevel=(avgNTSC[0]+avgNTSC[1]+avgNTSC[2])/3;
-//	ntscDecodeAddSample(actualLevel);
+	if (edlVideoGeneration)
+		ntscDecodeAddSample(actualLevel);
 //	printf("AVG : %d\n",actualLevel);
 //	fwrite(&actualLevel,1,1,ntsc_file);
 }
@@ -1387,7 +1405,7 @@ Color 30	 2.743	 1.960	 1.000
 			static uint8_t levelsHigh[4]={SIGNAL_OFFSET+(.397f*SIGNAL_RANGE),SIGNAL_OFFSET+(.681f*SIGNAL_RANGE),SIGNAL_OFFSET+(1.0f*SIGNAL_RANGE),SIGNAL_OFFSET+(1.0f*SIGNAL_RANGE)};
 
 
-//			lastPixelValue=(curClock>>4)|((curLine-21)&0x30);
+			lastPixelValue=0x16;
 
 			uint8_t level=(lastPixelValue&0x30)>>4;
 			uint8_t colour=lastPixelValue&0x0F;

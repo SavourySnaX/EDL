@@ -249,11 +249,11 @@ DECLARE hiTable[[2]][8] {113,154,200,200};
 #*/
 
 #DECLARE INTERNAL waveTable[[4]][16]	{5,6,7,8,7,6,3,2,1,0,1,2};
-DECLARE INTERNAL waveTable[[4]][16]	{8,8,8,8,8,8,0,0,0,0,0,0};
+#DECLARE INTERNAL waveTable[[4]][16]	{8,8,8,8,8,8,0,0,0,0,0,0};
 
-#DECLARE INTERNAL waveTable[[4]][16]	{0,0,1,1,2,2,3,3,2,2,1,1};
+DECLARE INTERNAL waveTable[[4]][16]	{0,0,1,1,2,2,3,3,2,2,1,1};
 
-FUNCTION INTERNAL value[8] LumaColourMixer low[8],high[8],phase[4]
+FUNCTION INTERNAL value[8] LumaColourMixer low[8],high[8],phase[8]
 {
 	DECLARE c[16];
 	DECLARE tmp[16];
@@ -277,7 +277,8 @@ DECLARE __phase[4];
 FUNCTION INTERNAL SetupLHP	ppuLevel[6]
 {
 	DECLARE palette[6]	ALIAS	level[2]:phase[4];
-	palette<-ppuLevel;
+
+	palette<-$16;#ppuLevel;
 
 	IF phase>13
 	{
@@ -307,9 +308,11 @@ INSTRUCTION ntscLevel	"active"	%0:dontcare[8]
 
 INSTRUCTION ntscLevel	"background"	background
 {
-	CALL SetupLHP(Pixel PIN_BKGCOL);
+#	CALL SetupLHP(Pixel PIN_BKGCOL);
 
-	VIDEO<-CALL LumaColourMixer(__low,__high,__phase);#lumaTable[[Pixel PIN_BKGCOL]];
+#	VIDEO<-CALL LumaColourMixer(__low,__high,__phase);#lumaTable[[Pixel PIN_BKGCOL]];
+
+	VIDEO<-70;
 }
 
 INSTRUCTION ntscLevel	"black"		black

@@ -422,6 +422,7 @@ FUNCTION INTERNAL	Rasterise
 
 	IF (hClock>=320) & (hClock<=335)
 	{
+		PIN_ACTIVECOL<-0;
 		CALL UpdateShiftRegisters();
 	}
 }
@@ -439,6 +440,10 @@ FUNCTION INTERNAL	RasteriseOff
 		actualCol<-PaletteRAM[[actualCol]];
 		PIN_ACTIVECOL<-actualCol;
 		CALL SetVideo(hClock,(vClock-21),actualCol);
+	}
+	IF hClock==256
+	{
+		PIN_ACTIVECOL<-0;
 	}
 }
 
