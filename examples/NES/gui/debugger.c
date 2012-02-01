@@ -247,7 +247,7 @@ void DrawTimingA(unsigned char* buffer,unsigned int width)
 	}
 
 	uint32_t level;
-	for (a=3;a<MAX_PINS;a++)
+	for (a=4;a<MAX_PINS;a++)
 	{
 		pulsepos=pulsestart;
 		uint32_t lastLevel=50+(255-(lohi[a][pulsepos>>16]));
@@ -383,11 +383,11 @@ void UpdateTimingWindow(GLFWwindow window)
 
 	if (KeyDownWindow(GLFW_KEY_LEFT,window))
 	{
-		timeOffset-=1<<16;
+		timeOffset-=8<<16;
 	}
 	if (KeyDownWindow(GLFW_KEY_RIGHT,window))
 	{
-		timeOffset+=1<<16;
+		timeOffset+=8<<16;
 	}
 
 }

@@ -19,7 +19,7 @@
 #define IS_COMPAT		0
 
 #define ENABLE_TV		1
-#define ENABLE_LOGIC_ANALYSER	0
+#define ENABLE_LOGIC_ANALYSER	1
 #define ENABLE_DEBUGGER		1
 
 #include "jake\ntscDecode.h"
@@ -228,6 +228,62 @@ uint8_t MMC1_ChrBank0=0;
 uint8_t MMC1_ChrBank1=0;
 uint8_t MMC1_PrgBank=0;
 
+void WriteMMC1_SwitchChr0()
+{
+	if (MMC1_Control&0x10)
+	{
+		bnk00chr=&chrRom[0x1000*(MMC1_ChrBank0&0x1F)];
+		bnk01chr=&chrRom[0x1000*(MMC1_ChrBank0&0x1F)+0x400];
+		bnk02chr=&chrRom[0x1000*(MMC1_ChrBank0&0x1F)+0x800];
+		bnk03chr=&chrRom[0x1000*(MMC1_ChrBank0&0x1F)+0xC00];
+	}
+	else
+	{
+		bnk00chr=&chrRom[0x2000*(MMC1_ChrBank0&0x1E)];
+		bnk01chr=&chrRom[0x2000*(MMC1_ChrBank0&0x1E)+0x400];
+		bnk02chr=&chrRom[0x2000*(MMC1_ChrBank0&0x1E)+0x800];
+		bnk03chr=&chrRom[0x2000*(MMC1_ChrBank0&0x1E)+0xC00];
+		bnk10chr=&chrRom[0x2000*(MMC1_ChrBank0&0x1E)+0x1000];
+		bnk11chr=&chrRom[0x2000*(MMC1_ChrBank0&0x1E)+0x1400];
+		bnk12chr=&chrRom[0x2000*(MMC1_ChrBank0&0x1E)+0x1800];
+		bnk13chr=&chrRom[0x2000*(MMC1_ChrBank0&0x1E)+0x1C00];
+	}
+}
+
+void WriteMMC1_SwitchChr1()
+{
+	if (MMC1_Control&0x10)
+	{
+		bnk10chr=&chrRom[0x1000*(MMC1_ChrBank1&0x1F)];
+		bnk11chr=&chrRom[0x1000*(MMC1_ChrBank1&0x1F)+0x400];
+		bnk12chr=&chrRom[0x1000*(MMC1_ChrBank1&0x1F)+0x800];
+		bnk13chr=&chrRom[0x1000*(MMC1_ChrBank1&0x1F)+0xC00];
+	}
+}
+
+void WriteMMC1_SwitchPrg()
+{
+	switch (MMC1_Control&0x0C)
+	{
+		case 0:
+		case 0x4:
+			bnk0prg=&prgRom[(MMC1_PrgBank&0xE)*32678];
+			bnk1prg=&prgRom[(MMC1_PrgBank&0xE)*32678 + 8192];
+			bnk2prg=&prgRom[(MMC1_PrgBank&0xE)*32678 + 16384];
+			bnk3prg=&prgRom[(MMC1_PrgBank&0xE)*32678 + 16384 + 8192];
+			break;
+		case 0x8:
+			bnk2prg=&prgRom[(MMC1_PrgBank&0xF)*16384];
+			bnk3prg=&prgRom[(MMC1_PrgBank&0xF)*16384+8192];
+			break;
+		case 0xC:
+			bnk0prg=&prgRom[(MMC1_PrgBank&0xF)*16384];
+			bnk1prg=&prgRom[(MMC1_PrgBank&0xF)*16384+8192];
+			break;
+	}
+
+}
+
 void WriteMMC1_Control(uint8_t byte)	//NB need to set bank configs up here as well!!!
 {
 	byte&=0x1F;
@@ -250,6 +306,10 @@ void WriteMMC1_Control(uint8_t byte)	//NB need to set bank configs up here as we
 			vMirror=0;
 			break;
 	}
+
+	WriteMMC1_SwitchChr0();
+	WriteMMC1_SwitchChr1();
+	WriteMMC1_SwitchPrg();
 }
 
 void WriteMMC1_ChrBank0(uint8_t byte)
@@ -258,24 +318,7 @@ void WriteMMC1_ChrBank0(uint8_t byte)
 	if (MMC1_ChrBank0!=byte)
 		printf("MMC1 char0 bank %02X\n",byte);
 	MMC1_ChrBank0=byte;
-	if (MMC1_Control&0x10)
-	{
-		bnk00chr=&chrRom[0x1000*(byte&0x1F)];
-		bnk01chr=&chrRom[0x1000*(byte&0x1F)+0x400];
-		bnk02chr=&chrRom[0x1000*(byte&0x1F)+0x800];
-		bnk03chr=&chrRom[0x1000*(byte&0x1F)+0xC00];
-	}
-	else
-	{
-		bnk00chr=&chrRom[0x2000*(byte&0x1E)];
-		bnk01chr=&chrRom[0x2000*(byte&0x1E)+0x400];
-		bnk02chr=&chrRom[0x2000*(byte&0x1E)+0x800];
-		bnk03chr=&chrRom[0x2000*(byte&0x1E)+0xC00];
-		bnk10chr=&chrRom[0x2000*(byte&0x1E)+0x1000];
-		bnk11chr=&chrRom[0x2000*(byte&0x1E)+0x1400];
-		bnk12chr=&chrRom[0x2000*(byte&0x1E)+0x1800];
-		bnk13chr=&chrRom[0x2000*(byte&0x1E)+0x1C00];
-	}
+	WriteMMC1_SwitchChr0();
 }
 
 void WriteMMC1_ChrBank1(uint8_t byte)
@@ -284,15 +327,8 @@ void WriteMMC1_ChrBank1(uint8_t byte)
 	if (MMC1_ChrBank1!=byte)
 		printf("MMC1 char1 bank %02X\n",byte);
 	MMC1_ChrBank1=byte;
-	if (MMC1_Control&0x10)
-	{
-		bnk10chr=&chrRom[0x1000*(byte&0x1F)];
-		bnk11chr=&chrRom[0x1000*(byte&0x1F)+0x400];
-		bnk12chr=&chrRom[0x1000*(byte&0x1F)+0x800];
-		bnk13chr=&chrRom[0x1000*(byte&0x1F)+0xC00];
-	}
+	WriteMMC1_SwitchChr1();
 }
-
 void WriteMMC1_PrgBank(uint8_t byte)
 {
 	//DBBBB  D-PRGRam Disable  - BBBB is bank
@@ -300,24 +336,7 @@ void WriteMMC1_PrgBank(uint8_t byte)
 	if (MMC1_PrgBank!=byte)
 		printf("MMC1 prg bank %02X\n",byte);
 	MMC1_PrgBank=byte;
-	switch (MMC1_Control&0x0C)
-	{
-		case 0:
-		case 0x4:
-			bnk0prg=&prgRom[(byte&0xE)*32678];
-			bnk1prg=&prgRom[(byte&0xE)*32678 + 8192];
-			bnk2prg=&prgRom[(byte&0xE)*32678 + 16384];
-			bnk3prg=&prgRom[(byte&0xE)*32678 + 16384 + 8192];
-			break;
-		case 0x8:
-			bnk2prg=&prgRom[(byte&0xF)*16384];
-			bnk3prg=&prgRom[(byte&0xF)*16384+8192];
-			break;
-		case 0xC:
-			bnk0prg=&prgRom[(byte&0xF)*16384];
-			bnk1prg=&prgRom[(byte&0xF)*16384+8192];
-			break;
-	}
+	WriteMMC1_SwitchPrg();
 }
 
 void WriteToUxROM(uint16_t addr,uint8_t byte)
@@ -413,18 +432,18 @@ void WriteMMC3_SwitchChr()
 		bnk01chr=&chrRom[MMC3_BankData[3]*1024];
 		bnk02chr=&chrRom[MMC3_BankData[4]*1024];
 		bnk03chr=&chrRom[MMC3_BankData[5]*1024];
-		bnk10chr=&chrRom[MMC3_BankData[0]*2048];
-		bnk11chr=&chrRom[MMC3_BankData[0]*2048+0x400];
-		bnk12chr=&chrRom[MMC3_BankData[1]*2048];
-		bnk13chr=&chrRom[MMC3_BankData[1]*2048+0x400];
+		bnk10chr=&chrRom[(MMC3_BankData[0]&0xFE)*1024];
+		bnk11chr=&chrRom[(MMC3_BankData[0]&0xFE)*1024+0x400];
+		bnk12chr=&chrRom[(MMC3_BankData[1]&0xFE)*1024];
+		bnk13chr=&chrRom[(MMC3_BankData[1]&0xFE)*1024+0x400];
 	}
 	else
 	{
 		// R0|R0+|R1|R1+|R2|R3|R4|R5
-		bnk00chr=&chrRom[MMC3_BankData[0]*2048];
-		bnk01chr=&chrRom[MMC3_BankData[0]*2048+0x400];
-		bnk02chr=&chrRom[MMC3_BankData[1]*2048];
-		bnk03chr=&chrRom[MMC3_BankData[1]*2048+0x400];
+		bnk00chr=&chrRom[(MMC3_BankData[0]&0xFE)*1024];
+		bnk01chr=&chrRom[(MMC3_BankData[0]&0xFE)*1024+0x400];
+		bnk02chr=&chrRom[(MMC3_BankData[1]&0xFE)*1024];
+		bnk03chr=&chrRom[(MMC3_BankData[1]&0xFE)*1024+0x400];
 		bnk10chr=&chrRom[MMC3_BankData[2]*1024];
 		bnk11chr=&chrRom[MMC3_BankData[3]*1024];
 		bnk12chr=&chrRom[MMC3_BankData[4]*1024];
@@ -437,7 +456,7 @@ void WriteMMC3_BankSelect(uint8_t byte)
 	MMC3_BankSel=byte;
 
 	WriteMMC3_SwitchPrg();
-//	WriteMMC3_SwitchChr();
+	WriteMMC3_SwitchChr();
 }
 
 void WriteMMC3_BankData(uint8_t byte)
@@ -445,7 +464,7 @@ void WriteMMC3_BankData(uint8_t byte)
 	MMC3_BankData[MMC3_BankSel&7]=byte;
 	if ((MMC3_BankSel&7)<6)
 	{
-		//WriteMMC3_SwitchChr();
+		WriteMMC3_SwitchChr();
 	}
 	else
 	{
@@ -1405,7 +1424,7 @@ Color 30	 2.743	 1.960	 1.000
 			static uint8_t levelsHigh[4]={SIGNAL_OFFSET+(.397f*SIGNAL_RANGE),SIGNAL_OFFSET+(.681f*SIGNAL_RANGE),SIGNAL_OFFSET+(1.0f*SIGNAL_RANGE),SIGNAL_OFFSET+(1.0f*SIGNAL_RANGE)};
 
 
-			lastPixelValue=0x16;
+	//		lastPixelValue=0x16;
 
 			uint8_t level=(lastPixelValue&0x30)>>4;
 			uint8_t colour=lastPixelValue&0x0F;
