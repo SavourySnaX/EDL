@@ -18,9 +18,9 @@
 
 #define IS_COMPAT		0
 
-#define ENABLE_TV		1
+#define ENABLE_TV		0
 #define ENABLE_LOGIC_ANALYSER	1
-#define ENABLE_DEBUGGER		1
+#define ENABLE_DEBUGGER		0
 
 #include "jake\ntscDecode.h"
 
@@ -175,6 +175,8 @@ uint8_t* bnk0prg=NULL;
 uint8_t* bnk1prg=NULL;
 uint8_t* bnk2prg=NULL;
 uint8_t* bnk3prg=NULL;
+
+uint8_t mapperIRQ=0;
 
 uint8_t GetByte(uint16_t addr)
 {
@@ -359,7 +361,6 @@ void WriteToCNROM(uint16_t addr,uint8_t byte)
 	bnk13chr=&chrRom[byte*0x2000+0x1C00];
 }
 
-
 void WriteToMMC1(uint16_t addr,uint8_t byte)
 {
 	if (byte&0x80)
@@ -401,6 +402,29 @@ void WriteToMMC1(uint16_t addr,uint8_t byte)
 
 uint8_t MMC3_BankSel;
 uint8_t MMC3_BankData[8]={0,0,0,0,0,0,0,0};
+uint8_t MMC3_IRQLatch=0;
+uint8_t MMC3_IRQCount=0;
+uint8_t MMC3_IRQDisable=1;
+uint8_t MMC3_IRQPending=0;
+
+uint8_t MMC3_TickIRQ()
+{
+	if (MMC3_IRQDisable)
+		return 1;
+
+	static lastClock=59;
+	if (PPU_vClock!=lastClock)
+	{
+		lastClock=PPU_vClock;
+		if (MMC3_IRQCount==0)
+		{
+			MMC3_IRQPending=1;
+			MMC3_IRQCount=MMC3_IRQLatch;
+		}
+		MMC3_IRQCount--;
+	}
+	return MMC3_IRQPending;
+}
 
 void WriteMMC3_SwitchPrg()
 {
@@ -501,6 +525,19 @@ void WriteToMMC3(uint16_t addr,uint8_t byte)
 			break;
 		case 0xA000:
 			WriteMMC3_Mirroring(byte);
+			break;
+		case 0xC000:
+			MMC3_IRQLatch=byte;
+			break;
+		case 0xC001:
+			MMC3_IRQCount=0;
+			break;
+		case 0xE000:
+			MMC3_IRQDisable=1;
+			MMC3_IRQPending=0;
+			break;
+		case 0xE001:
+			MMC3_IRQDisable=0;
 			break;
 		default:
 //			printf("MMC3 Write : %04X,%02X\n",addr,byte);
@@ -873,7 +910,7 @@ void ClockCPU(int cpuClock)
 	{
 		MAIN_PinSetCLK(cpuClock&1);
 #if ENABLE_LOGIC_ANALYSER
-		RecordPin(0,cpuClock&1);
+//		RecordPin(0,cpuClock&1);
 		RecordPin(1,MAIN_PinGetM2()&1);
 #endif
 		addr = MAIN_PinGetA();
@@ -927,7 +964,7 @@ void ClockCPU(int cpuClock)
 			}
 		}
 
-		MAIN_PinSet_IRQ(1);
+		MAIN_PinSet_IRQ(MMC3_TickIRQ());
 		MAIN_PinSet_NMI(PPU_PinGet_INT());
 	}
 
@@ -955,6 +992,7 @@ void ClockPPU(int ppuClock)
 			PPUSetByte(addr,PPU_PinGetAD());
 		}
 
+		RecordPin(0,(PPU_PinGetPA()&0x10)>>4);
 	}
 
 }
