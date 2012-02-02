@@ -450,8 +450,6 @@ FUNCTION INTERNAL	RasteriseOff
 FUNCTION INTERNAL	TickPixelClockStart
 {
 	PIN__INT<-~(NMI&VBlank);
-	PIN_VCLOCK<-vClock;
-	PIN_HCLOCK<-hClock;
 
 	EXECUTE VRAMRequest	requestVRAM;
 
@@ -482,6 +480,8 @@ FUNCTION INTERNAL	TickPixelClockStart
 		}
 	}
 	EXECUTE PixelClockLine vClock;
+	PIN_VCLOCK<-vClock;
+	PIN_HCLOCK<-hClock;
 }
 
 INSTRUCTION	VRAMRequest	"noop"		%000
@@ -550,6 +550,8 @@ FUNCTION INTERNAL	TickPixelClockEnd
 			VBlank<-1;
 		}
 	}
+	PIN_VCLOCK<-vClock;
+	PIN_HCLOCK<-hClock;
 }
 
 INSTRUCTION MemoryFetchOperation "NameTable"		%0001

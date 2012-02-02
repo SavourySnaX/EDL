@@ -23,9 +23,6 @@ PIN OUT			PA[6];			# VRAM Facing - Top 6 bits of address
 
 DECLARE INTERNAL	pixelCounter[2];
 DECLARE INTERNAL	colourCounter[4];
-DECLARE INTERNAL	ntscCounter[2];
-
-DECLARE INTERNAL	bigCounter[16];
 
 DECLARE INTERNAL	pixelClk[1];
 
@@ -69,8 +66,6 @@ FUNCTION INTERNAL NTSCClock
 
 	curV<-Pixel PIN_VCLOCK;
 	curH<-Pixel PIN_HCLOCK;
-
-	ntscCounter<-0;
 
 	VIDEO<-4;
 	IF ~((curV>=8) & (curV<=11))
@@ -249,9 +244,9 @@ DECLARE hiTable[[2]][8] {113,154,200,200};
 #*/
 
 #DECLARE INTERNAL waveTable[[4]][16]	{5,6,7,8,7,6,3,2,1,0,1,2};
-#DECLARE INTERNAL waveTable[[4]][16]	{8,8,8,8,8,8,0,0,0,0,0,0};
+DECLARE INTERNAL waveTable[[4]][16]	{8,8,8,8,8,8,0,0,0,0,0,0};
 
-DECLARE INTERNAL waveTable[[4]][16]	{0,0,1,1,2,2,3,3,2,2,1,1};
+#DECLARE INTERNAL waveTable[[4]][16]	{0,0,1,1,2,2,3,3,2,2,1,1};
 
 FUNCTION INTERNAL value[8] LumaColourMixer low[8],high[8],phase[8]
 {
@@ -278,7 +273,7 @@ FUNCTION INTERNAL SetupLHP	ppuLevel[6]
 {
 	DECLARE palette[6]	ALIAS	level[2]:phase[4];
 
-	palette<-$16;#ppuLevel;
+	palette<-ppuLevel;
 
 	IF phase>13
 	{
@@ -308,9 +303,9 @@ INSTRUCTION ntscLevel	"active"	%0:dontcare[8]
 
 INSTRUCTION ntscLevel	"background"	background
 {
-#	CALL SetupLHP(Pixel PIN_BKGCOL);
+	CALL SetupLHP(Pixel PIN_BKGCOL);
 
-#	VIDEO<-CALL LumaColourMixer(__low,__high,__phase);#lumaTable[[Pixel PIN_BKGCOL]];
+	VIDEO<-CALL LumaColourMixer(__low,__high,__phase);#lumaTable[[Pixel PIN_BKGCOL]];
 
 	VIDEO<-70;
 }
@@ -327,6 +322,6 @@ INSTRUCTION ntscLevel	"sync"		sync
 
 INSTRUCTION ntscLevel	"colourburst"	cburst
 {
-	VIDEO<-CALL LumaColourMixer(25,97,8);
+	VIDEO<-CALL LumaColourMixer(25,97,3);
 }
 

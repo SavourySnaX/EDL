@@ -18,9 +18,9 @@
 
 #define IS_COMPAT		0
 
-#define ENABLE_TV		0
+#define ENABLE_TV		1
 #define ENABLE_LOGIC_ANALYSER	1
-#define ENABLE_DEBUGGER		0
+#define ENABLE_DEBUGGER		1
 
 #include "jake\ntscDecode.h"
 
@@ -49,6 +49,8 @@ uint8_t PPU_PinGetALE();
 uint8_t PPU_PinGet_RE();
 uint8_t PPU_PinGet_WE();
 uint8_t PPU_PinGetVIDEO();
+
+extern uint8_t PPU_colourCounter;
 
 uint16_t MAIN_PinGetA();
 uint8_t MAIN_PinGetD();
@@ -1002,10 +1004,10 @@ void writeNTSC();
 
 void TickChips(int MasterClock)
 {
-	int cpuClock=MasterClock%24;
-	int ppuClock=MasterClock%8;
-	int ColourClock=MasterClock%12;
-	NTSCClock=MasterClock%3;
+//	int cpuClock=MasterClock%24;
+//	int ppuClock=MasterClock%8;
+	static int ColourClock=0;
+	NTSCClock=ColourClock%3;
 
 	ClockCPU(MasterClock);
 	ClockPPU(MasterClock);
@@ -1024,6 +1026,10 @@ void TickChips(int MasterClock)
 			AvgNTSC();
 		}
 	}
+
+	ColourClock++;
+	if (ColourClock==12)
+		ColourClock=0;
 #endif
 #if ENABLE_LOGIC_ANALYSER
 	UpdatePinTick();
@@ -1327,7 +1333,13 @@ uint8_t activeNTSCSignalCol;
 uint16_t avgNTSC[3];
 uint16_t sampleOld[3];
 
-uint16_t waveTable[16]={0,0,1,1,2,2,3,3,2,2,1,1};
+uint16_t waveTable[16]={8,8,8,8,8,8,0,0,0,0,0,0};
+//uint16_t waveTable[16]={0,0,1,1,2,2,3,3,2,2,1,1};
+uint8_t lowTable[4]={39,55,100,159};
+uint8_t hiTable[4]={113,154,200,200};
+
+uint8_t lastEDLLevelAvg=0;
+uint8_t lastCLevelAvg=0;
 
 void GenerateNTSC(int colourClock)
 {
@@ -1363,15 +1375,15 @@ void GenerateNTSC(int colourClock)
 #endif
 	sampleOld[NTSCClock]=actualLevel;
 #if ENABLE_LOGIC_ANALYSER
-	RecordPin(4,actualLevel);
+	RecordPin(4,lastCLevelAvg);
 #endif
 }
 
 void writeNTSC()
 {
-	uint8_t actualLevel=(sampleOld[0]+sampleOld[1]+sampleOld[2])/3;
+	lastCLevelAvg=(sampleOld[0]+sampleOld[1]+sampleOld[2])/3;
 	if (!edlVideoGeneration)
-		ntscDecodeAddSample(actualLevel);
+		ntscDecodeAddSample(lastCLevelAvg);
 //	printf("OLD : %d\n",actualLevel);
 //	fwrite(&actualLevel,1,1,ntsc_file);
 }
@@ -1403,16 +1415,16 @@ void SampleNTSC(uint8_t actualLevel)
 //	printf("Level : %02X\n",actualLevel);
 	avgNTSC[NTSCClock]=actualLevel;
 #if ENABLE_LOGIC_ANALYSER
-	RecordPin(3,actualLevel);
+	RecordPin(3,lastEDLLevelAvg);
 #endif
 	//printf("SAM : %d\n",actualLevel);
 }
 
 void AvgNTSC()
 {
-	uint8_t actualLevel=(avgNTSC[0]+avgNTSC[1]+avgNTSC[2])/3;
+	lastEDLLevelAvg=(avgNTSC[0]+avgNTSC[1]+avgNTSC[2])/3;
 	if (edlVideoGeneration)
-		ntscDecodeAddSample(actualLevel);
+		ntscDecodeAddSample(lastEDLLevelAvg);
 //	printf("AVG : %d\n",actualLevel);
 //	fwrite(&actualLevel,1,1,ntsc_file);
 }
@@ -1458,6 +1470,7 @@ Color 20	 2.743	 1.960	 1.000
 Color 30	 2.743	 1.960	 1.000
 */
 
+#if 0
 			static uint8_t levelsLow[4]={SIGNAL_OFFSET+(-.117f*SIGNAL_RANGE),SIGNAL_OFFSET+(.0f*SIGNAL_RANGE),SIGNAL_OFFSET+(.308f*SIGNAL_RANGE),SIGNAL_OFFSET+(.815f*SIGNAL_RANGE)};
 			static uint8_t levelsHigh[4]={SIGNAL_OFFSET+(.397f*SIGNAL_RANGE),SIGNAL_OFFSET+(.681f*SIGNAL_RANGE),SIGNAL_OFFSET+(1.0f*SIGNAL_RANGE),SIGNAL_OFFSET+(1.0f*SIGNAL_RANGE)};
 
@@ -1484,15 +1497,41 @@ Color 30	 2.743	 1.960	 1.000
 			{
 				levelHigh=levelLow;
 			}
+			
 			activeNTSCSignalLow=levelLow;
 			activeNTSCSignalHi=levelHigh;
 			activeNTSCSignalCol=colour+5;
+#else
+
+			uint8_t level=(lastPixelValue&0x30)>>4;
+			uint8_t phase=lastPixelValue&0x0F;
+			if (phase>13)
+			{
+				level<-1;
+			}
+
+			activeNTSCSignalLow=lowTable[level];
+			activeNTSCSignalHi=hiTable[level];
+			activeNTSCSignalCol=phase+5;
+
+			if (phase==0)
+			{
+				activeNTSCSignalLow=activeNTSCSignalHi;
+			}
+			if (phase>12)
+			{
+				activeNTSCSignalHi=activeNTSCSignalLow;
+			}
+
+#endif
 			activeNTSCDisplay=1;
 		}
 		else
 		if (curClock<256+11)
 		{
-			lastPixelValue=0x0F;
+#if 1
+			lastPixelValue=0x00;
+#endif
 			activeNTSCSignalLow=70;
 			activeNTSCSignalHi=70;
 			activeNTSCDisplay=0;
@@ -1522,8 +1561,13 @@ Color 30	 2.743	 1.960	 1.000
 		else
 		if (curClock<256+11+9+25+4+15)
 		{
+#if 0
 			activeNTSCSignalLow=60+(-.208f*SIGNAL_RANGE);
 			activeNTSCSignalHi=60+(.286f*SIGNAL_RANGE);
+			activeNTSCSignalCol=8;
+#endif
+			activeNTSCSignalLow=25;
+			activeNTSCSignalHi=97;
 			activeNTSCSignalCol=8;
 			// colour burst
 		}
