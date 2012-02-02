@@ -27,6 +27,10 @@ PIN OUT			PIN_HCLOCK[9];
 PIN OUT			PIN_VCLOCK[9];
 PIN OUT			PIN_ACTIVECOL[6];
 PIN OUT			PIN_BKGCOL[6];
+
+PIN OUT			PIN_EMPHB[1];
+PIN OUT			PIN_EMPHG[1];
+PIN OUT			PIN_EMPHR[1];
 ###
 
 # Internal Memory
@@ -163,6 +167,9 @@ INSTRUCTION	IORegisterWrite	"Control"	%000
 INSTRUCTION	IORegisterWrite	"Mask"		%001
 {
 	Mask<-PIN_D;
+	PIN_EMPHR<-EmphR;
+	PIN_EMPHG<-EmphG;
+	PIN_EMPHB<-EmphB;
 }
 
 INSTRUCTION	IORegisterWrite	"OAMAddress"	%011
@@ -422,7 +429,6 @@ FUNCTION INTERNAL	Rasterise
 
 	IF (hClock>=320) & (hClock<=335)
 	{
-		PIN_ACTIVECOL<-0;
 		CALL UpdateShiftRegisters();
 	}
 }
@@ -440,10 +446,6 @@ FUNCTION INTERNAL	RasteriseOff
 		actualCol<-PaletteRAM[[actualCol]];
 		PIN_ACTIVECOL<-actualCol;
 		CALL SetVideo(hClock,(vClock-21),actualCol);
-	}
-	IF hClock==256
-	{
-		PIN_ACTIVECOL<-0;
 	}
 }
 

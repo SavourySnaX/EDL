@@ -203,66 +203,50 @@ MAPPING cburst[9]
 	319	""	0;
 }
 
-DECLARE lumaTable[[2]][8] {70,120,150,200};
-
 #			Absol	 Rel	 Normalized	Assuming Sync At 4 with Relative Values  ((200-4)/1.96)
 #Synch		 	0.781	 0.000	 -0.359		4
 #Colorburst L	 	1.000	 0.218	 -0.208		25
 #Colorburst H	 	1.712	 0.931	 0.286		97
-#Color 0D	 	1.131	 0.350	 -0.117		39
-#Color 1D (black)	1.300	 0.518	 0.000		55
-#Color 2D	 	1.743	 0.962	 0.308		100
-#Color 3D	 	2.331	 1.550	 0.715		159
-#Color 00	 	1.875	 1.090	 0.397		113
-#Color 10	 	2.287	 1.500	 0.681		154
-#Color 20	 	2.743	 1.960	 1.000		200
-#Color 30	 	2.743	 1.960	 1.000		200
+#Color 0D	 	1.131	 0.350	 -0.117		39      	*.746		29.094		29
+#Color 1D (black)	1.300	 0.518	 0.000		55      	*.746		41.03		41
+#Color 2D	 	1.743	 0.962	 0.308		100     	*.746		74.6		75
+#Color 3D	 	2.331	 1.550	 0.715		159     	*.746		118.614		119
+#Color 00	 	1.875	 1.090	 0.397		113     	*.746		84.298		84
+#Color 10	 	2.287	 1.500	 0.681		154     	*.746		114.884		115
+#Color 20	 	2.743	 1.960	 1.000		200     	*.746		149.2		149
+#Color 30	 	2.743	 1.960	 1.000		200     	*.746		149.2		149
 
 DECLARE lowTable[[2]][8] {39,55,100,159};
 DECLARE hiTable[[2]][8] {113,154,200,200};
+DECLARE lowAtten[[2]][8] {29,41,75,119};
+DECLARE hiAtten[[2]][8] {84,115,149,149};
 
-#static int TopBottomPercentage[12]={64,104,128,128,128,104,64,24,0,0,0,24};
-#int range = activeNTSCSignalHi-activeNTSCSignalLow;
-#	int inRangeR=((colourClock+0+5)%12)<6;
-#	int inRangeG=((colourClock+4+5)%12)<6;
-#	int inRangeB=((colourClock+8+5)%12)<6;
-#	int actualLevel=(range*TopBottomPercentage[(colourClock+activeNTSCSignalCol)%12])/128;
-#
-#	if (((regs2C02[1]&0x20 && inRangeR) ||
-#	    (regs2C02[1]&0x40 && inRangeG) ||
-#	    (regs2C02[1]&0x80 && inRangeB)) && activeNTSCDisplay)
-#	{
-#		actualLevel*=.546f;
-#		actualLevel-=SIGNAL_RANGE*.0902f;
-#	}
-#//	else
-#//		actualLevel+=15;
-#
-#	actualLevel+=activeNTSCSignalLow;
-#	if (actualLevel<0)
-#		printf("Level : %d\n",actualLevel);
-#*/
-
-#DECLARE INTERNAL waveTable[[4]][16]	{5,6,7,8,7,6,3,2,1,0,1,2};
-DECLARE INTERNAL waveTable[[4]][16]	{8,8,8,8,8,8,0,0,0,0,0,0};
-
-#DECLARE INTERNAL waveTable[[4]][16]	{0,0,1,1,2,2,3,3,2,2,1,1};
-
-FUNCTION INTERNAL value[8] LumaColourMixer low[8],high[8],phase[8]
+FUNCTION INTERNAL value[1]  InPhase	phase[8]
 {
-	DECLARE c[16];
-	DECLARE tmp[16];
 	DECLARE wavePhase[8];
 	wavePhase<-colourCounter+phase;
 	IF wavePhase>11
 	{
 		wavePhase<-wavePhase-12;
 	}
-	tmp<-high-low;
-	tmp<-ROR(tmp,c,0,waveTable[[wavePhase]]);
 
-	tmp<-tmp+low;
-	value<-tmp;
+	value<-wavePhase<6;
+}
+
+FUNCTION INTERNAL value[8] LumaColourMixer low[8],high[8],phase[8]
+{
+	DECLARE c[1];
+	DECLARE tmp[16];
+	
+	c<-CALL InPhase(phase);
+	IF c
+	{
+		value<-high;
+	}
+	IF ~c
+	{
+		value<-low;
+	}
 }
 
 DECLARE __low[8];
@@ -273,6 +257,14 @@ FUNCTION INTERNAL SetupLHP	ppuLevel[6]
 {
 	DECLARE palette[6]	ALIAS	level[2]:phase[4];
 
+	DECLARE inR[1];
+	DECLARE inG[1];
+	DECLARE inB[1];
+
+	inR<-CALL InPhase(0) & Pixel PIN_EMPHR;
+	inG<-CALL InPhase(4) & Pixel PIN_EMPHG;
+	inB<-CALL InPhase(8) & Pixel PIN_EMPHB;
+
 	palette<-ppuLevel;
 
 	IF phase>13
@@ -280,8 +272,16 @@ FUNCTION INTERNAL SetupLHP	ppuLevel[6]
 		level<-1;
 	}
 
-	__low<-lowTable[[level]];
-	__high<-hiTable[[level]];
+	IF inR | inG | inB
+	{
+		__low<-lowAtten[[level]];
+		__high<-hiAtten[[level]];
+	}
+	IF ~(inR | inG | inB)
+	{
+		__low<-lowTable[[level]];
+		__high<-hiTable[[level]];
+	}
 	__phase<-phase;
 
 	IF phase==0
@@ -298,7 +298,7 @@ INSTRUCTION ntscLevel	"active"	%0:dontcare[8]
 {
 	CALL SetupLHP(Pixel PIN_ACTIVECOL);
 	
-	VIDEO<-CALL LumaColourMixer(__low,__high,__phase);#lumaTable[[Pixel PIN_ACTIVECOL]];
+	VIDEO<-CALL LumaColourMixer(__low,__high,__phase);
 }
 
 INSTRUCTION ntscLevel	"background"	background
@@ -307,7 +307,7 @@ INSTRUCTION ntscLevel	"background"	background
 
 	VIDEO<-CALL LumaColourMixer(__low,__high,__phase);#lumaTable[[Pixel PIN_BKGCOL]];
 
-	VIDEO<-70;
+#	VIDEO<-70;
 }
 
 INSTRUCTION ntscLevel	"black"		black
