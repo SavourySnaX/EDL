@@ -24,8 +24,6 @@
 
 #include "jake\ntscDecode.h"
 
-int edlVideoGeneration=1;
-
 void AudioKill();
 void AudioInitialise();
 void UpdateAudio();
@@ -100,8 +98,6 @@ int LoadRom(unsigned char* rom,unsigned int size,const char* fname)
 	return 0;
 }
 
-void Tick2C02();
-
 int InitialiseMemory()
 {
 	return 0;
@@ -109,6 +105,9 @@ int InitialiseMemory()
 
 uint8_t internalRam[0x800];
 uint8_t ppuRam[0x800];
+
+void APUSetByte(uint16_t addr,uint8_t byte);
+uint8_t APUGetByte(uint16_t addr);
 
 uint8_t PPUGetByte(uint16_t addr)
 {
@@ -192,15 +191,10 @@ uint8_t GetByte(uint16_t addr)
 	}
 	if (addr<0x6000)
 	{
-		if (addr==0x4016)
+		if (addr>=0x4000 && addr<=0x4017)
 		{
-			uint8_t tmp=controllerData&0x80;
-			controllerData<<=1;
-			tmp>>=7;
-			return tmp;
+			return APUGetByte(addr);
 		}
-		if (addr>=0x4017 && addr<=0x4017)	//controller ports
-			return 0;
 //		printf("Unkown Read : %08X\n",addr);
 		return 0;
 	}
@@ -560,48 +554,9 @@ void SetByte(uint16_t addr,uint8_t byte)
 	}
 	if (addr<0x6000)
 	{
-		if (addr>=0x4014 && addr<=0x4017)		// sound channel + controller 2.. todo  - controller 1 will need rewriting when rp2a03 has proper register support
+		if (addr>=0x4000 && addr<=0x4017)
 		{
-			if (addr>=4016)
-			{
-				if (byte&1)
-				{
-					// Latch controller - reset shifter
-					controllerData=0;
-					if (KeyDown(GLFW_KEY_RIGHT))
-					{
-						controllerData|=0x01;
-					}
-					if (KeyDown(GLFW_KEY_LEFT))
-					{
-						controllerData|=0x02;
-					}
-					if (KeyDown(GLFW_KEY_DOWN))
-					{
-						controllerData|=0x04;
-					}
-					if (KeyDown(GLFW_KEY_UP))
-					{
-						controllerData|=0x08;
-					}
-					if (KeyDown(GLFW_KEY_ENTER))
-					{
-						controllerData|=0x10;
-					}
-					if (KeyDown(GLFW_KEY_SPACE))
-					{
-						controllerData|=0x20;
-					}
-					if (KeyDown('Z'))
-					{
-						controllerData|=0x40;
-					}
-					if (KeyDown('X'))
-					{
-						controllerData|=0x80;
-					}
-				}
-			}
+			APUSetByte(addr,byte);
 			return;
 		}
 //		printf("Unknown Write : %08X\n",addr);
@@ -908,7 +863,6 @@ static uint16_t lastPC;
 void ClockCPU(int cpuClock)
 {
 	uint16_t addr; 
-	//if (cpuClock==0)
 	{
 		MAIN_PinSetCLK(cpuClock&1);
 #if ENABLE_LOGIC_ANALYSER
@@ -974,7 +928,6 @@ void ClockCPU(int cpuClock)
 
 void ClockPPU(int ppuClock)
 {
-//	if (ppuClock==0)
 	{
 		static uint8_t vramLowAddressLatch=0;
 
@@ -999,37 +952,349 @@ void ClockPPU(int ppuClock)
 
 }
 
-void GenerateNTSC(int colourClock);
-void writeNTSC();
+uint32_t APU_Divider=0;
+
+uint8_t APU_FrameControl=0;
+uint8_t APU_FrameSequence=0;
+
+uint8_t APU_Status=0;
+
+uint8_t APU_Timer[4]={0,0,0,0};
+uint8_t APU_Counter[4]={0,0,0,0};
+
+uint8_t APU_Sequence0[4]={0x80,0xC0,0x80,0xE0};		//0x80 - clock envelopes : 0x40 - clock length counters and sweeps : 0x20 - set interrupt flag
+uint8_t APU_Sequence1[5]={0xC0,0x80,0xC0,0x80,0};
+
+void APU_UpdateFrameSequence(uint8_t flag)
+{
+	if (flag&0x80)
+	{
+		//clock envelopes
+		printf("APU Env Clock\n");
+	}
+	if (flag&0x40)
+	{
+		//clock lengths + sweeps
+		printf("APU Len Clock\n");
+		if ((APU_Timer[0]&0x20)==0 && APU_Counter[0]!=0)
+		{
+			APU_Counter[0]--;
+		}
+		printf("APU Counter 0 : %02X\n",APU_Counter[0]);
+		if ((APU_Timer[1]&0x20)==0 && APU_Counter[1]!=0)
+		{
+			APU_Counter[1]--;
+		}
+		printf("APU Counter 1 : %02X\n",APU_Counter[1]);
+		if ((APU_Timer[2]&0x80)==0 && APU_Counter[2]!=0)
+		{
+			APU_Counter[2]--;
+		}
+		printf("APU Counter 2 : %02X\n",APU_Counter[2]);
+	}
+		if ((APU_Timer[3]&0x20)==0 && APU_Counter[3]!=0)
+		{
+			APU_Counter[3]--;
+		}
+		printf("APU Counter 3 : %02X\n",APU_Counter[3]);
+	if (flag&0x20)
+	{
+		// set i flag
+	}
+}
+
+void APU_WriteFrameControl(uint8_t byte)
+{
+	APU_FrameControl=byte;
+	APU_Divider=0;
+	APU_FrameSequence=0;
+	if (APU_FrameControl&0x80)
+	{
+		APU_UpdateFrameSequence(APU_Sequence1[APU_FrameSequence]);
+		APU_FrameSequence++;
+	}
+}
+
+
+uint8_t APUGetByte(uint16_t addr)
+{
+	switch (addr)
+	{
+		case 0x4000:
+		case 0x4001:
+		case 0x4002:
+		case 0x4003:
+		case 0x4004:
+		case 0x4005:
+		case 0x4006:
+		case 0x4007:
+		case 0x4008:
+		case 0x4009:
+		case 0x400A:
+		case 0x400B:
+		case 0x400C:
+		case 0x400D:
+		case 0x400E:
+		case 0x400F:
+		case 0x4010:
+		case 0x4011:
+		case 0x4012:
+		case 0x4013:
+		case 0x4014:
+			break;
+		case 0x4015:
+			{
+				uint8_t ret=0;
+				
+				if (APU_Counter[0]!=0)
+					ret|=1;
+				if (APU_Counter[1]!=0)
+					ret|=2;
+				if (APU_Counter[2]!=0)
+					ret|=4;
+				if (APU_Counter[3]!=0)
+					ret|=8;
+
+				printf("APU : %04X (%02X)\n",addr,ret);
+
+				return ret;
+			}
+			break;
+		case 0x4016:
+		{
+			uint8_t tmp=controllerData&0x80;
+			controllerData<<=1;
+			tmp>>=7;
+			return tmp;
+		}
+		case 0x4017:
+		{
+			break;
+		}
+	}
+
+	return 0;
+}
+
+
+/*    bits  bit 3
+    7-4   0   1
+        -------
+    0   $0A $FE
+    1   $14 $02
+    2   $28 $04
+    3   $50 $06
+    4   $A0 $08
+    5   $3C $0A
+    6   $0E $0C
+    7   $1A $0E
+    8   $0C $10
+    9   $18 $12
+    A   $30 $14
+    B   $60 $16
+    C   $C0 $18
+    D   $48 $1A
+    E   $10 $1C
+    F   $20 $1E*/
+
+
+uint8_t counterReset0[16]={0x0A,0x14,0x28,0x50,0xA0,0x3C,0x0E,0x1A,0x0C,0x18,0x30,0x60,0xC0,0x48,0x10,0x20};
+uint8_t counterReset1[16]={0xFE,0x02,0x04,0x06,0x08,0x0A,0x0C,0x0E,0x10,0x12,0x14,0x16,0x18,0x1A,0x1C,0x1E};
+
+void APU_WriteLength(uint8_t enMask,uint8_t chn,uint8_t byte)	// need to do multi channel!
+{
+	uint8_t table=(byte&0x08)>>3;
+	uint8_t index=(byte&0xF0)>>4;
+
+	if (APU_Status&enMask)		// Pulse1Length Enabled
+	{
+		if (table)
+		{
+			APU_Counter[chn]=counterReset1[index];
+		}
+		else
+		{
+			APU_Counter[chn]=counterReset0[index];
+		}
+	}		
+
+}
+
+void APUSetByte(uint16_t addr,uint8_t byte)
+{
+	printf("APU : %04X : %02X\n",addr,byte);
+	switch (addr)
+	{
+		case 0x4000:
+			// Pulse1Timer	ttedvvvv		t - duty cycle type    e - length counter disable / envelope loop enable    d - envelope decay disable    v - volume/decay rate
+			// 		00010001
+			APU_Timer[0]=byte;
+			break;
+		case 0x4001:
+		case 0x4002:
+		case 0x4003:
+			// Pulse1Length	ccccclll
+			// 		00011000
+			APU_WriteLength(1,0,byte);
+			break;
+		case 0x4004:
+			// Pulse2Timer	ttedvvvv		t - duty cycle type    e - length counter disable / envelope loop enable    d - envelope decay disable    v - volume/decay rate
+			// 		00010001
+			APU_Timer[1]=byte;
+			break;
+		case 0x4005:
+		case 0x4006:
+		case 0x4007:
+			// Pulse2Length	ccccclll
+			// 		00011000
+			APU_WriteLength(2,1,byte);
+			break;
+		case 0x4008:
+			// TriangleTimer	dlllllll		d - length counter disable    l - linear load register
+			APU_Timer[2]=byte;
+			break;
+		case 0x4009:
+		case 0x400A:
+		case 0x400B:
+			// TriangleLength	ccccclll
+			APU_WriteLength(4,2,byte);
+			break;
+		case 0x400C:
+			// NoiseTimer	ttedvvvv		t - duty cycle type    e - length counter disable / envelope loop enable    d - envelope decay disable    v - volume/decay rate
+			// 		00010001
+			APU_Timer[3]=byte;
+			break;
+		case 0x400D:
+		case 0x400E:
+		case 0x400F:
+			// Pulse2Length	ccccclll
+			// 		00011000
+			APU_WriteLength(8,3,byte);
+			break;
+		case 0x4010:
+		case 0x4011:
+		case 0x4012:
+		case 0x4013:
+		case 0x4014:
+		case 0x4015:
+			APU_Status=byte;
+			if ((byte&1)==0)
+			{
+				APU_Counter[0]=0;
+			}
+			if ((byte&2)==0)
+			{
+				APU_Counter[1]=0;
+			}
+			if ((byte&4)==0)
+			{
+				APU_Counter[2]=0;
+			}
+			if ((byte&8)==0)
+			{
+				APU_Counter[3]=0;
+			}
+			break;
+		case 0x4016:
+			if (byte&1)
+			{
+				// Latch controller - reset shifter
+				controllerData=0;
+				if (KeyDown(GLFW_KEY_RIGHT))
+				{
+					controllerData|=0x01;
+				}
+				if (KeyDown(GLFW_KEY_LEFT))
+				{
+					controllerData|=0x02;
+				}
+				if (KeyDown(GLFW_KEY_DOWN))
+				{
+					controllerData|=0x04;
+				}
+				if (KeyDown(GLFW_KEY_UP))
+				{
+					controllerData|=0x08;
+				}
+				if (KeyDown(GLFW_KEY_ENTER))
+				{
+					controllerData|=0x10;
+				}
+				if (KeyDown(GLFW_KEY_SPACE))
+				{
+					controllerData|=0x20;
+				}
+				if (KeyDown('Z'))
+				{
+					controllerData|=0x40;
+				}
+				if (KeyDown('X'))
+				{
+					controllerData|=0x80;
+				}
+			}
+			break;
+		case 0x4017:
+		{
+			APU_WriteFrameControl(byte);
+			break;
+		}
+	}
+}
+
+void ClockAPU(int apuClock)
+{
+	// Temporary - needs moving into cpu core
+	if (apuClock&1)
+	{
+		APU_Divider++;
+		if (APU_Divider==89490)
+		{
+			APU_Divider=0;
+			printf("APU TICK\n");
+
+			if (APU_FrameControl&0x80)
+			{
+				APU_UpdateFrameSequence(APU_Sequence1[APU_FrameSequence]);
+			}
+			else
+			{
+				APU_UpdateFrameSequence(APU_Sequence0[APU_FrameSequence]);
+			}
+
+			APU_FrameSequence++;
+			if (APU_FrameControl&0x80)
+			{
+				if (APU_FrameSequence==5)
+					APU_FrameSequence=0;
+			}
+			else
+			{
+				if (APU_FrameSequence==4)
+					APU_FrameSequence=0;
+			}
+		}
+	}
+}
 
 void TickChips(int MasterClock)
 {
-//	int cpuClock=MasterClock%24;
-//	int ppuClock=MasterClock%8;
-	static int ColourClock=0;
-	NTSCClock=ColourClock%3;
-
 	ClockCPU(MasterClock);
+	ClockAPU(MasterClock);
 	ClockPPU(MasterClock);
 #if ENABLE_TV
-//	if (ppuClock==0)
-		Tick2C02();
-
-	//			if (ntsc_file /*&& (NTSCClock==0)*/)
+	
 	{
-		GenerateNTSC(ColourClock);
-		if (NTSCClock==2)
-			writeNTSC();
 		SampleNTSC(PPU_PinGetVIDEO());
 		if (NTSCClock==2)
 		{
 			AvgNTSC();
 		}
-	}
 
-	ColourClock++;
-	if (ColourClock==12)
-		ColourClock=0;
+		NTSCClock++;
+		if (NTSCClock==3)
+			NTSCClock=0;
+	}
 #endif
 #if ENABLE_LOGIC_ANALYSER
 	UpdatePinTick();
@@ -1152,7 +1417,7 @@ int main(int argc,char**argv)
 			// Tick Hardware based on MASTER clocks (or as close as damn it)
 
 
-			TickChips(MasterClock);//cpuClock,ppuClock,ColourClock,NTSCClock);
+			TickChips(MasterClock);
 			MasterClock+=1;
 			UpdateAudio();
 		}
@@ -1201,11 +1466,6 @@ int main(int argc,char**argv)
 
 			glfwPollEvents();
 			
-			if (CheckKey(GLFW_KEY_F1))
-			{
-				ClearKey(GLFW_KEY_F1);
-				edlVideoGeneration^=1;
-			}
 			if (CheckKey(GLFW_KEY_INSERT))
 			{
 				ClearKey(GLFW_KEY_INSERT);
@@ -1318,115 +1578,23 @@ uint32_t nesColours[0x40]=
 0x000000,
 0x000000
 };
-uint8_t lastPixelValue;
-
-static int TopBottomPercentage[12]={64,104,128,128,128,104,64,24,0,0,0,24};
-
-uint8_t activeNTSCSignalLow;
-uint8_t activeNTSCSignalHi;
-uint8_t activeNTSCDisplay=1;
-uint8_t activeNTSCSignalCol;
-
-#define SIGNAL_OFFSET	(60)
-#define SIGNAL_RANGE	(130)
 
 uint16_t avgNTSC[3];
-uint16_t sampleOld[3];
-
-uint16_t waveTable[16]={8,8,8,8,8,8,0,0,0,0,0,0};
-//uint16_t waveTable[16]={0,0,1,1,2,2,3,3,2,2,1,1};
-uint8_t lowTable[4]={39,55,100,159};
-uint8_t hiTable[4]={113,154,200,200};
 
 uint8_t lastEDLLevelAvg=0;
-uint8_t lastCLevelAvg=0;
-
-void GenerateNTSC(int colourClock)
-{
-
-#if 0
-	int range = activeNTSCSignalHi-activeNTSCSignalLow;
-	int inRangeR=((colourClock+0+5)%12)<6;
-	int inRangeG=((colourClock+4+5)%12)<6;
-	int inRangeB=((colourClock+8+5)%12)<6;
-	int actualLevel=(range*TopBottomPercentage[(colourClock+activeNTSCSignalCol)%12])/128;
-/*
-	if (((regs2C02[1]&0x20 && inRangeR) ||
-	    (regs2C02[1]&0x40 && inRangeG) ||
-	    (regs2C02[1]&0x80 && inRangeB)) && activeNTSCDisplay)
-	{
-		actualLevel*=.546f;
-		actualLevel-=SIGNAL_RANGE*.0902f;
-	}
-//	else
-//		actualLevel+=15;
-*/
-	actualLevel+=activeNTSCSignalLow;
-//	if (actualLevel<0)
-//		printf("Level : %d\n",actualLevel);
-
-//	printf("Level : %02X\n",actualLevel);
-#else
-	int actualLevel=activeNTSCSignalHi-activeNTSCSignalLow;
-
-	actualLevel>>=waveTable[(colourClock+activeNTSCSignalCol)%12];
-	
-	actualLevel+=activeNTSCSignalLow;
-#endif
-	sampleOld[NTSCClock]=actualLevel;
-#if ENABLE_LOGIC_ANALYSER
-	RecordPin(4,lastCLevelAvg);
-#endif
-}
-
-void writeNTSC()
-{
-	lastCLevelAvg=(sampleOld[0]+sampleOld[1]+sampleOld[2])/3;
-	if (!edlVideoGeneration)
-		ntscDecodeAddSample(lastCLevelAvg);
-//	printf("OLD : %d\n",actualLevel);
-//	fwrite(&actualLevel,1,1,ntsc_file);
-}
-
 
 void SampleNTSC(uint8_t actualLevel)
 {
-/*
-	int range = activeNTSCSignalHi-activeNTSCSignalLow;
-	int inRangeR=((colourClock+0+5)%12)<6;
-	int inRangeG=((colourClock+4+5)%12)<6;
-	int inRangeB=((colourClock+8+5)%12)<6;
-	int actualLevel=(range*TopBottomPercentage[(colourClock+activeNTSCSignalCol)%12])/128;
-
-	if (((regs2C02[1]&0x20 && inRangeR) ||
-	    (regs2C02[1]&0x40 && inRangeG) ||
-	    (regs2C02[1]&0x80 && inRangeB)) && activeNTSCDisplay)
-	{
-		actualLevel*=.546f;
-		actualLevel-=SIGNAL_RANGE*.0902f;
-	}
-//	else
-//		actualLevel+=15;
-
-	actualLevel+=activeNTSCSignalLow;
-	if (actualLevel<0)
-		printf("Level : %d\n",actualLevel);
-*/
-//	printf("Level : %02X\n",actualLevel);
 	avgNTSC[NTSCClock]=actualLevel;
 #if ENABLE_LOGIC_ANALYSER
 	RecordPin(3,lastEDLLevelAvg);
 #endif
-	//printf("SAM : %d\n",actualLevel);
 }
 
 void AvgNTSC()
 {
 	lastEDLLevelAvg=(avgNTSC[0]+avgNTSC[1]+avgNTSC[2])/3;
-	if (edlVideoGeneration)
-		ntscDecodeAddSample(lastEDLLevelAvg);
-//	printf("AVG : %d\n",actualLevel);
-//	fwrite(&actualLevel,1,1,ntsc_file);
+	ntscDecodeAddSample(lastEDLLevelAvg);
 }
 
 void PPU_SetVideo(uint8_t x,uint8_t y,uint8_t col)
@@ -1434,167 +1602,6 @@ void PPU_SetVideo(uint8_t x,uint8_t y,uint8_t col)
 	uint32_t* outputTexture = (uint32_t*)videoMemory[MAIN_WINDOW];
 
 	outputTexture[y*WIDTH+x]=nesColours[col];
-	lastPixelValue=col;
-}
-
-void Tick2C02()
-{
-	static int triCnt=0;
-	uint16_t curLine=0;
-	uint16_t curClock=0;
-
-	curLine=PPU_vClock&0x1FF;
-	curClock=PPU_hClock&0x1FF;
-
-	/// NTSC
-	{
-		if (/*curLine>17 && */curLine>=8 && curLine<11)
-		{
-			activeNTSCSignalLow=4;
-			activeNTSCSignalHi=4;
-		}
-		else
-		// For Every Line (for Now)
-		if (curClock<256)			// active
-		{
-/*Synch	 	0.781	 0.000	 -0.359
-Colorburst L	 1.000	 0.218	 -0.208
-Colorburst H	 1.712	 0.931	 0.286
-Color 0D	 1.131	 0.350	 -0.117
-Color 1D (black) 1.300	 0.518	 0.000
-Color 2D	 1.743	 0.962	 0.308
-Color 3D	 2.331	 1.550	 0.715
-Color 00	 1.875	 1.090	 0.397
-Color 10	 2.287	 1.500	 0.681
-Color 20	 2.743	 1.960	 1.000
-Color 30	 2.743	 1.960	 1.000
-*/
-
-#if 0
-			static uint8_t levelsLow[4]={SIGNAL_OFFSET+(-.117f*SIGNAL_RANGE),SIGNAL_OFFSET+(.0f*SIGNAL_RANGE),SIGNAL_OFFSET+(.308f*SIGNAL_RANGE),SIGNAL_OFFSET+(.815f*SIGNAL_RANGE)};
-			static uint8_t levelsHigh[4]={SIGNAL_OFFSET+(.397f*SIGNAL_RANGE),SIGNAL_OFFSET+(.681f*SIGNAL_RANGE),SIGNAL_OFFSET+(1.0f*SIGNAL_RANGE),SIGNAL_OFFSET+(1.0f*SIGNAL_RANGE)};
-
-
-	//		lastPixelValue=0x16;
-
-			uint8_t level=(lastPixelValue&0x30)>>4;
-			uint8_t colour=lastPixelValue&0x0F;
-
-			if (colour>13)
-				level=1;
-
-			uint8_t levelLow=levelsLow[level]/*(level<<0)*/;
-			uint8_t levelHigh=levelsHigh[level]/*(level<<6)*/;
-
-//			uint8_t levelLow=SIGNAL_OFFSET+((level+1)<<3);
-//			uint8_t levelHigh=SIGNAL_OFFSET+((level+1)<<6);
-
-			if (colour==0)
-			{
-				levelLow=levelHigh;
-			}
-			if (colour>12)
-			{
-				levelHigh=levelLow;
-			}
-			
-			activeNTSCSignalLow=levelLow;
-			activeNTSCSignalHi=levelHigh;
-			activeNTSCSignalCol=colour+5;
-#else
-
-			uint8_t level=(lastPixelValue&0x30)>>4;
-			uint8_t phase=lastPixelValue&0x0F;
-			if (phase>13)
-			{
-				level<-1;
-			}
-
-			activeNTSCSignalLow=lowTable[level];
-			activeNTSCSignalHi=hiTable[level];
-			activeNTSCSignalCol=phase+5;
-
-			if (phase==0)
-			{
-				activeNTSCSignalLow=activeNTSCSignalHi;
-			}
-			if (phase>12)
-			{
-				activeNTSCSignalHi=activeNTSCSignalLow;
-			}
-
-#endif
-			activeNTSCDisplay=1;
-		}
-		else
-		if (curClock<256+11)
-		{
-#if 1
-			lastPixelValue=0x00;
-#endif
-			activeNTSCSignalLow=70;
-			activeNTSCSignalHi=70;
-			activeNTSCDisplay=0;
-			// background colour
-		}
-		else
-		if (curClock<256+11+9)
-		{
-			activeNTSCSignalLow=60;
-			activeNTSCSignalHi=60;
-			// black
-		}
-		else
-		if (curClock<256+11+9+25)
-		{
-			activeNTSCSignalLow=4;
-			activeNTSCSignalHi=4;
-			// sync
-		}
-		else
-		if (curClock<256+11+9+25+4)
-		{
-			activeNTSCSignalLow=60;
-			activeNTSCSignalHi=60;
-			// black
-		}
-		else
-		if (curClock<256+11+9+25+4+15)
-		{
-#if 0
-			activeNTSCSignalLow=60+(-.208f*SIGNAL_RANGE);
-			activeNTSCSignalHi=60+(.286f*SIGNAL_RANGE);
-			activeNTSCSignalCol=8;
-#endif
-			activeNTSCSignalLow=25;
-			activeNTSCSignalHi=97;
-			activeNTSCSignalCol=8;
-			// colour burst
-		}
-		else
-		if (curClock<256+11+9+25+4+15+5)
-		{
-			activeNTSCSignalLow=60;
-			activeNTSCSignalHi=60;
-			// black
-		}
-		else
-		if (curClock<256+11+9+25+4+15+5+1)
-		{
-			activeNTSCSignalLow=60;
-			activeNTSCSignalHi=60;
-			// pulse???
-		}
-		else
-		if (curClock<256+11+9+25+4+15+5+1+15)
-		{
-			activeNTSCSignalLow=70;
-			activeNTSCSignalHi=70;
-			// background colour
-		}
-		else
-			printf("hiccup\n");
-	}
 }
 
 //////////////////////// NOISES //////////////////////////

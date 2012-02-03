@@ -23,6 +23,8 @@ DECLARE INTERNAL clkCounter[4];
 DECLARE INTERNAL phase[1];
 DECLARE INTERNAL outClck[1];
 
+### TODO : Move DMAC from 6502 core to here 
+
 HANDLER _RST	ALWAYS
 {
 	CPU PIN__RES<-_RST;

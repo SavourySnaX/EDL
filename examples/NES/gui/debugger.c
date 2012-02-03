@@ -188,7 +188,7 @@ void DrawRegisterMain(unsigned char* buffer,unsigned int width,uint16_t address,
 }
 
 #define MAX_CAPTURE		(341*262*2*4*3)
-#define MAX_PINS		(5)
+#define MAX_PINS		(4)
 
 unsigned char lohi[MAX_PINS][MAX_CAPTURE];
 
@@ -247,7 +247,7 @@ void DrawTimingA(unsigned char* buffer,unsigned int width)
 	}
 
 	uint32_t level;
-	for (a=4;a<MAX_PINS;a++)
+	for (a=3;a<MAX_PINS;a++)
 	{
 		pulsepos=pulsestart;
 		uint32_t lastLevel=50+(255-(lohi[a][pulsepos>>16]));
@@ -309,7 +309,7 @@ void DrawTiming(unsigned char* buffer,unsigned int width)
 
 	DrawTimingA(buffer,width);
 
-	for (a=0;a<MAX_PINS-2;a++)
+	for (a=0;a<MAX_PINS-1;a++)
 	{
 		for (b=0;b<512*2;b++)
 		{

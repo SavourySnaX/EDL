@@ -303,11 +303,11 @@ INSTRUCTION ntscLevel	"active"	%0:dontcare[8]
 
 INSTRUCTION ntscLevel	"background"	background
 {
-	CALL SetupLHP(Pixel PIN_BKGCOL);
+#	CALL SetupLHP(Pixel PIN_BKGCOL);
 
-	VIDEO<-CALL LumaColourMixer(__low,__high,__phase);#lumaTable[[Pixel PIN_BKGCOL]];
+#	VIDEO<-CALL LumaColourMixer(__low,__high,__phase);#lumaTable[[Pixel PIN_BKGCOL]];
 
-#	VIDEO<-70;
+	VIDEO<-70;
 }
 
 INSTRUCTION ntscLevel	"black"		black
