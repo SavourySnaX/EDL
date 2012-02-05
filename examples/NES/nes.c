@@ -18,8 +18,8 @@
 
 #define IS_COMPAT		0
 
-#define ENABLE_TV		1
-#define ENABLE_LOGIC_ANALYSER	1
+#define ENABLE_TV		0
+#define ENABLE_LOGIC_ANALYSER	0
 #define ENABLE_DEBUGGER		1
 
 #include "jake\ntscDecode.h"
@@ -959,6 +959,8 @@ uint8_t APU_FrameSequence=0;
 
 uint8_t APU_Status=0;
 
+uint8_t APU_Interrupt=0;
+
 uint8_t APU_Timer[4]={0,0,0,0};
 uint8_t APU_Counter[4]={0,0,0,0};
 
@@ -991,15 +993,19 @@ void APU_UpdateFrameSequence(uint8_t flag)
 			APU_Counter[2]--;
 		}
 		printf("APU Counter 2 : %02X\n",APU_Counter[2]);
-	}
 		if ((APU_Timer[3]&0x20)==0 && APU_Counter[3]!=0)
 		{
 			APU_Counter[3]--;
 		}
 		printf("APU Counter 3 : %02X\n",APU_Counter[3]);
+	}
 	if (flag&0x20)
 	{
 		// set i flag
+		if ((APU_FrameControl&0x40)==0)
+		{
+			APU_Interrupt=1;
+		}
 	}
 }
 
@@ -1012,6 +1018,10 @@ void APU_WriteFrameControl(uint8_t byte)
 	{
 		APU_UpdateFrameSequence(APU_Sequence1[APU_FrameSequence]);
 		APU_FrameSequence++;
+	}
+	if (APU_FrameControl&0x40)
+	{
+		APU_Interrupt=0;
 	}
 }
 
@@ -1054,8 +1064,13 @@ uint8_t APUGetByte(uint16_t addr)
 					ret|=4;
 				if (APU_Counter[3]!=0)
 					ret|=8;
+				if (APU_Interrupt)
+				{
+					ret|=0x40;
+				}
+				APU_Interrupt=0;
 
-				printf("APU : %04X (%02X)\n",addr,ret);
+				printf("APU : %04X (%02X)%d\n",addr,ret);
 
 				return ret;
 			}
