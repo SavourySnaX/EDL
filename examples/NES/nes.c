@@ -20,7 +20,7 @@
 
 #define ENABLE_TV		0
 #define ENABLE_LOGIC_ANALYSER	0
-#define ENABLE_DEBUGGER		1
+#define ENABLE_DEBUGGER		0
 
 #include "jake\ntscDecode.h"
 
@@ -509,7 +509,7 @@ void WriteMMC3_Mirroring(uint8_t byte)
 
 void WriteToMMC3(uint16_t addr,uint8_t byte)
 {
-	printf("MMC3 Write : %04X,%02X\n",addr,byte);
+//	printf("MMC3 Write : %04X,%02X\n",addr,byte);
 	addr&=0xE001;
 	switch (addr)
 	{
@@ -865,12 +865,16 @@ void ClockCPU(int cpuClock)
 	uint16_t addr; 
 	{
 		MAIN_PinSetCLK(cpuClock&1);
+
+		uint8_t m2=MAIN_PinGetM2()&1;
+
 #if ENABLE_LOGIC_ANALYSER
 //		RecordPin(0,cpuClock&1);
 		RecordPin(1,MAIN_PinGetM2()&1);
 #endif
 		addr = MAIN_PinGetA();
 
+#if ENABLE_DEBUGGER
 		if (MAIN_DEBUG_SYNC)
 		{
 			lastPC=addr;
@@ -880,9 +884,9 @@ void ClockCPU(int cpuClock)
 				stopTheClock=1;
 			}
 		}
-
+#endif
 		// Phase is 1 (LS139 decode gives us DBE low when Phase 1, Address=001x xxxx xxxx xxxx
-		uint8_t dbe_signal=(MAIN_PinGetM2()&1) && ((addr&0x8000)==0) && ((addr&0x4000)==0) && ((addr&0x2000)==0x2000)?0:1;
+		uint8_t dbe_signal=(m2) && ((addr&0x8000)==0) && ((addr&0x4000)==0) && ((addr&0x2000)==0x2000)?0:1;
 #if ENABLE_LOGIC_ANALYSER
 		RecordPin(2,dbe_signal&1);
 #endif
@@ -902,9 +906,9 @@ void ClockCPU(int cpuClock)
 		{
 			// Because we are not yet handling ram/rom etc as chips - the below check takes care of making sure we only get a single access
 			static int lastM2=1111;
-			if (lastM2!=(MAIN_PinGetM2()&1))
+			if (lastM2!=m2)
 			{
-				lastM2=MAIN_PinGetM2()&1;
+				lastM2=m2;
 				if (lastM2==1 && dbe_signal)
 				{
 					if (MAIN_PinGetRW())
@@ -947,12 +951,15 @@ void ClockPPU(int ppuClock)
 			PPUSetByte(addr,PPU_PinGetAD());
 		}
 
+#if ENABLE_LOGIC_ANALYSER
 		RecordPin(0,(PPU_PinGetPA()&0x10)>>4);
+#endif
 	}
 
 }
 
 uint32_t APU_Divider=0;
+uint32_t APU_CPUClockRate=0;
 
 uint8_t APU_FrameControl=0;
 uint8_t APU_FrameSequence=0;
@@ -962,6 +969,8 @@ uint8_t APU_Status=0;
 uint8_t APU_Interrupt=0;
 
 uint8_t APU_Timer[4]={0,0,0,0};
+uint16_t APU_WaveTimer[4]={0,0,0,0};
+uint16_t APU_WaveTimerActual[4]={0,0,0,0};
 uint8_t APU_Counter[4]={0,0,0,0};
 
 uint8_t APU_Sequence0[4]={0x80,0xC0,0x80,0xE0};		//0x80 - clock envelopes : 0x40 - clock length counters and sweeps : 0x20 - set interrupt flag
@@ -972,32 +981,26 @@ void APU_UpdateFrameSequence(uint8_t flag)
 	if (flag&0x80)
 	{
 		//clock envelopes
-		printf("APU Env Clock\n");
 	}
 	if (flag&0x40)
 	{
 		//clock lengths + sweeps
-		printf("APU Len Clock\n");
 		if ((APU_Timer[0]&0x20)==0 && APU_Counter[0]!=0)
 		{
 			APU_Counter[0]--;
 		}
-		printf("APU Counter 0 : %02X\n",APU_Counter[0]);
 		if ((APU_Timer[1]&0x20)==0 && APU_Counter[1]!=0)
 		{
 			APU_Counter[1]--;
 		}
-		printf("APU Counter 1 : %02X\n",APU_Counter[1]);
 		if ((APU_Timer[2]&0x80)==0 && APU_Counter[2]!=0)
 		{
 			APU_Counter[2]--;
 		}
-		printf("APU Counter 2 : %02X\n",APU_Counter[2]);
 		if ((APU_Timer[3]&0x20)==0 && APU_Counter[3]!=0)
 		{
 			APU_Counter[3]--;
 		}
-		printf("APU Counter 3 : %02X\n",APU_Counter[3]);
 	}
 	if (flag&0x20)
 	{
@@ -1137,7 +1140,6 @@ void APU_WriteLength(uint8_t enMask,uint8_t chn,uint8_t byte)	// need to do mult
 
 void APUSetByte(uint16_t addr,uint8_t byte)
 {
-	printf("APU : %04X : %02X\n",addr,byte);
 	switch (addr)
 	{
 		case 0x4000:
@@ -1146,10 +1148,16 @@ void APUSetByte(uint16_t addr,uint8_t byte)
 			APU_Timer[0]=byte;
 			break;
 		case 0x4001:
+			break;
 		case 0x4002:
+			APU_WaveTimer[0]&=0x700;
+			APU_WaveTimer[0]|=byte;
+			break;
 		case 0x4003:
 			// Pulse1Length	ccccclll
 			// 		00011000
+			APU_WaveTimer[0]&=0x0FF;
+			APU_WaveTimer[0]|=(byte&7)<<8;
 			APU_WriteLength(1,0,byte);
 			break;
 		case 0x4004:
@@ -1158,10 +1166,16 @@ void APUSetByte(uint16_t addr,uint8_t byte)
 			APU_Timer[1]=byte;
 			break;
 		case 0x4005:
+			break;
 		case 0x4006:
+			APU_WaveTimer[1]&=0x700;
+			APU_WaveTimer[1]|=byte;
+			break;
 		case 0x4007:
 			// Pulse2Length	ccccclll
 			// 		00011000
+			APU_WaveTimer[1]&=0x0FF;
+			APU_WaveTimer[1]|=(byte&7)<<8;
 			APU_WriteLength(2,1,byte);
 			break;
 		case 0x4008:
@@ -1257,16 +1271,61 @@ void APUSetByte(uint16_t addr,uint8_t byte)
 	}
 }
 
+uint8_t APU_Duty0[16]={1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+uint8_t APU_Duty1[16]={1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0};
+uint8_t APU_Duty2[16]={1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0};
+uint8_t APU_Duty3[16]={1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0};
+
+uint8_t DAC_LEVEL[4]={0,0,0,0};
+
+uint8_t APU_DutyCycle[2]={0,0};
+
 void ClockAPU(int apuClock)
 {
 	// Temporary - needs moving into cpu core
 	if (apuClock&1)
 	{
+		APU_CPUClockRate++;
+		if (APU_CPUClockRate==6)
+		{
+			int a;
+			APU_CPUClockRate=0;
+			//Tick WaveTimers
+			
+			for (a=0;a<2;a++)
+			{
+				if (APU_WaveTimerActual[a]==0)
+				{
+					APU_WaveTimerActual[a]=APU_WaveTimer[a];
+					// Do something (toggle square?)
+					APU_DutyCycle[a]++;
+
+					switch (APU_Timer[a]&0xC0)
+					{
+						case 0x00:
+							DAC_LEVEL[a]=APU_Duty0[APU_DutyCycle[a]&0xF];
+							break;
+						case 0x40:
+							DAC_LEVEL[a]=APU_Duty1[APU_DutyCycle[a]&0xF];
+							break;
+						case 0x80:
+							DAC_LEVEL[a]=APU_Duty2[APU_DutyCycle[a]&0xF];
+							break;
+						case 0xC0:
+							DAC_LEVEL[a]=APU_Duty3[APU_DutyCycle[a]&0xF];
+							break;
+					}
+				}
+				else
+				{
+					APU_WaveTimerActual[a]--;
+				}
+			}
+		}
 		APU_Divider++;
 		if (APU_Divider==89490)
 		{
 			APU_Divider=0;
-			printf("APU TICK\n");
 
 			if (APU_FrameControl&0x80)
 			{
@@ -1290,6 +1349,9 @@ void ClockAPU(int apuClock)
 			}
 		}
 	}
+
+	_AudioAddData(0,DAC_LEVEL[0]?(APU_Timer[0]&0x0F)<<10:0);
+	_AudioAddData(1,DAC_LEVEL[1]?(APU_Timer[1]&0x0F)<<10:0);
 }
 
 void TickChips(int MasterClock)
@@ -1722,6 +1784,8 @@ void AudioKill()
 
 int16_t currentDAC[4] = {0,0,0,0};
 
+FILE* poop=NULL;
+
 void _AudioAddData(int channel,int16_t dacValue)
 {
 	currentDAC[channel]=dacValue;
@@ -1742,6 +1806,14 @@ void UpdateAudio()
 		if (amountAdded!=BUFFER_LEN)
 		{
 			int32_t res=0;
+
+			if (!poop)
+			{
+				poop=fopen("out.raw","wb");
+			}
+
+			fwrite(&currentDAC[0],2,1,poop);
+			fwrite(&currentDAC[1],2,1,poop);
 
 			res+=currentDAC[0];
 			res+=currentDAC[1];
