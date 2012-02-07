@@ -973,6 +973,8 @@ uint16_t APU_WaveTimer[4]={0,0,0,0};
 uint16_t APU_WaveTimerActual[4]={0,0,0,0};
 uint8_t APU_Counter[4]={0,0,0,0};
 
+uint8_t APU_NoiseModePeriod=0;
+
 uint8_t APU_Sequence0[4]={0x80,0xC0,0x80,0xE0};		//0x80 - clock envelopes : 0x40 - clock length counters and sweeps : 0x20 - set interrupt flag
 uint8_t APU_Sequence1[5]={0xC0,0x80,0xC0,0x80,0};
 
@@ -1086,9 +1088,7 @@ uint8_t APUGetByte(uint16_t addr)
 			return tmp;
 		}
 		case 0x4017:
-		{
 			break;
-		}
 	}
 
 	return 0;
@@ -1124,7 +1124,7 @@ void APU_WriteLength(uint8_t enMask,uint8_t chn,uint8_t byte)	// need to do mult
 	uint8_t table=(byte&0x08)>>3;
 	uint8_t index=(byte&0xF0)>>4;
 
-	if (APU_Status&enMask)		// Pulse1Length Enabled
+	if (APU_Status&enMask)
 	{
 		if (table)
 		{
@@ -1183,7 +1183,9 @@ void APUSetByte(uint16_t addr,uint8_t byte)
 			APU_Timer[2]=byte;
 			break;
 		case 0x4009:
+			break;
 		case 0x400A:
+			break;
 		case 0x400B:
 			// TriangleLength	ccccclll
 			APU_WriteLength(4,2,byte);
@@ -1194,17 +1196,25 @@ void APUSetByte(uint16_t addr,uint8_t byte)
 			APU_Timer[3]=byte;
 			break;
 		case 0x400D:
+			break;
 		case 0x400E:
+			APU_NoiseModePeriod=byte;
+			break;
 		case 0x400F:
 			// Pulse2Length	ccccclll
 			// 		00011000
 			APU_WriteLength(8,3,byte);
 			break;
 		case 0x4010:
+			break;
 		case 0x4011:
+			break;
 		case 0x4012:
+			break;
 		case 0x4013:
+			break;
 		case 0x4014:
+			break;
 		case 0x4015:
 			APU_Status=byte;
 			if ((byte&1)==0)
@@ -1280,6 +1290,117 @@ uint8_t DAC_LEVEL[4]={0,0,0,0};
 
 uint8_t APU_DutyCycle[2]={0,0};
 
+void GenerateSqr1()
+{
+	// TIMER
+	if (APU_WaveTimerActual[0]==0)
+	{
+		APU_WaveTimerActual[0]=APU_WaveTimer[0];
+		// SEQUENCER
+		APU_DutyCycle[0]++;
+
+		switch (APU_Timer[0]&0xC0)
+		{
+			case 0x00:
+				DAC_LEVEL[0]=APU_Duty0[APU_DutyCycle[0]&0xF];
+				break;
+			case 0x40:
+				DAC_LEVEL[0]=APU_Duty1[APU_DutyCycle[0]&0xF];
+				break;
+			case 0x80:
+				DAC_LEVEL[0]=APU_Duty2[APU_DutyCycle[0]&0xF];
+				break;
+			case 0xC0:
+				DAC_LEVEL[0]=APU_Duty3[APU_DutyCycle[0]&0xF];
+				break;
+		}
+	}
+	else
+	{
+		APU_WaveTimerActual[0]--;
+	}
+
+	// LENGTH
+	if (APU_Counter[0]==0)
+		DAC_LEVEL[0]=0;
+}
+
+void GenerateSqr2()
+{
+	// TIMER
+	if (APU_WaveTimerActual[1]==0)
+	{
+		APU_WaveTimerActual[1]=APU_WaveTimer[1];
+		// SEQUENCER
+		APU_DutyCycle[1]++;
+
+		switch (APU_Timer[1]&0xC0)
+		{
+			case 0x00:
+				DAC_LEVEL[1]=APU_Duty0[APU_DutyCycle[1]&0xF];
+				break;
+			case 0x40:
+				DAC_LEVEL[1]=APU_Duty1[APU_DutyCycle[1]&0xF];
+				break;
+			case 0x80:
+				DAC_LEVEL[1]=APU_Duty2[APU_DutyCycle[1]&0xF];
+				break;
+			case 0xC0:
+				DAC_LEVEL[1]=APU_Duty3[APU_DutyCycle[1]&0xF];
+				break;
+		}
+	}
+	else
+	{
+		APU_WaveTimerActual[1]--;
+	}
+
+	// LENGTH
+	if (APU_Counter[1]==0)
+		DAC_LEVEL[1]=0;
+}
+
+uint8_t triangleSequencer[32]={0x0F,0x0E,0x0D,0x0C,0x0B,0x0A,0x09,0x08,0x07,0x06,0x05,0x04,0x03,0x02,0x01,0x00,0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0A,0x0B,0x0C,0x0D,0x0E,0x0F};
+
+void GenerateTriangle()
+{
+
+}
+
+uint16_t noisePeriod[16]={0x004,0x008,0x010,0x020,0x040,0x060,0x080,0x0A0,0x0CA,0x0FE,0x17C,0x1FC,0x2FA,0x3F8,0x7F2,0xFE4};
+
+uint16_t noiseShifter=1;
+
+void GenerateNoise()
+{
+	// TIMER
+	if (APU_WaveTimerActual[3]==0)
+	{
+		APU_WaveTimerActual[3]=noisePeriod[APU_NoiseModePeriod&0xF];
+
+		uint16_t preShift;
+		if (APU_NoiseModePeriod&0x80)
+		{
+			preShift=((noiseShifter&1)^((noiseShifter&0x40)>>5))<<13;
+		}
+		else
+		{
+			preShift=((noiseShifter&1)^((noiseShifter&2)>>1))<<13;
+		}
+		noiseShifter>>=1;
+		noiseShifter|=preShift;
+
+		DAC_LEVEL[3]=(~noiseShifter)&1;
+	}
+	else
+	{
+		APU_WaveTimerActual[3]--;
+	}
+
+	if (APU_Counter[3]==0)
+		DAC_LEVEL[3]=0;
+}
+
 void ClockAPU(int apuClock)
 {
 	// Temporary - needs moving into cpu core
@@ -1290,37 +1411,10 @@ void ClockAPU(int apuClock)
 		{
 			int a;
 			APU_CPUClockRate=0;
-			//Tick WaveTimers
-			
-			for (a=0;a<2;a++)
-			{
-				if (APU_WaveTimerActual[a]==0)
-				{
-					APU_WaveTimerActual[a]=APU_WaveTimer[a];
-					// Do something (toggle square?)
-					APU_DutyCycle[a]++;
 
-					switch (APU_Timer[a]&0xC0)
-					{
-						case 0x00:
-							DAC_LEVEL[a]=APU_Duty0[APU_DutyCycle[a]&0xF];
-							break;
-						case 0x40:
-							DAC_LEVEL[a]=APU_Duty1[APU_DutyCycle[a]&0xF];
-							break;
-						case 0x80:
-							DAC_LEVEL[a]=APU_Duty2[APU_DutyCycle[a]&0xF];
-							break;
-						case 0xC0:
-							DAC_LEVEL[a]=APU_Duty3[APU_DutyCycle[a]&0xF];
-							break;
-					}
-				}
-				else
-				{
-					APU_WaveTimerActual[a]--;
-				}
-			}
+			GenerateSqr1();
+			GenerateSqr2();
+			GenerateNoise();
 		}
 		APU_Divider++;
 		if (APU_Divider==89490)
@@ -1352,6 +1446,7 @@ void ClockAPU(int apuClock)
 
 	_AudioAddData(0,DAC_LEVEL[0]?(APU_Timer[0]&0x0F)<<10:0);
 	_AudioAddData(1,DAC_LEVEL[1]?(APU_Timer[1]&0x0F)<<10:0);
+	_AudioAddData(3,DAC_LEVEL[3]?(APU_Timer[3]&0x0F)<<10:0);
 }
 
 void TickChips(int MasterClock)
@@ -1814,6 +1909,7 @@ void UpdateAudio()
 
 			fwrite(&currentDAC[0],2,1,poop);
 			fwrite(&currentDAC[1],2,1,poop);
+			fwrite(&currentDAC[3],2,1,poop);
 
 			res+=currentDAC[0];
 			res+=currentDAC[1];
