@@ -973,6 +973,10 @@ uint16_t APU_WaveTimer[4]={0,0,0,0};
 uint16_t APU_WaveTimerActual[4]={0,0,0,0};
 uint8_t APU_Counter[4]={0,0,0,0};
 
+uint8_t APU_LinearCounter=0;
+uint8_t APU_LinearHalt=0;
+uint8_t APU_TriSequencer=0;
+
 uint8_t APU_NoiseModePeriod=0;
 
 uint8_t APU_Sequence0[4]={0x80,0xC0,0x80,0xE0};		//0x80 - clock envelopes : 0x40 - clock length counters and sweeps : 0x20 - set interrupt flag
@@ -982,7 +986,18 @@ void APU_UpdateFrameSequence(uint8_t flag)
 {
 	if (flag&0x80)
 	{
-		//clock envelopes
+		//clock envelopes + linear counter
+		if (APU_LinearHalt)
+		{
+			APU_LinearCounter=APU_Timer[2]&0x7F;
+		}
+		else
+		{
+			if (APU_LinearCounter!=0)
+				APU_LinearCounter--;
+		}
+		if ((APU_Timer[2]&0x80)==0)
+			APU_LinearHalt=0;
 	}
 	if (flag&0x40)
 	{
@@ -1185,9 +1200,14 @@ void APUSetByte(uint16_t addr,uint8_t byte)
 		case 0x4009:
 			break;
 		case 0x400A:
+			APU_WaveTimer[2]&=0x700;
+			APU_WaveTimer[2]|=byte;
 			break;
 		case 0x400B:
 			// TriangleLength	ccccclll
+			APU_WaveTimer[2]&=0x0FF;
+			APU_WaveTimer[2]|=(byte&7)<<8;
+			APU_LinearHalt=1;
 			APU_WriteLength(4,2,byte);
 			break;
 		case 0x400C:
@@ -1364,7 +1384,22 @@ uint8_t triangleSequencer[32]={0x0F,0x0E,0x0D,0x0C,0x0B,0x0A,0x09,0x08,0x07,0x06
 
 void GenerateTriangle()
 {
+	if (APU_WaveTimerActual[2]==0)
+	{
+		APU_WaveTimerActual[2]=APU_WaveTimer[2];
 
+		if (APU_LinearCounter!=0 && APU_Counter[2]!=0)
+		{
+			APU_TriSequencer++;
+			APU_TriSequencer&=31;
+		}
+	}
+	else
+	{
+		APU_WaveTimerActual[2]--;
+	}
+		
+	DAC_LEVEL[2]=triangleSequencer[APU_TriSequencer];
 }
 
 uint16_t noisePeriod[16]={0x004,0x008,0x010,0x020,0x040,0x060,0x080,0x0A0,0x0CA,0x0FE,0x17C,0x1FC,0x2FA,0x3F8,0x7F2,0xFE4};
@@ -1414,6 +1449,7 @@ void ClockAPU(int apuClock)
 
 			GenerateSqr1();
 			GenerateSqr2();
+			GenerateTriangle();
 			GenerateNoise();
 		}
 		APU_Divider++;
@@ -1446,6 +1482,7 @@ void ClockAPU(int apuClock)
 
 	_AudioAddData(0,DAC_LEVEL[0]?(APU_Timer[0]&0x0F)<<10:0);
 	_AudioAddData(1,DAC_LEVEL[1]?(APU_Timer[1]&0x0F)<<10:0);
+	_AudioAddData(2,DAC_LEVEL[2]<<10);
 	_AudioAddData(3,DAC_LEVEL[3]?(APU_Timer[3]&0x0F)<<10:0);
 }
 
@@ -1909,6 +1946,7 @@ void UpdateAudio()
 
 			fwrite(&currentDAC[0],2,1,poop);
 			fwrite(&currentDAC[1],2,1,poop);
+			fwrite(&currentDAC[2],2,1,poop);
 			fwrite(&currentDAC[3],2,1,poop);
 
 			res+=currentDAC[0];
