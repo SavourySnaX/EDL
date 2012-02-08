@@ -381,7 +381,7 @@ FUNCTION INTERNAL	MultiplexSprite
 
 FUNCTION INTERNAL	Rasterise
 {
-	IF hClock<256
+	IF (hClock<256) & ((hClock>7)|(BGCol0))
 	{
 		DECLARE actualCol[6];
 		DECLARE c[16];
@@ -402,15 +402,18 @@ FUNCTION INTERNAL	Rasterise
 
 		IF bp0|bp1
 		{
-			IF SpriteColour!=0 & SpriteZero & ~SpriteCollision
+			IF ((hClock>7) | SprCol0) & (hClock<255)
 			{
-				SpriteCollision<-1;
-				Sprite0<-1;
-			}
-			actualCol<-col;
-			IF SpriteColour!=0 & (~SpriteBack)
-			{
-				actualCol<-SpriteColour;
+				IF SpriteColour!=0 & SpriteZero & ~SpriteCollision
+				{
+					SpriteCollision<-1;
+					Sprite0<-1;
+				}
+				actualCol<-col;
+				IF SpriteColour!=0 & (~SpriteBack)
+				{
+					actualCol<-SpriteColour;
+				}
 			}
 		}
 		IF ~(bp0|bp1)
@@ -472,7 +475,7 @@ FUNCTION INTERNAL	TickPixelClockStart
 	}
 	IF (vClock>=21) & (vClock<=260) 
 	{
-		IF BGShow
+		IF BGShow					## TODO Bg off sprites on
 		{
 			CALL Rasterise();
 		}
@@ -641,7 +644,7 @@ INSTRUCTION	PixelClockLine	"Line20"	%000010100
 	{
 		VramAddress_counter<-VramAddress;
 	}
-	IF oddField & (hClock==339) & BGShow
+	IF oddField & (hClock==339) & (BGShow|SprShow)
 	{
 		hClock<-hClock+1;
 	}
