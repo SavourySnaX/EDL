@@ -26,7 +26,9 @@ DECLARE SP[16]		ALIAS	%00000001:S[8];
 DECLARE	PC[16] 		ALIAS PCH[8]:PCL[8];
 
 DECLARE	P[8]		ALIAS n[1]:v[1]:%1:b[1]:d[1]:i[1]:z[1]:c[1];
-										# n negative : v overflow : b break : d decimal : i interrupt disable : z zero : c carry
+			# n negative : v overflow : b break : d decimal : i interrupt disable : z zero : c carry
+
+DECLARE inhibit[1];	# SEI,CLI,PLP effectively delay update to the i flag until after the next instruction
 
 DECLARE DEBUG_SYNC[1];								# Used for debugging, since the sync pin is no longer exposed
 
@@ -48,17 +50,14 @@ DECLARE INTERNAL TMP[8];
 DECLARE INTERNAL DMA_ADD[16]	ALIAS	DMA_ADDH[8]:DMA_ADDL[8];
 DECLARE INTERNAL DMA_START[1];
 
-#
-# For now we don't implement the internal clock generator - we rely on a single phase clock on O0 
-#
-#
-
 HANDLER PIN__RES	ALWAYS
 {
 	IF ~PIN__RES
 	{
 		nmi<-0;
 		res<-1;
+		inhibit<-1;
+		i<-1;
 		DMA_START<-0;
 		DMA_ADDL<-0;
 	}
@@ -120,7 +119,7 @@ HANDLER		PIN_O0	TRANSITION(0,1)
 			PIN_AB<-SP;
 			S<-S-1;
 			DEBUG_SYNC<0;
-			PIN_RW<-0;
+			PIN_RW<-0 | res;		# Reset does not push to the stack
 			PIN_DB<-MEMSTORE;
 		}
 
@@ -237,12 +236,12 @@ INSTRUCTION registers "OAM_DMA"	$4014
 
 HANDLER		PIN_O0	TRANSITION(1,0)
 {
-	IF PIN_O0.FETCH@ & (PIN__IRQ | i) & (~(nmi|res))
+	IF PIN_O0.FETCH@ & (PIN__IRQ | inhibit) & (~(nmi|res))
 	{
 		PIN_DB->IR;
 		PC<-PC+1;
 	}
-	IF PIN_O0.FETCH@ & (~PIN__IRQ) & (~i)
+	IF PIN_O0.FETCH@ & (~PIN__IRQ) & (~inhibit)
 	{
 		irq<-1;
 		$00->IR;
@@ -251,7 +250,11 @@ HANDLER		PIN_O0	TRANSITION(1,0)
 	{
 		$00->IR;
 	}
-
+	IF PIN_O0.FETCH@
+	{
+		inhibit<-i;		# This will cause the interrupt flag update to be delayed by one instruction (RTI explicitly updates internally)
+	}
+	
 	IF PIN_O0.IMM@
 	{
 		PC<-PC+1;
@@ -1096,11 +1099,6 @@ INSTRUCTION	"BRK"		%00000000
 	{
 		MEMSTORE<-PCH;
 		NEXT PIN_O0.PH.T0;
-		IF res
-		{
-			$FFFC->IA;
-			NEXT PIN_O0.IA.T0;
-		}
 	}
 
 	IF PIN_O0.PH.T0@
@@ -1132,6 +1130,10 @@ INSTRUCTION	"BRK"		%00000000
 		{
 			$FFFA->IA;
 		}
+		IF res
+		{
+			$FFFC->IA;
+		}
 		NEXT PIN_O0.IA.T0;
 	}
 
@@ -1146,6 +1148,7 @@ INSTRUCTION	"BRK"		%00000000
 		PIN_DB->ADH;
 		PC<-AD;
 		i<-1;
+		inhibit<-i;
 		irq<-0;
 		nmi<-0;
 		res<-0;
@@ -1209,6 +1212,7 @@ INSTRUCTION	"RTI"			%01000000
 
 	IF PIN_O0.PL.T2@
 	{
+		i->inhibit;
 		PIN_DB->PCL;
 	}
 
