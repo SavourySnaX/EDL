@@ -20,7 +20,7 @@
 
 #define ENABLE_TV		0
 #define ENABLE_LOGIC_ANALYSER	0
-#define ENABLE_DEBUGGER		0
+#define ENABLE_DEBUGGER		1
 
 #include "jake\ntscDecode.h"
 
@@ -860,6 +860,8 @@ int NTSCClock;
 
 static uint16_t lastPC;
 
+uint8_t APU_Interrupt=1;
+
 void ClockCPU(int cpuClock)
 {
 	uint16_t addr; 
@@ -924,7 +926,7 @@ void ClockCPU(int cpuClock)
 			}
 		}
 
-		MAIN_PinSet_IRQ(MMC3_TickIRQ());
+		MAIN_PinSet_IRQ((MMC3_TickIRQ()&APU_Interrupt)&1);
 		MAIN_PinSet_NMI(PPU_PinGet_INT());
 	}
 
@@ -966,7 +968,6 @@ uint8_t APU_FrameSequence=0;
 
 uint8_t APU_Status=0;
 
-uint8_t APU_Interrupt=0;
 
 uint8_t APU_Timer[4]={0,0,0,0};
 uint16_t APU_WaveTimer[4]={0,0,0,0};
@@ -1024,7 +1025,7 @@ void APU_UpdateFrameSequence(uint8_t flag)
 		// set i flag
 		if ((APU_FrameControl&0x40)==0)
 		{
-			APU_Interrupt=1;
+			APU_Interrupt=0;
 		}
 	}
 }
@@ -1041,7 +1042,7 @@ void APU_WriteFrameControl(uint8_t byte)
 	}
 	if (APU_FrameControl&0x40)
 	{
-		APU_Interrupt=0;
+		APU_Interrupt=1;
 	}
 }
 
@@ -1084,13 +1085,11 @@ uint8_t APUGetByte(uint16_t addr)
 					ret|=4;
 				if (APU_Counter[3]!=0)
 					ret|=8;
-				if (APU_Interrupt)
+				if (~APU_Interrupt)
 				{
 					ret|=0x40;
 				}
-				APU_Interrupt=0;
-
-				printf("APU : %04X (%02X)%d\n",addr,ret);
+				APU_Interrupt=1;
 
 				return ret;
 			}
@@ -1607,9 +1606,10 @@ int main(int argc,char**argv)
 
 	MAIN_PinSet_IRQ(1);
 	MAIN_PinSet_NMI(1);
-
-	MAIN_PC=GetByte(0xFFFC);
-	MAIN_PC|=GetByte(0xFFFD)<<8;
+	MAIN_PinSet_RST(0);
+	MAIN_PinSet_RST(1);
+//	MAIN_PC=GetByte(0xFFFC);
+//	MAIN_PC|=GetByte(0xFFFD)<<8;
 
 //	MAIN_PC=0xc000;
 // TODO PPU RESET + PROPER CPU RESET
