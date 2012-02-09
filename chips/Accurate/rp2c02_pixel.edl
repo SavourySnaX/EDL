@@ -87,6 +87,14 @@ DECLARE INTERNAL	requestVRAM[3];
 DECLARE INTERNAL	requestAddress[16];
 DECLARE INTERNAL	requestData[8];
 
+
+DECLARE INTERNAL	SpriteComputePhase[8];
+DECLARE INTERNAL	SpriteComputePhaseNext[8];
+DECLARE INTERNAL	SpriteSrcAddr[8]	ALIAS	SpriteN[6]:SpriteM[2];
+DECLARE INTERNAL	SpriteDstAddr[4];
+DECLARE INTERNAL	SpriteDisableWrites[1];
+
+
 ### 
 
 FUNCTION INTERNAL VRAMAddressSetupALE	upperAddress[6],lowerAddress[8]
@@ -349,7 +357,7 @@ FUNCTION INTERNAL	UpdateSprite	sprNum[3]
 			OAMBpl0[[sprNum]]<-ROL(OAMBpl0[[sprNum]],bp0,0,1);
 			OAMBpl1[[sprNum]]<-ROL(OAMBpl1[[sprNum]],bp1,0,1);
 		}
-		
+
 		IF (bp0 | bp1) & (SpriteColour==0)
 		{
 			SpriteColour<-col;
@@ -381,7 +389,7 @@ FUNCTION INTERNAL	MultiplexSprite
 
 FUNCTION INTERNAL	Rasterise
 {
-	IF (hClock<256) & ((hClock>7)|(BGCol0))
+	IF (hClock<256)
 	{
 		DECLARE actualCol[6];
 		DECLARE c[16];
@@ -400,7 +408,7 @@ FUNCTION INTERNAL	Rasterise
 		
 		CALL UpdateShiftRegisters();
 
-		IF bp0|bp1
+		IF (bp0|bp1) & ((hClock>7)|(BGCol0))
 		{
 			IF ((hClock>7) | SprCol0) & (hClock<255)
 			{
@@ -416,7 +424,7 @@ FUNCTION INTERNAL	Rasterise
 				}
 			}
 		}
-		IF ~(bp0|bp1)
+		IF ~((bp0|bp1) & ((hClock>7)|(BGCol0)))
 		{
 			actualCol<-SpriteColour;
 		}
@@ -426,8 +434,8 @@ FUNCTION INTERNAL	Rasterise
 			actualCol<-0;
 		}
 		actualCol<-PaletteRAM[[actualCol]];
-		PIN_ACTIVECOL<-actualCol;
 		CALL SetVideo(hClock,(vClock-21),actualCol);
+		PIN_ACTIVECOL<-actualCol;
 	}
 
 	IF (hClock>=320) & (hClock<=335)
@@ -613,19 +621,32 @@ INSTRUCTION MemoryFetchOperation "Pattern1"		%0100
 INSTRUCTION MemoryFetchOperation "SpritePattern0"	%0101
 {
 	DECLARE sprNum[3];
+	DECLARE tData[8];
 
+	tData<-PIN_AD;
 	sprNum<-hClock[3..5];
 
-	OAMBpl0[[sprNum]]<-PIN_AD;
+	IF sprNum>=SpriteDstAddr
+	{
+		tData<-0;
+	}
+	OAMBpl0[[sprNum]]<-tData;
 }
 
 INSTRUCTION MemoryFetchOperation "SpritePattern1"	%0110
 {
 	DECLARE sprNum[3];
+	DECLARE tData[8];
+
+	tData<-PIN_AD;
 
 	sprNum<-hClock[3..5];
 
-	OAMBpl1[[sprNum]]<-PIN_AD;
+	IF sprNum>=SpriteDstAddr
+	{
+		tData<-0;
+	}
+	OAMBpl1[[sprNum]]<-tData;
 }
 
 INSTRUCTION MemoryFetchOperation "VRAMRead"		%0111
@@ -834,11 +855,23 @@ INSTRUCTION	OAMClock	"ClearOAM"	%000:oamRamAddr[3]:%111
 	SecondaryX[[oamRamAddr]]<-SpriteTmpTransfer;
 }
 
-DECLARE SpriteComputePhase[8];
-DECLARE SpriteComputePhaseNext[8];
-DECLARE SpriteSrcAddr[8]	ALIAS	SpriteN[6]:SpriteM[2];
-DECLARE SpriteDstAddr[4];
-DECLARE SpriteDisableWrites[1];
+FUNCTION INTERNAL	OldPhase2
+{
+	SpriteN<-SpriteN+1;
+	IF SpriteN==0
+	{
+		SpriteComputePhaseNext<-99;
+	}
+	IF SpriteDstAddr<8
+	{
+		SpriteComputePhaseNext<-0;
+	}
+	IF SpriteDstAddr==8
+	{
+		SpriteDisableWrites<-1;
+		SpriteComputePhaseNext<-3;
+	}
+}
 
 FUNCTION INTERNAL	ProcessSprite
 {
@@ -870,24 +903,7 @@ FUNCTION INTERNAL	ProcessSprite
 		}
 		IF ~SpriteInRange
 		{
-			SpriteComputePhaseNext<-2;
-		}
-	}
-	IF SpriteComputePhase==2
-	{
-		SpriteN<-SpriteN+1;
-		IF SpriteN==0
-		{
-			SpriteComputePhaseNext<-99;
-		}
-		IF SpriteDstAddr<8
-		{
-			SpriteComputePhaseNext<-0;
-		}
-		IF SpriteDstAddr==8
-		{
-			SpriteDisableWrites<-1;
-			SpriteComputePhaseNext<-3;
+			CALL OldPhase2();
 		}
 	}
 
@@ -915,7 +931,7 @@ FUNCTION INTERNAL	ProcessSprite
 		IF ~SpriteInRange
 		{
 			SpriteM<-SpriteM+1;
-			SpriteComputePhaseNext<-2;
+			CALL OldPhase2();
 		}
 	}
 
@@ -960,7 +976,7 @@ FUNCTION INTERNAL	ProcessSprite
 		}
 		SpriteM<-SpriteM+1;
 		SpriteDstAddr<-SpriteDstAddr+1;
-		SpriteComputePhaseNext<-2;
+		CALL OldPhase2();
 	}
 
 	SpriteComputePhase<-SpriteComputePhaseNext;
