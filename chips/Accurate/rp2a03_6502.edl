@@ -77,7 +77,7 @@ HANDLER		PIN_O0	TRANSITION(0,1)
 		STATE FETCH
 		{
 			PIN_AB<-PC;
-			DEBUG_SYNC<-1;
+			DEBUG_SYNC<-1 & (~res);
 			PIN_RW<-1;
 		}
 
@@ -408,7 +408,7 @@ FUNCTION INTERNAL	tmpRdy[1]	IndirectX	store[1]
 	}
 }
 
-FUNCTION INTERNAL	tmpRdy[1]	IndirectY	store[1]
+FUNCTION INTERNAL	tmpRdy[1]	IndirectY	store[1],rmw[1]
 {
 	tmpRdy<-0;
 
@@ -439,7 +439,7 @@ FUNCTION INTERNAL	tmpRdy[1]	IndirectY	store[1]
 		}->BAL;
 		AD<-BA;
 		NEXT PIN_O0.ADR;
-		IF IAc | store
+		IF IAc | store | rmw
 		{
 			NEXT PIN_O0.BA.T2;
 		}
@@ -510,7 +510,7 @@ FUNCTION INTERNAL	tmpRdy[1]	ZeroPageIndexed	store[1],index[8]
 	}
 }
 
-FUNCTION INTERNAL	tmpRdy[1]	AbsoluteIndexed	store[1],index[8]
+FUNCTION INTERNAL	tmpRdy[1]	AbsoluteIndexed	store[1],rmw[1],index[8]
 {
 	tmpRdy<-0;
 
@@ -533,7 +533,7 @@ FUNCTION INTERNAL	tmpRdy[1]	AbsoluteIndexed	store[1],index[8]
 		}->BAL;
 		AD<-BA;
 		NEXT PIN_O0.ADR;
-		IF IAc | store
+		IF IAc | store | rmw
 		{
 			NEXT PIN_O0.BA.T2;
 		}
@@ -569,10 +569,10 @@ MAPPING addressing01[3]
 	%001	"%$1"		CALL ZeroPage(0);
 	%010	"#%$1"		CALL Immediate();
 	%011	"%$2%$1"	CALL Absolute(0);
-	%100	"(%$1),Y"	CALL IndirectY(0);
+	%100	"(%$1),Y"	CALL IndirectY(0,0);
 	%101	"%$1,X"		CALL ZeroPageIndexed(0,X);
-	%110	"%$2%$1,Y"	CALL AbsoluteIndexed(0,Y);
-	%111	"%$2%$1,X"	CALL AbsoluteIndexed(0,X);
+	%110	"%$2%$1,Y"	CALL AbsoluteIndexed(0,0,Y);
+	%111	"%$2%$1,X"	CALL AbsoluteIndexed(0,0,X);
 }
 
 FUNCTION INTERNAL	res[8]	ADC	src1[8],src2[8]
@@ -627,10 +627,10 @@ MAPPING addressing01_sta[3]
 	%000	"(%$1,X)"	CALL IndirectX(1);
 	%001	"%$1"		CALL ZeroPage(1);
 	%011	"%$2%$1"	CALL Absolute(1);
-	%100	"(%$1),Y"	CALL IndirectY(1);
+	%100	"(%$1),Y"	CALL IndirectY(1,0);
 	%101	"%$1,X"		CALL ZeroPageIndexed(1,X);
-	%110	"%$2%$1,Y"	CALL AbsoluteIndexed(1,Y);
-	%111	"%$2%$1,X"	CALL AbsoluteIndexed(1,X);
+	%110	"%$2%$1,Y"	CALL AbsoluteIndexed(1,0,Y);
+	%111	"%$2%$1,X"	CALL AbsoluteIndexed(1,0,X);
 }
 
 INSTRUCTION	"%M0 %M1"	operation01:addressing01:%01
@@ -656,7 +656,7 @@ MAPPING addressing10[3]
 #	%010	"#%$1"		A;			# Handled seperately
 	%011	"%$2%$1"	CALL Absolute(0);
 	%101	"%$1,X"		CALL ZeroPageIndexed(0,X);
-	%111	"%$2%$1,X"	CALL AbsoluteIndexed(0,X);
+	%111	"%$2%$1,X"	CALL AbsoluteIndexed(0,1,X);
 }
 
 MAPPING operation10[3]
@@ -719,7 +719,7 @@ MAPPING addressing10_LDX[3]
 	%001	"%$1"		CALL ZeroPage(0);
 	%011	"%$2%$1"	CALL Absolute(0);
 	%101	"%$1,Y"		CALL ZeroPageIndexed(0,Y);
-	%111	"%$2%$1,Y"	CALL AbsoluteIndexed(0,Y);
+	%111	"%$2%$1,Y"	CALL AbsoluteIndexed(0,0,Y);
 }
 
 INSTRUCTION	"LDX %M0"	%101:addressing10_LDX:%10
@@ -754,7 +754,7 @@ MAPPING addressing00_LDY[3]
 	%001	"%$1"		CALL ZeroPage(0);
 	%011	"%$2%$1"	CALL Absolute(0);
 	%101	"%$1,X"		CALL ZeroPageIndexed(0,X);
-	%111	"%$2%$1,X"	CALL AbsoluteIndexed(0,X);
+	%111	"%$2%$1,X"	CALL AbsoluteIndexed(0,0,X);
 }
 
 INSTRUCTION	"LDY %M0"	%101:addressing00_LDY:%00
@@ -1258,12 +1258,12 @@ INSTRUCTION	"RTS"			%01100000
 MAPPING opcodeSKW[4]
 {
 	%0000	"%$2%$1"	CALL Absolute(0);
-	%0001	"%$2%$1,X"	CALL AbsoluteIndexed(0,X);
-	%0011	"%$2%$1,X"	CALL AbsoluteIndexed(0,X);
-	%0101	"%$2%$1,X"	CALL AbsoluteIndexed(0,X);
-	%0111	"%$2%$1,X"	CALL AbsoluteIndexed(0,X);
-	%1101	"%$2%$1,X"	CALL AbsoluteIndexed(0,X);
-	%1111	"%$2%$1,X"	CALL AbsoluteIndexed(0,X);
+	%0001	"%$2%$1,X"	CALL AbsoluteIndexed(0,0,X);
+	%0011	"%$2%$1,X"	CALL AbsoluteIndexed(0,0,X);
+	%0101	"%$2%$1,X"	CALL AbsoluteIndexed(0,0,X);
+	%0111	"%$2%$1,X"	CALL AbsoluteIndexed(0,0,X);
+	%1101	"%$2%$1,X"	CALL AbsoluteIndexed(0,0,X);
+	%1111	"%$2%$1,X"	CALL AbsoluteIndexed(0,0,X);
 }
 
 INSTRUCTION	"SKW %M0"	opcodeSKW:%1100
@@ -1337,9 +1337,9 @@ MAPPING opcodeLAX[8]
 	$A7	"%$1"		CALL ZeroPage(0);
 	$B7	"%$1,Y"		CALL ZeroPageIndexed(0,Y);
 	$AF	"%$2%$1"	CALL Absolute(0);
-	$BF	"%$2%$1,Y"	CALL AbsoluteIndexed(0,Y);
+	$BF	"%$2%$1,Y"	CALL AbsoluteIndexed(0,0,Y);
 	$A3	"(%$1,X)"	CALL IndirectX(0);
-	$B3	"(%$1),Y"	CALL IndirectY(0);
+	$B3	"(%$1),Y"	CALL IndirectY(0,0);
 }
 
 INSTRUCTION	"LAX %M0"	opcodeLAX
@@ -1356,10 +1356,10 @@ MAPPING opcodeDCP[8]
 	$C7	"%$1"		CALL ZeroPage(0);
 	$D7	"%$1,X"		CALL ZeroPageIndexed(0,X);
 	$CF	"%$2%$1"	CALL Absolute(0);
-	$DF	"%$2%$1,X"	CALL AbsoluteIndexed(0,X);
-	$DB	"%$2%$1,Y"	CALL AbsoluteIndexed(0,Y);
+	$DF	"%$2%$1,X"	CALL AbsoluteIndexed(0,1,X);
+	$DB	"%$2%$1,Y"	CALL AbsoluteIndexed(0,1,Y);
 	$C3	"(%$1,X)"	CALL IndirectX(0);
-	$D3	"(%$1),Y"	CALL IndirectY(0);
+	$D3	"(%$1),Y"	CALL IndirectY(0,1);
 }
 
 INSTRUCTION	"DCP %M0"	opcodeDCP
@@ -1388,10 +1388,10 @@ MAPPING opcodeSLO[8]
 	$07	"%$1"		CALL ZeroPage(0);
 	$17	"%$1,X"		CALL ZeroPageIndexed(0,X);
 	$0F	"%$2%$1"	CALL Absolute(0);
-	$1F	"%$2%$1,X"	CALL AbsoluteIndexed(0,X);
-	$1B	"%$2%$1,Y"	CALL AbsoluteIndexed(0,Y);
+	$1F	"%$2%$1,X"	CALL AbsoluteIndexed(0,1,X);
+	$1B	"%$2%$1,Y"	CALL AbsoluteIndexed(0,1,Y);
 	$03	"(%$1,X)"	CALL IndirectX(0);
-	$13	"(%$1),Y"	CALL IndirectY(0);
+	$13	"(%$1),Y"	CALL IndirectY(0,1);
 }
 #
 #MAPPING operationSLO[3]
@@ -1432,10 +1432,10 @@ MAPPING opcodeRLA[8]
 	$27	"%$1"		CALL ZeroPage(0);
 	$37	"%$1,X"		CALL ZeroPageIndexed(0,X);
 	$2F	"%$2%$1"	CALL Absolute(0);
-	$3F	"%$2%$1,X"	CALL AbsoluteIndexed(0,X);
-	$3B	"%$2%$1,Y"	CALL AbsoluteIndexed(0,Y);
+	$3F	"%$2%$1,X"	CALL AbsoluteIndexed(0,1,X);
+	$3B	"%$2%$1,Y"	CALL AbsoluteIndexed(0,1,Y);
 	$23	"(%$1,X)"	CALL IndirectX(0);
-	$33	"(%$1),Y"	CALL IndirectY(0);
+	$33	"(%$1),Y"	CALL IndirectY(0,1);
 }
 
 INSTRUCTION	"RLA %M0"	opcodeRLA
@@ -1464,10 +1464,10 @@ MAPPING opcodeSRE[8]
 	$47	"%$1"		CALL ZeroPage(0);
 	$57	"%$1,X"		CALL ZeroPageIndexed(0,X);
 	$4F	"%$2%$1"	CALL Absolute(0);
-	$5F	"%$2%$1,X"	CALL AbsoluteIndexed(0,X);
-	$5B	"%$2%$1,Y"	CALL AbsoluteIndexed(0,Y);
+	$5F	"%$2%$1,X"	CALL AbsoluteIndexed(0,1,X);
+	$5B	"%$2%$1,Y"	CALL AbsoluteIndexed(0,1,Y);
 	$43	"(%$1,X)"	CALL IndirectX(0);
-	$53	"(%$1),Y"	CALL IndirectY(0);
+	$53	"(%$1),Y"	CALL IndirectY(0,1);
 }
 
 INSTRUCTION	"SRE %M0"	opcodeSRE
@@ -1496,10 +1496,10 @@ MAPPING opcodeRRA[8]
 	$67	"%$1"		CALL ZeroPage(0);
 	$77	"%$1,X"		CALL ZeroPageIndexed(0,X);
 	$6F	"%$2%$1"	CALL Absolute(0);
-	$7F	"%$2%$1,X"	CALL AbsoluteIndexed(0,X);
-	$7B	"%$2%$1,Y"	CALL AbsoluteIndexed(0,Y);
+	$7F	"%$2%$1,X"	CALL AbsoluteIndexed(0,1,X);
+	$7B	"%$2%$1,Y"	CALL AbsoluteIndexed(0,1,Y);
 	$63	"(%$1,X)"	CALL IndirectX(0);
-	$73	"(%$1),Y"	CALL IndirectY(0);
+	$73	"(%$1),Y"	CALL IndirectY(0,1);
 }
 
 INSTRUCTION	"RRA %M0"	opcodeRRA
@@ -1528,10 +1528,10 @@ MAPPING opcodeISC[8]
 	$E7	"%$1"		CALL ZeroPage(0);
 	$F7	"%$1,X"		CALL ZeroPageIndexed(0,X);
 	$EF	"%$2%$1"	CALL Absolute(0);
-	$FF	"%$2%$1,X"	CALL AbsoluteIndexed(0,X);
-	$FB	"%$2%$1,Y"	CALL AbsoluteIndexed(0,Y);
+	$FF	"%$2%$1,X"	CALL AbsoluteIndexed(0,1,X);
+	$FB	"%$2%$1,Y"	CALL AbsoluteIndexed(0,1,Y);
 	$E3	"(%$1,X)"	CALL IndirectX(0);
-	$F3	"(%$1),Y"	CALL IndirectY(0);
+	$F3	"(%$1),Y"	CALL IndirectY(0,1);
 }
 
 INSTRUCTION	"ISC %M0"	opcodeISC
@@ -1603,7 +1603,7 @@ INSTRUCTION	"ATX #%$1"	$AB
 {
 	IF CALL Immediate()
 	{
-		AFFECT z AS ZERO, n AS SIGN { (A | $EE) & TMP }->A;
+		AFFECT z AS ZERO, n AS SIGN { (A | $FF) & TMP }->A;		# Changed for nes
 		A->X;
 	}
 }
@@ -1619,8 +1619,8 @@ INSTRUCTION	"AXS #%$1"	$CB
 
 MAPPING opcodeAXA[8]
 {
-	$9F	"%$2%$1,Y"	CALL AbsoluteIndexed(1,Y);
-	$93	"(%$1),Y"	CALL IndirectY(1);
+	$9F	"%$2%$1,Y"	CALL AbsoluteIndexed(1,0,Y);
+	$93	"(%$1),Y"	CALL IndirectY(1,0);
 }
 
 INSTRUCTION	"AXA %M0"	opcodeAXA
@@ -1633,7 +1633,7 @@ INSTRUCTION	"AXA %M0"	opcodeAXA
 
 INSTRUCTION	"SXA %$2%$1,Y"	$9E
 {
-	IF CALL AbsoluteIndexed(1,Y)
+	IF CALL AbsoluteIndexed(1,0,Y)
 	{
 		MEMSTORE<- X & ((ADH-IAc)+1);		# ADH will have been corrected at this point, but the value stored is +1 from uncorrected ADH
 	}
@@ -1641,7 +1641,7 @@ INSTRUCTION	"SXA %$2%$1,Y"	$9E
 
 INSTRUCTION	"SYA %$2%$1,X"	$9C
 {
-	IF CALL AbsoluteIndexed(1,X)
+	IF CALL AbsoluteIndexed(1,0,X)
 	{
 		MEMSTORE<- Y & ((ADH-IAc)+1);		# ADH will have been corrected at this point, but the value stored is +1 from uncorrected ADH
 	}
@@ -1649,7 +1649,7 @@ INSTRUCTION	"SYA %$2%$1,X"	$9C
 
 INSTRUCTION	"XAS %$2%$1,Y"	$9B
 {
-	IF CALL AbsoluteIndexed(1,Y)
+	IF CALL AbsoluteIndexed(1,0,Y)
 	{
 		S <- X & A;
 		MEMSTORE<- S & ((ADH-IAc)+1);		# ADH will have been corrected at this point, but the value stored is +1 from uncorrected ADH
@@ -1658,7 +1658,7 @@ INSTRUCTION	"XAS %$2%$1,Y"	$9B
 
 INSTRUCTION	"LAR %$2%$1,Y"	$BB
 {
-	IF CALL AbsoluteIndexed(0,Y)
+	IF CALL AbsoluteIndexed(0,0,Y)
 	{
 		AFFECT z AS ZERO, n AS SIGN { TMP & S } -> S;
 		S->A;
