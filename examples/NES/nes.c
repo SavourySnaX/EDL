@@ -1026,6 +1026,7 @@ void APU_UpdateFrameSequence(uint8_t flag)
 		if ((APU_FrameControl&0x40)==0)
 		{
 			APU_Interrupt=0;
+			printf("Setting frame interrupt\n");
 		}
 	}
 }
@@ -1085,11 +1086,15 @@ uint8_t APUGetByte(uint16_t addr)
 					ret|=4;
 				if (APU_Counter[3]!=0)
 					ret|=8;
-				if (~APU_Interrupt)
+				if ((APU_FrameControl&0x40)==0)
 				{
-					ret|=0x40;
+					if (APU_Interrupt==0)
+					{
+						ret|=0x40;
+					}
 				}
 				APU_Interrupt=1;
+				printf("Interrupt cleared on read %02x\n",ret);
 
 				return ret;
 			}
