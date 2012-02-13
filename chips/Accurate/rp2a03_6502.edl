@@ -54,6 +54,7 @@ FUNCTION INTERNAL	CheckInterrupt
 	InterruptGated<-0;
 	IF nmi|res|(~(PIN__IRQ|i))
 	{
+		DEBUG_TRACE BASE 16,nmi,PC,res;
 		InterruptGated<-1;
 	}
 }
