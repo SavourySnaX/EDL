@@ -88,7 +88,9 @@ DECLARE INTERNAL	requestVRAM[3];
 DECLARE INTERNAL	requestAddress[16];
 DECLARE INTERNAL	requestData[8];
 
+DECLARE INTERNAL	DropClockLatch[1];	# Latch used to determine if a cycle should be dropped from Line20
 DECLARE INTERNAL	NMILatch[1];
+DECLARE INTERNAL	NMILatched[1];		# Used to provide delay for NMI generation
 DECLARE INTERNAL	NMITrigger[8];
 DECLARE INTERNAL	surpressVBlankFlag[1];	# Prevents VBL flag from being set if Status is read to close to set time
 
@@ -179,7 +181,7 @@ INSTRUCTION	IORegisterWrite	"Control"	%000
 	H<-BaseH;
 	IF (~prev)&NMI&VBlank
 	{
-		NMITrigger<-3;
+		NMITrigger<-5;
 	}
 	IF ~(NMI&VBlank)
 	{
@@ -577,16 +579,20 @@ FUNCTION INTERNAL	TickPixelClockEnd
 			IF ~surpressVBlankFlag
 			{
 				VBlank<-1;
-				NMITrigger<-3;
+				NMITrigger<-7;
 			}
 		}
 	}
 	IF NMITrigger!=0
 	{
 		NMITrigger<-NMITrigger-1;
+		IF (NMITrigger==4)
+		{
+			NMILatched<-~(NMI&VBlank);
+		}
 		IF (NMITrigger==0)
 		{
-			NMILatch<-~(NMI&VBlank);#~(NMI&VBlank);
+			NMILatch<-NMILatched;
 			PIN__INT<-NMILatch;
 		}
 	}
@@ -702,9 +708,14 @@ INSTRUCTION	PixelClockLine	"Line20"	%000010100
 	{
 		VramAddress_counter<-VramAddress;
 	}
-	IF oddField & (hClock==339) & (BGShow|SprShow)
+	IF oddField & (hClock==336) & (BGShow|SprShow)
+	{
+		DropClockLatch<-1;
+	}
+	IF oddField & (hClock==339) & DropClockLatch
 	{
 		hClock<-hClock+1;
+		DropClockLatch<-0;
 	}
 }
 
