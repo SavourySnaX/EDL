@@ -91,7 +91,7 @@ DECLARE INTERNAL	requestData[8];
 DECLARE INTERNAL	DropClockLatch[1];	# Latch used to determine if a cycle should be dropped from Line20
 DECLARE INTERNAL	NMILatch[1];
 DECLARE INTERNAL	NMILatched[1];		# Used to provide delay for NMI generation
-DECLARE INTERNAL	NMITrigger[8];
+DECLARE INTERNAL	NMITrigger[3];
 DECLARE INTERNAL	surpressVBlankFlag[1];	# Prevents VBL flag from being set if Status is read to close to set time
 
 DECLARE INTERNAL	SpriteComputePhase[8];
@@ -181,7 +181,8 @@ INSTRUCTION	IORegisterWrite	"Control"	%000
 	H<-BaseH;
 	IF (~prev)&NMI&VBlank
 	{
-		NMITrigger<-4;
+		NMITrigger<-2;
+		DEBUG_TRACE "double NMI";
 	}
 	IF ~(NMI&VBlank)
 	{
