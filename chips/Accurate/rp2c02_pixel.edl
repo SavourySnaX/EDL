@@ -31,6 +31,7 @@ PIN OUT			PIN_BKGCOL[6];
 PIN OUT			PIN_EMPHB[1];
 PIN OUT			PIN_EMPHG[1];
 PIN OUT			PIN_EMPHR[1];
+
 ###
 
 # Internal Memory
@@ -87,6 +88,9 @@ DECLARE INTERNAL	requestVRAM[3];
 DECLARE INTERNAL	requestAddress[16];
 DECLARE INTERNAL	requestData[8];
 
+DECLARE INTERNAL	NMILatch[1];
+DECLARE INTERNAL	NMITrigger[8];
+DECLARE INTERNAL	surpressVBlankFlag[1];	# Prevents VBL flag from being set if Status is read to close to set time
 
 DECLARE INTERNAL	SpriteComputePhase[8];
 DECLARE INTERNAL	SpriteComputePhaseNext[8];
@@ -137,6 +141,7 @@ INSTRUCTION	IORegisterRead	"Status"	%010
 {
 	PIN_D<-Status;
 	VBlank<-0;
+	surpressVBlankFlag<-1;
 	Scroll_H<-0;
 	Address_H<-0;
 }
@@ -167,9 +172,20 @@ INSTRUCTION	IORegisterRead	"Data"		%111
 
 INSTRUCTION	IORegisterWrite	"Control"	%000
 {
+	DECLARE INTERNAL prev[1];
+	prev<-NMI;
 	Control<-PIN_D;
 	V<-BaseV;
 	H<-BaseH;
+	IF (~prev)&NMI&VBlank
+	{
+		NMITrigger<-3;
+	}
+	IF ~(NMI&VBlank)
+	{
+		NMILatch<-~(NMI&VBlank);
+		PIN__INT<-NMILatch;
+	}
 }
 
 INSTRUCTION	IORegisterWrite	"Mask"		%001
@@ -462,8 +478,6 @@ FUNCTION INTERNAL	RasteriseOff
 
 FUNCTION INTERNAL	TickPixelClockStart
 {
-	PIN__INT<-~(NMI&VBlank);
-
 	EXECUTE VRAMRequest	requestVRAM;
 
 	IF (vClock>=20) & (vClock<=260)
@@ -560,11 +574,25 @@ FUNCTION INTERNAL	TickPixelClockEnd
 		{
 			vClock<-0;
 			oddField<-oddField+1;
-			VBlank<-1;
+			IF ~surpressVBlankFlag
+			{
+				VBlank<-1;
+				NMITrigger<-3;
+			}
+		}
+	}
+	IF NMITrigger!=0
+	{
+		NMITrigger<-NMITrigger-1;
+		IF (NMITrigger==0)
+		{
+			NMILatch<-~(NMI&VBlank);#~(NMI&VBlank);
+			PIN__INT<-NMILatch;
 		}
 	}
 	PIN_VCLOCK<-vClock;
 	PIN_HCLOCK<-hClock;
+	surpressVBlankFlag<-0;
 }
 
 INSTRUCTION MemoryFetchOperation "NameTable"		%0001
@@ -654,11 +682,20 @@ INSTRUCTION MemoryFetchOperation "VRAMRead"		%0111
 	ReadData_latch<-PIN_AD;
 }
 
-INSTRUCTION	PixelClockLine	"Line20"	%000010100
+INSTRUCTION	PixelClockLine	"Line19"	%000010011
 {
-	IF hClock==0
+	IF hClock==340
 	{
 		VBlank<-0;
+		NMILatch<-~(NMI&VBlank);
+		PIN__INT<-NMILatch;
+	}
+}
+
+INSTRUCTION	PixelClockLine	"Line20"	%000010100
+{
+	IF (hClock==0)
+	{
 		Sprite0<-0;
 	}
 	IF (hClock==256) & BGShow

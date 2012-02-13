@@ -862,6 +862,8 @@ static uint16_t lastPC;
 
 uint8_t APU_Interrupt=1;
 
+extern int nint_nmi;
+
 void ClockCPU(int cpuClock)
 {
 	uint16_t addr; 
@@ -926,8 +928,6 @@ void ClockCPU(int cpuClock)
 			}
 		}
 
-		MAIN_PinSet_IRQ((MMC3_TickIRQ()&APU_Interrupt)&1);
-		MAIN_PinSet_NMI(PPU_PinGet_INT());
 	}
 
 }
@@ -1490,6 +1490,9 @@ void TickChips(int MasterClock)
 	ClockCPU(MasterClock);
 	ClockAPU(MasterClock);
 	ClockPPU(MasterClock);
+	MAIN_PinSet_IRQ((MMC3_TickIRQ()&APU_Interrupt)&1);
+	MAIN_PinSet_NMI(PPU_PinGet_INT());
+
 #if ENABLE_TV
 	
 	{
