@@ -1144,6 +1144,7 @@ INSTRUCTION	"BRK"		%00000000
 			b<-1;
 			MEMSTORE<-P;
 		}
+		i<-1;				# set interrupt disable
 	}
 
 	IF PIN_O0.PH.T2@
@@ -1162,19 +1163,18 @@ INSTRUCTION	"BRK"		%00000000
 			$FFFC->IA;
 			res<-0;				# clear reset latch
 		}
+		CALL CheckInterrupt();
 		NEXT PIN_O0.IA.T0;
 	}
 
 	IF PIN_O0.IA.T0@
 	{
-		i<-1;				# set interrupt disable - we do this here to prevent check capturing
 		PIN_DB->ADL;
 		IAL<-IAL+1;
 	}
 
 	IF PIN_O0.IA.T1@
 	{
-		CALL CheckInterrupt();
 		PIN_DB->ADH;
 		PC<-AD;
 		NEXT PIN_O0.FETCH;
