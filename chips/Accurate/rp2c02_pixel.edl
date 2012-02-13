@@ -181,7 +181,7 @@ INSTRUCTION	IORegisterWrite	"Control"	%000
 	H<-BaseH;
 	IF (~prev)&NMI&VBlank
 	{
-		NMITrigger<-5;
+		NMITrigger<-4;
 	}
 	IF ~(NMI&VBlank)
 	{
@@ -579,14 +579,14 @@ FUNCTION INTERNAL	TickPixelClockEnd
 			IF ~surpressVBlankFlag
 			{
 				VBlank<-1;
-				NMITrigger<-7;
+				NMITrigger<-4;
 			}
 		}
 	}
 	IF NMITrigger!=0
 	{
 		NMITrigger<-NMITrigger-1;
-		IF (NMITrigger==4)
+		IF (NMITrigger==1)
 		{
 			NMILatched<-~(NMI&VBlank);
 		}
