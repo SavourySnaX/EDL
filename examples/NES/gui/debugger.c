@@ -9,7 +9,7 @@
 #include "font.h"
 
 unsigned short breakpoints[2][20]={
-	{0x44E,0},
+	{0xE231,0xE249,0xe264,0xe27c},
 	{/*0xE853,*//*0xF556,*/0xfd27,0xfd86,0xfd58,0xF497,0xF3C0,0xF567}
 	};		// first list main cpu, second is disk cpu
 unsigned int numBreakpoints[2]={0,0};

@@ -24,6 +24,8 @@
 
 #include "jake\ntscDecode.h"
 
+int stopTheClock=1;
+
 void AudioKill();
 void AudioInitialise();
 void UpdateAudio();
@@ -601,8 +603,6 @@ extern uint16_t	MAIN_PC;
 extern uint8_t	MAIN_P;
 
 extern uint8_t	MAIN_DEBUG_SYNC;
-
-int stopTheClock=1;
 
 uint32_t MAIN_missing(uint32_t opcode)
 {
