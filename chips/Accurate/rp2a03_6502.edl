@@ -904,7 +904,7 @@ MAPPING	ccc[3]
 	%111	"EQ"	z==1;
 }
 
-INSTRUCTION	"B%M0 %$1"	ccc:%10000
+INSTRUCTION	"B%M0 %$1"	ccc:%10000		# 6502 NMOS has an interrupt bug with taken branches
 {
 	IF PIN_O0.FETCH@
 	{
@@ -913,10 +913,7 @@ INSTRUCTION	"B%M0 %$1"	ccc:%10000
 
 	IF PIN_O0.IMM.LO@
 	{
-		IF ~ccc
-		{
-			CALL CheckInterrupt();
-		}
+		CALL CheckInterrupt();
 		PIN_DB->TMP;
 		NEXT PIN_O0.FETCH;
 		IF ccc
