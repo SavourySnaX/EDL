@@ -256,7 +256,8 @@ INSTRUCTION	IORegisterWrite	"Data"		%111
 		PaletteRAM[[VramAddress_counter]]<-PIN_D;
 		IF VramAddress_counter[0..3]==$0
 		{
-			PaletteRAM[[0]]<-PIN_D;
+			PaletteRAM[[$00]]<-PIN_D;
+			PaletteRAM[[$10]]<-PIN_D;
 			PIN_BKGCOL<-PIN_D;
 		}
 	}
