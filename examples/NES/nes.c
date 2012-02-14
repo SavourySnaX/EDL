@@ -968,6 +968,10 @@ uint8_t APU_FrameSequence=0;
 
 uint8_t APU_Status=0;
 
+uint8_t APU_Begin;
+uint8_t APU_NextFrameControl;
+
+uint8_t APU_oddCycle=1;
 
 uint8_t APU_Timer[4]={0,0,0,0};
 uint16_t APU_WaveTimer[4]={0,0,0,0};
@@ -980,8 +984,11 @@ uint8_t APU_TriSequencer=0;
 
 uint8_t APU_NoiseModePeriod=0;
 
-uint8_t APU_Sequence0[4]={0x80,0xC0,0x80,0xE0};		//0x80 - clock envelopes : 0x40 - clock length counters and sweeps : 0x20 - set interrupt flag
-uint8_t APU_Sequence1[5]={0xC0,0x80,0xC0,0x80,0};
+uint8_t APU_Sequence0[6]={0x80,0xC0,0x80,0x20,0xE0,0x21};		//0x80 - clock envelopes : 0x40 - clock length counters and sweeps : 0x20 - set interrupt flag : 1 - reset divider
+uint8_t APU_Sequence1[6]={0x80,0xC0,0x80,0x00,0xC0,0x01};
+
+uint32_t APU_SequenceClock0[6]={7458,7458*2-1,7458*3,29830,29831,29832};
+uint32_t APU_SequenceClock1[6]={7458,7458*2-1,7458*3,7458*4,7458*5-7,7458*5-6};
 
 void APU_UpdateFrameSequence(uint8_t flag)
 {
@@ -1005,6 +1012,7 @@ void APU_UpdateFrameSequence(uint8_t flag)
 		//clock lengths + sweeps
 		if ((APU_Timer[0]&0x20)==0 && APU_Counter[0]!=0)
 		{
+			printf("APU Counter Dec from %d @ APU %d,%d\n",APU_Counter[0],APU_Divider,APU_Divider/2);
 			APU_Counter[0]--;
 		}
 		if ((APU_Timer[1]&0x20)==0 && APU_Counter[1]!=0)
@@ -1026,8 +1034,12 @@ void APU_UpdateFrameSequence(uint8_t flag)
 		if ((APU_FrameControl&0x40)==0)
 		{
 			APU_Interrupt=0;
-			printf("Setting frame interrupt\n");
 		}
+	}
+	if (flag&0x01)
+	{
+		APU_Divider=2;
+		APU_FrameSequence=0xFF;		// will be ticked on exit
 	}
 }
 
@@ -1038,8 +1050,7 @@ void APU_WriteFrameControl(uint8_t byte)
 	APU_FrameSequence=0;
 	if (APU_FrameControl&0x80)
 	{
-		APU_UpdateFrameSequence(APU_Sequence1[APU_FrameSequence]);
-		APU_FrameSequence++;
+		APU_UpdateFrameSequence(0xC0);
 	}
 	if (APU_FrameControl&0x40)
 	{
@@ -1093,8 +1104,8 @@ uint8_t APUGetByte(uint16_t addr)
 						ret|=0x40;
 					}
 				}
+				printf("4015 Read @ APU %d,%d,%02X\n",APU_Divider,APU_Divider/2,ret);
 				APU_Interrupt=1;
-				printf("Interrupt cleared on read %02x\n",ret);
 
 				return ret;
 			}
@@ -1299,7 +1310,8 @@ void APUSetByte(uint16_t addr,uint8_t byte)
 			break;
 		case 0x4017:
 		{
-			APU_WriteFrameControl(byte);
+			APU_Begin=APU_oddCycle*1+1;
+			APU_NextFrameControl=byte;
 			break;
 		}
 	}
@@ -1442,6 +1454,8 @@ void GenerateNoise()
 
 void ClockAPU(int apuClock)
 {
+	static int SLOWMO=0;
+
 	// Temporary - needs moving into cpu core
 	if (apuClock&1)
 	{
@@ -1456,33 +1470,41 @@ void ClockAPU(int apuClock)
 			GenerateTriangle();
 			GenerateNoise();
 		}
-		APU_Divider++;
-		if (APU_Divider==89490)
-		{
-			APU_Divider=0;
+	}
 
-			if (APU_FrameControl&0x80)
+	if ((SLOWMO%24)==0)
+	{
+		APU_oddCycle^=1;
+
+		if (APU_FrameControl&0x80)
+		{
+			if (APU_Divider==APU_SequenceClock1[APU_FrameSequence])
 			{
 				APU_UpdateFrameSequence(APU_Sequence1[APU_FrameSequence]);
-			}
-			else
-			{
-				APU_UpdateFrameSequence(APU_Sequence0[APU_FrameSequence]);
-			}
-
-			APU_FrameSequence++;
-			if (APU_FrameControl&0x80)
-			{
-				if (APU_FrameSequence==5)
-					APU_FrameSequence=0;
-			}
-			else
-			{
-				if (APU_FrameSequence==4)
-					APU_FrameSequence=0;
+				APU_FrameSequence++;
 			}
 		}
+		else
+		{
+			if (APU_Divider==APU_SequenceClock0[APU_FrameSequence])
+			{
+				printf("APU Sequence Update : %d @ APU %d,%d\n",APU_FrameSequence,APU_Divider,APU_Divider/2);
+				APU_UpdateFrameSequence(APU_Sequence0[APU_FrameSequence]);
+				APU_FrameSequence++;
+			}
+		}
+
+		if (APU_Begin)
+		{
+			APU_Begin--;
+			if (APU_Begin==0)
+			{
+				APU_WriteFrameControl(APU_NextFrameControl);
+			}
+		}
+		APU_Divider++;
 	}
+	SLOWMO++;
 
 	_AudioAddData(0,DAC_LEVEL[0]?(APU_Timer[0]&0x0F)<<10:0);
 	_AudioAddData(1,DAC_LEVEL[1]?(APU_Timer[1]&0x0F)<<10:0);
