@@ -860,9 +860,8 @@ int NTSCClock;
 
 static uint16_t lastPC;
 
-uint8_t APU_Interrupt=1;
-
-extern int nint_nmi;
+uint8_t APU_Interrupt=1;			// This is the line to the cpu
+uint8_t APU_InterruptPending=0;			// This is the frame interrupt flag
 
 void ClockCPU(int cpuClock)
 {
@@ -984,7 +983,7 @@ uint8_t APU_TriSequencer=0;
 
 uint8_t APU_NoiseModePeriod=0;
 
-uint8_t APU_Sequence0[6]={0x80,0xC0,0x80,0x20,0xE0,0x21};		//0x80 - clock envelopes : 0x40 - clock length counters and sweeps : 0x20 - set interrupt flag : 1 - reset divider
+uint8_t APU_Sequence0[6]={0x80,0xC0,0x80,0x20,0xF0,0x21};		//0x80 - clock envelopes : 0x40 - clock length counters and sweeps : 0x20 - set interrupt flag : 0x10 - generate irq : 1 - reset divider
 uint8_t APU_Sequence1[6]={0x80,0xC0,0x80,0x00,0xC0,0x01};
 
 uint32_t APU_SequenceClock0[6]={7458,7458*2-1,7458*3,29830,29831,29832};
@@ -1033,9 +1032,17 @@ void APU_UpdateFrameSequence(uint8_t flag)
 		// set i flag
 		if ((APU_FrameControl&0x40)==0)
 		{
+			APU_InterruptPending=1;
+		}
+	}
+	if (flag&0x10)
+	{
+		if (APU_InterruptPending)		// This probably should be a marker - otherwise we might miss later interrupts...
+		{
 			APU_Interrupt=0;
 		}
 	}
+
 	if (flag&0x01)
 	{
 		APU_Divider=2;
@@ -1054,6 +1061,7 @@ void APU_WriteFrameControl(uint8_t byte)
 	}
 	if (APU_FrameControl&0x40)
 	{
+		APU_InterruptPending=0;
 		APU_Interrupt=1;
 	}
 }
@@ -1099,12 +1107,12 @@ uint8_t APUGetByte(uint16_t addr)
 					ret|=8;
 				if ((APU_FrameControl&0x40)==0)
 				{
-					if (APU_Interrupt==0)
+					if (APU_InterruptPending)
 					{
 						ret|=0x40;
 					}
 				}
-				printf("4015 Read @ APU %d,%d,%02X\n",APU_Divider,APU_Divider/2,ret);
+				APU_InterruptPending=0;
 				APU_Interrupt=1;
 
 				return ret;
@@ -1488,7 +1496,6 @@ void ClockAPU(int apuClock)
 		{
 			if (APU_Divider==APU_SequenceClock0[APU_FrameSequence])
 			{
-				printf("APU Sequence Update : %d @ APU %d,%d\n",APU_FrameSequence,APU_Divider,APU_Divider/2);
 				APU_UpdateFrameSequence(APU_Sequence0[APU_FrameSequence]);
 				APU_FrameSequence++;
 			}
