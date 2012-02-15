@@ -182,7 +182,6 @@ INSTRUCTION	IORegisterWrite	"Control"	%000
 	IF (~prev)&NMI&VBlank
 	{
 		NMITrigger<-2;
-		DEBUG_TRACE "double NMI";
 	}
 	IF ~(NMI&VBlank)
 	{
@@ -486,11 +485,11 @@ FUNCTION INTERNAL	TickPixelClockStart
 
 	IF (vClock>=20) & (vClock<=260)
 	{
-		IF BGShow
+		IF BGShow|SprShow
 		{
 			EXECUTE PixelClock	hClock;
 		}
-		IF SprShow
+		IF SprShow|BGShow
 		{
 			EXECUTE OAMClock	hClock;
 		}
@@ -555,7 +554,7 @@ FUNCTION INTERNAL	TickPixelClockEnd
 
 	hClock<-hClock+1;
 
-	IF (hClock==320) & BGShow & (vClock>=20)
+	IF (hClock==320) & (BGShow|SprShow) & (vClock>=20)
 	{
 		IF vClock>20
 		{
@@ -605,7 +604,7 @@ FUNCTION INTERNAL	TickPixelClockEnd
 
 INSTRUCTION MemoryFetchOperation "NameTable"		%0001
 {
-	IF BGShow
+	IF BGShow|SprShow
 	{
 		tile_latch<-PIN_AD;
 	}
@@ -613,7 +612,7 @@ INSTRUCTION MemoryFetchOperation "NameTable"		%0001
 
 INSTRUCTION MemoryFetchOperation "AttrTable"		%0010
 {
-	IF BGShow
+	IF BGShow|SprShow
 	{
 		DECLARE c[8];
 		DECLARE attrShift[8] ALIAS %00000:attrV[1]:attrH[1]:%0;
@@ -636,7 +635,7 @@ INSTRUCTION MemoryFetchOperation "AttrTable"		%0010
 
 INSTRUCTION MemoryFetchOperation "Pattern0"		%0011
 {
-	IF BGShow
+	IF BGShow|SprShow
 	{
 		bits_latch0<-CALL FlipBits(PIN_AD);
 	}
@@ -644,7 +643,7 @@ INSTRUCTION MemoryFetchOperation "Pattern0"		%0011
 
 INSTRUCTION MemoryFetchOperation "Pattern1"		%0100
 {
-	IF BGShow
+	IF BGShow|SprShow
 	{
 		bits_latch1<-CALL FlipBits(PIN_AD);
 
@@ -706,7 +705,7 @@ INSTRUCTION	PixelClockLine	"Line20"	%000010100
 	{
 		Sprite0<-0;
 	}
-	IF (hClock==256) & BGShow
+	IF (hClock==256) & (BGShow|SprShow)
 	{
 		VramAddress_counter<-VramAddress;
 	}
@@ -908,18 +907,10 @@ INSTRUCTION	OAMClock	"ClearOAM"	%000:oamRamAddr[3]:%111
 FUNCTION INTERNAL	OldPhase2
 {
 	SpriteN<-SpriteN+1;
+	SpriteComputePhaseNext<-0;
 	IF SpriteN==0
 	{
 		SpriteComputePhaseNext<-99;
-	}
-	IF SpriteDstAddr<8
-	{
-		SpriteComputePhaseNext<-0;
-	}
-	IF SpriteDstAddr==8
-	{
-		SpriteDisableWrites<-1;
-		SpriteComputePhaseNext<-3;
 	}
 }
 
@@ -928,7 +919,15 @@ FUNCTION INTERNAL	ProcessSprite
 	IF SpriteComputePhase==0
 	{
 		SpriteTmpTransfer<-OAM[[SpriteSrcAddr]];
-		SpriteComputePhaseNext<-1;
+		IF SpriteDstAddr<8
+		{
+			SpriteComputePhaseNext<-1;
+		}
+		IF SpriteDstAddr==8
+		{
+			SpriteDisableWrites<-1;
+			SpriteComputePhaseNext<-3;
+		}
 	}
 	IF SpriteComputePhase==1
 	{
@@ -975,6 +974,7 @@ FUNCTION INTERNAL	ProcessSprite
 		IF SpriteInRange
 		{
 			# Set Overflow
+			SpriteOver<-1;
 			SpriteM<-SpriteM+1;
 			SpriteComputePhaseNext<-10;
 		}
@@ -1049,6 +1049,7 @@ INSTRUCTION	OAMClock	"SpriteCompute"	%0:RemainingClocks:dontCare[6]
 		SpriteSrcAddr<-0;
 		SpriteDstAddr<-0;
 		SpriteDisableWrites<-0;
+		SpriteOver<-0;
 	}
 	CALL ProcessSprite();
 }
