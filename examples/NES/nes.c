@@ -1048,7 +1048,6 @@ void APU_UpdateFrameSequence(uint8_t flag)
 		//clock lengths + sweeps
 		if ((APU_Timer[0]&0x20)==0 && APU_Counter[0]!=0)
 		{
-			printf("APU Counter Dec from %d @ APU %d,%d\n",APU_Counter[0],APU_Divider,APU_Divider/2);
 			APU_Counter[0]--;
 		}
 		if ((APU_Timer[1]&0x20)==0 && APU_Counter[1]!=0)
