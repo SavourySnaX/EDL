@@ -399,16 +399,19 @@ FUNCTION INTERNAL	UpdateSprite	sprNum[3]
 FUNCTION INTERNAL	MultiplexSprite
 {
 	SpriteColour<-0;
-	IF hClock<256
+	IF SprShow
 	{
-		CALL UpdateSprite(0);
-		CALL UpdateSprite(1);
-		CALL UpdateSprite(2);
-		CALL UpdateSprite(3);
-		CALL UpdateSprite(4);
-		CALL UpdateSprite(5);
-		CALL UpdateSprite(6);
-		CALL UpdateSprite(7);
+		IF hClock<256
+		{
+			CALL UpdateSprite(0);
+			CALL UpdateSprite(1);
+			CALL UpdateSprite(2);
+			CALL UpdateSprite(3);
+			CALL UpdateSprite(4);
+			CALL UpdateSprite(5);
+			CALL UpdateSprite(6);
+			CALL UpdateSprite(7);
+		}
 	}
 }
 
@@ -423,13 +426,16 @@ FUNCTION INTERNAL	Rasterise
 
 		DECLARE	col[4] ALIAS at1[1]:at0[1]:bp1[1]:bp0[1];
 
-		shift<-FHl;
-		fMask<-ROL($01,c,$00,shift);
+		IF BGShow
+		{
+			shift<-FHl;
+			fMask<-ROL($01,c,$00,shift);
 
-		bp0<-ROR(fMask & bits_shift0,c,0,shift);
-		bp1<-ROR(fMask & bits_shift1,c,0,shift);
-		at0<-ROR(fMask & attr_shift0,c,0,shift);
-		at1<-ROR(fMask & attr_shift1,c,0,shift);
+			bp0<-ROR(fMask & bits_shift0,c,0,shift);
+			bp1<-ROR(fMask & bits_shift1,c,0,shift);
+			at0<-ROR(fMask & attr_shift0,c,0,shift);
+			at1<-ROR(fMask & attr_shift1,c,0,shift);
+		}
 		
 		CALL UpdateShiftRegisters();
 
@@ -514,11 +520,11 @@ FUNCTION INTERNAL	TickPixelClockStart
 	}
 	IF (vClock>=21) & (vClock<=260) 
 	{
-		IF BGShow					## TODO Bg off sprites on
+		IF BGShow|SprShow
 		{
 			CALL Rasterise();
 		}
-		IF ~BGShow
+		IF ~(BGShow|SprShow)
 		{
 			CALL RasteriseOff();
 		}
