@@ -213,6 +213,7 @@ HANDLER		PIN_O0	TRANSITION(0,1)
 				{
 					PIN_AB<-$2004;
 					PIN_RW<-0;
+					NEXT PIN_O0.DMA.DMA_READ;
 					IF DMA_ADDL==0
 					{
 						DMA_START<-0;
