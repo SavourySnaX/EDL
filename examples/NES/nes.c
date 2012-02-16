@@ -21,6 +21,7 @@
 #define ENABLE_TV		0
 #define ENABLE_LOGIC_ANALYSER	0
 #define ENABLE_DEBUGGER		1
+#define ENABLE_LOG_TRACE	0
 
 #include "jake\ntscDecode.h"
 
@@ -893,7 +894,30 @@ void ClockCPU(int cpuClock)
 			lastPC=addr;
 			if (g_instructionStep)
 				g_instructionStep=0;
+#if ENABLE_LOG_TRACE
+			int numBytes=0;
+			const char* retVal = decodeDisasm(MAIN_DIS_,lastPC,&numBytes,255);
+			int opcodeLength=numBytes+1;
+			int a;
 
+			printf("%04X  ",lastPC);
+
+			for (a=0;a<opcodeLength;a++)
+			{
+				printf("%02X ",GetByte(lastPC+a));
+			}
+			for (a=opcodeLength;a<3;a++)
+			{
+				printf("   ");
+			}
+			printf(" ");
+			printf("%s",retVal);
+			for (a=strlen(retVal);a<40-7;a++)
+			{
+				printf(" ");
+			}
+			printf("A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%3d SL:%3d\n",MAIN_A,MAIN_X,MAIN_Y,MAIN_P,MAIN_SP&0xFF,PPU_hClock,PPU_vClock);
+#endif
 			if (isBreakpoint(0,lastPC))
 			{
 				stopTheClock=1;
