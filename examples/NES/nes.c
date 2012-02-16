@@ -24,6 +24,7 @@
 
 #include "jake\ntscDecode.h"
 
+int g_instructionStep=0;
 int stopTheClock=1;
 
 void AudioKill();
@@ -612,6 +613,7 @@ uint32_t MAIN_missing(uint32_t opcode)
 
 const char* decodeDisasm(uint8_t *table[256],unsigned int address,int *count,int realLength)
 {
+	int first=1;
 	static char temporaryBuffer[2048];
 	char sprintBuffer[256];
 
@@ -660,7 +662,15 @@ const char* decodeDisasm(uint8_t *table[256],unsigned int address,int *count,int
 					negOffs=-1;
 				}
 				int offset=(*sPtr-'0')*negOffs;
-				sprintf(sprintBuffer,"%02X",GetByte(address+offset));
+				if (first)
+				{
+					first=0;
+					sprintf(sprintBuffer,"$%02X",GetByte(address+offset));
+				}
+				else
+				{
+					sprintf(sprintBuffer,"%02X",GetByte(address+offset));
+				}
 				while (*tPtr)
 				{
 					*dPtr++=*tPtr++;
@@ -676,7 +686,6 @@ const char* decodeDisasm(uint8_t *table[256],unsigned int address,int *count,int
 	return temporaryBuffer;
 }
 
-int g_instructionStep=0;
 int g_traceStep=0;
 
 #define REGISTER_WIDTH	256
@@ -878,15 +887,19 @@ void ClockCPU(int cpuClock)
 		addr = MAIN_PinGetA();
 
 #if ENABLE_DEBUGGER
-		if (MAIN_DEBUG_SYNC)
+		static int lastDebugSync=0;
+		if ((lastDebugSync==0) && MAIN_DEBUG_SYNC)
 		{
 			lastPC=addr;
+			if (g_instructionStep)
+				g_instructionStep=0;
 
 			if (isBreakpoint(0,lastPC))
 			{
 				stopTheClock=1;
 			}
 		}
+		lastDebugSync=MAIN_DEBUG_SYNC;
 #endif
 		// Phase is 1 (LS139 decode gives us DBE low when Phase 1, Address=001x xxxx xxxx xxxx
 		uint8_t dbe_signal=(m2) && ((addr&0x8000)==0) && ((addr&0x4000)==0) && ((addr&0x2000)==0x2000)?0:1;
@@ -1730,7 +1743,7 @@ int main(int argc,char**argv)
 			if (CheckKey(GLFW_KEY_KP_MULTIPLY))
 			{
 				ClearKey(GLFW_KEY_KP_MULTIPLY);
-				g_traceStep=1;
+				g_instructionStep=1;
 			}
 			if (CheckKey(GLFW_KEY_KP_ADD))
 			{
