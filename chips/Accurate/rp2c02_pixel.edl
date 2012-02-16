@@ -693,6 +693,7 @@ INSTRUCTION	PixelClockLine	"Line19"	%000010011
 {
 	IF hClock==340
 	{
+		SpriteOver<-0;
 		VBlank<-0;
 		NMILatch<-~(NMI&VBlank);
 		PIN__INT<-NMILatch;
@@ -1049,7 +1050,6 @@ INSTRUCTION	OAMClock	"SpriteCompute"	%0:RemainingClocks:dontCare[6]
 		SpriteSrcAddr<-0;
 		SpriteDstAddr<-0;
 		SpriteDisableWrites<-0;
-		SpriteOver<-0;
 	}
 	CALL ProcessSprite();
 }

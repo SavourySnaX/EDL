@@ -1521,6 +1521,7 @@ INSTRUCTION	"SRE %M0"	opcodeSRE
 
 	IF PIN_O0.MW.WRITE@
 	{
+		CALL CheckInterrupt();
 		CALL LastWriteCycle();
 	}
 }
