@@ -53,8 +53,7 @@ DECLARE INTERNAL 	Mask[8]			ALIAS	EmphB[1]:EmphG[1]:EmphR[1]:SprShow[1]:BGShow[1
 DECLARE INTERNAL 	Status[8]		ALIAS	VBlank[1]:Sprite0[1]:SpriteOver[1]:%00000;	# Lower 5 bits are floating in actuality
 DECLARE INTERNAL	OAMAddress[8];
 
-DECLARE INTERNAL	Scroll_H[1];		# Address latch for Scroll Register
-DECLARE INTERNAL	Address_H[1];		# Address latch for Address Register
+DECLARE INTERNAL	Address_H[1];		# Address latch for Address&Scroll Register
 
 # Internal Registers
 
@@ -144,7 +143,6 @@ INSTRUCTION	IORegisterRead	"Status"	%010
 	PIN_D<-Status;
 	VBlank<-0;
 	surpressVBlankFlag<-1;
-	Scroll_H<-0;
 	Address_H<-0;
 }
 
@@ -160,7 +158,14 @@ INSTRUCTION	IORegisterRead	"Data"		%111
 	requestAddress<-VramAddress_counter;
 	IF VramAddress_counter[8..13]==$3F
 	{
-		PIN_D<-PaletteRAM[[VramAddress_counter]];
+		IF Gray
+		{
+			PIN_D<-PaletteRAM[[VramAddress_counter]]&$30;
+		}
+		IF ~Gray
+		{
+			PIN_D<-PaletteRAM[[VramAddress_counter]];
+		}
 	}
 	IF VInc32
 	{
@@ -211,17 +216,18 @@ INSTRUCTION	IORegisterWrite	"OAMData"	%100
 
 INSTRUCTION	IORegisterWrite	"Scroll"	%101
 {
-	IF Scroll_H
+	IF Address_H
 	{
 		PIN_D[0..2]->FV;
 		PIN_D[3..7]->VT;
 	}
-	IF ~Scroll_H
+	IF ~Address_H
 	{
 		PIN_D[0..2]->FH;
+		FH->FHl;
 		PIN_D[3..7]->HT;
 	}
-	Scroll_H<-Scroll_H+1;
+	Address_H<-Address_H+1;
 }
 
 INSTRUCTION	IORegisterWrite	"Address"	%110
@@ -453,8 +459,12 @@ FUNCTION INTERNAL	Rasterise
 			actualCol<-0;
 		}
 		actualCol<-PaletteRAM[[actualCol]];
-		CALL SetVideo(hClock,(vClock-21),actualCol);
+		IF Gray
+		{
+			actualCol<-actualCol&$30;
+		}
 		PIN_ACTIVECOL<-actualCol;
+		CALL SetVideo(hClock,(vClock-21),actualCol);
 	}
 
 	IF (hClock>=320) & (hClock<=335)
@@ -474,6 +484,10 @@ FUNCTION INTERNAL	RasteriseOff
 			actualCol<-VramAddress_counter[0..4];
 		}
 		actualCol<-PaletteRAM[[actualCol]];
+		IF Gray
+		{
+			actualCol<-actualCol&$30;
+		}
 		PIN_ACTIVECOL<-actualCol;
 		CALL SetVideo(hClock,(vClock-21),actualCol);
 	}
@@ -1155,7 +1169,6 @@ HANDLER		PIN__RST	ALWAYS
 	{
 		PIN__INT<-1;
 		Address_H<-0;
-		Scroll_H<-0;
 		PIN_ALE<-0;
 		PIN__RE<-1;
 		PIN__WE<-1;
