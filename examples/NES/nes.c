@@ -86,6 +86,8 @@ int usingMMC1=0;
 int usingMMC3=0;
 int usingUxROM=0;
 int usingCNROM=0;
+int usingColorDreams=0;
+int usingAOROM=0;
 
 // Step 1. Memory
 
@@ -317,9 +319,11 @@ void WriteMMC1_Control(uint8_t byte)	//NB need to set bank configs up here as we
 void WriteMMC1_ChrBank0(uint8_t byte)
 {
 	byte&=0x1F;
+
 	if (MMC1_ChrBank0!=byte)
 		printf("MMC1 char0 bank %02X\n",byte);
 	MMC1_ChrBank0=byte;
+	MMC1_ChrBank0&=chrRomSize-1;
 	WriteMMC1_SwitchChr0();
 }
 
@@ -329,6 +333,7 @@ void WriteMMC1_ChrBank1(uint8_t byte)
 	if (MMC1_ChrBank1!=byte)
 		printf("MMC1 char1 bank %02X\n",byte);
 	MMC1_ChrBank1=byte;
+	MMC1_ChrBank1&=chrRomSize-1;
 	WriteMMC1_SwitchChr1();
 }
 void WriteMMC1_PrgBank(uint8_t byte)
@@ -338,12 +343,14 @@ void WriteMMC1_PrgBank(uint8_t byte)
 	if (MMC1_PrgBank!=byte)
 		printf("MMC1 prg bank %02X\n",byte);
 	MMC1_PrgBank=byte;
+	MMC1_PrgBank&=(prgRomSize/16384)-1;
 	WriteMMC1_SwitchPrg();
 }
 
 void WriteToUxROM(uint16_t addr,uint8_t byte)
 {
 	byte&=0x7;
+	byte&=(prgRomSize/16384)-1;
 	bnk0prg=&prgRom[byte*16384];
 	bnk1prg=&prgRom[byte*16384+8192];
 }
@@ -351,6 +358,7 @@ void WriteToUxROM(uint16_t addr,uint8_t byte)
 void WriteToCNROM(uint16_t addr,uint8_t byte)
 {
 	byte&=0x3;
+	byte&=chrRomSize-1;
 	bnk00chr=&chrRom[byte*0x2000];
 	bnk01chr=&chrRom[byte*0x2000+0x400];
 	bnk02chr=&chrRom[byte*0x2000+0x800];
@@ -360,6 +368,42 @@ void WriteToCNROM(uint16_t addr,uint8_t byte)
 	bnk12chr=&chrRom[byte*0x2000+0x1800];
 	bnk13chr=&chrRom[byte*0x2000+0x1C00];
 }
+
+void WriteToColorDreams(uint16_t addr,uint8_t byte)
+{
+	//CCCCLLPP	- C chrrom bank | P prgrom bank
+	uint8_t chr=(byte&0xF0)>>4;
+	uint8_t prg=(byte&0x03);
+	chr&=chrRomSize-1;
+	prg&=((prgRomSize/16384)*2)-1;
+
+	bnk0prg=&prgRom[prg*32768];
+	bnk1prg=&prgRom[prg*32768+8192];
+	bnk2prg=&prgRom[prg*32768+16384];
+	bnk3prg=&prgRom[prg*32768+16384+8192];
+
+	bnk00chr=&chrRom[chr*0x2000];
+	bnk01chr=&chrRom[chr*0x2000+0x400];
+	bnk02chr=&chrRom[chr*0x2000+0x800];
+	bnk03chr=&chrRom[chr*0x2000+0xC00];
+	bnk10chr=&chrRom[chr*0x2000+0x1000];
+	bnk11chr=&chrRom[chr*0x2000+0x1400];
+	bnk12chr=&chrRom[chr*0x2000+0x1800];
+	bnk13chr=&chrRom[chr*0x2000+0x1C00];
+}
+
+void WriteToAOROM(uint16_t addr,uint8_t byte)
+{
+	//xxxSPPPP	- S mirror control | P prgrom bank
+	uint8_t prg=(byte&0x0F);
+	prg&=((prgRomSize/16384)*2)-1;
+
+	bnk0prg=&prgRom[prg*32768];
+	bnk1prg=&prgRom[prg*32768+8192];
+	bnk2prg=&prgRom[prg*32768+16384];
+	bnk3prg=&prgRom[prg*32768+16384+8192];
+}
+
 
 void WriteToMMC1(uint16_t addr,uint8_t byte)
 {
@@ -485,13 +529,14 @@ void WriteMMC3_BankSelect(uint8_t byte)
 
 void WriteMMC3_BankData(uint8_t byte)
 {
-	MMC3_BankData[MMC3_BankSel&7]=byte;
 	if ((MMC3_BankSel&7)<6)
 	{
+		MMC3_BankData[MMC3_BankSel&7]=byte&((chrRomSize*8)-1);
 		WriteMMC3_SwitchChr();
 	}
 	else
 	{
+		MMC3_BankData[MMC3_BankSel&7]=byte&(((prgRomSize/16384)*2)-1);
 		WriteMMC3_SwitchPrg();
 	}
 }
@@ -586,6 +631,14 @@ void SetByte(uint16_t addr,uint8_t byte)
 	if (usingMMC3)
 	{
 		WriteToMMC3(addr,byte);
+	}
+	if (usingColorDreams)
+	{
+		WriteToColorDreams(addr,byte);
+	}
+	if (usingAOROM)
+	{
+		WriteToAOROM(addr,byte);
 	}
 	//printf("Unmapped Write : %08X\n",addr);
 	return;
@@ -2138,15 +2191,17 @@ void LoadCart(const char* fileName)
 		printf("mapper : %02X\n",mapper);
 		
 
-		if (mapper>4)
+		if (mapper>4 && mapper!=7 && mapper!=11)
 		{
-			printf("Only supports mapper 0-4!\n");
+			printf("Only supports mapper 0-4,7,11!\n");
 			exit(-1);
 		}
 		usingMMC1=mapper==1;
 		usingUxROM=mapper==2;
 		usingCNROM=mapper==3;
 		usingMMC3=mapper==4;
+		usingAOROM=mapper==7;
+		usingColorDreams=mapper==11;
 		if ((flags6&0x0C)!=0)
 		{
 			printf("No Train/4Scr Support\n");
@@ -2166,12 +2221,12 @@ void LoadCart(const char* fileName)
 		prgRomSize=prgSize*16384;
 		if (chrSize==0)
 		{
-			chrRomSize=8192;
+			chrRomSize=1;
 			chrRom=chrRam;
 		}
 		else
 		{
-			chrRomSize=chrSize*8192;
+			chrRomSize=chrSize;
 			chrRom=&ptr[16+prgRomSize];
 		}
 		prgRom=&ptr[16];
