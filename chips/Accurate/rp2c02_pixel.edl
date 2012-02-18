@@ -61,8 +61,8 @@ DECLARE INTERNAL	ReadData_latch[8];	# Stores VRAM fetch here - Reading through R
 
 DECLARE INTERNAL	oddField[1];
 
-DECLARE		hClock[9];		# Horizontal Clock (0-340)
-DECLARE 	vClock[9];		# Vertical Clock 0-261
+DECLARE	INTERNAL	hClock[9];		# Horizontal Clock (0-340)
+DECLARE INTERNAL	vClock[9];		# Vertical Clock 0-261
 
 DECLARE INTERNAL	VramAddress[16]		ALIAS	%0:FV[3]:V[1]:H[1]:VT[5]:HT[5];
 DECLARE INTERNAL	VramAddress_counter[16]	ALIAS	%0:FVl[3]:Vl[1]:Hl[1]:VTl[5]:HTl[5];
@@ -99,6 +99,13 @@ DECLARE INTERNAL	SpriteSrcAddr[8]	ALIAS	SpriteN[6]:SpriteM[2];
 DECLARE INTERNAL	SpriteDstAddr[4];
 DECLARE INTERNAL	SpriteDisableWrites[1];
 
+DECLARE INTERNAL	SpriteCollision[1];
+DECLARE INTERNAL	SpriteColour[5];
+DECLARE INTERNAL	SpriteZero[1];
+DECLARE INTERNAL	SpriteBack[1];
+DECLARE INTERNAL	Sprite0InRange[1];
+DECLARE INTERNAL	Sprite0InRange_latch[1];
+DECLARE INTERNAL	SpriteBufCur[4];
 
 ### 
 
@@ -357,14 +364,6 @@ FUNCTION INTERNAL	UpdateShiftRegisters
 	attr_shift0<-ROR(attr_shift0,c,0,1);
 	attr_shift1<-ROR(attr_shift1,c,0,1);
 }
-	
-DECLARE INTERNAL SpriteCollision[1];
-DECLARE INTERNAL SpriteColour[5];
-DECLARE INTERNAL SpriteZero[1];
-DECLARE INTERNAL SpriteBack[1];
-DECLARE INTERNAL Sprite0InRange[1];
-DECLARE INTERNAL Sprite0InRange_latch[1];
-DECLARE INTERNAL SpriteBufCur[4];
 
 FUNCTION INTERNAL	UpdateSprite	sprNum[3]
 {
