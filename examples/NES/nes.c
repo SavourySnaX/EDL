@@ -232,6 +232,7 @@ uint8_t GetByte(uint16_t addr)
 uint8_t shiftRegister=0;
 uint8_t shiftCount=0;
 
+uint8_t MMC1_IgnoreWrite=0;
 uint8_t MMC1_Control=0;
 uint8_t MMC1_ChrBank0=0;
 uint8_t MMC1_ChrBank1=0;
@@ -435,41 +436,60 @@ void WriteToAOROM(uint16_t addr,uint8_t byte)
 
 void WriteToMMC1(uint16_t addr,uint8_t byte)
 {
-	if (byte&0x80)
+	printf("Write To Base MMC1 Shift Register : %02X\n",byte);		//Right..shift register ignores too close together writes.. need a ticker
+	if (!MMC1_IgnoreWrite)
 	{
-		shiftRegister=0;
-		shiftCount=0;
-		WriteMMC1_Control(MMC1_Control|0x0C);
-	}
-	else
-	{
-		shiftRegister>>=1;
-		shiftRegister&=0x0F;
-		shiftRegister|=(byte&1)<<4;
-		shiftCount++;
-		if (shiftCount==5)
+		MMC1_IgnoreWrite=2;
+		if (byte&0x80)
 		{
+			printf("Reset MMC1 Shift Register\n");
+			shiftRegister=0;
 			shiftCount=0;
-			addr&=0x6000;
-			addr>>=13;
-			switch(addr)
+			WriteMMC1_Control(MMC1_Control|0x0C);
+		}
+		else
+		{
+			printf("Clock MMC1 Shift Register\n");
+			shiftRegister>>=1;
+			shiftRegister&=0x0F;
+			shiftRegister|=(byte&1)<<4;
+			shiftCount++;
+			if (shiftCount==5)
 			{
-				case 0:
-					WriteMMC1_Control(shiftRegister);
-					break;
-				case 1:
-					WriteMMC1_ChrBank0(shiftRegister);
-					break;
-				case 2:
-					WriteMMC1_ChrBank1(shiftRegister);
-					break;
-				case 3:
-					WriteMMC1_PrgBank(shiftRegister);
-					break;
+				printf("5bits MMC1 Shift Register\n");
+				shiftCount=0;
+				addr&=0x6000;
+				addr>>=13;
+				switch(addr)
+				{
+					case 0:
+						WriteMMC1_Control(shiftRegister);
+						break;
+					case 1:
+						WriteMMC1_ChrBank0(shiftRegister);
+						break;
+					case 2:
+						WriteMMC1_ChrBank1(shiftRegister);
+						break;
+					case 3:
+						WriteMMC1_PrgBank(shiftRegister);
+						break;
+				}
 			}
 		}
 	}
+}
 
+void TickMMC1()
+{
+	// driven by M2 clock
+	static uint8_t lastM2=12;
+	if (lastM2!=(MAIN_PinGetM2()&1))
+	{
+		lastM2=(MAIN_PinGetM2()&1);
+		if (MMC1_IgnoreWrite)
+			MMC1_IgnoreWrite--;
+	}
 }
 
 uint8_t MMC3_BankSel;
@@ -1641,6 +1661,7 @@ void TickChips(int MasterClock)
 	ClockCPU(MasterClock);
 	ClockAPU(MasterClock);
 	ClockPPU(MasterClock);
+	TickMMC1();
 	MAIN_PinSet_IRQ((MMC3_TickIRQ()&APU_Interrupt)&1);
 	MAIN_PinSet_NMI(PPU_PinGet_INT());
 
