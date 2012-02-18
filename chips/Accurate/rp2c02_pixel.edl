@@ -246,6 +246,7 @@ INSTRUCTION	IORegisterWrite	"Address"	%110
 		tmp<-VramAddress;
 		tmpH<-PIN_D&$3F;
 		VramAddress<-tmp;
+		PIN_PA<-tmpH;
 	}
 
 	Address_H<-Address_H+1;
@@ -517,12 +518,12 @@ FUNCTION INTERNAL	TickPixelClockStart
 			EXECUTE OAMClock	hClock;
 		}
 	}
-	IF (vClock>=21) & (vClock<=260) & SprShow
+	IF (vClock>=21) & (vClock<=260)
 	{
-		CALL MultiplexSprite();
-	}
-	IF (vClock>=21) & (vClock<=260) 
-	{
+		IF SprShow
+		{
+			CALL MultiplexSprite();
+		}
 		IF BGShow|SprShow
 		{
 			CALL Rasterise();
@@ -569,10 +570,12 @@ FUNCTION INTERNAL	TickPixelClockEnd
 	{
 		EXECUTE MemoryFetchOperation	fetchOperation;
 		PIN__RE<-1;
+		PIN_PA<-VramAddress_counter[8..13];
 	}
 	IF ~PIN__WE
 	{
 		PIN__WE<-1;
+		PIN_PA<-VramAddress_counter[8..13];
 	}
 
 	hClock<-hClock+1;

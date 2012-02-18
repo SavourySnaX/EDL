@@ -187,6 +187,11 @@ void DrawRegisterMain(unsigned char* buffer,unsigned int width,uint16_t address,
 	DrawRegister(0,MAIN_DIS_,buffer,width,address,GetMem,decodeDisasm);
 }
 
+void ShowFPS(unsigned char* buffer,unsigned int width,float fps)
+{
+	PrintAt(buffer,width,255,255,255,0,240/8,"FPS : %.1f       ",fps);
+}
+
 #define MAX_CAPTURE		(341*262*2*4*3)
 #define MAX_PINS		(4)
 
@@ -388,6 +393,14 @@ void UpdateTimingWindow(GLFWwindow window)
 	if (KeyDownWindow(GLFW_KEY_RIGHT,window))
 	{
 		timeOffset+=8<<16;
+	}
+	if (KeyDownWindow(',',window))
+	{
+		timeOffset-=909<<16;
+	}
+	if (KeyDownWindow('.',window))
+	{
+		timeOffset+=909<<16;
 	}
 
 }

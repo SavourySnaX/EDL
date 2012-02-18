@@ -5,6 +5,8 @@ ALLIBS= -I/c/program\ files\ \(x86\)\OpenAL\ 1.1\ SDK\include /c/program\ files\
 ZLIB= -I../../../zlib125 -lz
 EDL=../../bin/edl.exe
 
+PROF_FLAGS=#-pg -g3
+
 clean:
 	$(RM) -rf out/*
 	rmdir out
@@ -25,4 +27,4 @@ out/rp2a03.lls.s: out/rp2a03.lls
 	llc -O3 out/rp2a03.lls
 
 nes: nes.c gui/debugger.c gui/debugger.h out/rp2a03.lls.s minizip/miniunz.c minizip/iowin32.c minizip/ioapi.c minizip/unzip.c out/rp2c02.lls.s jake/ntscDecode.c jake/ntscDecode.h jake/ntscDecodeCrtsim.c jake/ntscDecodeCrtsim.h
-	gcc -O3 -g -Wl,-Map,nes.map nes.c gui/debugger.c out/rp2a03.lls.s out/rp2c02.lls.s minizip/miniunz.c minizip/iowin32.c minizip/ioapi.c minizip/unzip.c jake/ntscDecode.c jake/ntscDecodeCrtsim.c $(ALLIBS) $(GLLIBS) $(ZLIB) -o nes.exe
+	gcc -O3 $(PROF_FLAGS) -Wl,-Map,nes.map nes.c gui/debugger.c out/rp2a03.lls.s out/rp2c02.lls.s minizip/miniunz.c minizip/iowin32.c minizip/ioapi.c minizip/unzip.c jake/ntscDecode.c jake/ntscDecodeCrtsim.c $(ALLIBS) $(GLLIBS) $(ZLIB) -o nes.exe

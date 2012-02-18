@@ -16,12 +16,15 @@
 
 #include "gui\debugger.h"
 
+#define WRITE_AUDIO		0
 #define IS_COMPAT		0
 
 #define ENABLE_TV		0
 #define ENABLE_LOGIC_ANALYSER	0
-#define ENABLE_DEBUGGER		1
+#define ENABLE_DEBUGGER		0
 #define ENABLE_LOG_TRACE	0
+
+#define COMPLEX_MAPPERS		1
 
 #include "jake\ntscDecode.h"
 
@@ -190,43 +193,45 @@ uint8_t* bnk3prg=NULL;
 
 uint8_t mapperIRQ=0;
 
+uint8_t READ_RAM(uint16_t addr)
+{
+	return internalRam[addr&0x7FF];
+}
+uint8_t READ_UNMAPPED(uint16_t addr)
+{
+	return 0;
+}
+uint8_t READ_APU(uint16_t addr)
+{
+	return APUGetByte(addr);
+}
+uint8_t READ_PRGRAM(uint16_t addr)
+{
+	return prgRam[addr];
+}
+uint8_t READ_BNK0(uint16_t addr)
+{
+	return bnk0prg[addr];
+}
+uint8_t READ_BNK1(uint16_t addr)
+{
+	return bnk1prg[addr];
+}
+uint8_t READ_BNK2(uint16_t addr)
+{
+	return bnk2prg[addr];
+}
+uint8_t READ_BNK3(uint16_t addr)
+{
+	return bnk3prg[addr];
+}
+
+typedef uint8_t (*ReadMapper)(uint16_t addr);
+ReadMapper mapperReadByte[8]={READ_RAM,READ_UNMAPPED,READ_APU,READ_PRGRAM,READ_BNK0,READ_BNK1,READ_BNK2,READ_BNK3};
+
 uint8_t GetByte(uint16_t addr)
 {
-	if (addr<0x2000)
-	{
-		return internalRam[addr&0x7FF];
-	}
-	if (addr<0x4000)
-	{
-		return;
-	}
-	if (addr<0x6000)
-	{
-		if (addr>=0x4000 && addr<=0x4017)
-		{
-			return APUGetByte(addr);
-		}
-//		printf("Unkown Read : %08X\n",addr);
-		return 0;
-	}
-	if (addr<0x8000)
-	{
-		return prgRam[addr-0x6000];
-	}
-	if (addr<0xA000)
-	{
-		return bnk0prg[addr-0x8000];
-	}
-	if (addr<0xC000)
-	{
-		return bnk1prg[addr-0xA000];
-	}
-	if (addr<0xE000)
-	{
-		return bnk2prg[addr-0xC000];
-	}
-
-	return bnk3prg[addr-0xE000];
+	return mapperReadByte[addr>>13](addr&0x1FFF);
 }
 
 uint8_t shiftRegister=0;
@@ -436,27 +441,23 @@ void WriteToAOROM(uint16_t addr,uint8_t byte)
 
 void WriteToMMC1(uint16_t addr,uint8_t byte)
 {
-	printf("Write To Base MMC1 Shift Register : %02X\n",byte);		//Right..shift register ignores too close together writes.. need a ticker
 	if (!MMC1_IgnoreWrite)
 	{
-		MMC1_IgnoreWrite=2;
+		MMC1_IgnoreWrite=3;
 		if (byte&0x80)
 		{
-			printf("Reset MMC1 Shift Register\n");
 			shiftRegister=0;
 			shiftCount=0;
 			WriteMMC1_Control(MMC1_Control|0x0C);
 		}
 		else
 		{
-			printf("Clock MMC1 Shift Register\n");
 			shiftRegister>>=1;
 			shiftRegister&=0x0F;
 			shiftRegister|=(byte&1)<<4;
 			shiftCount++;
 			if (shiftCount==5)
 			{
-				printf("5bits MMC1 Shift Register\n");
 				shiftCount=0;
 				addr&=0x6000;
 				addr>>=13;
@@ -496,25 +497,49 @@ uint8_t MMC3_BankSel;
 uint8_t MMC3_BankData[8]={0,0,0,0,0,0,0,0};
 uint8_t MMC3_IRQLatch=0;
 uint8_t MMC3_IRQCount=0;
+uint8_t MMC3_ReloadLatch=0;
 uint8_t MMC3_IRQDisable=1;
-uint8_t MMC3_IRQPending=0;
+uint8_t MMC3_IRQPending=1;
 
 uint8_t MMC3_TickIRQ()
 {
-	if (MMC3_IRQDisable)
-		return 1;
-
-	static lastClock=59;
-	if (PPU_vClock!=lastClock)
+	static int timeSinceLastHigh=0;
+	static lastA12=12;
+	if ((PPU_PinGetPA()&0x10)!=lastA12)
 	{
-		lastClock=PPU_vClock;
-		if (MMC3_IRQCount==0)
+		if (lastA12==0 )
 		{
-			MMC3_IRQPending=1;
-			MMC3_IRQCount=MMC3_IRQLatch;
+//			printf("%d\n",timeSinceLastHigh);
+			if (timeSinceLastHigh>48)
+			{
+				int lastValue=MMC3_IRQCount;
+//				printf("IRQTick : %04X:%04X\n",PPU_vClock&0x3FF,PPU_hClock&0x3FF);
+				if (MMC3_ReloadLatch)
+				{
+					MMC3_IRQCount=0;
+					MMC3_ReloadLatch=0;
+				}
+				if (MMC3_IRQCount==0)
+				{
+					MMC3_IRQCount=MMC3_IRQLatch;
+				}
+				else
+				{
+					MMC3_IRQCount--;
+				}
+				if (lastValue!=0 && MMC3_IRQCount==0)
+				{
+					if (!MMC3_IRQDisable)
+					{
+						MMC3_IRQPending=0;
+					}
+				}
+			}
+			timeSinceLastHigh=0;
 		}
-		MMC3_IRQCount--;
+		lastA12=PPU_PinGetPA()&0x10;
 	}
+	timeSinceLastHigh++;
 	return MMC3_IRQPending;
 }
 
@@ -623,11 +648,11 @@ void WriteToMMC3(uint16_t addr,uint8_t byte)
 			MMC3_IRQLatch=byte;
 			break;
 		case 0xC001:
-			MMC3_IRQCount=0;
+			MMC3_ReloadLatch=1;
 			break;
 		case 0xE000:
 			MMC3_IRQDisable=1;
-			MMC3_IRQPending=0;
+			MMC3_IRQPending=1;
 			break;
 		case 0xE001:
 			MMC3_IRQDisable=0;
@@ -638,32 +663,30 @@ void WriteToMMC3(uint16_t addr,uint8_t byte)
 	}
 }
 
-void SetByte(uint16_t addr,uint8_t byte)
+typedef void (*WriteMapper)(uint16_t addr,uint8_t byte);
+
+void WRITE_RAM(uint16_t addr,uint8_t byte)
 {
-	if (addr<0x2000)
-	{
-		internalRam[addr&0x7FF]=byte;
-		return;
-	}
-	if (addr<0x4000)
-	{
-		return;
-	}
-	if (addr<0x6000)
-	{
-		if (addr>=0x4000 && addr<=0x4017)
-		{
-			APUSetByte(addr,byte);
-			return;
-		}
-//		printf("Unknown Write : %08X\n",addr);
-		return;
-	}
-	if (addr<0x8000)
-	{
-		prgRam[addr-0x6000]=byte;
-		return;
-	}
+	internalRam[addr&0x7FF]=byte;
+}
+
+void WRITE_UNMAPPED(uint16_t addr,uint8_t byte)
+{
+}
+
+void WRITE_APU(uint16_t addr,uint8_t byte)
+{
+	APUSetByte(addr,byte);
+}
+
+void WRITE_PRGRAM(uint16_t addr,uint8_t byte)
+{
+	prgRam[addr]=byte;
+}
+
+void WRITE_MAPPER(uint16_t addr,uint8_t byte)
+{
+#if COMPLEX_MAPPERS
 	if (usingUxROM)
 	{
 		WriteToUxROM(addr,byte);
@@ -688,8 +711,42 @@ void SetByte(uint16_t addr,uint8_t byte)
 	{
 		WriteToAOROM(addr,byte);
 	}
-	//printf("Unmapped Write : %08X\n",addr);
-	return;
+#endif
+}
+
+void WRITE_BNK0(uint16_t addr,uint8_t byte)
+{
+#if COMPLEX_MAPPERS
+	WRITE_MAPPER(addr+0x8000,byte);
+#endif
+}
+
+void WRITE_BNK1(uint16_t addr,uint8_t byte)
+{
+#if COMPLEX_MAPPERS
+	WRITE_MAPPER(addr+0xA000,byte);
+#endif
+}
+
+void WRITE_BNK2(uint16_t addr,uint8_t byte)
+{
+#if COMPLEX_MAPPERS
+	WRITE_MAPPER(addr+0xC000,byte);
+#endif
+}
+
+void WRITE_BNK3(uint16_t addr,uint8_t byte)
+{
+#if COMPLEX_MAPPERS
+	WRITE_MAPPER(addr+0xE000,byte);
+#endif
+}
+
+WriteMapper mapperWriteByte[8]={WRITE_RAM,WRITE_UNMAPPED,WRITE_APU,WRITE_PRGRAM,WRITE_BNK0,WRITE_BNK1,WRITE_BNK2,WRITE_BNK3};
+
+void SetByte(uint16_t addr,uint8_t byte)
+{
+	return mapperWriteByte[addr>>13](addr&0x1FFF,byte);
 }
 
 int masterClock=0;
@@ -983,7 +1040,7 @@ void ClockCPU(int cpuClock)
 		uint8_t m2=MAIN_PinGetM2()&1;
 
 #if ENABLE_LOGIC_ANALYSER
-//		RecordPin(0,cpuClock&1);
+		RecordPin(0,cpuClock&1);
 		RecordPin(1,MAIN_PinGetM2()&1);
 #endif
 		addr = MAIN_PinGetA();
@@ -1089,10 +1146,6 @@ void ClockPPU(int ppuClock)
 			uint16_t addr = ((PPU_PinGetPA()&0x3F)<<8)|vramLowAddressLatch;
 			PPUSetByte(addr,PPU_PinGetAD());
 		}
-
-#if ENABLE_LOGIC_ANALYSER
-		RecordPin(0,(PPU_PinGetPA()&0x10)>>4);
-#endif
 	}
 
 }
@@ -1208,29 +1261,29 @@ uint8_t APUGetByte(uint16_t addr)
 {
 	switch (addr)
 	{
-		case 0x4000:
-		case 0x4001:
-		case 0x4002:
-		case 0x4003:
-		case 0x4004:
-		case 0x4005:
-		case 0x4006:
-		case 0x4007:
-		case 0x4008:
-		case 0x4009:
-		case 0x400A:
-		case 0x400B:
-		case 0x400C:
-		case 0x400D:
-		case 0x400E:
-		case 0x400F:
-		case 0x4010:
-		case 0x4011:
-		case 0x4012:
-		case 0x4013:
-		case 0x4014:
+		case 0x0000:
+		case 0x0001:
+		case 0x0002:
+		case 0x0003:
+		case 0x0004:
+		case 0x0005:
+		case 0x0006:
+		case 0x0007:
+		case 0x0008:
+		case 0x0009:
+		case 0x000A:
+		case 0x000B:
+		case 0x000C:
+		case 0x000D:
+		case 0x000E:
+		case 0x000F:
+		case 0x0010:
+		case 0x0011:
+		case 0x0012:
+		case 0x0013:
+		case 0x0014:
 			break;
-		case 0x4015:
+		case 0x0015:
 			{
 				uint8_t ret=0;
 				
@@ -1255,14 +1308,14 @@ uint8_t APUGetByte(uint16_t addr)
 				return ret;
 			}
 			break;
-		case 0x4016:
+		case 0x0016:
 		{
 			uint8_t tmp=controllerData&0x80;
 			controllerData<<=1;
 			tmp>>=7;
 			return tmp;
 		}
-		case 0x4017:
+		case 0x0017:
 			break;
 	}
 
@@ -1317,85 +1370,85 @@ void APUSetByte(uint16_t addr,uint8_t byte)
 {
 	switch (addr)
 	{
-		case 0x4000:
+		case 0x0000:
 			// Pulse1Timer	ttedvvvv		t - duty cycle type    e - length counter disable / envelope loop enable    d - envelope decay disable    v - volume/decay rate
 			// 		00010001
 			APU_Timer[0]=byte;
 			break;
-		case 0x4001:
+		case 0x0001:
 			break;
-		case 0x4002:
+		case 0x0002:
 			APU_WaveTimer[0]&=0x700;
 			APU_WaveTimer[0]|=byte;
 			break;
-		case 0x4003:
+		case 0x0003:
 			// Pulse1Length	ccccclll
 			// 		00011000
 			APU_WaveTimer[0]&=0x0FF;
 			APU_WaveTimer[0]|=(byte&7)<<8;
 			APU_WriteLength(1,0,byte);
 			break;
-		case 0x4004:
+		case 0x0004:
 			// Pulse2Timer	ttedvvvv		t - duty cycle type    e - length counter disable / envelope loop enable    d - envelope decay disable    v - volume/decay rate
 			// 		00010001
 			APU_Timer[1]=byte;
 			break;
-		case 0x4005:
+		case 0x0005:
 			break;
-		case 0x4006:
+		case 0x0006:
 			APU_WaveTimer[1]&=0x700;
 			APU_WaveTimer[1]|=byte;
 			break;
-		case 0x4007:
+		case 0x0007:
 			// Pulse2Length	ccccclll
 			// 		00011000
 			APU_WaveTimer[1]&=0x0FF;
 			APU_WaveTimer[1]|=(byte&7)<<8;
 			APU_WriteLength(2,1,byte);
 			break;
-		case 0x4008:
+		case 0x0008:
 			// TriangleTimer	dlllllll		d - length counter disable    l - linear load register
 			APU_Timer[2]=byte;
 			break;
-		case 0x4009:
+		case 0x0009:
 			break;
-		case 0x400A:
+		case 0x000A:
 			APU_WaveTimer[2]&=0x700;
 			APU_WaveTimer[2]|=byte;
 			break;
-		case 0x400B:
+		case 0x000B:
 			// TriangleLength	ccccclll
 			APU_WaveTimer[2]&=0x0FF;
 			APU_WaveTimer[2]|=(byte&7)<<8;
 			APU_LinearHalt=1;
 			APU_WriteLength(4,2,byte);
 			break;
-		case 0x400C:
+		case 0x000C:
 			// NoiseTimer	ttedvvvv		t - duty cycle type    e - length counter disable / envelope loop enable    d - envelope decay disable    v - volume/decay rate
 			// 		00010001
 			APU_Timer[3]=byte;
 			break;
-		case 0x400D:
+		case 0x000D:
 			break;
-		case 0x400E:
+		case 0x000E:
 			APU_NoiseModePeriod=byte;
 			break;
-		case 0x400F:
+		case 0x000F:
 			// Pulse2Length	ccccclll
 			// 		00011000
 			APU_WriteLength(8,3,byte);
 			break;
-		case 0x4010:
+		case 0x0010:
 			break;
-		case 0x4011:
+		case 0x0011:
 			break;
-		case 0x4012:
+		case 0x0012:
 			break;
-		case 0x4013:
+		case 0x0013:
 			break;
-		case 0x4014:
+		case 0x0014:
 			break;
-		case 0x4015:
+		case 0x0015:
 			APU_Status=byte;
 			if ((byte&1)==0)
 			{
@@ -1414,7 +1467,7 @@ void APUSetByte(uint16_t addr,uint8_t byte)
 				APU_Counter[3]=0;
 			}
 			break;
-		case 0x4016:
+		case 0x0016:
 			if (byte&1)
 			{
 				// Latch controller - reset shifter
@@ -1453,7 +1506,7 @@ void APUSetByte(uint16_t addr,uint8_t byte)
 				}
 			}
 			break;
-		case 0x4017:
+		case 0x0017:
 		{
 			APU_Begin=APU_oddCycle*1+1;
 			APU_NextFrameControl=byte;
@@ -1661,8 +1714,12 @@ void TickChips(int MasterClock)
 	ClockCPU(MasterClock);
 	ClockAPU(MasterClock);
 	ClockPPU(MasterClock);
+#if COMPLEX_MAPPERS
 	TickMMC1();
 	MAIN_PinSet_IRQ((MMC3_TickIRQ()&APU_Interrupt)&1);
+#else
+	MAIN_PinSet_IRQ(APU_Interrupt&1);
+#endif
 	MAIN_PinSet_NMI(PPU_PinGet_INT());
 
 #if ENABLE_TV
@@ -1683,6 +1740,8 @@ void TickChips(int MasterClock)
 	UpdatePinTick();
 #endif
 }
+
+void ShowFPS(unsigned char* buffer,unsigned int width,float fps);
 
 int main(int argc,char**argv)
 {
@@ -1879,6 +1938,7 @@ int main(int argc,char**argv)
 			now=glfwGetTime();
 
 			remain = now-atStart;
+			ShowFPS(videoMemory[MAIN_WINDOW],WIDTH,1/remain);
 
 			while ((remain<0.01666666f) && normalSpeed && !stopTheClock)
 			{
@@ -2114,6 +2174,7 @@ void UpdateAudio()
 		{
 			int32_t res=0;
 
+#if WRITE_AUDIO
 			if (!poop)
 			{
 				poop=fopen("out.raw","wb");
@@ -2123,7 +2184,7 @@ void UpdateAudio()
 			fwrite(&currentDAC[1],2,1,poop);
 			fwrite(&currentDAC[2],2,1,poop);
 			fwrite(&currentDAC[3],2,1,poop);
-
+#endif
 			res+=currentDAC[0];
 			res+=currentDAC[1];
 			res+=currentDAC[2];
