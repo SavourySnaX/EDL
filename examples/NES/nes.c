@@ -81,6 +81,7 @@ uint8_t prgRam[8192];
 
 uint8_t hMirror;
 uint8_t vMirror;
+uint8_t hvMirror;
 
 int usingMMC1=0;
 int usingMMC3=0;
@@ -151,6 +152,8 @@ uint8_t PPUGetByte(uint16_t addr)
 		return bnk13chr[addr&0x03FF];
 	}
 	uint16_t chrAddr=(addr-0x2000)&0x3FF;
+	if (hvMirror)
+		chrAddr+=0x400;
 	if (hMirror)
 		chrAddr|=(addr&0x0800)>>1;
 	if (vMirror)
@@ -166,6 +169,8 @@ void PPUSetByte(uint16_t addr,uint8_t byte)
 		return;		/// assuming fixed tile ram		<---- this might need to be pageable! but doubtful
 	}
 	uint16_t chrAddr=(addr-0x2000)&0x3FF;
+	if (hvMirror)
+		chrAddr+=0x400;
 	if (hMirror)
 		chrAddr|=(addr&0x0800)>>1;
 	if (vMirror)
@@ -243,14 +248,14 @@ void WriteMMC1_SwitchChr0()
 	}
 	else
 	{
-		bnk00chr=&chrRom[0x2000*(MMC1_ChrBank0&0x1E)];
-		bnk01chr=&chrRom[0x2000*(MMC1_ChrBank0&0x1E)+0x400];
-		bnk02chr=&chrRom[0x2000*(MMC1_ChrBank0&0x1E)+0x800];
-		bnk03chr=&chrRom[0x2000*(MMC1_ChrBank0&0x1E)+0xC00];
-		bnk10chr=&chrRom[0x2000*(MMC1_ChrBank0&0x1E)+0x1000];
-		bnk11chr=&chrRom[0x2000*(MMC1_ChrBank0&0x1E)+0x1400];
-		bnk12chr=&chrRom[0x2000*(MMC1_ChrBank0&0x1E)+0x1800];
-		bnk13chr=&chrRom[0x2000*(MMC1_ChrBank0&0x1E)+0x1C00];
+		bnk00chr=&chrRom[0x1000*(MMC1_ChrBank0&0x1E)];
+		bnk01chr=&chrRom[0x1000*(MMC1_ChrBank0&0x1E)+0x400];
+		bnk02chr=&chrRom[0x1000*(MMC1_ChrBank0&0x1E)+0x800];
+		bnk03chr=&chrRom[0x1000*(MMC1_ChrBank0&0x1E)+0xC00];
+		bnk10chr=&chrRom[0x1000*(MMC1_ChrBank0&0x1E)+0x1000];
+		bnk11chr=&chrRom[0x1000*(MMC1_ChrBank0&0x1E)+0x1400];
+		bnk12chr=&chrRom[0x1000*(MMC1_ChrBank0&0x1E)+0x1800];
+		bnk13chr=&chrRom[0x1000*(MMC1_ChrBank0&0x1E)+0x1C00];
 	}
 }
 
@@ -271,18 +276,22 @@ void WriteMMC1_SwitchPrg()
 	{
 		case 0:
 		case 0x4:
-			bnk0prg=&prgRom[(MMC1_PrgBank&0xE)*32678];
-			bnk1prg=&prgRom[(MMC1_PrgBank&0xE)*32678 + 8192];
-			bnk2prg=&prgRom[(MMC1_PrgBank&0xE)*32678 + 16384];
-			bnk3prg=&prgRom[(MMC1_PrgBank&0xE)*32678 + 16384 + 8192];
+			bnk0prg=&prgRom[MMC1_PrgBank*16384];
+			bnk1prg=&prgRom[MMC1_PrgBank*16384 + 8192];
+			bnk2prg=&prgRom[MMC1_PrgBank*16384 + 16384];
+			bnk3prg=&prgRom[MMC1_PrgBank*16384 + 16384 + 8192];
 			break;
 		case 0x8:
-			bnk2prg=&prgRom[(MMC1_PrgBank&0xF)*16384];
-			bnk3prg=&prgRom[(MMC1_PrgBank&0xF)*16384+8192];
+			bnk0prg=&prgRom[0];
+			bnk1prg=bnk0prg+8192;
+			bnk2prg=&prgRom[MMC1_PrgBank*16384];
+			bnk3prg=&prgRom[MMC1_PrgBank*16384+8192];
 			break;
 		case 0xC:
-			bnk0prg=&prgRom[(MMC1_PrgBank&0xF)*16384];
-			bnk1prg=&prgRom[(MMC1_PrgBank&0xF)*16384+8192];
+			bnk0prg=&prgRom[MMC1_PrgBank*16384];
+			bnk1prg=&prgRom[MMC1_PrgBank*16384+8192];
+			bnk2prg=&prgRom[prgRomSize-16384];
+			bnk3prg=bnk2prg+8192;
 			break;
 	}
 
@@ -297,15 +306,22 @@ void WriteMMC1_Control(uint8_t byte)	//NB need to set bank configs up here as we
 	switch (MMC1_Control&3)
 	{
 		case 0:
+			hvMirror=0;
+			hMirror=0;
+			vMirror=0;
+			break;
 		case 1:
+			hvMirror=1;
 			hMirror=0;
 			vMirror=0;
 			break;
 		case 2:
+			hvMirror=0;
 			hMirror=0;
 			vMirror=1;
 			break;
 		case 3:
+			hvMirror=0;
 			hMirror=1;
 			vMirror=0;
 			break;
@@ -323,7 +339,7 @@ void WriteMMC1_ChrBank0(uint8_t byte)
 	if (MMC1_ChrBank0!=byte)
 		printf("MMC1 char0 bank %02X\n",byte);
 	MMC1_ChrBank0=byte;
-	MMC1_ChrBank0&=chrRomSize-1;
+	MMC1_ChrBank0&=(chrRomSize*2)-1;
 	WriteMMC1_SwitchChr0();
 }
 
@@ -331,18 +347,17 @@ void WriteMMC1_ChrBank1(uint8_t byte)
 {
 	byte&=0x1F;
 	if (MMC1_ChrBank1!=byte)
-		printf("MMC1 char1 bank %02X\n",byte);
+		printf("MMC1 char1 bank %02X  :  Mask : %08X\n",byte,(chrRomSize*2)-1);
 	MMC1_ChrBank1=byte;
-	MMC1_ChrBank1&=chrRomSize-1;
+	MMC1_ChrBank1&=(chrRomSize*2)-1;
 	WriteMMC1_SwitchChr1();
 }
 void WriteMMC1_PrgBank(uint8_t byte)
 {
 	//DBBBB  D-PRGRam Disable  - BBBB is bank
-	byte&=0x1F;
-	if (MMC1_PrgBank!=byte)
-		printf("MMC1 prg bank %02X\n",byte);
-	MMC1_PrgBank=byte;
+//	if (MMC1_PrgBank!=byte)
+//		printf("MMC1 prg bank %02X : %08X\n",byte,(prgRomSize/16384)-1);
+	MMC1_PrgBank=byte&0xF;
 	MMC1_PrgBank&=(prgRomSize/16384)-1;
 	WriteMMC1_SwitchPrg();
 }
@@ -396,12 +411,25 @@ void WriteToAOROM(uint16_t addr,uint8_t byte)
 {
 	//xxxSPPPP	- S mirror control | P prgrom bank
 	uint8_t prg=(byte&0x0F);
-	prg&=((prgRomSize/16384)*2)-1;
+	prg&=(prgRomSize/32768)-1;
 
 	bnk0prg=&prgRom[prg*32768];
 	bnk1prg=&prgRom[prg*32768+8192];
 	bnk2prg=&prgRom[prg*32768+16384];
 	bnk3prg=&prgRom[prg*32768+16384+8192];
+
+	if (byte&0x10)
+	{
+		hvMirror=1;
+		hMirror=0;
+		vMirror=0;
+	}
+	else
+	{
+		hvMirror=0;
+		hMirror=0;
+		vMirror=0;
+	}
 }
 
 
