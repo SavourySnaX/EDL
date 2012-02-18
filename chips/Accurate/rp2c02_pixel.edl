@@ -507,19 +507,13 @@ FUNCTION INTERNAL	TickPixelClockStart
 {
 	EXECUTE VRAMRequest	requestVRAM;
 
-	IF (vClock>=20) & (vClock<=260)
+	IF (vClock>=21) & (vClock<=260)
 	{
 		IF BGShow|SprShow
 		{
 			EXECUTE PixelClock	hClock;
-		}
-		IF SprShow|BGShow
-		{
 			EXECUTE OAMClock	hClock;
 		}
-	}
-	IF (vClock>=21) & (vClock<=260)
-	{
 		IF SprShow
 		{
 			CALL MultiplexSprite();
@@ -728,6 +722,11 @@ INSTRUCTION	PixelClockLine	"Line19"	%000010011
 
 INSTRUCTION	PixelClockLine	"Line20"	%000010100
 {
+	IF BGShow|SprShow
+	{
+		EXECUTE PixelClock	hClock;
+		EXECUTE OAMClock	hClock;
+	}
 	IF (hClock==0)
 	{
 		Sprite0<-0;

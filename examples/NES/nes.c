@@ -1938,7 +1938,6 @@ int main(int argc,char**argv)
 			now=glfwGetTime();
 
 			remain = now-atStart;
-			ShowFPS(videoMemory[MAIN_WINDOW],WIDTH,1/remain);
 
 			while ((remain<0.01666666f) && normalSpeed && !stopTheClock)
 			{
@@ -1946,6 +1945,7 @@ int main(int argc,char**argv)
 
 				remain = now-atStart;
 			}
+			ShowFPS(videoMemory[MAIN_WINDOW],WIDTH,1/remain);
 			atStart=glfwGetTime();
 		}
 	}
