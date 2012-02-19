@@ -2,7 +2,7 @@
  * NES implementation
  *
  */
-
+#include <pthread.h>
 #include <GL/glfw3.h>
 #include <GL/glext.h>
 
@@ -16,15 +16,18 @@
 
 #include "gui\debugger.h"
 
+#define USE_THREADS		0
+
 #define WRITE_AUDIO		0
 #define IS_COMPAT		0
+#define APU			1
 
 #define ENABLE_TV		0
 #define ENABLE_LOGIC_ANALYSER	0
 #define ENABLE_DEBUGGER		0
 #define ENABLE_LOG_TRACE	0
 
-#define COMPLEX_MAPPERS		1
+#define COMPLEX_MAPPERS		0
 
 #include "jake\ntscDecode.h"
 
@@ -1715,11 +1718,73 @@ void ClockAPU(int apuClock)
 	_AudioAddData(3,DAC_LEVEL[3]?(APU_Timer[3]&0x0F)<<9:0);
 }
 
+volatile int masterClockTick=0;
+
+volatile int cpuLastMaster=0;
+volatile int ppuLastMaster=0;
+volatile int apuLastMaster=0;
+
+void* TickThreadCPU(void* threadID)
+{
+	while (1)
+	{
+		while (masterClockTick==cpuLastMaster)
+		{
+			// Wait for clock
+		}
+
+		ClockCPU(masterClockTick);
+
+		cpuLastMaster=masterClockTick;
+	}
+}
+
+void* TickThreadPPU(void* threadID)
+{
+	while (1)
+	{
+		while (masterClockTick==ppuLastMaster)
+		{
+			// Wait for clock
+		}
+
+		ClockPPU(masterClockTick);
+
+		ppuLastMaster=masterClockTick;
+	}
+}
+void* TickThreadAPU(void* threadID)
+{
+	while (1)
+	{
+		while (masterClockTick==apuLastMaster)
+		{
+			// Wait for clock
+		}
+
+		ClockAPU(masterClockTick);
+
+		apuLastMaster=masterClockTick;
+	}
+}
+
 void TickChips(int MasterClock)
 {
+#if USE_THREADS
+	masterClockTick=MasterClock;
+
+	while (	masterClockTick!=cpuLastMaster &&
+		masterClockTick!=ppuLastMaster &&
+		masterClockTick!=apuLastMaster)
+	{
+	}
+#else
 	ClockCPU(MasterClock);
+#if APU
 	ClockAPU(MasterClock);
+#endif
 	ClockPPU(MasterClock);
+#endif
 #if COMPLEX_MAPPERS
 	TickMMC1();
 	MAIN_PinSet_IRQ((MMC3_TickIRQ()&APU_Interrupt)&1);
@@ -1749,6 +1814,10 @@ void TickChips(int MasterClock)
 
 void ShowFPS(unsigned char* buffer,unsigned int width,float fps);
 
+#if USE_THREADS
+pthread_t threads[4];
+#endif
+
 int main(int argc,char**argv)
 {
 	int w,h;
@@ -1769,6 +1838,11 @@ int main(int argc,char**argv)
 		exit(-1);
 	}
 
+#if USE_THREADS
+	pthread_create(&threads[0],NULL,TickThreadCPU,NULL);
+	pthread_create(&threads[1],NULL,TickThreadPPU,NULL);
+	pthread_create(&threads[2],NULL,TickThreadAPU,NULL);
+#endif
 
 	/// Initialize GLFW 
 	glfwInit(); 

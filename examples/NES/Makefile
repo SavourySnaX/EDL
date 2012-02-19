@@ -63,4 +63,4 @@ out/ioapi.o: minizip/ioapi.c
 	clang -O3 -c minizip/ioapi.c $(ZINCS) -o out/ioapi.o
 
 nes: out/nes.o out/debugger.o out/rp2a03.o out/miniunz.o out/iowin32.o out/ioapi.o out/unzip.o out/rp2c02.o
-	clang -g3 -O3 $(PROF_FLAGS) -Wl,-Map,nes.map out/nes.o out/debugger.o out/rp2a03.o out/rp2c02.o out/miniunz.o out/iowin32.o out/ioapi.o out/unzip.o $(ALLIBS) $(GLLIBS) $(ZLIB) -o nes.exe
+	clang -g3 -O3 $(PROF_FLAGS) -Wl,-Map,nes.map out/nes.o out/debugger.o out/rp2a03.o out/rp2c02.o out/miniunz.o out/iowin32.o out/ioapi.o out/unzip.o $(ALLIBS) $(GLLIBS) $(ZLIB) -lpthread -o nes.exe

@@ -502,17 +502,22 @@ FUNCTION INTERNAL	RasteriseOff
 	}
 }
 
+FUNCTION INTERNAL	UpdateFetch
+{
+	IF BGShow|SprShow
+	{
+		EXECUTE PixelClock	hClock;
+		EXECUTE OAMClock	hClock;
+	}
+}
+
 FUNCTION INTERNAL	TickPixelClockStart
 {
 	EXECUTE VRAMRequest	requestVRAM;
 
 	IF (vClock>=21) & (vClock<=260)
 	{
-		IF BGShow|SprShow
-		{
-			EXECUTE PixelClock	hClock;
-			EXECUTE OAMClock	hClock;
-		}
+		CALL UpdateFetch();
 		IF SprShow
 		{
 			CALL MultiplexSprite();
@@ -721,11 +726,7 @@ INSTRUCTION	PixelClockLine	"Line19"	%000010011
 
 INSTRUCTION	PixelClockLine	"Line20"	%000010100
 {
-	IF BGShow|SprShow
-	{
-		EXECUTE PixelClock	hClock;
-		EXECUTE OAMClock	hClock;
-	}
+	CALL UpdateFetch();
 	IF (hClock==0)
 	{
 		Sprite0<-0;
