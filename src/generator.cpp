@@ -10,6 +10,8 @@
 
 using namespace llvm;
 
+#define DEBUG_STATE_SQUASH	0
+
 namespace 
 {
 	struct StateReferenceSquasher : public FunctionPass 
@@ -20,14 +22,15 @@ namespace
 		StateReferenceSquasher() : ourContext(NULL),FunctionPass(ID) {}
 		StateReferenceSquasher(CodeGenContext* context) : ourContext(context),FunctionPass(ID) {}
 
-		virtual bool runOnFunction(Function &F) 
+		bool DoWork(Function &F,CodeGenContext* context)
 		{
-			bool doneSomeWork=false;
-
 			std::map<std::string, StateVariable>::iterator stateVars;
-
-			for (stateVars=ourContext->states().begin();stateVars!=ourContext->states().end();++stateVars)
+			bool doneSomeWork=false;
+			for (stateVars=context->states().begin();stateVars!=context->states().end();++stateVars)
 			{
+#if DEBUG_STATE_SQUASH
+				std::cerr << "-" << F.getName().str() << " " << stateVars->first << std::endl;
+#endif
 				// Search the instructions in the function, and find Load instructions
 				Value* foundReference=NULL;
 				for (inst_iterator I = inst_begin(F), E = inst_end(F); I != E; ++I)
@@ -40,6 +43,9 @@ namespace
 						{
 							if (foundReference)
 							{
+#if DEBUG_STATE_SQUASH
+								std::cerr << "--" << F.getName().str() << " " << iRef->getName().str() << std::endl;
+#endif
 								// Replace all uses of this instruction with original result,
 								// I don't remove the current instruction - its upto a later pass to remove it
 								iRef->replaceAllUsesWith(foundReference);//BinaryOperator::Create (Instruction::Or,foundReference,foundReference,"",iRef));
@@ -47,6 +53,9 @@ namespace
 							}
 							else
 							{
+#if DEBUG_STATE_SQUASH
+								std::cerr << "==" << F.getName().str() << " " << iRef->getName().str() << std::endl;
+#endif
 								foundReference=iRef;
 							}
 						}
@@ -62,6 +71,23 @@ namespace
 					}
 				}
 
+			}
+			return doneSomeWork;
+		}
+
+		virtual bool runOnFunction(Function &F) 
+		{
+			bool doneSomeWork=false;
+
+    			std::map<std::string, CodeGenContext*>::iterator includeIter;
+
+			doneSomeWork|=DoWork(F,ourContext);
+			for (includeIter=ourContext->m_includes.begin();includeIter!=ourContext->m_includes.end();++includeIter)
+			{
+#if DEBUG_STATE_SQUASH
+				std::cerr << F.getName().str() << " " << includeIter->second->states().size() << std::endl;
+#endif
+				doneSomeWork|=DoWork(F,includeIter->second);
 			}
 
 			return doneSomeWork;

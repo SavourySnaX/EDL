@@ -1,5 +1,7 @@
 all: bin/edl
 
+COMPILER=g++
+
 OBJS = out/parser.o  \
        out/generator.o \
        out/main.o    \
@@ -9,8 +11,8 @@ LLVM_MODULES = all
 
 #TODO Fix so i can build in linux again
 LLVM_CONFIG=llvm-config
-START_GROUP=--start-group
-END_GROUP=--end-group
+START_GROUP=#--start-group
+END_GROUP=#--end-group
 
 CPPFLAGS = -g -Isrc -Iout `$(LLVM_CONFIG) --cppflags $(LLVM_MODULES)`
 LDFLAGS = -g `$(LLVM_CONFIG) --ldflags $(LLVM_MODULES)`
@@ -31,10 +33,16 @@ out/parser.hpp: out/parser.cpp
 out/lexer.cpp: src/edl.l out/parser.hpp
 	flex -o $@ $^
 
+out/parser.o: out/parser.cpp
+	$(COMPILER) -c $(CPPFLAGS) -o $@ $<
+
+out/lexer.o: out/lexer.cpp
+	$(COMPILER) -c $(CPPFLAGS) -o $@ $<
+
 out/%.o: src/%.cpp
-	g++ -c $(CPPFLAGS) -o $@ $<
+	$(COMPILER) -c $(CPPFLAGS) -o $@ $<
 
 
 bin/edl: $(OBJS)
 	mkdir -p bin
-	g++ -o $@ $(LDFLAGS) $(START_GROUP) $(OBJS) $(LIBS) $(END_GROUP)
+	$(COMPILER) -o $@ $(LDFLAGS) $(START_GROUP) $(OBJS) $(LIBS) $(END_GROUP)
