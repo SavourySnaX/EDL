@@ -78,8 +78,9 @@ CodeGenContext::CodeGenContext(CodeGenContext* parent)
 { 
 	if (!parent) 
 	{ 
+		std::string err;
 		module = new Module("root",getGlobalContext()); 
-		ee = EngineBuilder(module).create();
+		ee = EngineBuilder(module).setErrorStr(&err).create();
 		isRoot=true; 
 	}
 	else
@@ -123,7 +124,7 @@ void CodeGenContext::GenerateDisassmTables()
 				ConstantInt* const_int64_13 = ConstantInt::get(getGlobalContext(), APInt(64, StringRef("0"), 10));
 				const_ptr_12_indices.push_back(const_int64_13);
 				const_ptr_12_indices.push_back(const_int64_13);
-				Constant* const_ptr_12 = ConstantExpr::getGetElementPtr(gvar_array__str, &const_ptr_12_indices[0], const_ptr_12_indices.size());
+				Constant* const_ptr_12 = ConstantExpr::getGetElementPtr(gvar_array__str, const_ptr_12_indices);
 
 				gvar_array__str->setInitializer(const_array_9);
 
@@ -158,7 +159,7 @@ void CodeGenContext::generateCode(CBlock& root,CompilerOptions &options)
 
 		PointerType* PointerTy_4 = PointerType::get(IntegerType::get(getGlobalContext(), 8), 0);
 
-		std::vector<const Type*>FuncTy_8_args;
+		std::vector<Type*>FuncTy_8_args;
 		FuncTy_8_args.push_back(PointerTy_4);
 		FunctionType* FuncTy_8 = FunctionType::get(/*Result=*/IntegerType::get(getGlobalContext(), 32),/*Params=*/FuncTy_8_args,/*isVarArg=*/false);
 
@@ -167,7 +168,7 @@ void CodeGenContext::generateCode(CBlock& root,CompilerOptions &options)
 		AttrListPtr func_puts_PAL;
 		debugTraceString->setAttributes(func_puts_PAL);
 
-		std::vector<const Type*>FuncTy_6_args;
+		std::vector<Type*>FuncTy_6_args;
 		FuncTy_6_args.push_back(IntegerType::get(getGlobalContext(), 32));
 		FunctionType* FuncTy_6 = FunctionType::get(/*Result=*/IntegerType::get(getGlobalContext(), 32),/*Params=*/FuncTy_6_args,/*isVarArg=*/false);
 
@@ -213,7 +214,7 @@ void CodeGenContext::generateCode(CBlock& root,CompilerOptions &options)
 					pm.add(new StateReferenceSquasher(this));		// Custom pass designed to remove redundant loads of the current state (since it can only be modified in one place)
 				}
 
-				pm.add(createLowerSetJmpPass());          // Lower llvm.setjmp/.longjmp
+				//pm.add(createLowerSetJmpPass());          // Lower llvm.setjmp/.longjmp
 
 				// Propagate constants at call sites into the functions they call.  This
 				// opens opportunities for globalopt (and inlining) by substituting function
@@ -314,7 +315,7 @@ void CodeGenContext::generateCode(CBlock& root,CompilerOptions &options)
 				pm.add(createAggressiveDCEPass());        // Delete dead instructions
 				pm.add(createCFGSimplificationPass());    // Merge & remove BBs
 				pm.add(createStripDeadPrototypesPass());  // Get rid of dead prototypes
-				pm.add(createDeadTypeEliminationPass());  // Eliminate dead types
+	//			pm.add(createDeadTypeEliminationPass());  // Eliminate dead types
 				pm.add(createConstantMergePass());        // Merge dup global constants
 
 				// Make sure everything is still good.
@@ -359,7 +360,7 @@ Value* CString::codeGen(CodeGenContext& context)
 	ConstantInt* const_int64_13 = ConstantInt::get(getGlobalContext(), APInt(64, StringRef("0"), 10));
 	const_ptr_12_indices.push_back(const_int64_13);
 	const_ptr_12_indices.push_back(const_int64_13);
-	Constant* const_ptr_12 = ConstantExpr::getGetElementPtr(gvar_array__str, &const_ptr_12_indices[0], const_ptr_12_indices.size());
+	Constant* const_ptr_12 = ConstantExpr::getGetElementPtr(gvar_array__str, const_ptr_12_indices);
 
 	// Global Variable Definitions
 	gvar_array__str->setInitializer(const_array_9);
@@ -376,7 +377,7 @@ Value* CIdentifier::trueSize(Value* in,CodeGenContext& context,BitVariable& var)
 		return NULL;
 	}
 
-	const Type* ty = Type::getIntNTy(getGlobalContext(),var.trueSize.getLimitedValue());
+	Type* ty = Type::getIntNTy(getGlobalContext(),var.trueSize.getLimitedValue());
 	Instruction::CastOps op = CastInst::getCastOpcode(in,false,ty,false);
 
 	Instruction* truncExt = CastInst::Create(op,in,ty,"cast",context.currentBlock());
@@ -470,7 +471,7 @@ Value* CIdentifier::codeGen(CodeGenContext& context)
 			Function* function=context.LookupFunctionInExternalModule(module,"PinGet"+name);
 
 			std::vector<Value*> args;
-			return CallInst::Create(function,args.begin(),args.end(),"pinValue",context.currentBlock());
+			return CallInst::Create(function,args,"pinValue",context.currentBlock());
 		}
 
 	}
@@ -482,8 +483,8 @@ Value* CIdentifier::codeGen(CodeGenContext& context)
 		{
 			Value* exprResult=GetExpression()->codeGen(context);
 
-			const Type* ty = Type::getIntNTy(getGlobalContext(),var.arraySize.getLimitedValue());
-			const Type* ty64 = Type::getIntNTy(getGlobalContext(),64);
+			Type* ty = Type::getIntNTy(getGlobalContext(),var.arraySize.getLimitedValue());
+			Type* ty64 = Type::getIntNTy(getGlobalContext(),64);
 			Instruction::CastOps op = CastInst::getCastOpcode(exprResult,false,ty,false);
 			Instruction* truncExt0 = CastInst::Create(op,exprResult,ty,"cast",context.currentBlock());		// Cast index to 64 bit type
 			Instruction::CastOps op1 = CastInst::getCastOpcode(exprResult,false,ty64,false);
@@ -493,7 +494,7 @@ Value* CIdentifier::codeGen(CodeGenContext& context)
  			ConstantInt* index0 = ConstantInt::get(getGlobalContext(), APInt(var.size.getLimitedValue(), StringRef("0"), 10));
 			indices.push_back(index0);
  			indices.push_back(truncExt);
-			Instruction* elementPtr = GetElementPtrInst::Create(var.value,indices.begin(),indices.end(),"array index",context.currentBlock());
+			Instruction* elementPtr = GetElementPtrInst::Create(var.value,indices,"array index",context.currentBlock());
 
 			final = new LoadInst(elementPtr, "", false, context.currentBlock());
 		}
@@ -516,7 +517,7 @@ Value* CDebugTraceString::codeGen(CodeGenContext& context)
 		std::vector<Value*> args;
 		
 		args.push_back(ConstantInt::get(getGlobalContext(),APInt(32,string.quoted[a])));
-		CallInst *call = CallInst::Create(context.debugTraceChar,args.begin(),args.end(),"DEBUGTRACE",context.currentBlock());
+		CallInst *call = CallInst::Create(context.debugTraceChar,args,"DEBUGTRACE",context.currentBlock());
 	}
 }
 
@@ -551,7 +552,7 @@ Value* CDebugTraceInteger::codeGen(CodeGenContext& context)
 		APInt tmp = integer.integer.udiv(baseDivisor);
 
 		args.push_back(ConstantInt::get(getGlobalContext(), APInt(32, tbl[tmp.getLimitedValue()])));
-		CallInst *call = CallInst::Create(context.debugTraceChar,args.begin(),args.end(),"DEBUGTRACE",context.currentBlock());
+		CallInst *call = CallInst::Create(context.debugTraceChar,args,"DEBUGTRACE",context.currentBlock());
 
 		integer.integer-=tmp*baseDivisor;
 		if (cnt!=1)
@@ -594,7 +595,7 @@ Value* CDebugTraceIdentifier::generate(CodeGenContext& context,Value *loadedValu
 		ConstantInt* const_intDiv = ConstantInt::get(getGlobalContext(), baseDivisor);
 		BinaryOperator* shiftInst = BinaryOperator::Create(Instruction::UDiv,loadedValue,const_intDiv, "Dividing", context.currentBlock());
 		
-		const Type* ty = Type::getIntNTy(getGlobalContext(),32);
+		Type* ty = Type::getIntNTy(getGlobalContext(),32);
 		Instruction::CastOps op = CastInst::getCastOpcode(shiftInst,false,ty,false);
 		Instruction* readyToAdd = CastInst::Create(op,shiftInst,ty,"cast",context.currentBlock());
 		
@@ -606,7 +607,7 @@ Value* CDebugTraceIdentifier::generate(CodeGenContext& context,Value *loadedValu
 		SelectInst *select = SelectInst::Create(check,lowAdd,hiAdd,"getRightChar",context.currentBlock());
 
 		args.push_back(select);
-		CallInst *call = CallInst::Create(context.debugTraceChar,args.begin(),args.end(),"DEBUGTRACE",context.currentBlock());
+		CallInst *call = CallInst::Create(context.debugTraceChar,args,"DEBUGTRACE",context.currentBlock());
 		
 		BinaryOperator* mulUp = BinaryOperator::Create(Instruction::Mul,shiftInst,const_intDiv,"mulUp",context.currentBlock());
 		loadedValue = BinaryOperator::Create(Instruction::Sub,loadedValue,mulUp,"fixup",context.currentBlock());
@@ -644,7 +645,7 @@ Value* CDebugTraceIdentifier::codeGen(CodeGenContext& context)
 
 		std::vector<Value*> args;
 		args.push_back(ConstantInt::get(getGlobalContext(), APInt(32, ')')));
-		CallInst::Create(context.debugTraceChar,args.begin(),args.end(),"DEBUGTRACE",context.currentBlock());
+		CallInst::Create(context.debugTraceChar,args,"DEBUGTRACE",context.currentBlock());
 
 		return ret;
 	}
@@ -674,13 +675,13 @@ Value* CDebugTraceIdentifier::codeGen(CodeGenContext& context)
 			{
 				std::vector<Value*> args;
 				args.push_back(ConstantInt::get(getGlobalContext(), APInt(32, ',')));
-				CallInst::Create(context.debugTraceChar,args.begin(),args.end(),"DEBUGTRACE",context.currentBlock());
+				CallInst::Create(context.debugTraceChar,args,"DEBUGTRACE",context.currentBlock());
 			}
 		}
 		
 		std::vector<Value*> args;
 		args.push_back(ConstantInt::get(getGlobalContext(), APInt(32, ')')));
-		CallInst::Create(context.debugTraceChar,args.begin(),args.end(),"DEBUGTRACE",context.currentBlock());
+		CallInst::Create(context.debugTraceChar,args,"DEBUGTRACE",context.currentBlock());
 	}
 
 	return NULL;
@@ -713,7 +714,7 @@ Value* CDebugLine::codeGen(CodeGenContext& context)		// Refactored away onto its
 
 	std::vector<Value*> args;
 	args.push_back(ConstantInt::get(getGlobalContext(), APInt(32, '\n')));
-	CallInst* fcall = CallInst::Create(context.debugTraceChar,args.begin(),args.end(),"DEBUGTRACE",context.currentBlock());
+	CallInst* fcall = CallInst::Create(context.debugTraceChar,args,"DEBUGTRACE",context.currentBlock());
 	
 	BranchInst::Create(cont,context.currentBlock());
 
@@ -757,8 +758,8 @@ Value* CBinaryOperator::codeGen(CodeGenContext& context,Value* left,Value* right
 {
 	if (left->getType()->isIntegerTy() && right->getType()->isIntegerTy())
 	{
-		const IntegerType* leftType = cast<IntegerType>(left->getType());
-		const IntegerType* rightType = cast<IntegerType>(right->getType());
+		IntegerType* leftType = cast<IntegerType>(left->getType());
+		IntegerType* rightType = cast<IntegerType>(right->getType());
 
 		bool signExtend;
 		switch (op)
@@ -961,7 +962,7 @@ Value* CRotationOperator::codeGen(CodeGenContext& context)
 		return NULL;
 	}
 
-	const IntegerType* toShiftType = cast<IntegerType>(toShift->getType());
+	IntegerType* toShiftType = cast<IntegerType>(toShift->getType());
 
 	if (direction == TOK_ROL)
 	{
@@ -1025,8 +1026,8 @@ Value* CAssignment::generateAssignment(BitVariable& to,const CIdentifier& toIden
 	{
 		Value* exprResult=toIdent.GetExpression()->codeGen(context);
 
-		const Type* ty = Type::getIntNTy(getGlobalContext(),to.arraySize.getLimitedValue());
-		const Type* ty64 = Type::getIntNTy(getGlobalContext(),64);
+		Type* ty = Type::getIntNTy(getGlobalContext(),to.arraySize.getLimitedValue());
+		Type* ty64 = Type::getIntNTy(getGlobalContext(),64);
 		Instruction::CastOps op = CastInst::getCastOpcode(exprResult,false,ty,false);
 		Instruction* truncExt0 = CastInst::Create(op,exprResult,ty,"cast",context.currentBlock());		// Cast index to 64 bit type
 		Instruction::CastOps op1 = CastInst::getCastOpcode(exprResult,false,ty64,false);
@@ -1039,7 +1040,7 @@ Value* CAssignment::generateAssignment(BitVariable& to,const CIdentifier& toIden
 		ConstantInt* index0 = ConstantInt::get(getGlobalContext(), APInt(to.size.getLimitedValue(), StringRef("0"), 10));
 		indices.push_back(index0);
 		indices.push_back(truncExt);
-		Instruction* elementPtr = GetElementPtrInst::Create(to.value,indices.begin(),indices.end(),"array index",context.currentBlock());
+		Instruction* elementPtr = GetElementPtrInst::Create(to.value,indices,"array index",context.currentBlock());
 
 		assignTo = elementPtr;//new LoadInst(elementPtr, "", false, context.currentBlock());
 	}
@@ -1052,7 +1053,7 @@ Value* CAssignment::generateAssignment(BitVariable& to,const CIdentifier& toIden
 	}
 
 	// Handle variable promotion
-	const Type* ty = Type::getIntNTy(getGlobalContext(),to.size.getLimitedValue());
+	Type* ty = Type::getIntNTy(getGlobalContext(),to.size.getLimitedValue());
 	Instruction::CastOps op = CastInst::getCastOpcode(from,false,ty,false);
 
 	Instruction* truncExt = CastInst::Create(op,from,ty,"cast",context.currentBlock());
@@ -1079,8 +1080,8 @@ Value* CAssignment::generateAssignment(BitVariable& to,const CIdentifier& toIden
 		{
 			Value* exprResult=toIdent.GetExpression()->codeGen(context);
 
-			const Type* ty = Type::getIntNTy(getGlobalContext(),to.arraySize.getLimitedValue());
-			const Type* ty64 = Type::getIntNTy(getGlobalContext(),64);
+			Type* ty = Type::getIntNTy(getGlobalContext(),to.arraySize.getLimitedValue());
+			Type* ty64 = Type::getIntNTy(getGlobalContext(),64);
 			Instruction::CastOps op = CastInst::getCastOpcode(exprResult,false,ty,false);
 			Instruction* truncExt0 = CastInst::Create(op,exprResult,ty,"cast",context.currentBlock());		// Cast index to 64 bit type
 			Instruction::CastOps op1 = CastInst::getCastOpcode(exprResult,false,ty64,false);
@@ -1093,7 +1094,7 @@ Value* CAssignment::generateAssignment(BitVariable& to,const CIdentifier& toIden
 			ConstantInt* index0 = ConstantInt::get(getGlobalContext(), APInt(to.size.getLimitedValue(), StringRef("0"), 10));
 			indices.push_back(index0);
 			indices.push_back(truncExt);
-			Instruction* elementPtr = GetElementPtrInst::Create(to.value,indices.begin(),indices.end(),"array index",context.currentBlock());
+			Instruction* elementPtr = GetElementPtrInst::Create(to.value,indices,"array index",context.currentBlock());
 
 			dest = elementPtr;
 		}
@@ -1119,7 +1120,7 @@ Value* CAssignment::generateAssignment(BitVariable& to,const CIdentifier& toIden
 
 			std::vector<Value*> args;
 			args.push_back(final);
-			return CallInst::Create(function,args.begin(),args.end(),"",context.currentBlock());
+			return CallInst::Create(function,args,"",context.currentBlock());
 		}
 
 	}
@@ -1560,7 +1561,7 @@ Value* CStateDefinition::codeGen(CodeGenContext& context)
 
 void CVariableDeclaration::CreateWriteAccessor(CodeGenContext& context,BitVariable& var,const std::string& moduleName,const std::string& name)
 {
-	vector<const Type*> argTypes;
+	vector<Type*> argTypes;
 	argTypes.push_back(IntegerType::get(getGlobalContext(), var.size.getLimitedValue()));
 	FunctionType *ftype = FunctionType::get(Type::getVoidTy(getGlobalContext()),argTypes, false);
 	Function* function;
@@ -1593,7 +1594,7 @@ void CVariableDeclaration::CreateWriteAccessor(CodeGenContext& context,BitVariab
 
 void CVariableDeclaration::CreateReadAccessor(CodeGenContext& context,BitVariable& var)
 {
-	vector<const Type*> argTypes;
+	vector<Type*> argTypes;
 	FunctionType *ftype = FunctionType::get(IntegerType::get(getGlobalContext(), var.size.getLimitedValue()),argTypes, false);
 	Function* function;
        	if (context.isRoot)
@@ -1654,7 +1655,7 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 		// Rules for globals have changed. If we are definining a PIN then the variable should be private to this module, and accessors should be created instead. 
 		if (pinType==0)
 		{
-			const Type* type = Type::getIntNTy(getGlobalContext(),size.integer.getLimitedValue());
+			Type* type = Type::getIntNTy(getGlobalContext(),size.integer.getLimitedValue());
 			if (arraySize.integer.getLimitedValue())
 			{
 				APInt power2(arraySize.integer.getLimitedValue()+1,1);
@@ -1857,7 +1858,7 @@ void CHandlerDeclaration::prePass(CodeGenContext& context)
 
 Value* CHandlerDeclaration::codeGen(CodeGenContext& context)
 {
-	vector<const Type*> argTypes;
+	vector<Type*> argTypes;
 	BitVariable pinVariable;
 
 	if (context.globals().find(id.name) == context.globals().end())
@@ -1977,7 +1978,7 @@ void CInstruction::prePass(CodeGenContext& context)
 
 Value* CInstruction::codeGen(CodeGenContext& context)
 {
-	vector<const Type*> argTypes;
+	vector<Type*> argTypes;
 
 	// First up, get the first operand (this must be a computable constant!) - remaining operands are only used for asm/disasm generation
 
@@ -2017,7 +2018,7 @@ Value* CInstruction::codeGen(CodeGenContext& context)
 		{
 			BasicBlock* tempBlock = BasicBlock::Create(getGlobalContext(),"callOut" + table.name + opcode.toString(16,false),context.executeLocations[table.name][b].blockEndForExecute->getParent(),0);
 			std::vector<Value*> args;
-			CallInst* fcall = CallInst::Create(function,args.begin(),args.end(),"",tempBlock);
+			CallInst* fcall = CallInst::Create(function,args,"",tempBlock);
 			BranchInst::Create(context.executeLocations[table.name][b].blockEndForExecute,tempBlock);
 			context.executeLocations[table.name][b].switchForExecute->addCase(ConstantInt::get(getGlobalContext(),opcode),tempBlock);
 		}
@@ -2050,13 +2051,13 @@ Value* CExecute::codeGen(CodeGenContext& context)
 			std::vector<Value*> args;
 	
 			// Handle variable promotion
-			const Type* ty = Type::getIntNTy(getGlobalContext(),32);
+			Type* ty = Type::getIntNTy(getGlobalContext(),32);
 			Instruction::CastOps op = CastInst::getCastOpcode(load,false,ty,false);
 
 			Instruction* truncExt = CastInst::Create(op,load,ty,"cast",tempBlock);
 		
 			args.push_back(truncExt);
-			CallInst *call = CallInst::Create(context.debugTraceMissing,args.begin(),args.end(),"DEBUGTRACEMISSING",tempBlock);
+			CallInst *call = CallInst::Create(context.debugTraceMissing,args,"DEBUGTRACEMISSING",tempBlock);
 
 			BranchInst::Create(temp.blockEndForExecute,tempBlock);
 			
@@ -2297,7 +2298,7 @@ Value* CStatePush::codeGen(CodeGenContext& context)
 	ConstantInt* const_intn = ConstantInt::get(getGlobalContext(), APInt(bitsNeeded, StringRef("0"), 10));
 	indices.push_back(const_intn);
 	indices.push_back(index);
-	Value* ref = GetElementPtrInst::Create(topState.stateStackNext, indices.begin(), indices.end(),"stackPos",context.currentBlock());
+	Value* ref = GetElementPtrInst::Create(topState.stateStackNext, indices,"stackPos",context.currentBlock());
 
 	Value* curNext = new LoadInst(topState.nextState,"currentNext",false,context.currentBlock());
 
@@ -2346,7 +2347,7 @@ Value* CStatePop::codeGen(CodeGenContext& context)
 	ConstantInt* const_intn = ConstantInt::get(getGlobalContext(), APInt(bitsNeeded, StringRef("0"), 10));
 	indices.push_back(const_intn);
 	indices.push_back(dec);
-	Value* ref = GetElementPtrInst::Create(topState.stateStackNext, indices.begin(), indices.end(),"stackPos",context.currentBlock());
+	Value* ref = GetElementPtrInst::Create(topState.stateStackNext, indices,"stackPos",context.currentBlock());
 
 	Value* oldNext = new LoadInst(ref,"oldNext",false,context.currentBlock());	// retrieve old next value
 
@@ -2587,7 +2588,7 @@ CInteger CAffect::emptyParam(stringZero);
 
 Value* CAffect::codeGenCarry(CodeGenContext& context,Value* exprResult,Value* lhs,Value* rhs,int optype)
 {
-	const IntegerType* resultType = cast<IntegerType>(exprResult->getType());
+	IntegerType* resultType = cast<IntegerType>(exprResult->getType());
 	Value *answer;
 	switch (type)
 	{
@@ -2601,8 +2602,8 @@ Value* CAffect::codeGenCarry(CodeGenContext& context,Value* exprResult,Value* lh
 					return NULL;
 				}
 				
-				const IntegerType* lhsType = cast<IntegerType>(lhs->getType());
-				const IntegerType* rhsType = cast<IntegerType>(rhs->getType());
+				IntegerType* lhsType = cast<IntegerType>(lhs->getType());
+				IntegerType* rhsType = cast<IntegerType>(rhs->getType());
 		       		
 				Instruction::CastOps lhsOp = CastInst::getCastOpcode(lhs,false,resultType,false);
 				lhs = CastInst::Create(lhsOp,lhs,resultType,"cast",context.currentBlock());
@@ -2683,7 +2684,7 @@ Value* CAffect::codeGenFinal(CodeGenContext& context,Value* exprResult)
 		return NULL;
 	}
 
-	const IntegerType* resultType = cast<IntegerType>(exprResult->getType());
+	IntegerType* resultType = cast<IntegerType>(exprResult->getType());
 	Value *answer;
 	switch (type)
 	{
@@ -2732,7 +2733,7 @@ Value* CAffect::codeGenFinal(CodeGenContext& context,Value* exprResult)
 					if (resultType->getBitWidth() <= computeClosestPower2Size.getLimitedValue())
 					{
 						// Output a casting operator to up the size of type
-						const Type* ty = Type::getIntNTy(getGlobalContext(),computeClosestPower2Size.getLimitedValue());
+						Type* ty = Type::getIntNTy(getGlobalContext(),computeClosestPower2Size.getLimitedValue());
 						Instruction::CastOps op = CastInst::getCastOpcode(exprResult,false,ty,false);
 						answer = CastInst::Create(op,exprResult,ty,"",context.currentBlock());
 						break;
@@ -2756,7 +2757,7 @@ Value* CAffect::codeGenFinal(CodeGenContext& context,Value* exprResult)
 
 				// final part, mask to nibble size and use this to lookup into magic constant 0x6996 (which is simply a table look up for the parities of a nibble)
 				answer=BinaryOperator::Create(Instruction::And,answer,ConstantInt::get(getGlobalContext(),APInt(computeClosestPower2Size.getBitWidth(),0xF,false)),"",context.currentBlock());
-				const Type* ty = Type::getIntNTy(getGlobalContext(),16);
+				Type* ty = Type::getIntNTy(getGlobalContext(),16);
 				Instruction::CastOps op = CastInst::getCastOpcode(answer,false,ty,false);
 				answer = CastInst::Create(op,answer,ty,"",context.currentBlock());
 				if (type == TOK_PARITYEVEN)
@@ -2814,8 +2815,8 @@ Value* CAffect::codeGenFinal(CodeGenContext& context,Value* exprResult)
 					return NULL;
 				}
 				
-				const IntegerType* lhsType = cast<IntegerType>(lhs->getType());
-				const IntegerType* rhsType = cast<IntegerType>(rhs->getType());
+				IntegerType* lhsType = cast<IntegerType>(lhs->getType());
+				IntegerType* rhsType = cast<IntegerType>(rhs->getType());
 				
 				if (param.integer.getLimitedValue() >= lhsType->getBitWidth())
 				{
@@ -3012,7 +3013,7 @@ Value* CExternDecl::codeGen(CodeGenContext& context)
 	// 	16-> unsigned short (technically u_int16_t)
 	// 	32-> unsigned int   (technically u_int32_t)
 
-  	std::vector<const Type*> FuncTy_8_args;
+  	std::vector<Type*> FuncTy_8_args;
 	for (int a=0;a<params.size();a++)
 	{
 		unsigned size = params[a]->integer.getLimitedValue();
@@ -3092,13 +3093,13 @@ Value* CFuncCall::codeGen(CodeGenContext& context)
 	Value* call;
 	if (funcType->getReturnType()->isVoidTy())
 	{
-		call = CallInst::Create(func, args.begin(), args.end(), "", context.currentBlock());
+		call = CallInst::Create(func, args, "", context.currentBlock());
 
 		call = ConstantInt::get(getGlobalContext(),APInt(1,0));		// Forces void returns to actually return 0
 	}
 	else
 	{
-		call = CallInst::Create(func, args.begin(), args.end(), "CallingCFunc"+name.name, context.currentBlock());
+		call = CallInst::Create(func, args, "CallingCFunc"+name.name, context.currentBlock());
 	}
 
 	return call;
@@ -3193,7 +3194,7 @@ Value* CFunctionDecl::codeGen(CodeGenContext& context)
 {
 	int a;
 	BitVariable returnVal;
-  	std::vector<const Type*> FuncTy_8_args;
+  	std::vector<Type*> FuncTy_8_args;
 
 	for (a=0;a<params.size();a++)
 	{
