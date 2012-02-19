@@ -2,7 +2,7 @@
 Emulation Description Language
 ------------------------------
 
-Requires Bison/Yacc,lex/flex,llvm (2.9) to build the compiler.
+Requires Bison/Yacc,lex/flex,llvm (3.0) to build the compiler.
 
 Invaders needs the above compiler plus opengl and glfw (3.0). glfw 3.0 is currently only available as source - but i needed the multiple window support available in that version.
 
