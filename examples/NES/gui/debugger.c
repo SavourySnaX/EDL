@@ -8,6 +8,10 @@
 
 #include "font.h"
 
+void ClearKey(int key);
+int CheckKey(int key);
+int CheckKeyWindow(int key,GLFWwindow window);
+
 unsigned short breakpoints[2][20]={
 	{0xE231,0xE249,0xe264,0xe27c},
 	{/*0xE853,*//*0xF556,*/0xfd27,0xfd86,0xfd58,0xF497,0xF3C0,0xF567}
@@ -192,7 +196,7 @@ void ShowFPS(unsigned char* buffer,unsigned int width,float fps)
 	PrintAt(buffer,width,255,255,255,0,240/8,"FPS : %.1f       ",fps);
 }
 
-#define MAX_CAPTURE		(341*262*2*4*3)
+#define MAX_CAPTURE		(341*262*2*4*3ull)
 #define MAX_PINS		(4)
 
 unsigned char lohi[MAX_PINS][MAX_CAPTURE];

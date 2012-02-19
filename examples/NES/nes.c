@@ -42,24 +42,30 @@ extern uint8_t PPU_Status;
 extern uint16_t PPU_hClock;
 extern uint16_t PPU_vClock;
 
+void PPU_PinSetAD(uint8_t);
 void PPU_PinSetRW(uint8_t);
 void PPU_PinSet_DBE(uint8_t);
 void PPU_PinSetRS(uint8_t);
 void PPU_PinSetD(uint8_t);
 void PPU_PinSetCLK(uint8_t);
+void PPU_PinSet_RST(uint8_t);
 uint8_t PPU_PinGetD();
 uint8_t PPU_PinGetPA();
 uint8_t PPU_PinGetAD();
 uint8_t PPU_PinGetALE();
 uint8_t PPU_PinGet_RE();
 uint8_t PPU_PinGet_WE();
+uint8_t PPU_PinGet_INT();
 uint8_t PPU_PinGetVIDEO();
 
 extern uint8_t PPU_colourCounter;
 
 uint16_t MAIN_PinGetA();
 uint8_t MAIN_PinGetD();
+uint8_t MAIN_PinGetM2();
 void MAIN_PinSetD(uint8_t);
+void MAIN_PinSet_RST(uint8_t);
+void MAIN_PinSet_NMI(uint8_t);
 void MAIN_PinSetCLK(uint8_t);
 uint8_t MAIN_PinGetRW();
 void MAIN_PinSet_IRQ(uint8_t);
@@ -504,7 +510,7 @@ uint8_t MMC3_IRQPending=1;
 uint8_t MMC3_TickIRQ()
 {
 	static int timeSinceLastHigh=0;
-	static lastA12=12;
+	static uint8_t lastA12=12;
 	if ((PPU_PinGetPA()&0x10)!=lastA12)
 	{
 		if (lastA12==0 )
@@ -764,7 +770,7 @@ extern uint8_t	MAIN_P;
 
 extern uint8_t	MAIN_DEBUG_SYNC;
 
-uint32_t MAIN_missing(uint32_t opcode)
+void MAIN_missing(uint32_t opcode)
 {
 	printf("MAIN:Executing Missing Instruction!! : %04X:%02X\n",MAIN_PC-1,opcode);
 	stopTheClock=1;
@@ -784,8 +790,8 @@ const char* decodeDisasm(uint8_t *table[256],unsigned int address,int *count,int
 	}
 	else
 	{
-		const char* mnemonic=table[byte];
-		const char* sPtr=mnemonic;
+		const uint8_t* mnemonic=table[byte];
+		const uint8_t* sPtr=mnemonic;
 		char* dPtr=temporaryBuffer;
 		int counting = 0;
 		int doingDecode=0;
@@ -1703,10 +1709,10 @@ void ClockAPU(int apuClock)
 	}
 	SLOWMO++;
 
-	_AudioAddData(0,DAC_LEVEL[0]?(APU_Timer[0]&0x0F)<<10:0);
-	_AudioAddData(1,DAC_LEVEL[1]?(APU_Timer[1]&0x0F)<<10:0);
-	_AudioAddData(2,DAC_LEVEL[2]<<10);
-	_AudioAddData(3,DAC_LEVEL[3]?(APU_Timer[3]&0x0F)<<10:0);
+	_AudioAddData(0,DAC_LEVEL[0]?(APU_Timer[0]&0x0F)<<9:0);
+	_AudioAddData(1,DAC_LEVEL[1]?(APU_Timer[1]&0x0F)<<9:0);
+	_AudioAddData(2,DAC_LEVEL[2]<<9);
+	_AudioAddData(3,DAC_LEVEL[3]?(APU_Timer[3]&0x0F)<<9:0);
 }
 
 void TickChips(int MasterClock)
@@ -2023,6 +2029,7 @@ uint32_t nesColours[0x40]=
 0x000000
 };
 
+#if ENABLE_TV
 uint16_t avgNTSC[3];
 
 uint8_t lastEDLLevelAvg=0;
@@ -2040,7 +2047,7 @@ void AvgNTSC()
 	lastEDLLevelAvg=(avgNTSC[0]+avgNTSC[1]+avgNTSC[2])/3;
 	ntscDecodeAddSample(lastEDLLevelAvg);
 }
-
+#endif
 void PPU_SetVideo(uint8_t x,uint8_t y,uint8_t col)
 {
 	uint32_t* outputTexture = (uint32_t*)videoMemory[MAIN_WINDOW];
