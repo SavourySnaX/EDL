@@ -126,8 +126,15 @@ void CodeGenContext::GenerateDisassmTables()
 
 	for (tableIter=disassemblyTable.begin();tableIter!=disassemblyTable.end();++tableIter)
 	{
-		// Create a global array to hold the table
 		APInt tableSize=tableIter->second.rbegin()->first;
+		APInt tableSize32=tableSize.zextOrTrunc(32);
+		// Create a global variable to indicate the max size of the table
+
+		GlobalVariable* gvar_int32_DIS_max = new GlobalVariable(*module, IntegerType::get(getGlobalContext(), 32),true,GlobalValue::ExternalLinkage,NULL,symbolPrepend+"DIS_max_"+tableIter->first);
+		ConstantInt* const_int32_1 = ConstantInt::get(getGlobalContext(), tableSize32+1);
+		gvar_int32_DIS_max->setInitializer(const_int32_1);
+
+		// Create a global array to hold the table
 		PointerType* PointerTy_5 = PointerType::get(IntegerType::get(getGlobalContext(), 8), 0);
 	       	ArrayType* ArrayTy_4 = ArrayType::get(PointerTy_5, tableSize.getLimitedValue()+1);
 		ConstantPointerNull* const_ptr_13 = ConstantPointerNull::get(PointerTy_5);	
