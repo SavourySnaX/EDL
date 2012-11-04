@@ -81,12 +81,13 @@ class CompilerOptions
 {
 public:
 
-	CompilerOptions() { symbolModifier=NULL; inputFile=NULL; optimisationLevel=0; traceUnimplemented=0; }
+	CompilerOptions() { symbolModifier=NULL; inputFile=NULL; optimisationLevel=0; traceUnimplemented=0; generateDisassembly=1; }
 	
 	char *symbolModifier;
 	char *inputFile;
 	int optimisationLevel;
 	int traceUnimplemented;
+	int generateDisassembly;
 };
 
 class CodeGenContext 

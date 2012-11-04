@@ -21,6 +21,7 @@ int Usage()
 	cerr << "-O1			enables all but experimental optimisations" << endl;
 	cerr << "-O2			enables O1 plus experimental optimisations" << endl;
 	cerr << "-t                     trace on unimplemented instructions" << endl;
+	cerr << "-n			disables disassembly generation" << endl;
 	cerr << "-v			print version" << endl;
 	cerr << "-h --help		print usage" << endl;
 
@@ -52,6 +53,10 @@ int main(int argc, char **argv)
 			if (strcmp(argv[a],"-t")==0)
 			{
 				opts.traceUnimplemented=1;
+			}
+			if (strcmp(argv[a],"-n")==0)
+			{
+				opts.generateDisassembly=0;
 			}
 			if (strcmp(argv[a],"-v")==0)
 			{

@@ -218,7 +218,10 @@ void CodeGenContext::generateCode(CBlock& root,CompilerOptions &options)
 	root.codeGen(*this);	/* Generate complete code - starting at no block (global space) */
 
 	// Finalise disassembly arrays
-	GenerateDisassmTables();
+	if (opts.generateDisassembly)
+	{
+		GenerateDisassmTables();
+	}
 	
 	if (errorFlagged)
 	{
