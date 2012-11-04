@@ -59,7 +59,7 @@
 %token <token>	TOK_C_FUNC_EXTERN									/* C Calling Interface */
 %token <token> TOK_LSQR TOK_RSQR TOK_LBRACE TOK_RBRACE TOK_COMMA TOK_COLON TOK_EOS 			/* Operators/Seperators */
 %token <token> TOK_ASSIGNLEFT TOK_ASSIGNRIGHT TOK_ADD TOK_SUB TOK_OBR TOK_CBR TOK_CMPEQ TOK_BAR		/* Operators/Seperators */
-%token <token> TOK_DOT TOK_AT TOK_AMP TOK_TILDE TOK_DDOT TOK_CMPNEQ TOK_HAT				/* Operators/Seperators */
+%token <token> TOK_DOT TOK_AT TOK_AMP TOK_TILDE TOK_DDOT TOK_CMPNEQ TOK_HAT TOK_MUL			/* Operators/Seperators */
 %token <token> TOK_CMPLESSEQ TOK_CMPLESS TOK_CMPGREATEREQ TOK_CMPGREATER TOK_INDEXOPEN TOK_INDEXCLOSE	/* Operators/Seperators */
 
 %type <namedParams> named_params_list named_return
@@ -94,6 +94,7 @@
 %left TOK_LSQR
 %left TOK_BAR TOK_AMP TOK_HAT
 %left TOK_CMPEQ TOK_CMPNEQ TOK_CMPLESS TOK_CMPLESSEQ TOK_CMPGREATER TOK_CMPGREATEREQ
+%left TOK_MUL
 %left TOK_ADD TOK_DADD TOK_SUB TOK_DSUB
 
 %start program
@@ -280,6 +281,7 @@ expr : ident_ref TOK_ASSIGNLEFT expr { $$ = new CAssignment(*$<ident>1,*$3); }
      | expr TOK_ASSIGNRIGHT ident_ref { $$ = new CAssignment(*$<ident>3,*$1); }
      | expr TOK_ADD expr { $$ = new CBinaryOperator(*$1,TOK_ADD,*$3); }
      | expr TOK_SUB expr { $$ = new CBinaryOperator(*$1,TOK_SUB,*$3); }
+     | expr TOK_MUL expr { $$ = new CBinaryOperator(*$1,TOK_MUL,*$3); }
      | expr TOK_DADD expr { $$ = new CBinaryOperator(*$1,TOK_DADD,*$3); }
      | expr TOK_DSUB expr { $$ = new CBinaryOperator(*$1,TOK_DSUB,*$3); }
      | expr TOK_CMPEQ expr { $$ = new CBinaryOperator(*$1,TOK_CMPEQ,*$3); }

@@ -89,6 +89,7 @@ C_FUNC_EXTERN				{ return TOKEN(TOK_C_FUNC_EXTERN); }
 "->"					{ return TOKEN(TOK_ASSIGNRIGHT); }
 "+"					{ return TOKEN(TOK_ADD); }
 "-"					{ return TOKEN(TOK_SUB); }
+"*"					{ return TOKEN(TOK_MUL); }
 "("					{ return TOKEN(TOK_OBR); }
 ")"					{ return TOKEN(TOK_CBR); }
 "|"					{ return TOKEN(TOK_BAR); }
