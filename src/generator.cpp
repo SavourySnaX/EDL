@@ -882,6 +882,10 @@ Value* CBinaryOperator::codeGen(CodeGenContext& context,Value* left,Value* right
 			}
 		case TOK_MUL:
 			return BinaryOperator::Create(Instruction::Mul,left,right,"",context.currentBlock());
+		case TOK_DIV:
+			return BinaryOperator::Create(Instruction::UDiv,left,right,"",context.currentBlock());
+		case TOK_MOD:
+			return BinaryOperator::Create(Instruction::URem,left,right,"",context.currentBlock());
 		case TOK_CMPEQ:
 			return CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_EQ,left, right, "", context.currentBlock());
 		case TOK_CMPNEQ:
