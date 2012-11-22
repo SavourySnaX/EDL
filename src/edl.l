@@ -78,6 +78,8 @@ C_FUNC_EXTERN				{ return TOKEN(TOK_C_FUNC_EXTERN); }
 ".."					{ return TOKEN(TOK_DDOT); }
 "!="					{ return TOKEN(TOK_CMPNEQ); }
 "=="					{ return TOKEN(TOK_CMPEQ); }
+"//"					{ return TOKEN(TOK_SDIV); }
+"%%"					{ return TOKEN(TOK_SMOD); }
 "{"					{ return TOKEN(TOK_LBRACE); }
 "}"					{ return TOKEN(TOK_RBRACE); }
 "["					{ return TOKEN(TOK_LSQR); }
