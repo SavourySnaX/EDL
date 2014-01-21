@@ -1,19 +1,19 @@
 #include <stack>
 #include <typeinfo>
-#include <llvm/Module.h>
-#include <llvm/Function.h>
-#include <llvm/Type.h>
-#include <llvm/DerivedTypes.h>
-#include <llvm/LLVMContext.h>
+#include <llvm/IR/Module.h>
+#include <llvm/IR/Function.h>
+#include <llvm/IR/Type.h>
+#include <llvm/IR/DerivedTypes.h>
+#include <llvm/IR/LLVMContext.h>
 #include <llvm/PassManager.h>
-#include <llvm/Instructions.h>
-#include <llvm/CallingConv.h>
+#include <llvm/IR/Instructions.h>
+#include <llvm/IR/CallingConv.h>
 #include <llvm/LinkAllPasses.h>
-#include <llvm/Target/TargetData.h>
+#include <llvm/IR/DataLayout.h>
 #include <llvm/Bitcode/ReaderWriter.h>
 #include <llvm/Analysis/Verifier.h>
 #include <llvm/Assembly/PrintModulePass.h>
-#include <llvm/Support/IRBuilder.h>
+#include <llvm/IR/IRBuilder.h>
 //#include <llvm/ModuleProvider.h>
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/ExecutionEngine/GenericValue.h>
@@ -124,7 +124,21 @@ public:
     {
 	bool operator()(const APInt& s1,const APInt& s2) const
 	{
-		return s1.ult(s2);
+		APInt f1=s1;
+		APInt f2=s2;
+
+		if (f1.getBitWidth()!=f2.getBitWidth())
+		{
+			if (f1.getBitWidth()<f2.getBitWidth())
+			{
+				f1=f1.zext(f2.getBitWidth());
+			}
+			else
+			{
+				f2=f2.zext(f1.getBitWidth());
+			}
+		}
+		return f1.ult(f2);
 	}
     };
 

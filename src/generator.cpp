@@ -4,11 +4,56 @@
 
 
 #include "llvm/Pass.h"
-#include "llvm/Function.h"
+#include "llvm/IR/Function.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/InstIterator.h"
 
 using namespace llvm;
+
+CInteger::CInteger(std::string& value )
+{
+	unsigned char radix;
+	const char* data;
+	unsigned numBits;
+	if (value[0]=='%')
+	{
+		numBits = value.length()-1;
+		data = &value.c_str()[1];
+		radix=2;
+	}
+	else
+	{
+		if (value[0]=='$')
+		{
+			numBits = 4*(value.length()-1);
+			data = &value.c_str()[1];
+			radix=16;
+		}
+		else
+		{
+			numBits = 4*(value.length());	/* over allocation for now */
+			data = &value.c_str()[0];
+			radix=10;
+		}
+	}
+
+	integer = llvm::APInt(numBits,data,radix);
+	if (radix==10)
+	{
+		if (integer.getActiveBits())						// this shrinks the value to the correct number of bits - fixes over allocation for decimal numbers
+		{
+			if (integer.getActiveBits()!=numBits)
+			{
+				integer = integer.trunc(integer.getActiveBits());		// only performed on decimal numbers (otherwise we loose important leading zeros)
+			}
+		}
+		else
+		{
+			integer = integer.trunc(1);
+		}
+	}
+}
+
 
 #define DEBUG_STATE_SQUASH	0
 
@@ -120,6 +165,20 @@ CodeGenContext::CodeGenContext(CodeGenContext* parent)
 	}
 }
     
+
+bool CompareEquals(APInt a,APInt b)
+{
+	if (a.getBitWidth()!=b.getBitWidth())
+	{
+		if (a.getBitWidth()<b.getBitWidth())
+			a=a.zext(b.getBitWidth());
+		else
+			b=b.zext(a.getBitWidth());
+	}
+
+	return a==b;
+}
+
 void CodeGenContext::GenerateDisassmTables()
 {
 	std::map<std::string, std::map<APInt,std::string,myAPIntCompare> >::iterator tableIter;
@@ -146,13 +205,13 @@ void CodeGenContext::GenerateDisassmTables()
 
 		while (slot!=tableIter->second.end())
 		{
-			if (slot->first == trackingSlot)
+			if (CompareEquals(slot->first,trackingSlot))
 			{
 				ArrayType* ArrayTy_0 = ArrayType::get(IntegerType::get(getGlobalContext(), 8), slot->second.length()-1);
 				GlobalVariable* gvar_array__str = new GlobalVariable(*module, ArrayTy_0,true,GlobalValue::PrivateLinkage,0,symbolPrepend+".str"+trackingSlot.toString(16,false));
 				gvar_array__str->setAlignment(1);
   
-				Constant* const_array_9 = ConstantArray::get(getGlobalContext(), slot->second.substr(1,slot->second.length()-2), true);
+				Constant* const_array_9 = ConstantDataArray::getString(getGlobalContext(), slot->second.substr(1,slot->second.length()-2), true);
 				std::vector<Constant*> const_ptr_12_indices;
 				ConstantInt* const_int64_13 = ConstantInt::get(getGlobalContext(), APInt(64, StringRef("0"), 10));
 				const_ptr_12_indices.push_back(const_int64_13);
@@ -198,8 +257,6 @@ void CodeGenContext::generateCode(CBlock& root,CompilerOptions &options)
 
 		debugTraceString = Function::Create(/*Type=*/FuncTy_8,/*Linkage=*/GlobalValue::ExternalLinkage,/*Name=*/"puts", module); // (external, no body)
 		debugTraceString->setCallingConv(CallingConv::C);
-		AttrListPtr func_puts_PAL;
-		debugTraceString->setAttributes(func_puts_PAL);
 
 		std::vector<Type*>FuncTy_6_args;
 		FuncTy_6_args.push_back(IntegerType::get(getGlobalContext(), 32));
@@ -207,11 +264,9 @@ void CodeGenContext::generateCode(CBlock& root,CompilerOptions &options)
 
 		debugTraceChar = Function::Create(/*Type=*/FuncTy_6,/*Linkage=*/GlobalValue::ExternalLinkage,/*Name=*/"putchar", module); // (external, no body)
 		debugTraceChar->setCallingConv(CallingConv::C);
-		debugTraceChar->setAttributes(func_puts_PAL);
 		
 		debugTraceMissing = Function::Create(FuncTy_6,GlobalValue::ExternalLinkage,symbolPrepend+"missing", module); // (external, no body)
 		debugTraceMissing->setCallingConv(CallingConv::C);
-		debugTraceMissing->setAttributes(func_puts_PAL);
 	}
 
 	root.prePass(*this);	/* Run a pre-pass on the code */
@@ -237,11 +292,11 @@ void CodeGenContext::generateCode(CBlock& root,CompilerOptions &options)
 		PassManager pm;
 
 		pm.add(createVerifierPass());
-
+		
 		if (opts.optimisationLevel>0)
 		{
 			// Add an appropriate TargetData instance for this module...
-			pm.add(new TargetData(*ee->getTargetData()));
+			pm.add(new DataLayout(*ee->getDataLayout()));
 
 			for (int a=0;a<2;a++)		// We add things twice, as the statereferencesquasher will make more improvements once inlining has happened
 			{
@@ -320,7 +375,6 @@ void CodeGenContext::generateCode(CBlock& root,CompilerOptions &options)
 				pm.add(createFunctionInliningPass());   // Inline small functions
 				pm.add(createArgumentPromotionPass());    // Scalarize uninlined fn args
 
-				pm.add(createSimplifyLibCallsPass());     // Library Call Optimizations
 				pm.add(createInstructionCombiningPass()); // Cleanup for scalarrepl.
 				pm.add(createJumpThreadingPass());        // Thread jumps.
 				pm.add(createCFGSimplificationPass());    // Merge & remove BBs
@@ -391,7 +445,7 @@ Value* CString::codeGen(CodeGenContext& context)
 	gvar_array__str->setAlignment(1);
   
 	// Constant Definitions
-	Constant* const_array_9 = ConstantArray::get(getGlobalContext(), quoted.substr(1,quoted.length()-2), true);
+	Constant* const_array_9 = ConstantDataArray::getString(getGlobalContext(), quoted.substr(1,quoted.length()-2), true);
 	std::vector<Constant*> const_ptr_12_indices;
 	ConstantInt* const_int64_13 = ConstantInt::get(getGlobalContext(), APInt(64, StringRef("0"), 10));
 	const_ptr_12_indices.push_back(const_int64_13);
@@ -1619,6 +1673,7 @@ void CVariableDeclaration::CreateWriteAccessor(CodeGenContext& context,BitVariab
 	{
 		function = Function::Create(ftype, GlobalValue::PrivateLinkage, context.symbolPrepend+"PinSet"+id.name, context.module);
 	}
+	function->setDoesNotThrow();
 	BasicBlock *bblock = BasicBlock::Create(getGlobalContext(), "entry", function, 0);
 
 	context.pushBlock(bblock);
@@ -1651,9 +1706,10 @@ void CVariableDeclaration::CreateReadAccessor(CodeGenContext& context,BitVariabl
 	{
 		function = Function::Create(ftype, GlobalValue::PrivateLinkage, context.symbolPrepend+"PinGet"+id.name, context.module);
 	}
+	function->setOnlyReadsMemory();
+	function->setDoesNotThrow();
 
 	BasicBlock *bblock = BasicBlock::Create(getGlobalContext(), "entry", function, 0);
-	function->setOnlyReadsMemory(true);
 
 	LoadInst* load = new LoadInst(var.value,"",false,bblock);
 
@@ -1752,16 +1808,22 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 			APInt newMask = ~APInt(aliases[a]->sizeOrValue.integer.getBitWidth(),0);
 			APInt newCnst = aliases[a]->sizeOrValue.integer;
 
-			bitPos-=APInt(32,aliases[a]->sizeOrValue.integer.getBitWidth()-1);
+			bitPos-=APInt(bitPos.getBitWidth(),aliases[a]->sizeOrValue.integer.getBitWidth()-1);
 
-	    		newMask=newMask.zext(size.integer.getLimitedValue());
-	    		newCnst=newCnst.zext(size.integer.getLimitedValue());
+			if (newMask.getBitWidth()!=size.integer.getLimitedValue())
+			{
+	    			newMask=newMask.zext(size.integer.getLimitedValue());
+			}
+			if (newCnst.getBitWidth()!=size.integer.getLimitedValue())
+			{
+	    			newCnst=newCnst.zext(size.integer.getLimitedValue());
+			}
 	    		newCnst<<=bitPos.getLimitedValue();
 	    		newMask<<=bitPos.getLimitedValue();
 	    		temp.mask&=~newMask;
 	    		temp.cnst|=newCnst;
 
-			bitPos-=APInt(32,1);
+			bitPos-=APInt(bitPos.getBitWidth(),1);
 		}
 		else
 		{
@@ -1769,7 +1831,7 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 			// e.g. BOB[4] ALIAS CAT[2]:%01
 			// would create CAT with a shift of 2 a mask of %1100 (cnst will always be 0 for these)
 
-			bitPos-=aliases[a]->sizeOrValue.integer-1;
+			bitPos-=APInt(bitPos.getBitWidth(),aliases[a]->sizeOrValue.integer.getLimitedValue()-1);
 
 			BitVariable alias;
 			alias.arraySize = temp.arraySize;
@@ -1784,7 +1846,10 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 			alias.priorValue=temp.priorValue;
 
 			APInt newMask = ~APInt(aliases[a]->sizeOrValue.integer.getLimitedValue(),0);
-	    		newMask=newMask.zext(size.integer.getLimitedValue());
+			if (newMask.getBitWidth()!=size.integer.getLimitedValue())
+			{
+	    			newMask=newMask.zext(size.integer.getLimitedValue());
+			}
 	    		newMask<<=bitPos.getLimitedValue();
 			alias.mask = newMask;		// need to generate correct mask
 
@@ -1800,7 +1865,7 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 				context.globals()[aliases[a]->idOrEmpty.name]= alias;
 			}
 
-			bitPos-=APInt(32,1);
+			bitPos-=APInt(bitPos.getBitWidth(),1);
 		}
 	}
 
@@ -1822,7 +1887,14 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 				return NULL;
 			}
 
-			ConstantInt* constInit=ConstantInt::get(getGlobalContext(),initialiserList[0]->integer.zext(size.integer.getLimitedValue()));
+			APInt t = initialiserList[0]->integer;
+
+			if (t.getBitWidth()!=size.integer.getLimitedValue())
+			{
+				t = t.zext(size.integer.getLimitedValue());
+			}
+
+			ConstantInt* constInit=ConstantInt::get(getGlobalContext(),t);
 
 			StoreInst* stor = new StoreInst(constInit,temp.value,false,context.currentBlock());
 		}
@@ -1859,7 +1931,14 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 				{
 					if (a<initialiserList.size())
 					{
-						const_array_9_elems.push_back(ConstantInt::get(getGlobalContext(),initialiserList[a]->integer.zext(size.integer.getLimitedValue())));
+						APInt t = initialiserList[a]->integer;
+			
+						if (t.getBitWidth()!=size.integer.getLimitedValue())
+						{
+							t = t.zext(size.integer.getLimitedValue());
+						}
+
+						const_array_9_elems.push_back(ConstantInt::get(getGlobalContext(),t));
 					}
 					else
 					{
@@ -1886,7 +1965,14 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 					return NULL;
 				}
 
-				ConstantInt* constInit=ConstantInt::get(getGlobalContext(),initialiserList[0]->integer.zext(size.integer.getLimitedValue()));
+				APInt t = initialiserList[0]->integer;
+			
+				if (t.getBitWidth()!=size.integer.getLimitedValue())
+				{
+					t = t.zext(size.integer.getLimitedValue());
+				}
+
+				ConstantInt* constInit=ConstantInt::get(getGlobalContext(),t);
 				cast<GlobalVariable>(temp.value)->setInitializer(constInit);
 			}
 		}
@@ -1923,6 +2009,7 @@ Value* CHandlerDeclaration::codeGen(CodeGenContext& context)
 
 	FunctionType *ftype = FunctionType::get(Type::getVoidTy(getGlobalContext()),argTypes, false);
 	Function* function = Function::Create(ftype, GlobalValue::PrivateLinkage, context.symbolPrepend+"HANDLER."+id.name, context.module);
+	function->setDoesNotThrow();
 	BasicBlock *bblock = BasicBlock::Create(getGlobalContext(), "entry", function, 0);
 	
 	context.m_handlers[id.name]=this;
@@ -2020,7 +2107,25 @@ void CInstruction::prePass(CodeGenContext& context)
 	block.prePass(context);
 }
 
+std::string EscapeString(const std::string &in)
+{
+	const char okChars[]="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_";
+	std::string out="";
 
+	for (int a=0;a<in.length();a++)
+	{
+		if (strchr(okChars,in[a])==NULL)
+		{
+			out+='_';
+		}
+		else
+		{
+			out+=in[a];
+		}
+	}
+
+	return out;
+}
 
 Value* CInstruction::codeGen(CodeGenContext& context)
 {
@@ -2035,6 +2140,8 @@ Value* CInstruction::codeGen(CodeGenContext& context)
 		context.errorFlagged=true;
 		return NULL;
 	}
+			
+//	std::cout << "Adding ins " << numOpcodes << std::endl;
 
 	for (unsigned a=0;a<numOpcodes;a++)
 	{
@@ -2046,7 +2153,8 @@ Value* CInstruction::codeGen(CodeGenContext& context)
 		context.disassemblyTable[table.name][opcode]=disassembled.quoted;
 
 		FunctionType *ftype = FunctionType::get(Type::getVoidTy(getGlobalContext()),argTypes, false);
-		Function* function = Function::Create(ftype, GlobalValue::PrivateLinkage, context.symbolPrepend+"OPCODE_"+opcodeString.string.quoted.substr(1,mnemonic.quoted.length()-2) + "_" + table.name+opcode.toString(16,false),context.module);
+		Function* function = Function::Create(ftype, GlobalValue::PrivateLinkage, EscapeString(context.symbolPrepend+"OPCODE_"+opcodeString.string.quoted.substr(1,opcodeString.string.quoted.length()-2) + "_" + table.name+opcode.toString(16,false)),context.module);
+		function->setDoesNotThrow();
 		BasicBlock *bblock = BasicBlock::Create(getGlobalContext(), "entry", function, 0);
 
 		context.pushBlock(bblock);
@@ -2062,6 +2170,7 @@ Value* CInstruction::codeGen(CodeGenContext& context)
 		// Glue callee back into execute (assumes execute comes before instructions at all times for now)
 		for (int b=0;b<context.executeLocations[table.name].size();b++)
 		{
+//			std::cout << "Adding execute " << opcode.toString(2,false) << std::endl;
 			BasicBlock* tempBlock = BasicBlock::Create(getGlobalContext(),"callOut" + table.name + opcode.toString(16,false),context.executeLocations[table.name][b].blockEndForExecute->getParent(),0);
 			std::vector<Value*> args;
 			CallInst* fcall = CallInst::Create(function,args,"",tempBlock);
@@ -2473,7 +2582,7 @@ BitVariable COperandMapping::GetBitVariable(CodeGenContext& context,unsigned num
 		// If the expression in a mapping is a an identifer alone, then we can create a true local variable that maps directly to it, this allows
 		// assignments to work. (its done by copying the variable declaration resulting from looking up the identifier.
 
-		CIdentifier* identifier = cast<CIdentifier>(&mapping->expr);
+		CIdentifier* identifier = (CIdentifier*)&mapping->expr;
 
 		if (!context.LookupBitVariable(temp,identifier->module,identifier->name))
 		{
@@ -2491,11 +2600,13 @@ BitVariable COperandMapping::GetBitVariable(CodeGenContext& context,unsigned num
 
 llvm::APInt COperandMapping::GetComputableConstant(CodeGenContext& context,unsigned num)
 {
+	APInt error;
+
 	if (context.m_mappings.find(ident.name)==context.m_mappings.end())
 	{
 		std::cerr << "Undeclared mapping : " << ident.name << std::endl;
 		context.errorFlagged=true;
-		return APInt(0,0,false);
+		return error;
 	}
 
 	return context.m_mappings[ident.name]->mappings[num]->selector.integer;
@@ -2582,19 +2693,37 @@ void COperandPartial::DeclareLocal(CodeGenContext& context,unsigned num)
 
 APInt COperandPartial::GetComputableConstant(CodeGenContext& context,unsigned num)
 {
-	APInt result(0,0,false);
+//	APInt result(0,0,false);		// LLVM 3.4 (or somewhere between 3.0 and 3.4) it became illegal to do this... The smallest size is now 1 bit. To deal with this I`ve changed the logic
+//						// so that the first real value created is done explicitly
 
+	APInt result;
+	bool firstTime=true;
+
+	if (operands.size()==0)
+	{
+		std::cerr << "Illegal (0) number of operands for computable constant" << std::endl;
+		context.errorFlagged=true;
+		return result;
+	}
 	for (int a=operands.size()-1;a>=0;a--)
 	{
 		unsigned tNum=num % operands[a]->GetNumComputableConstants(context);
 		APInt temp = operands[a]->GetComputableConstant(context,tNum);
 		num/=operands[a]->GetNumComputableConstants(context);
-		unsigned curBitWidth = result.getBitWidth();
+		if (firstTime)
+		{
+			result=temp;
+			firstTime=false;
+		}
+		else
+		{
+			unsigned curBitWidth = result.getBitWidth();
 
-		result=result.zext(result.getBitWidth()+temp.getBitWidth());
-		temp=temp.zext(result.getBitWidth());
-		temp=temp.shl(curBitWidth);
-		result=result.Or(temp);
+			result=result.zext(result.getBitWidth()+temp.getBitWidth());
+			temp=temp.zext(result.getBitWidth());
+			temp=temp.shl(curBitWidth);
+			result=result.Or(temp);
+		}
 	}
 
 	return result;
@@ -3090,8 +3219,6 @@ Value* CExternDecl::codeGen(CodeGenContext& context)
 
 	Function* func = Function::Create(FuncTy_8,GlobalValue::ExternalLinkage,context.symbolPrepend+name.name,context.module);
 	func->setCallingConv(CallingConv::C);
-	AttrListPtr func_attrs;
-	func->setAttributes(func_attrs);
 
 	context.m_externFunctions[name.name] = func;
 
@@ -3269,8 +3396,7 @@ Value* CFunctionDecl::codeGen(CodeGenContext& context)
 		func=Function::Create(FuncTy_8,GlobalValue::ExternalLinkage,context.symbolPrepend+name.name,context.module);
 		func->setCallingConv(CallingConv::C);
 	}
-	AttrListPtr func_attrs;
-	func->setAttributes(func_attrs);
+	func->setDoesNotThrow();
 	
 	context.m_externFunctions[name.name] = func;
 
