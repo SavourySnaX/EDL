@@ -12,7 +12,7 @@
  *
  */
 
-#include <GL/glfw3.h>
+#include <GLFW/glfw3.h>
 #include <GL/glext.h>
 
 #include <stdlib.h>
@@ -350,7 +350,7 @@ int MEM_Handler()
 #define TIMING_WINDOW		1
 #define REGISTER_WINDOW		2
 
-GLFWwindow windows[MAX_WINDOWS];
+GLFWwindow* windows[MAX_WINDOWS];
 unsigned char *videoMemory[MAX_WINDOWS];
 GLint videoTexture[MAX_WINDOWS];
 
@@ -500,35 +500,29 @@ void ClearKey(int key)
 	keyArray[key*3+2]=0;
 }
 
-void kbHandler( GLFWwindow window, int key, int action )		/* At present ignores which window, will add per window keys later */
+void kbHandler( GLFWwindow* window, int key, int scan, int action, int mods )		/* At present ignores which window, will add per window keys later */
 {
 	keyArray[key*3 + 0]=keyArray[key*3+1];
-	keyArray[key*3 + 1]=action;
+	if (action==GLFW_RELEASE)
+	{
+		keyArray[key*3 + 1]=GLFW_RELEASE;
+	}
+	else
+	{
+		keyArray[key*3 + 1]=GLFW_PRESS;
+	}
 	keyArray[key*3 + 2]|=(keyArray[key*3+0]==GLFW_RELEASE)&&(keyArray[key*3+1]==GLFW_PRESS);
 }
 
 int mouseWheelDelta=0;
 
-void mwHandler( GLFWwindow window,int posx,int posy)
-{
-	mouseWheelDelta=posy;
-	UpdateTiming(mouseWheelDelta);
-}
-
 int bTimingEnabled=1;
 int bRegisterEnabled=1;
 
-int wcHandler( GLFWwindow window )
+void mwHandler( GLFWwindow* window,double posx,double posy)
 {
-	if (window == windows[TIMING_WINDOW])
-	{
-		bTimingEnabled=0;
-	}
-	if (window == windows[REGISTER_WINDOW])
-	{
-		bRegisterEnabled=0;
-	}
-	return 1;
+	mouseWheelDelta=(int)posy;
+	UpdateTiming(mouseWheelDelta);
 }
 
 int main(int argc,char**argv)
@@ -539,7 +533,7 @@ int main(int argc,char**argv)
 	glfwInit(); 
 
 	// Open registers OpenGL window 
-	if( !(windows[REGISTER_WINDOW]=glfwOpenWindow( REGISTER_WIDTH, REGISTER_HEIGHT, GLFW_WINDOWED,"cpu",NULL)) ) 
+	if( !(windows[REGISTER_WINDOW]=glfwCreateWindow( REGISTER_WIDTH, REGISTER_HEIGHT, "cpu",NULL,NULL)) ) 
 	{ 
 		glfwTerminate(); 
 		return 1; 
@@ -551,7 +545,7 @@ int main(int argc,char**argv)
 	setupGL(REGISTER_WINDOW,REGISTER_WIDTH,REGISTER_HEIGHT);
 
 	// Open timing OpenGL window 
-	if( !(windows[TIMING_WINDOW]=glfwOpenWindow( TIMING_WIDTH, TIMING_HEIGHT, GLFW_WINDOWED,"timing",NULL)) ) 
+	if( !(windows[TIMING_WINDOW]=glfwCreateWindow( TIMING_WIDTH, TIMING_HEIGHT, "timing",NULL,NULL)) ) 
 	{ 
 		glfwTerminate(); 
 		return 1; 
@@ -563,7 +557,7 @@ int main(int argc,char**argv)
 	setupGL(TIMING_WINDOW,TIMING_WIDTH,TIMING_HEIGHT);
 
 	// Open invaders OpenGL window 
-	if( !(windows[MAIN_WINDOW]=glfwOpenWindow( WIDTH, HEIGHT, GLFW_WINDOWED,"invaders",NULL)) ) 
+	if( !(windows[MAIN_WINDOW]=glfwCreateWindow( WIDTH, HEIGHT, "invaders",NULL,NULL)) ) 
 	{ 
 		glfwTerminate(); 
 		return 1; 
@@ -576,9 +570,8 @@ int main(int argc,char**argv)
 
 	glfwSwapInterval(0);			// Disable VSYNC
 
-	glfwSetKeyCallback(kbHandler);
-	glfwSetScrollCallback(mwHandler);
-	glfwSetWindowCloseCallback(wcHandler);
+	glfwSetKeyCallback(windows[MAIN_WINDOW],kbHandler);
+	glfwSetScrollCallback(windows[TIMING_WINDOW],mwHandler);
 
 	atStart=glfwGetTime();
 	//////////////////
@@ -606,8 +599,9 @@ int main(int argc,char**argv)
 	//dumpInstruction=100000;
 
 	int stopTheClock=0;
-	while (!glfwGetKey(windows[MAIN_WINDOW],GLFW_KEY_ESC))
+	while (!glfwGetKey(windows[MAIN_WINDOW],GLFW_KEY_ESCAPE))
 	{
+		
 		if (!stopTheClock)
 		{
 			masterClock++;
@@ -663,23 +657,34 @@ int main(int argc,char**argv)
 			if (pixelClock>=83200)
 				pixelClock=0;
 
+			if (glfwWindowShouldClose(windows[TIMING_WINDOW]))
+			{
+				bTimingEnabled=0;
+				glfwHideWindow(windows[TIMING_WINDOW]);
+			}
+			if (glfwWindowShouldClose(windows[REGISTER_WINDOW]))
+			{
+				bRegisterEnabled=0;
+				glfwHideWindow(windows[REGISTER_WINDOW]);
+			}
+
             		glfwMakeContextCurrent(windows[MAIN_WINDOW]);
 			ShowScreen(MAIN_WINDOW,WIDTH,HEIGHT);
-			glfwSwapBuffers();
+			glfwSwapBuffers(windows[MAIN_WINDOW]);
 				
 			if (bTimingEnabled)
 			{
 				glfwMakeContextCurrent(windows[TIMING_WINDOW]);
 				DrawTiming(videoMemory[TIMING_WINDOW],TIMING_WIDTH);
 				ShowScreen(TIMING_WINDOW,TIMING_WIDTH,TIMING_HEIGHT);
-				glfwSwapBuffers();
+				glfwSwapBuffers(windows[TIMING_WINDOW]);
 			}
 			if (bRegisterEnabled)
 			{
 				glfwMakeContextCurrent(windows[REGISTER_WINDOW]);
 				DrawRegister(videoMemory[REGISTER_WINDOW],REGISTER_WIDTH);
 				ShowScreen(REGISTER_WINDOW,REGISTER_WIDTH,REGISTER_HEIGHT);
-				glfwSwapBuffers();
+				glfwSwapBuffers(windows[REGISTER_WINDOW]);
 			}
         
 			glfwPollEvents();

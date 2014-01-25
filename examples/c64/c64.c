@@ -9,7 +9,7 @@
  *
  */
 
-#include <GL/glfw3.h>
+#include <GLFW/glfw3.h>
 #include <GL/glext.h>
 
 #include <al.h>
@@ -22,7 +22,7 @@
 
 #include "gui\debugger.h"
 
-#define DEBUG_WINDOWS	1
+#define DEBUG_WINDOWS	0
 #define JIFFY	0 
 
 int DISK_InitialiseMemory();
@@ -687,7 +687,7 @@ int g_traceStep=0;
 
 #define ENABLE_DISK_DEBUG	1
 
-GLFWwindow windows[MAX_WINDOWS];
+GLFWwindow* windows[MAX_WINDOWS];
 unsigned char *videoMemory[MAX_WINDOWS];
 GLint videoTexture[MAX_WINDOWS];
 
@@ -780,7 +780,7 @@ struct KeyArray
 	unsigned char lastState;
 	unsigned char curState;
 	unsigned char debounced;
-	GLFWwindow    window;
+	GLFWwindow*    window;
 };
 
 struct KeyArray keyArray[512];
@@ -795,7 +795,7 @@ int CheckKey(int key)
 	return keyArray[key].debounced;
 }
 
-int CheckKeyWindow(int key,GLFWwindow window)
+int CheckKeyWindow(int key,GLFWwindow* window)
 {
 	return keyArray[key].debounced && (keyArray[key].window==window);
 }
@@ -805,15 +805,22 @@ void ClearKey(int key)
 	keyArray[key].debounced=0;
 }
 
-void kbHandler( GLFWwindow window, int key, int action )
+void kbHandler( GLFWwindow* window, int key, int scan, int action, int mod )
 {
 	keyArray[key].lastState=keyArray[key].curState;
-	keyArray[key].curState=action;
+	if (action==GLFW_RELEASE)
+	{
+		keyArray[key].curState=GLFW_RELEASE;
+	}
+	else
+	{
+		keyArray[key].curState=GLFW_PRESS;
+	}
 	keyArray[key].debounced|=(keyArray[key].lastState==GLFW_RELEASE)&&(keyArray[key].curState==GLFW_PRESS);
 	keyArray[key].window=window;
 }
 
-void sizeHandler(GLFWwindow window,int xs,int ys)
+void sizeHandler(GLFWwindow* window,int xs,int ys)
 {
 	glfwMakeContextCurrent(window);
 	glViewport(0, 0, xs, ys);
@@ -899,7 +906,7 @@ void UpdateJoy()		// For now returns data on BOTH ports
 	joyVal|=KeyDown(GLFW_KEY_KP_2)?2:0;
 	joyVal|=KeyDown(GLFW_KEY_KP_4)?4:0;
 	joyVal|=KeyDown(GLFW_KEY_KP_6)?8:0;
-	joyVal|=KeyDown(GLFW_KEY_RCTRL)?0x10:0;
+	joyVal|=KeyDown(GLFW_KEY_RIGHT_CONTROL)?0x10:0;
 
 	if (joyVal)
 	{
@@ -954,20 +961,20 @@ void UpdateCassette()
 		casLevel=0;		
 	}
 #endif
-	if (CheckKey(GLFW_KEY_PAGEDOWN))
+	if (CheckKey(GLFW_KEY_PAGE_DOWN))
 	{
 		playDown=1;
 		recDown=0;
-		ClearKey(GLFW_KEY_PAGEDOWN);
+		ClearKey(GLFW_KEY_PAGE_DOWN);
 		cntPos=0;
 		casCount=0;
 		casLevel=0;
 	}
-	if (CheckKey(GLFW_KEY_PAGEUP))
+	if (CheckKey(GLFW_KEY_PAGE_UP))
 	{
 		playDown=0;
 		recDown=0;
-		ClearKey(GLFW_KEY_PAGEUP);
+		ClearKey(GLFW_KEY_PAGE_UP);
 		cntPos=0;
 		casCount=0;
 		casLevel=0;		
@@ -1085,7 +1092,7 @@ int main(int argc,char**argv)
 
 #if DEBUG_WINDOWS
 	// Open memory OpenGL window 
-	if( !(windows[MEMORY_WINDOW]=glfwOpenWindow( MEMORY_WIDTH, MEMORY_HEIGHT, GLFW_WINDOWED,"Memory",NULL)) ) 
+	if( !(windows[MEMORY_WINDOW]=glfwCreateWindow( MEMORY_WIDTH, MEMORY_HEIGHT, "Memory",NULL,NULL)) ) 
 	{ 
 		glfwTerminate(); 
 		return 1; 
@@ -1097,7 +1104,7 @@ int main(int argc,char**argv)
 	setupGL(MEMORY_WINDOW,MEMORY_WIDTH,MEMORY_HEIGHT);
 	
 	// Open timing OpenGL window 
-	if( !(windows[TIMING_WINDOW]=glfwOpenWindow( TIMING_WIDTH, TIMING_HEIGHT, GLFW_WINDOWED,"Serial Bus",NULL)) ) 
+	if( !(windows[TIMING_WINDOW]=glfwCreateWindow( TIMING_WIDTH, TIMING_HEIGHT, "Serial Bus",NULL,NULL)) ) 
 	{ 
 		glfwTerminate(); 
 		return 1; 
@@ -1110,7 +1117,7 @@ int main(int argc,char**argv)
 
 #if ENABLE_DISK_DEBUG
 	// Open via OpenGL window 
-	if( !(windows[VIA_WINDOW_DISK]=glfwOpenWindow( VIA_WIDTH, VIA_HEIGHT, GLFW_WINDOWED,"VIA Chips (disk)",NULL)) ) 
+	if( !(windows[VIA_WINDOW_DISK]=glfwCreateWindow( VIA_WIDTH, VIA_HEIGHT, "VIA Chips (disk)",NULL,NULL)) ) 
 	{ 
 		glfwTerminate(); 
 		return 1; 
@@ -1122,7 +1129,7 @@ int main(int argc,char**argv)
 	setupGL(VIA_WINDOW_DISK,VIA_WIDTH,VIA_HEIGHT);
 	
 	// Open registers OpenGL window 
-	if( !(windows[REGISTER_WINDOW_DISK]=glfwOpenWindow( REGISTER_WIDTH, REGISTER_HEIGHT, GLFW_WINDOWED,"Disk CPU",NULL)) ) 
+	if( !(windows[REGISTER_WINDOW_DISK]=glfwCreateWindow( REGISTER_WIDTH, REGISTER_HEIGHT, "Disk CPU",NULL,NULL)) ) 
 	{ 
 		glfwTerminate(); 
 		return 1; 
@@ -1135,7 +1142,7 @@ int main(int argc,char**argv)
 #endif
 
 	// Open via OpenGL window 
-	if( !(windows[REGISTER_6569]=glfwOpenWindow( REGISTER_WIDTH, REGISTER_HEIGHT, GLFW_WINDOWED,"6569",NULL)) ) 
+	if( !(windows[REGISTER_6569]=glfwCreateWindow( REGISTER_WIDTH, REGISTER_HEIGHT, "6569",NULL,NULL)) ) 
 	{ 
 		glfwTerminate(); 
 		return 1; 
@@ -1147,7 +1154,7 @@ int main(int argc,char**argv)
 	setupGL(REGISTER_6569,REGISTER_WIDTH,REGISTER_HEIGHT);
 	
 	// Open via OpenGL window 
-	if( !(windows[VIA_WINDOW]=glfwOpenWindow( VIA_WIDTH, VIA_HEIGHT, GLFW_WINDOWED,"CIA Chips (c64)",NULL)) ) 
+	if( !(windows[VIA_WINDOW]=glfwCreateWindow( VIA_WIDTH, VIA_HEIGHT,"CIA Chips (c64)",NULL,NULL)) ) 
 	{ 
 		glfwTerminate(); 
 		return 1; 
@@ -1159,7 +1166,7 @@ int main(int argc,char**argv)
 	setupGL(VIA_WINDOW,VIA_WIDTH,VIA_HEIGHT);
 	
 	// Open registers OpenGL window 
-	if( !(windows[REGISTER_WINDOW]=glfwOpenWindow( REGISTER_WIDTH, REGISTER_HEIGHT, GLFW_WINDOWED,"Main CPU",NULL)) ) 
+	if( !(windows[REGISTER_WINDOW]=glfwCreateWindow( REGISTER_WIDTH, REGISTER_HEIGHT, "Main CPU",NULL,NULL)) ) 
 	{ 
 		glfwTerminate(); 
 		return 1; 
@@ -1171,7 +1178,7 @@ int main(int argc,char**argv)
 	setupGL(REGISTER_WINDOW,REGISTER_WIDTH,REGISTER_HEIGHT);
 #endif
 	// Open screen OpenGL window 
-	if( !(windows[MAIN_WINDOW]=glfwOpenWindow( WIDTH, HEIGHT, GLFW_WINDOWED,"c64",NULL)) ) 
+	if( !(windows[MAIN_WINDOW]=glfwCreateWindow( WIDTH, HEIGHT, "c64",NULL,NULL)) ) 
 	{ 
 		glfwTerminate(); 
 		return 1; 
@@ -1187,8 +1194,8 @@ int main(int argc,char**argv)
 	glfwGetWindowSize(windows[MAIN_WINDOW],&w,&h);
 
 	//printf("width : %d (%d) , height : %d (%d)\n", w,WIDTH,h,HEIGHT);
-	glfwSetKeyCallback(kbHandler);
-	glfwSetWindowSizeCallback(sizeHandler);
+	glfwSetKeyCallback(windows[MAIN_WINDOW],kbHandler);
+	glfwSetWindowSizeCallback(windows[MAIN_WINDOW],sizeHandler);
 
 	atStart=glfwGetTime();
 	//////////////////
@@ -1358,45 +1365,45 @@ int main(int argc,char**argv)
 
             		glfwMakeContextCurrent(windows[MAIN_WINDOW]);
 			ShowScreen(MAIN_WINDOW,WIDTH,HEIGHT);
-			glfwSwapBuffers();
+			glfwSwapBuffers(windows[MAIN_WINDOW]);
 #if DEBUG_WINDOWS
 			glfwMakeContextCurrent(windows[MEMORY_WINDOW]);
 			DrawMemory(videoMemory[MEMORY_WINDOW],MEMORY_WIDTH,g_whereToLook,ReadRam);
 			ShowScreen(MEMORY_WINDOW,MEMORY_WIDTH,MEMORY_HEIGHT);
-			glfwSwapBuffers();
+			glfwSwapBuffers(windows[MEMORY_WINDOW]);
 
 			glfwMakeContextCurrent(windows[TIMING_WINDOW]);
 			DrawTiming(videoMemory[TIMING_WINDOW],TIMING_WIDTH);
 			UpdateTimingWindow(windows[TIMING_WINDOW]);
 			ShowScreen(TIMING_WINDOW,TIMING_WIDTH,TIMING_HEIGHT);
-			glfwSwapBuffers();
+			glfwSwapBuffers(windows[TIMING_WINDOW]);
 #if ENABLE_DISK_DEBUG
 			glfwMakeContextCurrent(windows[VIA_WINDOW_DISK]);
 			DrawVIADisk(videoMemory[VIA_WINDOW_DISK],VIA_WIDTH);
 			ShowScreen(VIA_WINDOW_DISK,VIA_WIDTH,VIA_HEIGHT);
-			glfwSwapBuffers();
+			glfwSwapBuffers(windows[VIA_WINDOW_DISK]);
 			
 			glfwMakeContextCurrent(windows[REGISTER_WINDOW_DISK]);
 			DrawRegisterDisk(videoMemory[REGISTER_WINDOW_DISK],REGISTER_WIDTH,DISK_lastPC,DISK_GetByte);
 			UpdateRegisterDisk(windows[REGISTER_WINDOW_DISK]);
 			ShowScreen(REGISTER_WINDOW_DISK,REGISTER_WIDTH,REGISTER_HEIGHT);
-			glfwSwapBuffers();
+			glfwSwapBuffers(windows[REGISTER_WINDOW_DISK]);
 #endif
 			glfwMakeContextCurrent(windows[REGISTER_WINDOW]);
 			DrawRegisterMain(videoMemory[REGISTER_WINDOW],REGISTER_WIDTH,lastPC,GetByte);
 			UpdateRegisterMain(windows[REGISTER_WINDOW]);
 			ShowScreen(REGISTER_WINDOW,REGISTER_WIDTH,REGISTER_HEIGHT);
-			glfwSwapBuffers();
+			glfwSwapBuffers(windows[REGISTER_WINDOW]);
 			
 			glfwMakeContextCurrent(windows[VIA_WINDOW]);
 			DrawVIAMain(videoMemory[VIA_WINDOW],VIA_WIDTH);
 			ShowScreen(VIA_WINDOW,VIA_WIDTH,VIA_HEIGHT);
-			glfwSwapBuffers();
+			glfwSwapBuffers(windows[VIA_WINDOW]);
 			
 			glfwMakeContextCurrent(windows[REGISTER_6569]);
 			DrawRegister6569(videoMemory[REGISTER_6569],REGISTER_WIDTH);
 			ShowScreen(REGISTER_6569,REGISTER_WIDTH,REGISTER_HEIGHT);
-			glfwSwapBuffers();
+			glfwSwapBuffers(windows[REGISTER_6569]);
 #endif
 			glfwPollEvents();
 			
@@ -1411,13 +1418,13 @@ int main(int argc,char**argv)
 			kbuffer[7]=CheckKeys('2','4','6','8','0','\\',GLFW_KEY_HOME,GLFW_KEY_F7);
 #else
 			kbuffer[0]=CheckKeys(GLFW_KEY_BACKSPACE,GLFW_KEY_ENTER,GLFW_KEY_RIGHT,GLFW_KEY_F7,GLFW_KEY_F1,GLFW_KEY_F3,GLFW_KEY_F5,GLFW_KEY_DOWN); 
-			kbuffer[1]=CheckKeys('3','W','A','4','Z','S','E',GLFW_KEY_LSHIFT);
+			kbuffer[1]=CheckKeys('3','W','A','4','Z','S','E',GLFW_KEY_LEFT_SHIFT);
 			kbuffer[2]=CheckKeys('5','R','D','6','C','F','T','X');
 			kbuffer[3]=CheckKeys('7','Y','G','8','B','H','U','V');
 			kbuffer[4]=CheckKeys('9','I','J','0','M','K','O','N');
 			kbuffer[5]=CheckKeys('-','P','L','=','.',';','[',',');
-			kbuffer[6]=CheckKeys(GLFW_KEY_INSERT,']','\'',GLFW_KEY_HOME,GLFW_KEY_RSHIFT,'#',GLFW_KEY_DELETE,'/');
-			kbuffer[7]=CheckKeys('1','¬',GLFW_KEY_TAB,'2',GLFW_KEY_SPACE,GLFW_KEY_LCTRL,'Q',GLFW_KEY_ESC);
+			kbuffer[6]=CheckKeys(GLFW_KEY_INSERT,']','\'',GLFW_KEY_HOME,GLFW_KEY_RIGHT_SHIFT,'#',GLFW_KEY_DELETE,'/');
+			kbuffer[7]=CheckKeys('1','¬',GLFW_KEY_TAB,'2',GLFW_KEY_SPACE,GLFW_KEY_LEFT_CONTROL,'Q',GLFW_KEY_ESCAPE);
 
 #endif
 			if (CheckKey(GLFW_KEY_END))

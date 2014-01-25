@@ -5,7 +5,7 @@
  *
  */
 
-#include <GL/glfw3.h>
+#include <GLFW/glfw3.h>
 #include <GL/glext.h>
 
 #include <al.h>
@@ -70,7 +70,7 @@ void ClearKey(int key);
 
 #define MAIN_WINDOW		0
 
-GLFWwindow windows[MAX_WINDOWS];
+GLFWwindow* windows[MAX_WINDOWS];
 unsigned char *videoMemory[MAX_WINDOWS];
 GLint videoTexture[MAX_WINDOWS];
 
@@ -400,10 +400,17 @@ void ClearKey(int key)
 	keyArray[key*3+2]=0;
 }
 
-void kbHandler( GLFWwindow window, int key, int action )		/* At present ignores which window, will add per window keys later */
+void kbHandler( GLFWwindow* window, int key, int scan, int action, int mod )		/* At present ignores which window, will add per window keys later */
 {
 	keyArray[key*3 + 0]=keyArray[key*3+1];
-	keyArray[key*3 + 1]=action;
+	if (action==GLFW_RELEASE)
+	{
+		keyArray[key*3 + 1]=GLFW_RELEASE;
+	}
+	else
+	{
+		keyArray[key*3 + 1]=GLFW_PRESS;
+	}
 	keyArray[key*3 + 2]|=(keyArray[key*3+0]==GLFW_RELEASE)&&(keyArray[key*3+1]==GLFW_PRESS);
 }
 
@@ -488,14 +495,14 @@ uint8_t GetPort(uint16_t port)
 
 	if ((port&1)==0)			// ula responds on all even addresses
 	{
-		retVal|=CheckKeys(matrixLine&0x80,GLFW_KEY_SPACE,GLFW_KEY_RCTRL,'M','N','B');
+		retVal|=CheckKeys(matrixLine&0x80,GLFW_KEY_SPACE,GLFW_KEY_RIGHT_CONTROL,'M','N','B');
 		retVal|=CheckKeys(matrixLine&0x40,GLFW_KEY_ENTER,'L','K','J','H');
 		retVal|=CheckKeys(matrixLine&0x20,'P','O','I','U','Y');
 		retVal|=CheckKeys(matrixLine&0x10,'0','9','8','7','6');
 		retVal|=CheckKeys(matrixLine&0x08,'1','2','3','4','5');
 		retVal|=CheckKeys(matrixLine&0x04,'Q','W','E','R','T');
 		retVal|=CheckKeys(matrixLine&0x02,'A','S','D','F','G');
-		retVal|=CheckKeys(matrixLine&0x01,GLFW_KEY_LSHIFT,'Z','X','C','V');
+		retVal|=CheckKeys(matrixLine&0x01,GLFW_KEY_LEFT_SHIFT,'Z','X','C','V');
 
 		retVal=(~retVal)&0x1F;
 
@@ -746,7 +753,7 @@ int main(int argc,char**argv)
 	glfwInit(); 
 
 	// Open invaders OpenGL window 
-	if( !(windows[MAIN_WINDOW]=glfwOpenWindow( WIDTH, HEIGHT, GLFW_WINDOWED,"spectrum",NULL)) ) 
+	if( !(windows[MAIN_WINDOW]=glfwCreateWindow( WIDTH, HEIGHT, "spectrum",NULL,NULL)) ) 
 	{ 
 		glfwTerminate(); 
 		return 1; 
@@ -759,7 +766,7 @@ int main(int argc,char**argv)
 
 	glfwSwapInterval(0);			// Disable VSYNC
 
-	glfwSetKeyCallback(kbHandler);
+	glfwSetKeyCallback(windows[MAIN_WINDOW],kbHandler);
 
 	AudioInitialise();
 
@@ -805,23 +812,23 @@ int main(int argc,char**argv)
 
             		glfwMakeContextCurrent(windows[MAIN_WINDOW]);
 			ShowScreen(MAIN_WINDOW,WIDTH,HEIGHT);
-			glfwSwapBuffers();
+			glfwSwapBuffers(windows[MAIN_WINDOW]);
 				
 			glfwPollEvents();
 		
-			if (glfwGetKey(windows[MAIN_WINDOW],GLFW_KEY_ESC))
+			if (glfwGetKey(windows[MAIN_WINDOW],GLFW_KEY_ESCAPE))
 			{
 				break;
 			}
-			if (CheckKey(GLFW_KEY_PAGEUP))
+			if (CheckKey(GLFW_KEY_PAGE_UP))
 			{
 				tapePaused=!tapePaused;
-				ClearKey(GLFW_KEY_PAGEUP);
+				ClearKey(GLFW_KEY_PAGE_UP);
 			}
-			if (CheckKey(GLFW_KEY_PAGEDOWN))
+			if (CheckKey(GLFW_KEY_PAGE_DOWN))
 			{
 				syncOff=!syncOff;
-				ClearKey(GLFW_KEY_PAGEDOWN);
+				ClearKey(GLFW_KEY_PAGE_DOWN);
 			}
 			if (CheckKey(GLFW_KEY_END))
 			{

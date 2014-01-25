@@ -1,4 +1,4 @@
-#include <GL/glfw3.h>
+#include <GLFW/glfw3.h>
 
 #include <stdlib.h>
 #include <stdarg.h>
@@ -10,7 +10,7 @@
 
 void ClearKey(int key);
 int CheckKey(int key);
-int CheckKeyWindow(int key,GLFWwindow window);
+int CheckKeyWindow(int key,GLFWwindow* window);
 
 unsigned short breakpoints[2][20]={
 	{0xE231,0xE249,0xe264,0xe27c},
@@ -144,7 +144,7 @@ void DrawRegister(int chip,uint8_t *table[256],unsigned char* buffer,unsigned in
 	}
 }
 
-void UpdateRegisterMain(GLFWwindow window)
+void UpdateRegisterMain(GLFWwindow* window)
 {
 	if (CheckKeyWindow(GLFW_KEY_DOWN,window))
 	{
@@ -371,9 +371,9 @@ void DrawTiming(unsigned char* buffer,unsigned int width)
 	}
 }
 
-int KeyDownWindow(int key,GLFWwindow window);
+int KeyDownWindow(int key,GLFWwindow* window);
 
-void UpdateTimingWindow(GLFWwindow window)
+void UpdateTimingWindow(GLFWwindow* window)
 {
 	int a;
 

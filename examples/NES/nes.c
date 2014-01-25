@@ -2,8 +2,7 @@
  * NES implementation
  *
  */
-#include <pthread.h>
-#include <GL/glfw3.h>
+#include <GLFW/glfw3.h>
 #include <GL/glext.h>
 
 #include <al.h>
@@ -20,19 +19,23 @@
 
 #define WRITE_AUDIO		0
 #define IS_COMPAT		0
-#define APU			1
+#define APU			0
 
-#define ENABLE_TV		0
+#define ENABLE_TV		1
 #define ENABLE_LOGIC_ANALYSER	0
 #define ENABLE_DEBUGGER		0
 #define ENABLE_LOG_TRACE	0
 
 #define COMPLEX_MAPPERS		0
 
+#if USE_THREADS
+#include <pthread.h>
+#endif
+
 #include "jake\ntscDecode.h"
 
 int g_instructionStep=0;
-int stopTheClock=1;
+int stopTheClock=0;
 
 void AudioKill();
 void AudioInitialise();
@@ -875,7 +878,7 @@ int g_traceStep=0;
 #define REGISTER_WINDOW		2
 #define TIMING_WINDOW		3
 
-GLFWwindow windows[MAX_WINDOWS];
+GLFWwindow* windows[MAX_WINDOWS];
 unsigned char *videoMemory[MAX_WINDOWS];
 GLint videoTexture[MAX_WINDOWS];
 
@@ -968,7 +971,7 @@ struct KeyArray
 	unsigned char lastState;
 	unsigned char curState;
 	unsigned char debounced;
-	GLFWwindow    window;
+	GLFWwindow*    window;
 };
 
 struct KeyArray keyArray[512];
@@ -978,7 +981,7 @@ int KeyDown(int key)
 	return keyArray[key].curState==GLFW_PRESS;
 }
 
-int KeyDownWindow(int key,GLFWwindow window)
+int KeyDownWindow(int key,GLFWwindow* window)
 {
 	return (keyArray[key].curState==GLFW_PRESS) && (keyArray[key].window==window);
 }
@@ -988,7 +991,7 @@ int CheckKey(int key)
 	return keyArray[key].debounced;
 }
 
-int CheckKeyWindow(int key,GLFWwindow window)
+int CheckKeyWindow(int key,GLFWwindow* window)
 {
 	return keyArray[key].debounced && (keyArray[key].window==window);
 }
@@ -1008,15 +1011,22 @@ int windowCheckKey(int key)
 	return CheckKey(key);
 }
 
-void kbHandler( GLFWwindow window, int key, int action )
+void kbHandler( GLFWwindow* window, int key, int scan, int action, int mod )
 {
 	keyArray[key].lastState=keyArray[key].curState;
-	keyArray[key].curState=action;
+	if (action==GLFW_RELEASE)
+	{
+		keyArray[key].curState=GLFW_RELEASE;
+	}
+	else
+	{
+		keyArray[key].curState=GLFW_PRESS;
+	}
 	keyArray[key].debounced|=(keyArray[key].lastState==GLFW_RELEASE)&&(keyArray[key].curState==GLFW_PRESS);
 	keyArray[key].window=window;
 }
 
-void sizeHandler(GLFWwindow window,int xs,int ys)
+void sizeHandler(GLFWwindow* window,int xs,int ys)
 {
 	glfwMakeContextCurrent(window);
 	glViewport(0, 0, xs, ys);
@@ -1849,7 +1859,7 @@ int main(int argc,char**argv)
 
 #if ENABLE_LOGIC_ANALYSER
 	// Open timing OpenGL window 
-	if( !(windows[TIMING_WINDOW]=glfwOpenWindow( TIMING_WIDTH, TIMING_HEIGHT, GLFW_WINDOWED,"Logic Analyser",NULL)) ) 
+	if( !(windows[TIMING_WINDOW]=glfwCreateWindow( TIMING_WIDTH, TIMING_HEIGHT, "Logic Analyser",NULL,NULL)) ) 
 	{ 
 		glfwTerminate(); 
 		return 1; 
@@ -1863,7 +1873,7 @@ int main(int argc,char**argv)
 
 #if ENABLE_DEBUGGER
 	// Open registers OpenGL window 
-	if( !(windows[REGISTER_WINDOW]=glfwOpenWindow( REGISTER_WIDTH, REGISTER_HEIGHT, GLFW_WINDOWED,"Main CPU",NULL)) ) 
+	if( !(windows[REGISTER_WINDOW]=glfwCreateWindow( REGISTER_WIDTH, REGISTER_HEIGHT,"Main CPU",NULL,NULL)) ) 
 	{ 
 		glfwTerminate(); 
 		return 1; 
@@ -1876,7 +1886,7 @@ int main(int argc,char**argv)
 #endif
 
 #if ENABLE_TV
-	if( !(windows[NTSC_WINDOW]=glfwOpenWindow( NTSC_WIDTH, NTSC_HEIGHT, GLFW_WINDOWED,"NTSC",NULL)) ) 
+	if( !(windows[NTSC_WINDOW]=glfwCreateWindow( NTSC_WIDTH, NTSC_HEIGHT, "NTSC",NULL,NULL)) ) 
 	{ 
 		glfwTerminate(); 
 		return 1; 
@@ -1888,7 +1898,7 @@ int main(int argc,char**argv)
 	setupGL(NTSC_WINDOW,NTSC_WIDTH,NTSC_HEIGHT);
 #endif
 	// Open screen OpenGL window 
-	if( !(windows[MAIN_WINDOW]=glfwOpenWindow( WIDTH, HEIGHT, GLFW_WINDOWED,"nes",NULL)) ) 
+	if( !(windows[MAIN_WINDOW]=glfwCreateWindow( WIDTH, HEIGHT, "nes",NULL,NULL)) ) 
 	{ 
 		glfwTerminate(); 
 		return 1; 
@@ -1904,8 +1914,8 @@ int main(int argc,char**argv)
 	glfwGetWindowSize(windows[MAIN_WINDOW],&w,&h);
 
 	printf("width : %d (%d) , height : %d (%d)\n", w,WIDTH,h,HEIGHT);
-	glfwSetKeyCallback(kbHandler);
-	glfwSetWindowSizeCallback(sizeHandler);
+	glfwSetKeyCallback(windows[MAIN_WINDOW],kbHandler);
+	glfwSetWindowSizeCallback(windows[MAIN_WINDOW],sizeHandler);
 	
 #if ENABLE_TV
 	ntscDecodeInit((uint32_t*)videoMemory[NTSC_WINDOW]);
@@ -1932,7 +1942,7 @@ int main(int argc,char**argv)
 	PPU_PinSet_RST(1);
 	PPU_PinSet_DBE(1);
 
-	while (!glfwGetKey(windows[MAIN_WINDOW],GLFW_KEY_ESC))
+	while (!glfwGetKey(windows[MAIN_WINDOW],GLFW_KEY_ESCAPE))
 	{
 		
 		if ((!stopTheClock) || g_traceStep || g_instructionStep)
@@ -1959,7 +1969,7 @@ int main(int argc,char**argv)
 
             		glfwMakeContextCurrent(windows[MAIN_WINDOW]);
 			ShowScreen(MAIN_WINDOW,WIDTH,HEIGHT);
-			glfwSwapBuffers();
+			glfwSwapBuffers(windows[MAIN_WINDOW]);
  
 #if ENABLE_TV			
 			if (twofields&1)
@@ -1968,7 +1978,7 @@ int main(int argc,char**argv)
 			}
 			glfwMakeContextCurrent(windows[NTSC_WINDOW]);
 			ShowScreen(NTSC_WINDOW,NTSC_WIDTH,NTSC_HEIGHT);
-			glfwSwapBuffers();
+			glfwSwapBuffers(windows[NTSC_WINDOW]);
 #endif
 	
 #if ENABLE_DEBUGGER
@@ -1976,7 +1986,7 @@ int main(int argc,char**argv)
 			DrawRegisterMain(videoMemory[REGISTER_WINDOW],REGISTER_WIDTH,lastPC,GetByte);
 			UpdateRegisterMain(windows[REGISTER_WINDOW]);
 			ShowScreen(REGISTER_WINDOW,REGISTER_WIDTH,REGISTER_HEIGHT);
-			glfwSwapBuffers();
+			glfwSwapBuffers(windows[REGISTER_WINDOW]);
 #endif
 
 #if ENABLE_LOGIC_ANALYSER			
@@ -1984,7 +1994,7 @@ int main(int argc,char**argv)
 			DrawTiming(videoMemory[TIMING_WINDOW],TIMING_WIDTH);
 			UpdateTimingWindow(windows[TIMING_WINDOW]);
 			ShowScreen(TIMING_WINDOW,TIMING_WIDTH,TIMING_HEIGHT);
-			glfwSwapBuffers();
+			glfwSwapBuffers(windows[TIMING_WINDOW]);
 #endif
 
 			glfwPollEvents();
@@ -2025,7 +2035,7 @@ int main(int argc,char**argv)
 
 				remain = now-atStart;
 			}
-			ShowFPS(videoMemory[MAIN_WINDOW],WIDTH,1/remain);
+			//ShowFPS(videoMemory[MAIN_WINDOW],WIDTH,1/remain);
 			atStart=glfwGetTime();
 		}
 	}
@@ -2119,7 +2129,13 @@ void SampleNTSC(uint8_t actualLevel)
 void AvgNTSC()
 {
 	lastEDLLevelAvg=(avgNTSC[0]+avgNTSC[1]+avgNTSC[2])/3;
+	if (ntsc_file==NULL)
+	{
+		ntsc_file=fopen("tmp.tv","wb");
+	}
+
 	ntscDecodeAddSample(lastEDLLevelAvg);
+	fwrite(&lastEDLLevelAvg,1,1,ntsc_file);
 }
 #endif
 void PPU_SetVideo(uint8_t x,uint8_t y,uint8_t col)

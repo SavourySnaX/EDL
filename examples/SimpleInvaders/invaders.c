@@ -5,7 +5,7 @@
  *  Rest is C for now
  */
 
-#include <GL/glfw3.h>
+#include <GLFW/glfw3.h>
 #include <GL/glext.h>
 
 #include <stdlib.h>
@@ -142,7 +142,7 @@ void HandleIOPortWrite(unsigned char port,unsigned char data)
 
 #define MAIN_WINDOW		0
 
-GLFWwindow windows[MAX_WINDOWS];
+GLFWwindow* windows[MAX_WINDOWS];
 unsigned char *videoMemory[MAX_WINDOWS];
 GLint videoTexture[MAX_WINDOWS];
 
@@ -272,10 +272,17 @@ void ClearKey(int key)
 	keyArray[key*3+2]=0;
 }
 
-void kbHandler( GLFWwindow window, int key, int action )		/* At present ignores which window, will add per window keys later */
+void kbHandler( GLFWwindow* window, int key, int scan, int action, int mod )		/* At present ignores which window, will add per window keys later */
 {
 	keyArray[key*3 + 0]=keyArray[key*3+1];
-	keyArray[key*3 + 1]=action;
+	if (action==GLFW_RELEASE)
+	{
+		keyArray[key*3 + 1]=GLFW_RELEASE;
+	}
+	else
+	{
+		keyArray[key*3 + 1]=GLFW_PRESS;
+	}
 	keyArray[key*3 + 2]|=(keyArray[key*3+0]==GLFW_RELEASE)&&(keyArray[key*3+1]==GLFW_PRESS);
 }
 
@@ -290,7 +297,7 @@ int main(int argc,char**argv)
 	glfwInit(); 
 
 	// Open invaders OpenGL window 
-	if( !(windows[MAIN_WINDOW]=glfwOpenWindow( WIDTH, HEIGHT, GLFW_WINDOWED,"invaders",NULL)) ) 
+	if( !(windows[MAIN_WINDOW]=glfwCreateWindow( WIDTH, HEIGHT, "invaders",NULL,NULL)) ) 
 	{ 
 		glfwTerminate(); 
 		return 1; 
@@ -303,7 +310,7 @@ int main(int argc,char**argv)
 
 	glfwSwapInterval(0);			// Disable VSYNC
 
-	glfwSetKeyCallback(kbHandler);
+	glfwSetKeyCallback(windows[MAIN_WINDOW],kbHandler);
 
 	atStart=glfwGetTime();
 	//////////////////
@@ -313,7 +320,7 @@ int main(int argc,char**argv)
 	
 	RESET();
 
-	while (!glfwGetKey(windows[MAIN_WINDOW],GLFW_KEY_ESC))
+	while (!glfwGetKey(windows[MAIN_WINDOW],GLFW_KEY_ESCAPE))
 	{
 		STEP();
 
@@ -338,7 +345,7 @@ int main(int argc,char**argv)
 
             		glfwMakeContextCurrent(windows[MAIN_WINDOW]);
 			ShowScreen(MAIN_WINDOW,WIDTH,HEIGHT);
-			glfwSwapBuffers();
+			glfwSwapBuffers(windows[MAIN_WINDOW]);
 				
 			glfwPollEvents();
 			

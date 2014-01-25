@@ -1,6 +1,6 @@
 all: invaders
 
-GLLIBS= -I../../../glfw-3/include -L../../../glfw-3/lib -lglfw -lglu32 -lopengl32
+GLLIBS= -I../../../glfw-3.0.4/include -L../../../glfw-3.0.4/lib-mingw -lglfw3 -lglu32 -lopengl32 -lGDI32
 EDL=../../bin/edl.exe
 
 clean:
@@ -13,13 +13,13 @@ out/i8080.lls: ../../chips/Accurate/i8080.edl
 	$(EDL) -O2 ../../chips/Accurate/i8080.edl >out/i8080.lls
 
 out/i8080.lls.s: out/i8080.lls
-	llc out/i8080.lls
+	llc -O3 out/i8080.lls
 
 out/mb14241.lls: ../../chips/Accurate/mb14241.edl
-	$(EDL) ../../chips/Accurate/mb14241.edl >out/mb14241.lls
+	$(EDL) -O2 ../../chips/Accurate/mb14241.edl >out/mb14241.lls
 
 out/mb14241.lls.s: out/mb14241.lls
-	llc out/mb14241.lls
+	llc -O3 out/mb14241.lls
 
 invaders: invaders.c invadersDebug.c gui/debugger.c gui/debugger.h gui/font.h out/i8080.lls.s out/mb14241.lls.s
 	gcc -O3 invaders.c invadersDebug.c gui/debugger.c out/i8080.lls.s out/mb14241.lls.s $(GLLIBS) -o invaders.exe

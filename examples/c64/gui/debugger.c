@@ -1,4 +1,4 @@
-#include <GL/glfw3.h>
+#include <GLFW/glfw3.h>
 
 #include <stdlib.h>
 #include <stdarg.h>
@@ -195,7 +195,7 @@ void DrawRegisterDisk(unsigned char* buffer,unsigned int width,uint16_t address,
 	DrawRegister(1,DISK_DIS_,buffer,width,address,GetMem,DISK_decodeDisasm);
 }
 
-void UpdateRegisterMain(GLFWwindow window)
+void UpdateRegisterMain(GLFWwindow* window)
 {
 	if (CheckKeyWindow(GLFW_KEY_DOWN,window))
 	{
@@ -222,7 +222,7 @@ void UpdateRegisterMain(GLFWwindow window)
 	}
 }
 
-void UpdateRegisterDisk(GLFWwindow window)
+void UpdateRegisterDisk(GLFWwindow* window)
 {
 	if (CheckKeyWindow(GLFW_KEY_DOWN,window))
 	{
@@ -902,7 +902,7 @@ void DrawTimingA(unsigned char* buffer,unsigned int width)
 	}
 }
 
-void UpdateTimingWindow(GLFWwindow window)
+void UpdateTimingWindow(GLFWwindow* window)
 {
 	int a;
 
