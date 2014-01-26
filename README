@@ -2,9 +2,9 @@
 Emulation Description Language
 ------------------------------
 
-Requires Bison/Yacc,lex/flex,llvm (3.0) to build the compiler.
+Requires Bison/Yacc,lex/flex,llvm (3.4) to build the compiler.
 
-Invaders needs the above compiler plus opengl and glfw (3.0). glfw 3.0 is currently only available as source - but i needed the multiple window support available in that version.
+Invaders needs the above compiler plus opengl and glfw (3.0.4). 
 
 Only tested under mingw32 so far. It should build under linux, but the makefile will need tweaking to include the correct libraries.
 
@@ -14,5 +14,13 @@ will build the compiler.
 
 tests/ folder includes a simple test harness for validating the 8080 example cores work.
 
-examples/ folder includes a language hello world example, plus 2 space invaders emulators. SimpleInvaders uses the simplified 8080 core. Invaders uses the pin accurate core.
+examples/ folder includes a few examples :)
+
+	Invaders - Uses the pin accurate 8080 core, shows a logic analyser while running.
+	Simple Invaders - Uses the step based 8080 core.
+	Language - Contains a few small examples of constructs available in EDL.
+	ZXSpectrum - Both a step based, and a pin accurate Z80 version.
+	vic20 - Includes 1541 disk drive emulation + a lot of debug windows.
+	c64 - Includes 1541 disk drive emulation -- Incomplete.
+	NES - WIP (has a composite TV signal generator built in.. but output requires an external repository.
 
