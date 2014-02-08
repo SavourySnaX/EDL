@@ -12,10 +12,10 @@ clean:
 
 out/pin8080.lls: ../../chips/Accurate/i8080.edl
 	mkdir -p out
-	$(EDL) ../../chips/Accurate/i8080.edl >out/pin8080.lls
+	$(EDL) -O2 ../../chips/Accurate/i8080.edl >out/pin8080.lls
 
 out/step8080.lls: ../../chips/Simplified/i8080.edl
-	$(EDL) ../../chips/Simplified/i8080.edl >out/step8080.lls
+	$(EDL) -O2 ../../chips/Simplified/i8080.edl >out/step8080.lls
 
 out/pin8080.lls.s: out/pin8080.lls
 	llc out/pin8080.lls

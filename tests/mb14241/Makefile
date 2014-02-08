@@ -10,7 +10,7 @@ clean:
 
 out/mb14241.lls: ../../chips/Accurate/mb14241.edl
 	mkdir -p out
-	$(EDL) ../../chips/Accurate/mb14241.edl >out/mb14241.lls
+	$(EDL) -O2 ../../chips/Accurate/mb14241.edl >out/mb14241.lls
 
 out/mb14241.lls.s: out/mb14241.lls
 	llc out/mb14241.lls

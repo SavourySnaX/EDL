@@ -126,6 +126,9 @@ namespace
 
     			std::map<std::string, CodeGenContext*>::iterator includeIter;
 
+#if DEBUG_STATE_SQUASH
+			std::cerr << "Running stateReferenceSquasher" << std::endl;
+#endif
 			doneSomeWork|=DoWork(F,ourContext);
 			for (includeIter=ourContext->m_includes.begin();includeIter!=ourContext->m_includes.end();++includeIter)
 			{
@@ -141,6 +144,135 @@ namespace
 
 	char StateReferenceSquasher::ID = 0;
 	static RegisterPass<StateReferenceSquasher> X("StateReferenceSquasher", "Squashes multiple accesses to the same state, which should allow if/else behaviour", false, false);
+
+	// Below is similar to above - Essentially pin variables that are in cannot be modified during execution - this hoists all the loads into the entry block
+	struct InOutReferenceSquasher : public FunctionPass 
+	{
+		CodeGenContext *ourContext;
+
+		static char ID;
+		InOutReferenceSquasher() : ourContext(NULL),FunctionPass(ID) {}
+		InOutReferenceSquasher(CodeGenContext* context) : ourContext(context),FunctionPass(ID) {}
+
+		bool DoWork(Function &F,CodeGenContext* context)
+		{
+			BasicBlock& hoistHere = F.getEntryBlock();
+			TerminatorInst* hoistBefore = hoistHere.getTerminator();
+
+			std::map<std::string, BitVariable>::iterator bitVars;
+			bool doneSomeWork=false;
+			for (bitVars=context->globals().begin();bitVars!=context->globals().end();++bitVars)
+			{
+				if (bitVars->second.pinType==TOK_IN/* || bitVars->second.pinType==TOK_OUT*/)
+				{
+#if DEBUG_STATE_SQUASH
+					std::cerr << "-" << F.getName().str() << " " << bitVars->first << std::endl;
+#endif
+					// Search the instructions in the function, and find Load instructions
+					Value* foundReference=NULL;
+				
+					// Find and hoist all Pin loads to entry (avoids need to phi - hopefully llvm later passes will clean up)
+					bool hoisted=false;
+
+					do
+					{
+						hoisted=false;
+						for (inst_iterator I = inst_begin(F), E = inst_end(F); I != E; ++I)
+						{
+							LoadInst* iRef = dyn_cast<LoadInst>(&*I);
+							if (iRef)
+							{
+								// We have a load instruction, we need to see if its operand points at our global state variable
+								if (iRef->getOperand(0)==bitVars->second.value)
+								{
+									// First load for parameter - if its not in the entry basic block, move it
+									if (F.getEntryBlock().getName()!=iRef->getParent()->getName())
+									{
+#if DEBUG_STATE_SQUASH
+										std::cerr << "==" << F.getName().str() << " " << iRef->getName().str() << std::endl;
+										std::cerr << "BB" << F.getEntryBlock().getName().str() << " " << iRef->getParent()->getName().str() << std::endl;
+										std::cerr << "Needs Hoist" << std::endl;
+#endif
+										iRef->removeFromParent();
+										iRef->insertBefore(hoistBefore);
+										hoisted=true;
+										break;
+									}
+								}
+							}
+						}
+					}
+					while (hoisted);
+
+					// Do state squasher
+					for (inst_iterator I = inst_begin(F), E = inst_end(F); I != E; ++I)
+					{
+						LoadInst* iRef = dyn_cast<LoadInst>(&*I);
+						if (iRef)
+						{
+							// We have a load instruction, we need to see if its operand points at our global state variable
+							if (iRef->getOperand(0)==bitVars->second.value)
+							{
+								if (foundReference)
+								{
+#if DEBUG_STATE_SQUASH
+									std::cerr << "--" << F.getName().str() << " " << iRef->getName().str() << std::endl;
+#endif
+									// Replace all uses of this instruction with original result,
+									// I don't remove the current instruction - its upto a later pass to remove it
+									iRef->replaceAllUsesWith(foundReference);//BinaryOperator::Create (Instruction::Or,foundReference,foundReference,"",iRef));
+									doneSomeWork=true;
+								}
+								else
+								{
+#if DEBUG_STATE_SQUASH
+									std::cerr << "==" << F.getName().str() << " " << iRef->getName().str() << std::endl;
+#endif
+									foundReference=iRef;
+								}
+							}
+						}
+						StoreInst* sRef = dyn_cast<StoreInst>(&*I);
+						if (sRef)
+						{
+							// We have a store instruction, we need to see if its operand points at our global state variable
+							if (sRef->getOperand(1)==bitVars->second.value)
+							{
+								foundReference=sRef->getOperand(0);
+							}
+						}
+					}
+				}
+
+			}
+			return doneSomeWork;
+		}
+
+		virtual bool runOnFunction(Function &F) 
+		{
+			bool doneSomeWork=false;
+
+    			std::map<std::string, CodeGenContext*>::iterator includeIter;
+
+#if DEBUG_STATE_SQUASH
+			std::cerr << "Running globalReferenceSquasher" << std::endl;
+#endif
+			doneSomeWork|=DoWork(F,ourContext);
+			for (includeIter=ourContext->m_includes.begin();includeIter!=ourContext->m_includes.end();++includeIter)
+			{
+#if DEBUG_STATE_SQUASH
+				std::cerr << F.getName().str() << " " << includeIter->second->globals().size() << std::endl;
+#endif
+				doneSomeWork|=DoWork(F,includeIter->second);
+			}
+
+			return doneSomeWork;
+		}
+	};
+
+	char InOutReferenceSquasher::ID = 1;
+	static RegisterPass<InOutReferenceSquasher> XX("InOutReferenceSquasher", "Squashes multiple accesses to the same in/out pin, which should allow if/else behaviour", false, false);
+
 }
 
 using namespace std;
@@ -303,6 +435,7 @@ void CodeGenContext::generateCode(CBlock& root,CompilerOptions &options)
 				if (opts.optimisationLevel>1)
 				{
 					pm.add(new StateReferenceSquasher(this));		// Custom pass designed to remove redundant loads of the current state (since it can only be modified in one place)
+					pm.add(new InOutReferenceSquasher(this));		// Custom pass designed to remove redundant loads of the current state (since it can only be modified in one place)
 				}
 
 				//pm.add(createLowerSetJmpPass());          // Lower llvm.setjmp/.longjmp
@@ -1673,6 +1806,7 @@ void CVariableDeclaration::CreateWriteAccessor(CodeGenContext& context,BitVariab
 	{
 		function = Function::Create(ftype, GlobalValue::PrivateLinkage, context.symbolPrepend+"PinSet"+id.name, context.module);
 	}
+	function->onlyReadsMemory(0);	// Mark input read only
 	function->setDoesNotThrow();
 	BasicBlock *bblock = BasicBlock::Create(getGlobalContext(), "entry", function, 0);
 
