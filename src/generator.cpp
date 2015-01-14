@@ -2743,6 +2743,7 @@ void COperandIdent::DeclareLocal(CodeGenContext& context,unsigned num)
 	temp.writeInput=NULL;
 	temp.priorValue=NULL;
 	temp.impedance=NULL;
+	temp.fromExternal=false;
 
 	AllocaInst *alloc = new AllocaInst(Type::getIntNTy(getGlobalContext(),size.integer.getLimitedValue()), ident.name.c_str(), context.currentBlock());
 	temp.value = alloc;
@@ -3806,6 +3807,7 @@ Value* CFunctionDecl::codeGen(CodeGenContext& context)
 		returnVal.writeInput=NULL;
 		returnVal.priorValue=NULL;
 		returnVal.impedance=NULL;
+		returnVal.fromExternal=false;
 
 		AllocaInst *alloc = new AllocaInst(Type::getIntNTy(getGlobalContext(),returns[0]->size.integer.getLimitedValue()), returns[0]->id.name.c_str(), context.currentBlock());
 		returnVal.value = alloc;
@@ -3820,7 +3822,7 @@ Value* CFunctionDecl::codeGen(CodeGenContext& context)
 		temp.size = params[a]->size.integer;
 		temp.trueSize = params[a]->size.integer;
 		temp.cnst = APInt(params[a]->size.integer.getLimitedValue(),0);
-		temp.mask = ~returnVal.cnst;
+		temp.mask = ~temp.cnst;
 		temp.shft = APInt(params[a]->size.integer.getLimitedValue(),0);
 		temp.aliased = false;
 		temp.mappingRef = false;
@@ -3829,6 +3831,7 @@ Value* CFunctionDecl::codeGen(CodeGenContext& context)
 		temp.writeInput=NULL;
 		temp.priorValue=NULL;
 		temp.impedance=NULL;
+		temp.fromExternal=false;
 
 		temp.value=args;
 		temp.value->setName(params[a]->id.name);
