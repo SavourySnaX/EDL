@@ -114,6 +114,7 @@ public:
     Function *debugTraceMissing;
 
     std::string	symbolPrepend;
+    std::string moduleName;
 
     bool errorFlagged;
 

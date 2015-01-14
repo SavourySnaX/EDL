@@ -108,7 +108,7 @@ public:
 	std::string module;
 	std::string name;
 	CIdentifier(const std::string& name) : name(name) { }
-	CIdentifier(const std::string& module, const std::string& name) : module(module),name(name) { }
+	CIdentifier(const std::string& module, const std::string& name) : module(module+"."),name(name) { }
 	static llvm::Value* trueSize(llvm::Value*,CodeGenContext& context,BitVariable& var);
 	static llvm::Value* GetAliasedData(CodeGenContext& context,llvm::Value* in,BitVariable& var);
 	virtual llvm::Value* codeGen(CodeGenContext& context);

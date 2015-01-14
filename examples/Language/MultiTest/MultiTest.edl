@@ -22,7 +22,7 @@ FUNCTION	MyTestFunction
 
 	chip2 INPUTS <- %0010;
 	
-	result <- chip1 OUTPUTS;
+	result <- chip2 OUTPUTS;
 
 	DEBUG_TRACE result;
 }

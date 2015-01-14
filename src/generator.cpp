@@ -279,6 +279,7 @@ using namespace std;
 
 CodeGenContext::CodeGenContext(CodeGenContext* parent) 
 { 
+	moduleName="";
 	if (!parent) 
 	{ 
 		std::string err;
@@ -660,7 +661,7 @@ bool CodeGenContext::LookupBitVariable(BitVariable& outVar,const std::string& mo
 
 Function* CodeGenContext::LookupFunctionInExternalModule(const std::string& moduleName, const std::string& name)
 {
-	Function* function = m_includes[moduleName]->module->getFunction(name);
+	Function* function = m_includes[moduleName]->module->getFunction(moduleName+name);
 
 	return function;
 }
@@ -1830,11 +1831,11 @@ void CVariableDeclaration::CreateWriteAccessor(CodeGenContext& context,BitVariab
 	Function* function;
 	if (context.isRoot)
 	{
-		function = Function::Create(ftype, GlobalValue::ExternalLinkage, context.symbolPrepend+"PinSet"+id.name, context.module);
+		function = Function::Create(ftype, GlobalValue::ExternalLinkage, context.moduleName+context.symbolPrepend+"PinSet"+id.name, context.module);
 	}
 	else
 	{
-		function = Function::Create(ftype, GlobalValue::PrivateLinkage, context.symbolPrepend+"PinSet"+id.name, context.module);
+		function = Function::Create(ftype, GlobalValue::PrivateLinkage, context.moduleName+context.symbolPrepend+"PinSet"+id.name, context.module);
 	}
 	function->onlyReadsMemory(0);	// Mark input read only
 	function->setDoesNotThrow();
@@ -1873,11 +1874,11 @@ void CVariableDeclaration::CreateReadAccessor(CodeGenContext& context,BitVariabl
 	Function* function;
     if (context.isRoot)
 	{
-		function = Function::Create(ftype, GlobalValue::ExternalLinkage, context.symbolPrepend+"PinGet"+id.name, context.module);
+		function = Function::Create(ftype, GlobalValue::ExternalLinkage, context.moduleName+context.symbolPrepend+"PinGet"+id.name, context.module);
 	}
 	else
 	{
-		function = Function::Create(ftype, GlobalValue::PrivateLinkage, context.symbolPrepend+"PinGet"+id.name, context.module);
+		function = Function::Create(ftype, GlobalValue::PrivateLinkage, context.moduleName+context.symbolPrepend+"PinGet"+id.name, context.module);
 	}
 	function->setOnlyReadsMemory();
 	function->setDoesNotThrow();
@@ -3889,9 +3890,10 @@ void CInstance::prePass(CodeGenContext& context)
 	CompilerOptions dummy;
 
 	includefile = new CodeGenContext(&context);
+	includefile->moduleName=ident.name+".";
 	includefile->generateCode(*g_ProgramBlock,dummy);
 
-	context.m_includes[ident.name]=includefile;
+	context.m_includes[ident.name+"."]=includefile;
 }
 
 Value* CInstance::codeGen(CodeGenContext& context)
