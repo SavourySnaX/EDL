@@ -3010,7 +3010,7 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 	{
 		int outCnt=0,inCnt=0,biCnt=0;
 
-		std::cerr << "Connection " << a << std::endl;
+//		std::cerr << "Connection " << a << std::endl;
 	
 		// Do a quick pass to build a list of Inputs and Outputs - Maintaining declaration order (perform some validation as we go)
 		std::vector<CIdentifier*> ins;
@@ -3035,22 +3035,22 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 					switch (var.pinType)
 					{
 						case 0:
-							std::cerr << "Variable : Acts as Output " << ident->name << std::endl;
+//							std::cerr << "Variable : Acts as Output " << ident->name << std::endl;
 							outs.push_back(ident);
 							outCnt++;
 							break;
 						case TOK_IN:
-							std::cerr << "PIN : Acts as Input " << ident->name << std::endl;
+//							std::cerr << "PIN : Acts as Input " << ident->name << std::endl;
 							ins.push_back(ident);
 							inCnt++;
 							break;
 						case TOK_OUT:
-							std::cerr << "PIN : Acts as Output " << ident->name << std::endl;
+//							std::cerr << "PIN : Acts as Output " << ident->name << std::endl;
 							outs.push_back(ident);
 							outCnt++;
 							break;
 						case TOK_BIDIRECTIONAL:
-							std::cerr << "PIN : Acts as Input/Output " << ident->name << std::endl;
+//							std::cerr << "PIN : Acts as Input/Output " << ident->name << std::endl;
 							ins.push_back(ident);
 							outs.push_back(ident);
 							biCnt++;
@@ -3060,7 +3060,7 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 			}
 			else
 			{
-				std::cerr << "Complex Expression : Acts as Output " << std::endl;
+//				std::cerr << "Complex Expression : Acts as Output " << std::endl;
 				outs.push_back((*connects[a])[b]);
 				outCnt++;
 			}
@@ -3087,44 +3087,20 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 			return NULL;
 		}
 
-		std::cerr << "Total Connections : in " << inCnt << " , out " << outCnt << " , bidirect " << biCnt << std::endl;
+//		std::cerr << "Total Connections : in " << inCnt << " , out " << outCnt << " , bidirect " << biCnt << std::endl;
 
-		// Validation in/out done... next combine all outputs into a single bus.. then write bus to all inputs -- currently assuming pullup
-
-		BitVariable busIVar;
-
-		busIVar.size = 1;
-		busIVar.trueSize = 1;
-		busIVar.cnst = APInt(1,0);
-		busIVar.mask = ~busIVar.cnst;
-		busIVar.shft = APInt(1,0);
-		busIVar.aliased = false;
-		busIVar.mappingRef = false;
-		busIVar.pinType=0;
-		busIVar.writeAccessor=NULL;
-		busIVar.writeInput=NULL;
-		busIVar.priorValue=NULL;
-		busIVar.impedance=NULL;
-		busIVar.fromExternal=false;
-
-		busIVar.value=new AllocaInst(Type::getIntNTy(getGlobalContext(),1), "bus_collect", context.currentBlock());
-		busIVar.value->setName("busCombine");
-
-//		context.locals()[std::string("busI_")+a]=temp;		// no need to add to locals
+		Value* last;
 
 		for (size_t o=0;o<outs.size();o++)
 		{
 			Value* tmp = outs[o]->codeGen(context);
 			if (o==0)
 			{
-				CAssignment::generateAssignment(busIVar,ident,tmp,context);
+				last=tmp;
 			}
 			else
 			{
-				Value* t = new LoadInst(busIVar.value,"",context.currentBlock());
-				t= BinaryOperator::Create(Instruction::And,tmp,t,"PullUpCombine",context.currentBlock());
-
-				CAssignment::generateAssignment(busIVar,ident,t,context);
+				last= BinaryOperator::Create(Instruction::And,tmp,last,"PullUpCombine",context.currentBlock());
 			}
 		}
 
@@ -3138,7 +3114,7 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 				context.errorFlagged=true;
 				return NULL;
 			}
-			CAssignment::generateAssignment(var,*ins[i],busIVar.value,context);
+			CAssignment::generateAssignment(var,*ins[i],last,context);
 		}
 	}
 

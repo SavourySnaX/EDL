@@ -11,10 +11,10 @@ clean:
 
 out/test.lls: test.eds
 	mkdir -p out
-	$(EDL) test.eds >out/test.lls
+	$(EDL) -O3 test.eds >out/test.lls
 
 out/test.lls.s: out/test.lls
-	llc out/test.lls
+	llc -O3 out/test.lls
 
 test: test.c out/test.lls.s
 	gcc -g test.c out/test.lls.s -o test.exe

@@ -8,29 +8,12 @@ INSTANCE "rom0.edl" AS R0;
 INSTANCE "rom1.edl" AS R1;
 INSTANCE "reader.edl" AS READER;
 
+# void TEST(uint8_t TEST)
 CONNECT TEST
 {
-	READER PIN__CLK , TEST;			# hack, TEST here indicates the clock input to the function void TEST(int clk)		# 1 hz clock signal (aka nice and slow)
-#	R0 PIN_EN , ~ READER PIN_A[1..1];
-#	R1 PIN_EN , READER PIN_A[1..1];
-#	R0 PIN_A , READER PIN_A[0..0];
-#	R1 PIN_A , READER PIN_A[0..0];
-#	PULLUP R0 PIN_D , R1 PIN_D , READER PIN_D;
+	READER PIN__CLK , TEST;			# Feed clock signal from function input to CLK pin on READER
+	R0 PIN_EN , READER PIN_A[1..1];		# Feed Enable signal for rom based on stepped address of READER
+	R1 PIN_EN , READER PIN_A[0..0];
+	PULLUP R0 PIN_D , R1 PIN_D , READER PIN_D;	# Connect Data bus
 }
 
-# impl
-#
-#     peR TICK      
-#
-#		READER.PIN__CLK <- CLKVAL;
-#		R0.PIN_A <- READER.PIN_A[0..0];
-#		R1.PIN_A <- READER.PIN_A[0..0];
-#		R0.PIN_EN <- ~ READER.PIN_A[1..1];
-#		R1.PIN_EN <- READER.PIN_A[1..1];
-# 		READER.PIN_D <- (R0.PIN_D | R0.PIN_D_HZ) & (R1.PIN_D | R1.PIN_D_HZ);	# ASSUMES D_HZ is 1 when high impedance
-# 
-#
-#
-#
-#
-#
