@@ -1,0 +1,19 @@
+
+# Testing HIGH_IMPEDANCE implementation
+
+PIN IN			PIN_A[1];			# Address Bus
+PIN BIDIRECTIONAL	PIN_D[1];			# Data Bus
+
+DECLARE INTERNAL	INC[1];
+
+HANDLER PIN_A		TRANSITION(0,1)
+{
+	PIN_D<-HIGH_IMPEDANCE;
+}
+
+HANDLER PIN_A		TRANSITION(1,0)
+{
+	PIN_D<-INC;
+
+	INC<-INC+1;
+}

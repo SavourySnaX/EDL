@@ -1,0 +1,20 @@
+
+# 1 Bit Fake Rom - returns address as data
+
+# PINS 
+
+PIN IN			PIN_A[1];			# Address Bus
+PIN BIDIRECTIONAL	PIN_D[1];			# Data Bus
+PIN IN			PIN_EN[1];			# Enable chip signal (when EN is low, D goes to high impedance)
+
+HANDLER PIN_A		ALWAYS
+{
+	IF PIN_EN
+	{
+		PIN_D<-PIN_A;
+	}
+	IF ~PIN_EN
+	{
+		PIN_D<-HIGH_IMPEDANCE;
+	}
+}

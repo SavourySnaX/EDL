@@ -1249,7 +1249,20 @@ Value* CRotationOperator::codeGen(CodeGenContext& context)
 	return value.codeGen(context);
 }
 
+Value* CAssignment::generateImpedanceAssignment(BitVariable& to,llvm::Value* assignTo,CodeGenContext& context)
+{
+	ConstantInt* impedance = ConstantInt::get(getGlobalContext(), ~APInt(to.size.getLimitedValue(), StringRef("0"), 10));
+
+	return new StoreInst(impedance, assignTo, false, context.currentBlock());
+}
+
 Value* CAssignment::generateAssignment(BitVariable& to,const CIdentifier& toIdent, Value* from,CodeGenContext& context)
+{
+	return generateAssignmentActual(to,toIdent,from,context,true);
+}
+
+
+Value* CAssignment::generateAssignmentActual(BitVariable& to,const CIdentifier& toIdent, Value* from,CodeGenContext& context,bool clearImpedance)
 {
 	Value* assignTo;
 
@@ -1359,6 +1372,11 @@ Value* CAssignment::generateAssignment(BitVariable& to,const CIdentifier& toIden
 	}
 	else
 	{
+		if (to.impedance && clearImpedance)	// clear impedance
+		{
+			ConstantInt* impedance = ConstantInt::get(getGlobalContext(), APInt(to.size.getLimitedValue(), StringRef("0"), 10));
+			new StoreInst(impedance, to.impedance, false, context.currentBlock());
+		}
 		return new StoreInst(final, assignTo, false, context.currentBlock());
 	}
 }
@@ -1384,6 +1402,18 @@ Value* CAssignment::codeGen(CodeGenContext& context)
 		return NULL;
 	}
 
+	if (rhs.IsImpedance())
+	{
+		// special case, impedance uses hidden bit variable (which is only accessed during bus muxing)	- Going to need a few fixups to support this
+		if (var.pinType!=TOK_BIDIRECTIONAL)
+		{
+			std::cerr << "HIGH_IMPEDANCE only makes sense for BIDIRECTIONAL pins!";
+			context.errorFlagged=true;
+			return NULL;
+		}
+
+		return CAssignment::generateImpedanceAssignment(var,var.impedance,context);
+	}
 	assignWith = rhs.codeGen(context);
 
 	return CAssignment::generateAssignment(var,lhs,assignWith,context);
@@ -1792,7 +1822,7 @@ Value* CStateDefinition::codeGen(CodeGenContext& context)
 }
 
 
-void CVariableDeclaration::CreateWriteAccessor(CodeGenContext& context,BitVariable& var,const std::string& moduleName,const std::string& name)
+void CVariableDeclaration::CreateWriteAccessor(CodeGenContext& context,BitVariable& var,const std::string& moduleName,const std::string& name,bool impedance)
 {
 	vector<Type*> argTypes;
 	argTypes.push_back(IntegerType::get(getGlobalContext(), var.size.getLimitedValue()));
@@ -1817,7 +1847,16 @@ void CVariableDeclaration::CreateWriteAccessor(CodeGenContext& context,BitVariab
 	setVal->setName("InputVal");
 
 	LoadInst* load=new LoadInst(var.value,"",false,bblock);
-	Value* stor=CAssignment::generateAssignment(var,id/*moduleName, name*/,setVal,context);
+
+    if (impedance)
+	{
+		LoadInst* loadImp = new LoadInst(var.impedance,"",false,bblock);
+		CmpInst* check=CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_EQ,loadImp,ConstantInt::get(getGlobalContext(),APInt(var.size.getLimitedValue(),0)),"impedance",bblock);
+
+		setVal = SelectInst::Create(check,setVal,load,"impOrReal",bblock);
+	}
+
+	Value* stor=CAssignment::generateAssignmentActual(var,id/*moduleName, name*/,setVal,context,false);		// we shouldn't clear impedance on write via pin (instead should ignore write if impedance is set)
 
 	var.priorValue=load;
 	var.writeInput=setVal;
@@ -1827,12 +1866,12 @@ void CVariableDeclaration::CreateWriteAccessor(CodeGenContext& context,BitVariab
 	context.popBlock();
 }
 
-void CVariableDeclaration::CreateReadAccessor(CodeGenContext& context,BitVariable& var)
+void CVariableDeclaration::CreateReadAccessor(CodeGenContext& context,BitVariable& var,bool impedance)
 {
 	vector<Type*> argTypes;
 	FunctionType *ftype = FunctionType::get(IntegerType::get(getGlobalContext(), var.size.getLimitedValue()),argTypes, false);
 	Function* function;
-       	if (context.isRoot)
+    if (context.isRoot)
 	{
 		function = Function::Create(ftype, GlobalValue::ExternalLinkage, context.symbolPrepend+"PinGet"+id.name, context.module);
 	}
@@ -1845,7 +1884,14 @@ void CVariableDeclaration::CreateReadAccessor(CodeGenContext& context,BitVariabl
 
 	BasicBlock *bblock = BasicBlock::Create(getGlobalContext(), "entry", function, 0);
 
-	LoadInst* load = new LoadInst(var.value,"",false,bblock);
+	Value* load = new LoadInst(var.value,"",false,bblock);
+    if (impedance)
+	{
+		LoadInst* loadImp = new LoadInst(var.impedance,"",false,bblock);
+		CmpInst* check=CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_EQ,loadImp,ConstantInt::get(getGlobalContext(),APInt(var.size.getLimitedValue(),0)),"impedance",bblock);
+
+		load = SelectInst::Create(check,load,loadImp,"impOrReal",bblock);
+	}
 
 	ReturnInst::Create(getGlobalContext(),load,bblock);
 }
@@ -1871,6 +1917,7 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 	temp.writeAccessor=NULL;
 	temp.writeInput=NULL;
 	temp.priorValue=NULL;
+	temp.impedance=NULL;
 	temp.fromExternal=false;
 
 	if (context.currentBlock())
@@ -1914,14 +1961,20 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 			switch (pinType)
 			{
 				case TOK_IN:
-					CreateWriteAccessor(context,temp,id.module,id.name);
+					CreateWriteAccessor(context,temp,id.module,id.name,false);
 					break;
 				case TOK_OUT:
-					CreateReadAccessor(context,temp);
+					CreateReadAccessor(context,temp,false);
 					break;
 				case TOK_BIDIRECTIONAL:
-					CreateWriteAccessor(context,temp,id.module,id.name);
-					CreateReadAccessor(context,temp);
+
+					// In the future we should try to detect if a pin uses impedance and avoid the additional overhead
+
+					// we also need a new variable to hold the impedance mask
+					temp.impedance=new GlobalVariable(*context.module,Type::getIntNTy(getGlobalContext(),size.integer.getLimitedValue()), false, GlobalValue::PrivateLinkage,NULL,context.symbolPrepend+id.name+".HZ");
+
+					CreateWriteAccessor(context,temp,id.module,id.name,true);
+					CreateReadAccessor(context,temp,true);
 					break;
 				default:
 					std::cerr << "Unhandled pin type" << std::endl;
@@ -2089,6 +2142,10 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 			if (initialiserList.empty())
 			{
 				cast<GlobalVariable>(temp.value)->setInitializer(const_intn_0);
+				if (temp.impedance)
+				{
+					cast<GlobalVariable>(temp.impedance)->setInitializer(const_intn_0);
+				}
 			}
 			else
 			{
@@ -2683,6 +2740,7 @@ void COperandIdent::DeclareLocal(CodeGenContext& context,unsigned num)
 	temp.writeAccessor=NULL;
 	temp.writeInput=NULL;
 	temp.priorValue=NULL;
+	temp.impedance=NULL;
 
 	AllocaInst *alloc = new AllocaInst(Type::getIntNTy(getGlobalContext(),size.integer.getLimitedValue()), ident.name.c_str(), context.currentBlock());
 	temp.value = alloc;
@@ -2891,6 +2949,200 @@ Value* CMappingDeclaration::codeGen(CodeGenContext& context)
 	context.m_mappings[ident.name]=this;
 
 	return NULL;
+}
+
+void CConnectDeclaration::prePass(CodeGenContext& context)
+{
+
+}
+
+Value* CConnectDeclaration::codeGen(CodeGenContext& context)
+{
+  	std::vector<Type*> FuncTy_8_args;
+	FunctionType* FuncTy_8;
+	Function* func = NULL;
+
+	// 1 argument at present, same as the ident - contains a single bit
+	FuncTy_8_args.push_back(IntegerType::get(getGlobalContext(), 1));
+
+	FuncTy_8 = FunctionType::get(Type::getVoidTy(getGlobalContext()),FuncTy_8_args,false);
+
+	func=Function::Create(FuncTy_8,GlobalValue::ExternalLinkage,context.symbolPrepend+ident.name,context.module);
+	func->setCallingConv(CallingConv::C);
+	func->setDoesNotThrow();
+	
+	context.m_externFunctions[ident.name] = func;
+
+	BasicBlock *bblock = BasicBlock::Create(getGlobalContext(), "entry", func, 0);
+	
+	context.pushBlock(bblock);
+
+	Function::arg_iterator args = func->arg_begin();
+	while (args!=func->arg_end())
+	{
+		BitVariable temp;
+
+		temp.size = 1;
+		temp.trueSize = 1;
+		temp.cnst = APInt(1,0);
+		temp.mask = ~temp.cnst;
+		temp.shft = APInt(1,0);
+		temp.aliased = false;
+		temp.mappingRef = false;
+		temp.pinType=0;
+		temp.writeAccessor=NULL;
+		temp.writeInput=NULL;
+		temp.priorValue=NULL;
+		temp.impedance=NULL;
+		temp.fromExternal=false;
+
+		temp.value=args;
+		temp.value->setName(ident.name);
+		context.locals()[ident.name]=temp;
+		args++;
+	}
+
+	for (size_t a=0;a<connects.size();a++)
+	{
+		int outCnt=0,inCnt=0,biCnt=0;
+
+		std::cerr << "Connection " << a << std::endl;
+	
+		// Do a quick pass to build a list of Inputs and Outputs - Maintaining declaration order (perform some validation as we go)
+		std::vector<CIdentifier*> ins;
+		std::vector<CExpression*> outs;
+
+		for (size_t b=0;b<connects[a]->size();b++)
+		{
+			if ((*connects[a])[b]->IsIdentifierExpression())
+			{
+				CIdentifier* ident = (CIdentifier*)(*connects[a])[b];
+
+				BitVariable var;
+				
+				if (!context.LookupBitVariable(var,ident->module,ident->name))
+				{
+					std::cerr << "Unknown Ident : " << ident->name << std::endl;
+					context.errorFlagged=true;
+					return NULL;
+				}
+				else
+				{
+					switch (var.pinType)
+					{
+						case 0:
+							std::cerr << "Variable : Acts as Output " << ident->name << std::endl;
+							outs.push_back(ident);
+							outCnt++;
+							break;
+						case TOK_IN:
+							std::cerr << "PIN : Acts as Input " << ident->name << std::endl;
+							ins.push_back(ident);
+							inCnt++;
+							break;
+						case TOK_OUT:
+							std::cerr << "PIN : Acts as Output " << ident->name << std::endl;
+							outs.push_back(ident);
+							outCnt++;
+							break;
+						case TOK_BIDIRECTIONAL:
+							std::cerr << "PIN : Acts as Input/Output " << ident->name << std::endl;
+							ins.push_back(ident);
+							outs.push_back(ident);
+							biCnt++;
+							break;
+					}
+				}
+			}
+			else
+			{
+				std::cerr << "Complex Expression : Acts as Output " << std::endl;
+				outs.push_back((*connects[a])[b]);
+				outCnt++;
+			}
+		}
+
+		if (outCnt==0 && inCnt==0 && biCnt==0)
+		{
+			std::cerr << "No possible routing! - no connections" << std::endl;
+			context.errorFlagged=true;
+			return NULL;
+		}
+
+		if (outCnt==0 && inCnt>0 && biCnt==0)
+		{
+			std::cerr << "No possible routing! - all connections are input" << std::endl;
+			context.errorFlagged=true;
+			return NULL;
+		}
+
+		if (outCnt>0 && inCnt==0 && biCnt==0)
+		{
+			std::cerr << "No possible routing! - all connections are output" << std::endl;
+			context.errorFlagged=true;
+			return NULL;
+		}
+
+		std::cerr << "Total Connections : in " << inCnt << " , out " << outCnt << " , bidirect " << biCnt << std::endl;
+
+		// Validation in/out done... next combine all outputs into a single bus.. then write bus to all inputs -- currently assuming pullup
+
+		BitVariable busIVar;
+
+		busIVar.size = 1;
+		busIVar.trueSize = 1;
+		busIVar.cnst = APInt(1,0);
+		busIVar.mask = ~busIVar.cnst;
+		busIVar.shft = APInt(1,0);
+		busIVar.aliased = false;
+		busIVar.mappingRef = false;
+		busIVar.pinType=0;
+		busIVar.writeAccessor=NULL;
+		busIVar.writeInput=NULL;
+		busIVar.priorValue=NULL;
+		busIVar.impedance=NULL;
+		busIVar.fromExternal=false;
+
+		busIVar.value=new AllocaInst(Type::getIntNTy(getGlobalContext(),1), "bus_collect", context.currentBlock());
+		busIVar.value->setName("busCombine");
+
+//		context.locals()[std::string("busI_")+a]=temp;		// no need to add to locals
+
+		for (size_t o=0;o<outs.size();o++)
+		{
+			Value* tmp = outs[o]->codeGen(context);
+			if (o==0)
+			{
+				CAssignment::generateAssignment(busIVar,ident,tmp,context);
+			}
+			else
+			{
+				Value* t = new LoadInst(busIVar.value,"",context.currentBlock());
+				t= BinaryOperator::Create(Instruction::And,tmp,t,"PullUpCombine",context.currentBlock());
+
+				CAssignment::generateAssignment(busIVar,ident,t,context);
+			}
+		}
+
+		for (size_t i=0;i<ins.size();i++)
+		{
+			BitVariable var;
+
+			if (!context.LookupBitVariable(var,ins[i]->module,ins[i]->name))
+			{
+				std::cerr << "Failed to retrieve variable" << std::endl;
+				context.errorFlagged=true;
+				return NULL;
+			}
+			CAssignment::generateAssignment(var,*ins[i],busIVar.value,context);
+		}
+	}
+
+	ReturnInst::Create(getGlobalContext(), context.currentBlock());			/* block may well have changed by time we reach here */
+
+	context.popBlock();
+
+	return func;
 }
 
 CInteger CAffect::emptyParam(stringZero);
@@ -3551,6 +3803,7 @@ Value* CFunctionDecl::codeGen(CodeGenContext& context)
 		returnVal.writeAccessor=NULL;
 		returnVal.writeInput=NULL;
 		returnVal.priorValue=NULL;
+		returnVal.impedance=NULL;
 
 		AllocaInst *alloc = new AllocaInst(Type::getIntNTy(getGlobalContext(),returns[0]->size.integer.getLimitedValue()), returns[0]->id.name.c_str(), context.currentBlock());
 		returnVal.value = alloc;
@@ -3573,6 +3826,7 @@ Value* CFunctionDecl::codeGen(CodeGenContext& context)
 		temp.writeAccessor=NULL;
 		temp.writeInput=NULL;
 		temp.priorValue=NULL;
+		temp.impedance=NULL;
 
 		temp.value=args;
 		temp.value->setName(params[a]->id.name);

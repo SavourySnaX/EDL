@@ -43,6 +43,7 @@
 	std::vector<CAffect*> *affectvec;
 	std::vector<CInteger*> *externparams;
 	std::vector<CExpression*> *params;
+	std::vector<std::vector<CExpression*> *> *connectvec;
 	std::vector<CParamDecl*> *namedParams;
 	std::string *string;
 	int token;
@@ -62,11 +63,12 @@
 %token <token> TOK_DOT TOK_AT TOK_AMP TOK_TILDE TOK_DDOT TOK_CMPNEQ TOK_HAT TOK_MUL TOK_DIV TOK_MOD	/* Operators/Seperators */
 %token <token> TOK_SDIV TOK_SMOD									/* Operators/Seperators */
 %token <token> TOK_CMPLESSEQ TOK_CMPLESS TOK_CMPGREATEREQ TOK_CMPGREATER TOK_INDEXOPEN TOK_INDEXCLOSE	/* Operators/Seperators */
+%token <token>	TOK_CONNECT TOK_CLOCK_GEN TOK_PULLUP TOK_HIGH_IMPEDANCE					/* Reserved words schematic */
 
 %type <namedParams> named_params_list named_return
 %type <trigger> trigger
 %type <token> pin_type
-%type <params> params
+%type <params> params connect_params connect
 %type <externparams> params_list return_val var_inits
 %type <affect> affector
 %type <mapping> mapping
@@ -85,9 +87,11 @@
 %type <mappingvec> mappingList
 %type <affectvec> affectors
 %type <staterefvec> state_ident_list
+%type <connectvec> connect_list
+
 /* %type <exprvec> call_args */
 %type <block> program block stmts 
-%type <stmt> stmt var_decl handler_decl state_decl states_decl state_def alias_decl ifblock debug instruction_decl mapping_decl extern_c_decl function_decl
+%type <stmt> stmt var_decl handler_decl state_decl states_decl state_def alias_decl ifblock debug instruction_decl mapping_decl extern_c_decl function_decl connect_decl
 
 %right TOK_ASSIGNRIGHT
 %left TOK_ASSIGNLEFT
@@ -118,6 +122,7 @@ stmt : TOK_INSTANCE quoted TOK_AS ident TOK_EOS { $$ = new CInstance(*$2,*$4); }
      | states_decl
      | state_def
      | handler_decl
+     | connect_decl
      | function_decl
      | extern_c_decl
      | instruction_decl
@@ -186,6 +191,22 @@ trigger: TOK_ALWAYS 							{ $$ = new CTrigger(TOK_ALWAYS); }
        | TOK_CHANGED							{ $$ = new CTrigger(TOK_CHANGED); }
        | TOK_TRANSITION TOK_OBR numeric TOK_COMMA numeric TOK_CBR	{ $$ = new CTrigger(TOK_TRANSITION,*$3,*$5); }
        ;
+
+/*	| connect_list TOK_COMMA TOK_CLOCK_GEN TOK_OBR numeric TOK_CBR	{ $$->push_back(new CClock(numeric)); }*/
+
+connect_params : connect_params TOK_COMMA expr				{ $$->push_back($3); }
+	| expr								{ $$ = new ParamsList(); $$->push_back($1); }
+	;
+
+connect : connect_params TOK_EOS				{ $$=$1; }
+	| TOK_PULLUP connect_params TOK_EOS			{ $$=$2; }		/* TODO - PULLUP is presently simply assumed! */
+	;
+
+connect_list : connect_list connect				{ $$->push_back($2); }
+	| connect			{ $$ = new ConnectList(); $$->push_back($1); }
+	;
+
+connect_decl : TOK_CONNECT ident TOK_LBRACE connect_list TOK_RBRACE	{ $$ = new CConnectDeclaration(*$2,*$4); }
 
 handler_decl : TOK_HANDLER ident trigger block	{ $$ = new CHandlerDeclaration(*$2,*$3,*$4); }
 
@@ -308,6 +329,7 @@ expr : ident_ref TOK_ASSIGNLEFT expr { $$ = new CAssignment(*$<ident>1,*$3); }
      | TOK_AFFECT affectors TOK_LBRACE expr TOK_RBRACE { $$ = new CAffector(*$2,*$4); }
      | ident_ref { $<ident>$ = $1; }
      | numeric { $$ = new CInteger(*$1); delete $1; }
+     | TOK_HIGH_IMPEDANCE { $$ = new CHighImpedance(); }
      | TOK_OBR expr TOK_CBR { $$ = $2; }
 	;
 

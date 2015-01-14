@@ -42,6 +42,13 @@ ALWAYS					{ return TOKEN(TOK_ALWAYS); }
 CHANGED					{ return TOKEN(TOK_CHANGED); }
 TRANSITION				{ return TOKEN(TOK_TRANSITION); }
 
+
+CONNECT					{ return TOKEN(TOK_CONNECT); }
+CLOCK_GEN				{ return TOKEN(TOK_CLOCK_GEN); }
+PULLUP					{ return TOKEN(TOK_PULLUP); }
+HIGH_IMPEDANCE				{ return TOKEN(TOK_HIGH_IMPEDANCE); }
+
+
 INTERNAL				{ return TOKEN(TOK_INTERNAL); }
 
 ZERO					{ return TOKEN(TOK_ZERO); }

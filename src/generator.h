@@ -51,6 +51,7 @@ public:
 	Instruction**	writeAccessor;
 	Value*		writeInput;
 	Value*		priorValue;
+	Value*		impedance;
 };
 
 class StateVariable

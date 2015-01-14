@@ -41,6 +41,7 @@ typedef std::vector<CAffect*> AffectorList;
 typedef std::vector<CInteger*> ExternParamsList;
 typedef std::vector<CExpression*> ParamsList;
 typedef std::vector<CParamDecl*> NamedParamsList;
+typedef std::vector<std::vector<CExpression*> *> ConnectList;
 
 class CNode {
 public:
@@ -55,6 +56,7 @@ public:
 	virtual bool IsLeaf() { return true; }
 	virtual bool IsIdentifierExpression() { return false; }
 	virtual bool IsCarryExpression() { return false; }
+	virtual bool IsImpedance() { return false; }
 };
 
 class CStatement : public CNode {
@@ -82,6 +84,16 @@ public:
 	}
 
 	virtual llvm::Value* codeGen(CodeGenContext& context);
+};
+
+class CHighImpedance : public CExpression {
+public:
+
+	CHighImpedance(){};
+	
+	virtual bool IsImpedance() { return true; }
+
+	virtual llvm::Value* codeGen(CodeGenContext& context) { return NULL; } 
 };
 
 class CBaseIdentifier : public CExpression
@@ -258,6 +270,8 @@ public:
 	virtual bool IsAssignmentExpression() { return true; }
 
 	static llvm::Value* generateAssignment(BitVariable& to,const CIdentifier& identTo,llvm::Value* from,CodeGenContext& context);
+	static llvm::Value* generateAssignmentActual(BitVariable& to,const CIdentifier& identTo,llvm::Value* from,CodeGenContext& context,bool clearImpedance);
+	static llvm::Value* generateImpedanceAssignment(BitVariable& to,llvm::Value* assignTo,CodeGenContext& context);
 };
 
 class CBlock : public CExpression {
@@ -353,8 +367,8 @@ public:
 	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 
-	void CreateWriteAccessor(CodeGenContext& context,BitVariable& var,const std::string& moduleName, const std::string& name);
-	void CreateReadAccessor(CodeGenContext& context,BitVariable& var);
+	void CreateWriteAccessor(CodeGenContext& context,BitVariable& var,const std::string& moduleName, const std::string& name,bool impedance);
+	void CreateReadAccessor(CodeGenContext& context,BitVariable& var,bool impedance);
 };
 
 class CAliasDeclaration : public CStatement {
@@ -484,6 +498,18 @@ public:
 	CStatesDeclaration* child;
 	CHandlerDeclaration(const CIdentifier& id, CTrigger& trigger,CBlock& block) :
 		id(id), trigger(trigger),block(block) { }
+	virtual void prePass(CodeGenContext& context);
+	virtual llvm::Value* codeGen(CodeGenContext& context);
+};
+
+class CConnectDeclaration : public CStatement {
+public:
+	ConnectList connects;
+	const CIdentifier& ident;
+
+	CConnectDeclaration(const CIdentifier& ident, ConnectList& connects) :
+		connects(connects), ident(ident) { }
+	
 	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
