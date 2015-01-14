@@ -2031,6 +2031,7 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 			alias.writeAccessor=temp.writeAccessor;
 			alias.writeInput=temp.writeInput;
 			alias.priorValue=temp.priorValue;
+			alias.fromExternal=false;
 			alias.impedance=NULL;
 
 			APInt newMask = ~APInt(aliases[a]->sizeOrValue.integer.getLimitedValue(),0);
