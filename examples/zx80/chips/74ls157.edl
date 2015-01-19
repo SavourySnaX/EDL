@@ -1,0 +1,48 @@
+#
+# Quad 2-Line to 1-Line Selector
+#
+
+PIN IN			A[4];
+PIN IN			B[4];
+PIN OUT			Y[4];
+PIN IN			SELECT[1];
+PIN IN			STROBE[1];
+
+FUNCTION INTERNAL	UpdateY
+{
+	IF ~STROBE
+	{
+		IF SELECT
+		{
+			Y<-A;
+		}
+		IF ~SELECT
+		{
+			Y<-B;
+		}
+	}
+	IF STROBE
+	{
+		Y<-0;
+	}
+}
+
+HANDLER SELECT	ALWAYS
+{
+	CALL UpdateY();
+}
+
+HANDLER STROBE	ALWAYS
+{
+	CALL UpdateY();
+}
+
+HANDLER A ALWAYS
+{
+	CALL UpdateY();
+}
+
+HANDLER B ALWAYS
+{
+	CALL UpdateY();
+}

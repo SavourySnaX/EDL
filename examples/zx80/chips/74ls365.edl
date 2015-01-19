@@ -1,0 +1,36 @@
+#
+# HEX 3-STATE Buffer
+#
+
+PIN IN			D[6];
+PIN BIDIRECTIONAL	O[4];	# 3 state output not presently supported
+PIN IN			_E1[1];
+PIN IN			_E2[1];
+
+FUNCTION INTERNAL	UpdateO
+{
+	IF ~(_E1 | _E2)
+	{
+		O<-D;
+	}
+	IF (_E1 | _E2)
+	{
+		O<-HIGH_IMPEDANCE;
+	}
+}
+
+HANDLER D	ALWAYS
+{
+	CALL UpdateO();
+}
+
+HANDLER _E1	ALWAYS
+{
+	CALL UpdateO();
+}
+
+HANDLER _E2 ALWAYS
+{
+	CALL UpdateO();
+}
+

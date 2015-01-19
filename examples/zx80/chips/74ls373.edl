@@ -1,0 +1,39 @@
+#
+# Octal Transparent Latch
+#
+
+PIN IN			D[8];
+PIN BIDIRECTIONAL	O[8];		# Really its OUT 3 state, but I haven't implemented that yet
+PIN IN			LE[1];
+PIN IN			OE[1];
+
+FUNCTION INTERNAL	UpdateO
+{
+	IF OE
+	{
+		IF LE
+		{
+			O<-D;
+		}
+	}
+	IF ~OE
+	{
+		O<-HIGH_IMPEDANCE;
+	}
+}
+
+HANDLER LE	ALWAYS
+{
+	CALL UpdateO();
+}
+
+HANDLER OE	ALWAYS
+{
+	CALL UpdateO();
+}
+
+HANDLER D ALWAYS
+{
+	CALL UpdateO();
+}
+

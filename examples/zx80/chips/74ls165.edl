@@ -1,0 +1,35 @@
+#
+# Parallel Load 8 Bit Shift Register
+#
+
+PIN IN			D[8];		# HGFEDBCA
+PIN OUT			QH[1];
+PIN OUT			_QH[1];
+PIN IN			SER[1];
+PIN IN			SH_LD[1];
+PIN IN			CLK[1];
+PIN IN			CLKIN[1];
+
+DECLARE INTERNAL	ShiftRegister[8];	
+
+HANDLER SH_LD	ALWAYS
+{
+	IF ~SH_LD
+	{
+		ShiftRegister<-D;
+		QH<-ShiftRegister[7..7];
+		_QH<-~ShiftRegister[7..7];
+	}
+}
+
+HANDLER CLK	TRANSITION(0,1)
+{
+	IF SH_LD & ~CLKIN
+	{
+		DECLARE C[1];
+		ShiftRegister<-ROL(1,C,ShiftRegister,SER);
+		QH<-ShiftRegister[7..7];
+		_QH<-~ShiftRegister[7..7];
+	}
+}
+

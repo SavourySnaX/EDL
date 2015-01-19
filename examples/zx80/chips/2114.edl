@@ -1,0 +1,28 @@
+#
+# 1024x4 Static RAM
+#
+
+PIN IN			A[10];
+PIN BIDIRECTIONAL	D[4];
+PIN IN			_CS[1];
+PIN IN			_WE[1];
+
+
+DECLARE INTERNAL ram[[10]][4];
+
+HANDLER _CS	TRANSITION(0,1)
+{
+	D<-HIGH_IMPEDANCE;
+}
+
+HANDLER _WE	ALWAYS
+{
+	IF _WE & ~_CS
+	{
+		D<-ram[[A]];
+	}
+	IF ~_WE
+	{
+		ram[[A]]<-D;
+	}
+}
