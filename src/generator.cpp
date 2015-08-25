@@ -6,7 +6,7 @@
 #include "llvm/Pass.h"
 #include "llvm/IR/Function.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Support/InstIterator.h"
+#include "llvm/IR/InstIterator.h"
 
 using namespace llvm;
 
@@ -429,7 +429,7 @@ void CodeGenContext::generateCode(CBlock& root,CompilerOptions &options)
 		if (opts.optimisationLevel>0)
 		{
 			// Add an appropriate TargetData instance for this module...
-			pm.add(new DataLayout(*ee->getDataLayout()));
+			pm.add(new DataLayoutPass(*ee->getDataLayout()));
 
 			for (int a=0;a<2;a++)		// We add things twice, as the statereferencesquasher will make more improvements once inlining has happened
 			{
@@ -546,7 +546,7 @@ void CodeGenContext::generateCode(CBlock& root,CompilerOptions &options)
 				pm.add(createVerifierPass());
 			}
 		}
-		pm.add(createPrintModulePass(&outs()));
+		pm.add(createPrintModulePass(outs()));
 
 		pm.run(*module);
 	}
@@ -1611,7 +1611,7 @@ Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 	}
 
 	int totalStates;
-	Twine numStatesTwine;
+	Twine numStatesTwine(totalStates);
 	std::string numStates;
 	APInt overSized;
 	unsigned bitsNeeded;
@@ -1625,7 +1625,6 @@ Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 	if (TopMostState)
 	{
 		totalStates = GetNumStates(this);
-		numStatesTwine=Twine(totalStates);
 		numStates = numStatesTwine.str();
 		overSized=APInt(4*numStates.length(),numStates,10);
 		bitsNeeded = overSized.getActiveBits();
@@ -1675,7 +1674,6 @@ Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 		nxtState=topState.nextState;
 
 		totalStates = GetNumStates(topState.decl);
-		numStatesTwine=Twine(totalStates);
 		numStates = numStatesTwine.str();
 		overSized=APInt(4*numStates.length(),numStates,10);
 		bitsNeeded = overSized.getActiveBits();
