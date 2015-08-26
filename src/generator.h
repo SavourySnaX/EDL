@@ -16,8 +16,10 @@
 #include <llvm/IR/IRBuilder.h>
 //#include <llvm/ModuleProvider.h>
 #include <llvm/Support/TargetSelect.h>
-#include <llvm/ExecutionEngine/GenericValue.h>
-#include <llvm/ExecutionEngine/JIT.h>
+//#include <llvm/ExecutionEngine/GenericValue.h>
+#include <llvm/ExecutionEngine/ExecutionEngine.h>
+#include <llvm/ExecutionEngine/SectionMemoryManager.h>
+#include <llvm/ExecutionEngine/MCJIT.h>
 #include <llvm/Support/raw_ostream.h>
 
 using namespace llvm;
@@ -160,7 +162,7 @@ public:
     CompilerOptions opts;
 
     void generateCode(CBlock& root,CompilerOptions &opts);
-    GenericValue runCode();
+   // GenericValue runCode();
     std::map<std::string, BitVariable>& locals() { return blocks.top()->locals; }
     std::map<std::string, BitVariable>& globals() { return m_globals; }
     std::map<std::string, StateVariable>& states() { return m_states; }

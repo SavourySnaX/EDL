@@ -114,7 +114,6 @@ int main(int argc, char **argv)
 	
 	CodeGenContext rootContext(NULL);
 	rootContext.generateCode(*g_ProgramBlock,opts);
-	rootContext.runCode();
 
 	if (rootContext.errorFlagged)
 	{

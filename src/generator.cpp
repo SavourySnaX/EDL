@@ -283,8 +283,16 @@ CodeGenContext::CodeGenContext(CodeGenContext* parent)
 	if (!parent) 
 	{ 
 		std::string err;
-		module = new Module("root",getGlobalContext()); 
-		ee = EngineBuilder(module).setErrorStr(&err).create();
+//		module = new Module("root",getGlobalContext()); 
+
+		std::unique_ptr<Module> Owner = make_unique<Module>("root", getGlobalContext());
+		module = Owner.get();
+		ee = EngineBuilder(std::move(Owner)).setErrorStr(&err).setMCJITMemoryManager(llvm::make_unique<SectionMemoryManager>()).create();
+		if (!ee)
+		{
+			std::cerr << err << std::endl;
+			exit(1);
+		}
 		isRoot=true; 
 	}
 	else
@@ -429,7 +437,8 @@ void CodeGenContext::generateCode(CBlock& root,CompilerOptions &options)
 		if (opts.optimisationLevel>0)
 		{
 			// Add an appropriate TargetData instance for this module...
-			pm.add(new DataLayoutPass(*ee->getDataLayout()));
+			module->setDataLayout(ee->getDataLayout());
+			pm.add(new DataLayoutPass());
 
 			for (int a=0;a<2;a++)		// We add things twice, as the statereferencesquasher will make more improvements once inlining has happened
 			{
@@ -553,12 +562,12 @@ void CodeGenContext::generateCode(CBlock& root,CompilerOptions &options)
 }
 
 /* Executes the AST by running the main function */
-GenericValue CodeGenContext::runCode() 
+/*GenericValue CodeGenContext::runCode() 
 {
 	GenericValue v;
 
 	return v;
-}
+}*/
 
 /* -- Code Generation -- */
 
@@ -1611,7 +1620,6 @@ Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 	}
 
 	int totalStates;
-	Twine numStatesTwine(totalStates);
 	std::string numStates;
 	APInt overSized;
 	unsigned bitsNeeded;
@@ -1625,6 +1633,7 @@ Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 	if (TopMostState)
 	{
 		totalStates = GetNumStates(this);
+		Twine numStatesTwine(totalStates);
 		numStates = numStatesTwine.str();
 		overSized=APInt(4*numStates.length(),numStates,10);
 		bitsNeeded = overSized.getActiveBits();
@@ -1674,6 +1683,7 @@ Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 		nxtState=topState.nextState;
 
 		totalStates = GetNumStates(topState.decl);
+		Twine numStatesTwine(totalStates);
 		numStates = numStatesTwine.str();
 		overSized=APInt(4*numStates.length(),numStates,10);
 		bitsNeeded = overSized.getActiveBits();
