@@ -17,4 +17,4 @@ out/states.lls.s: out/states.lls
 
 test: test.c out/states.lls.s
 	gcc -g test.c out/states.lls.s -o test.exe
-	test.exe | tee test.result
+	./test.exe | tee test.result

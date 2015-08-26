@@ -22,6 +22,9 @@ void PinSetPIN_READY(uint8_t);
 void PinSetPIN_RESET(uint8_t);
 uint8_t PinGetPIN_SYNC();
 uint8_t PinGetPIN__WR();
+void PinSetO1(uint8_t);
+void PinSetO2(uint8_t);
+void PinSetRESET(uint8_t);
 
 extern uint16_t SP;
 extern uint16_t PC;

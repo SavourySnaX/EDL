@@ -18,7 +18,7 @@ out/test.lls.s: out/test.lls
 
 test: test.c out/test.lls.s
 	gcc -g test.c out/test.lls.s -o test.exe
-	test.exe | tee test.result
+	./test.exe | tee test.result
 
 out/simple.lls: simple.edl
 	mkdir -p out
@@ -30,5 +30,5 @@ out/simple.lls.s: out/simple.lls
 
 simple: simple.c out/simple.lls.s
 	gcc -g simple.c out/simple.lls.s -o simple.exe
-	simple.exe
+	./simple.exe
 

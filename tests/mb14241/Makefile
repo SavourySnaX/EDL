@@ -17,4 +17,4 @@ out/mb14241.lls.s: out/mb14241.lls
 
 test: test.c out/mb14241.lls.s
 	gcc -g test.c out/mb14241.lls.s -o test.exe
-	test.exe | tee test.result
+	./test.exe | tee test.result

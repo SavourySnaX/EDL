@@ -25,9 +25,9 @@ out/step8080.lls.s: out/step8080.lls
 
 test: testHarness.c out/pin8080.lls.s
 	gcc -g testHarness.c out/pin8080.lls.s -o test.exe
-	test.exe | tee test.result
+	./test.exe | tee test.result
 
 testStep: testHarnessSimplified.c out/step8080.lls.s
 	gcc -g testHarnessSimplified.c out/step8080.lls.s -o testStep.exe
-	testStep.exe | tee testStep.result
+	./testStep.exe | tee testStep.result
 
