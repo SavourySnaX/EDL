@@ -1857,10 +1857,10 @@ void CVariableDeclaration::CreateWriteAccessor(CodeGenContext& context,BitVariab
 
 	LoadInst* load=new LoadInst(var.value,"",false,bblock);
 
-    if (impedance)
+    	if (impedance)
 	{
 		LoadInst* loadImp = new LoadInst(var.impedance,"",false,bblock);
-		CmpInst* check=CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_EQ,loadImp,ConstantInt::get(getGlobalContext(),APInt(var.size.getLimitedValue(),0)),"impedance",bblock);
+		CmpInst* check=CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_NE,loadImp,ConstantInt::get(getGlobalContext(),APInt(var.size.getLimitedValue(),0)),"impedance",bblock);
 
 		setVal = SelectInst::Create(check,setVal,load,"impOrReal",bblock);
 	}
