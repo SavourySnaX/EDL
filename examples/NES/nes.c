@@ -5,8 +5,8 @@
 #include <GLFW/glfw3.h>
 #include <GL/glext.h>
 
-#include <al.h>
-#include <alc.h>
+#include <AL/al.h>
+#include <AL/alc.h>
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -19,9 +19,9 @@
 
 #define WRITE_AUDIO		0
 #define IS_COMPAT		0
-#define APU			0
+#define APU			1
 
-#define ENABLE_TV		1
+#define ENABLE_TV		0
 #define ENABLE_LOGIC_ANALYSER	0
 #define ENABLE_DEBUGGER		0
 #define ENABLE_LOG_TRACE	0
@@ -32,7 +32,9 @@
 #include <pthread.h>
 #endif
 
+#if ENABLE_TV
 #include "jake\ntscDecode.h"
+#endif
 
 int g_instructionStep=0;
 int stopTheClock=0;

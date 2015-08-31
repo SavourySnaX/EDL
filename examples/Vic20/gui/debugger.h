@@ -23,6 +23,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
  */
+#include <GLFW/glfw3.h>
 
 void DrawRegisterDisk(unsigned char* buffer,unsigned int width,uint16_t address,uint8_t (*GetByte)(uint16_t));
 void DrawRegisterMain(unsigned char* buffer,unsigned int width,uint16_t address,uint8_t (*GetByte)(uint16_t));
@@ -30,4 +31,13 @@ void DrawMemoryDisk(unsigned char* buffer,unsigned int width,uint16_t address,ui
 void RecordPin(int pinPos,uint8_t pinVal);
 void UpdatePinTick();
 int isBreakpoint(int chip,uint16_t address);
+
+void UpdateRegisterMain(GLFWwindow* window);
+void UpdateRegisterDisk(GLFWwindow* window);
+void DrawVIAMain(unsigned char* buffer,unsigned int width);
+void DrawVIADisk(unsigned char* buffer,unsigned int width);
+void DrawTiming(unsigned char* buffer,unsigned int width);
+
+
+
 

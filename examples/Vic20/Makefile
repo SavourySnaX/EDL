@@ -1,7 +1,7 @@
 all: vic20
 
-GLLIBS= -I../../../glfw-3.0.4/include -L../../../glfw-3.0.4/lib-mingw -lglfw3 -lglu32 -lopengl32 -lgdi32
-ALLIBS= -I/c/program\ files\ \(x86\)\OpenAL\ 1.1\ SDK\include /c/program\ files\ \(x86\)\OpenAL\ 1.1\ SDK\libs\Win32\Openal32.lib
+GLLIBS= -lglfw3 -lglu32 -lopengl32 -lgdi32
+ALLIBS= -lOpenAL32
 EDL=../../bin/edl.exe
 
 clean:

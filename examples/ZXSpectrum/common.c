@@ -8,8 +8,8 @@
 #include <GLFW/glfw3.h>
 #include <GL/glext.h>
 
-#include <al.h>
-#include <alc.h>
+#include <AL/al.h>
+#include <AL/alc.h>
 
 #include <stdlib.h>
 #include <stdio.h>

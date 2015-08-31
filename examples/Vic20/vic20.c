@@ -12,8 +12,8 @@
 #include <GLFW/glfw3.h>
 #include <GL/glext.h>
 
-#include <al.h>
-#include <alc.h>
+#include <AL/al.h>
+#include <AL/alc.h>
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -1198,7 +1198,7 @@ int main(int argc,char**argv)
 				if (doDebug)
 				{
 					Disassemble(addr,1);
-					getch();
+					//getch();
 				}
 			}
 

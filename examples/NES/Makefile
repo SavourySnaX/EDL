@@ -1,10 +1,10 @@
 all: nes
 
-GLINCS= -I../../../glfw-3.0.4/include 
-GLLIBS= -L../../../glfw-3.0.4/lib-mingw -lglfw3 -lglu32 -lopengl32 -lgdi32
-ALINCS= -I/c/program\ files\ \(x86\)\OpenAL\ 1.1\ SDK\include 
-ALLIBS= /c/program\ files\ \(x86\)\OpenAL\ 1.1\ SDK\libs\Win32\Openal32.lib
-ZINCS= -I../../../zlib125 
+GLINCS=  
+GLLIBS= -lglfw3 -lglu32 -lopengl32 -lgdi32
+ALINCS= 
+ALLIBS= -lOpenAL32
+ZINCS= 
 ZLIB= -lz
 EDL=../../bin/edl.exe
 
@@ -63,4 +63,4 @@ out/ioapi.o: minizip/ioapi.c
 	gcc -O3 -c minizip/ioapi.c $(ZINCS) -o out/ioapi.o
 
 nes: out/nes.o out/debugger.o out/rp2a03.o out/miniunz.o out/iowin32.o out/ioapi.o out/unzip.o out/rp2c02.o
-	gcc -g3 -O3 $(PROF_FLAGS) -Wl,-Map,nes.map $(TV_DECODER) out/nes.o out/debugger.o out/rp2a03.o out/rp2c02.o out/miniunz.o out/iowin32.o out/ioapi.o out/unzip.o $(ALLIBS) $(GLLIBS) $(ZLIB) -lpthread -o nes.exe
+	gcc -g3 -O3 $(PROF_FLAGS) -Wl,-Map,nes.map out/nes.o out/debugger.o out/rp2a03.o out/rp2c02.o out/miniunz.o out/iowin32.o out/ioapi.o out/unzip.o $(ALLIBS) $(GLLIBS) $(ZLIB) -lpthread -o nes.exe

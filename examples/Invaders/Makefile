@@ -1,6 +1,6 @@
 all: invaders
 
-GLLIBS= -I../../../glfw-3.0.4/include -L../../../glfw-3.0.4/lib-mingw -lglfw3 -lglu32 -lopengl32 -lGDI32
+GLLIBS= -lglfw3 -lglu32 -lopengl32 -lGDI32
 EDL=../../bin/edl.exe
 
 clean:

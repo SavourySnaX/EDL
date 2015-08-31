@@ -12,8 +12,8 @@
 #include <GLFW/glfw3.h>
 #include <GL/glext.h>
 
-#include <al.h>
-#include <alc.h>
+#include <AL/al.h>
+#include <AL/alc.h>
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -29,6 +29,7 @@ int DISK_InitialiseMemory();
 void DISK_Reset();
 uint16_t DISK_Tick(uint8_t* clk,uint8_t* atn,uint8_t* data);
 uint8_t DISK_GetByte(uint16_t addr);
+int LoadD64(const char* filename);
 
 void AudioKill();
 void AudioInitialise();
@@ -40,17 +41,50 @@ uint8_t GetByte6581(uint16_t regNo);
 void SetByte6581(uint16_t regNo,uint8_t byte);
 void Tick6581();
 
-uint16_t MAIN_PinGetPIN_AB();
+uint16_t MAIN_PinGetPIN_A();
 uint8_t MAIN_PinGetPIN_P();
 void MAIN_PinSetPIN_P(uint8_t);
 uint8_t MAIN_PinGetPIN_DB();
 void MAIN_PinSetPIN_DB(uint8_t);
 void MAIN_PinSetPIN_O0(uint8_t);
+void MAIN_PinSetPIN_O1(uint8_t);
 void MAIN_PinSetPIN_SO(uint8_t);
 uint8_t MAIN_PinGetPIN_SYNC();
 uint8_t MAIN_PinGetPIN_RW();
 void MAIN_PinSetPIN__IRQ(uint8_t);
+void MAIN_PinSetPIN__NMI(uint8_t);
 void MAIN_PinSetPIN__RES(uint8_t);
+
+void CIA0_PinSetPIN_RW(uint8_t);
+void CIA0_PinSetPIN_PA(uint8_t);
+void CIA0_PinSetPIN_PB(uint8_t);
+void CIA0_PinSetPIN_DB(uint8_t);
+void CIA0_PinSetPIN_O1(uint8_t);
+void CIA0_PinSetPIN_O2(uint8_t);
+void CIA0_PinSetPIN_TOD(uint8_t);
+void CIA0_PinSetPIN__RES(uint8_t);
+void CIA0_PinSetPIN__FLAG(uint8_t);
+void CIA0_PinSetPIN__CS(uint8_t);
+void CIA0_PinSetPIN_RS(uint8_t);
+uint8_t CIA0_PinGetPIN_PB();
+uint8_t CIA0_PinGetPIN_DB();
+uint8_t CIA0_PinGetPIN_PA();
+uint8_t CIA0_PinGetPIN__IRQ();
+
+void CIA1_PinSetPIN_RW(uint8_t);
+void CIA1_PinSetPIN_PA(uint8_t);
+void CIA1_PinSetPIN_PB(uint8_t);
+void CIA1_PinSetPIN_DB(uint8_t);
+void CIA1_PinSetPIN_O1(uint8_t);
+void CIA1_PinSetPIN_O2(uint8_t);
+void CIA1_PinSetPIN_TOD(uint8_t);
+void CIA1_PinSetPIN__RES(uint8_t);
+void CIA1_PinSetPIN__CS(uint8_t);
+void CIA1_PinSetPIN_RS(uint8_t);
+uint8_t CIA1_PinGetPIN_PB();
+uint8_t CIA1_PinGetPIN_DB();
+uint8_t CIA1_PinGetPIN_PA();
+uint8_t CIA1_PinGetPIN__IRQ();
 
 // Step 1. Memory
 
@@ -306,7 +340,7 @@ uint8_t ReadIO(uint16_t addr)
 	{
 		if (addr<0xDF00)
 		{
-			return;
+			return 0xFF;
 		}
 		if (addr<0xE000)
 		{

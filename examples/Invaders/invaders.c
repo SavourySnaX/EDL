@@ -20,14 +20,22 @@
 #include <string.h>
 #include <stdint.h>
 
+void DrawRegister(unsigned char* buffer,unsigned int width);
+void RecordPins();
+void UpdateTiming(int scrollPos);
+int isBreakpoint(unsigned int address);
 void DrawTiming(unsigned char* buffer,unsigned int width);
 
 uint16_t PinGetPIN_A();
 uint8_t PinGetPIN_D();
+uint8_t PinGetOUTPUTS();
 void PinSetPIN_D(uint8_t);
 void PinSetPIN_READY(uint8_t);
 void PinSetO1(uint8_t);
 void PinSetO2(uint8_t);
+void PinSetINPUTS(uint8_t);
+void PinSetLATCH_SHIFT(uint8_t);
+void PinSetLATCH_DATA(uint8_t);
 uint8_t PinGetPIN_SYNC();
 uint8_t PinGetPIN__WR();
 void PinSetINT(uint8_t);

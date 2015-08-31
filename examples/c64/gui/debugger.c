@@ -1,11 +1,15 @@
 #include <GLFW/glfw3.h>
 
 #include <stdlib.h>
+#include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
 #include <stdint.h>
 
 #include "font.h"
+
+void ClearKey(int key);
+int CheckKeyWindow(int key,GLFWwindow* window);
 
 unsigned short breakpoints[2][20]={
 	{0x44E,0},
