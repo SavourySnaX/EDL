@@ -2,7 +2,7 @@
 # ZX80 ROM
 
 PIN IN 			A[12];
-PIN BIDIRECTIONAL	D[8];		# Really its OUT 3 state, but I haven't implemented that yet
+PIN BIDIRECTIONAL	D[8];
 PIN IN			_CS1[1];
 PIN IN			_CS2[1];
 

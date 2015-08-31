@@ -1,0 +1,38 @@
+#
+# Quick Hack together of Z80A + ZX80_Rom to test it
+#
+#
+
+INSTANCE "chips/zx80_rom.edl" AS ROM;
+INSTANCE "../../chips/accurate/z80.edl" AS CPU;
+
+
+CONNECT RESET1
+{
+	CPU PIN__WAIT , 1;
+	CPU PIN__INT , 1;
+	CPU PIN__NMI , 1;
+	CPU PIN__RESET , 1;
+	CPU PIN__BUSRQ , 1;
+}
+
+CONNECT RESET2
+{
+	CPU PIN__RESET , 0;
+	ROM _CS1 , 0;
+	ROM _CS2 , 0;
+}
+
+# void TEST(uint8_t TEST)
+CONNECT TEST
+{
+	CPU PIN_A , ROM A;
+	PULLUP ROM D , CPU PIN_D;
+	CPU PIN__CLK , TEST;
+#	READER PIN__CLK , TEST;			# Feed clock signal from function input to CLK pin on READER
+#	R0 PIN_EN , READER PIN_A[1..1];		# Feed Enable signal for rom based on stepped address of READER
+#	R1 PIN_EN , READER PIN_A[0..0];
+#	PULLUP R0 PIN_D , R1 PIN_D , READER PIN_D;	# Connect Data bus
+}
+
+

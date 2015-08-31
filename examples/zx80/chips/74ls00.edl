@@ -1,0 +1,29 @@
+#
+# Quad 2 Input NAND Gate
+#
+
+PIN IN		A[8];
+PIN IN		B[8];
+PIN OUT		Y[8];
+
+FUNCTION INTERNAL	UpdateY
+{
+	Y<-~(A&B);
+}
+
+HANDLER A	ALWAYS
+{
+	CALL UpdateO();
+}
+
+HANDLER B	ALWAYS
+{
+	CALL UpdateO();
+}
+
+HANDLER Y ALWAYS
+{
+	CALL UpdateO();
+}
+
+

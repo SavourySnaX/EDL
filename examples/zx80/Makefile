@@ -1,10 +1,10 @@
 all: zx80
 
-GLINCS= -I../../../glfw-3.0.4/include 
-GLLIBS= -L../../../glfw-3.0.4/lib-mingw -lglfw3 -lglu32 -lopengl32 -lgdi32
-ALINCS= -I/c/program\ files\ \(x86\)\OpenAL\ 1.1\ SDK\include 
-ALLIBS= /c/program\ files\ \(x86\)\OpenAL\ 1.1\ SDK\libs\Win32\Openal32.lib
-ZINCS= -I../../../zlib125 
+GLINCS= 
+GLLIBS= -lglfw3 -lglu32 -lopengl32 -lgdi32
+ALINCS= 
+ALLIBS= -lOpenAL32
+ZINCS= 
 ZLIB= -lz
 EDL=../../bin/edl.exe
 
@@ -15,16 +15,16 @@ clean:
 	rmdir out
 	$(RM) zx80.exe
 
-out/z80.lls:	../../chips/Accurate/z80.edl
+out/cpu_rom_test.lls:	cpu_rom_test.eds chips/zx80_rom.edl ../../chips/Accurate/z80.edl
 	mkdir -p out
-	$(EDL) -O2 ../../chips/Accurate/z80.edl >out/z80.lls
+	$(EDL) -O0 cpu_rom_test.eds >out/cpu_rom_test.lls
 
-out/z80.lls.s: out/z80.lls
-	llc -O3 out/z80.lls
+out/cpu_rom_test.lls.s: out/cpu_rom_test.lls
+	llc -O0 out/cpu_rom_test.lls
 
 out/zx80.o: zx80.c
 	mkdir -p out
-	gcc -O3 -c zx80.c $(GLINCS) $(ALINCS) $(ZINCS) -o out/zx80.o
+	gcc -g3 -O0 -c zx80.c $(GLINCS) $(ALINCS) $(ZINCS) -o out/zx80.o
 
-zx80: out/zx80.o out/z80.lls.s
-	gcc -g3 -O3 $(PROF_FLAGS) -Wl,-Map,zx80.map out/zx80.o out/z80.lls.s $(ALLIBS) $(GLLIBS) $(ZLIB) -o zx80.exe
+zx80: out/zx80.o out/cpu_rom_test.lls.s
+	gcc -g3 -O0 $(PROF_FLAGS) -Wl,-Map,zx80.map out/zx80.o out/cpu_rom_test.lls.s $(ALLIBS) $(GLLIBS) $(ZLIB) -o zx80.exe
