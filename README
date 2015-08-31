@@ -24,3 +24,52 @@ examples/ folder includes a few examples :)
 	c64 - Includes 1541 disk drive emulation -- Incomplete.
 	NES - WIP (has a composite TV signal generator built in.. but output requires an external repository.
 
+Instructions To Setup Dev Environment For MSYS2 on Windows (MSYS2 64bit)
+------------------------------------------------------------------------
+
+Download MSYS2 @ http://sourceforge.net/projects/msys2/files/latest/download 
+
+Run the setup and install
+Launch the MSYS2 shell
+pacman -Sy
+pacman --needed -S bash pacman pacman-mirrors msys2-runtime
+exit (may need to do a few times till the window closes)
+Launch the MINGW-64 shell (recomend 64bit)
+update-core
+pacman -Su
+pacman -S make git bison flex mingw64/mingw-w64-x86_64-openal mingw64/mingw-w64-x86_64-llvm mingw64/mingw-w64-x86_64-glfw
+git clone https://github.com/SavourySnaX/EDL.git
+cd EDL
+make
+cd examples/ZXSpectrum
+make
+
+now find a copy of the 48k spectrum rom image, and place in roms/48k.rom
+
+./spectrum
+
+
+
+License
+-------
+
+
+Copyright (c) 2015 Lee Hammerton aka Savoury SnaX
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
