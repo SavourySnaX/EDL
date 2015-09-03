@@ -15,7 +15,7 @@ clean:
 	rmdir out
 	$(RM) zx80.exe
 
-out/cpu_rom_test.lls:	cpu_rom_test.eds chips/zx80_rom.edl ../../chips/Accurate/z80.edl
+out/cpu_rom_test.lls:	cpu_rom_test.eds chips/zx80_rom.edl ../../chips/Accurate/z80.edl chips/2114_8.edl
 	mkdir -p out
 	$(EDL) -O0 cpu_rom_test.eds >out/cpu_rom_test.lls
 

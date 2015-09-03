@@ -41,10 +41,18 @@ void RESET1(uint8_t a);
 void RESET2(uint8_t a);
 
 extern uint8_t rom[4096];
+extern uint8_t ram[1024];
 
 uint8_t GetByte(uint16_t address)
 {
-	return rom[address];
+	if (address<0x1000)
+	{
+		return rom[address];
+	}
+	else
+	{
+		return ram[address&0x3FF];
+	}
 }
 
 void CPU_RESET()
@@ -236,14 +244,16 @@ int main(int argc,char**argv)
 {
 	uint16_t lastIns=0xAA;
 	CPU_RESET();
-	for (int a=0;a<640000;a++)
+//	for (size_t a=0;a<640000*10;a++)
+	int a=0;
+	while (1==1)
 	{
 		if (DIS_INS!=lastIns)
 		{
 			lastIns=DIS_INS;
 			Disassemble(lastIns,1);
 		}
-		TEST(a&1);
+		TEST((a++)&1);
 	}
 
 	return 0;

@@ -1,0 +1,56 @@
+#
+# 1024x8 Static RAM
+#
+
+PIN IN			A[10];
+PIN BIDIRECTIONAL	D[8];
+PIN IN			_CS[1];
+PIN IN			_WE[1];
+
+
+DECLARE ram[[10]][8];
+
+FUNCTION INTERNAL UpdateD
+{
+	IF _CS
+	{
+		D<-HIGH_IMPEDANCE;
+	}
+
+	IF ~_WE & ~_CS
+	{
+		D<-HIGH_IMPEDANCE;
+	}
+}
+
+HANDLER A	ALWAYS
+{
+	CALL UpdateD();
+}
+
+HANDLER _CS	ALWAYS
+{
+	CALL UpdateD();
+}
+
+HANDLER _WE	ALWAYS
+{
+	CALL UpdateD();
+}
+
+HANDLER D	ALWAYS
+{
+	IF ~_CS
+	{
+		IF ~_WE
+		{
+			ram[[A]]<-D;
+		}
+		IF _WE
+		{
+			D<-ram[[A]];
+		}
+#		DEBUG_TRACE "RAM ",BASE 16,A,D,ram[[A]];
+	}
+
+}

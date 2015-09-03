@@ -1,11 +1,11 @@
 #
-# Quick Hack together of Z80A + ZX80_Rom to test it
+# Quick Hack together of Z80A + ZX80_Rom to test it + RAM (8bit -- original was 4, just makes life easier at the minute - missing support for different bus sizes)
 #
 #
 
 INSTANCE "chips/zx80_rom.edl" AS ROM;
 INSTANCE "../../chips/accurate/z80.edl" AS CPU;
-
+INSTANCE "chips/2114_8.edl" AS RAM;
 
 CONNECT RESET1
 {
@@ -19,20 +19,19 @@ CONNECT RESET1
 CONNECT RESET2
 {
 	CPU PIN__RESET , 0;
-	ROM _CS1 , 0;
 	ROM _CS2 , 0;
 }
 
 # void TEST(uint8_t TEST)
 CONNECT TEST
 {
-	CPU PIN_A , ROM A;
-	PULLUP ROM D , CPU PIN_D;
 	CPU PIN__CLK , TEST;
-#	READER PIN__CLK , TEST;			# Feed clock signal from function input to CLK pin on READER
-#	R0 PIN_EN , READER PIN_A[1..1];		# Feed Enable signal for rom based on stepped address of READER
-#	R1 PIN_EN , READER PIN_A[0..0];
-#	PULLUP R0 PIN_D , R1 PIN_D , READER PIN_D;	# Connect Data bus
+	CPU PIN_A , ROM A , RAM A;
+	CPU PIN__INT , CPU PIN_A[6..6];
+	RAM _WE , CPU PIN__WR;
+	RAM _CS , ~((CPU PIN_A[14..14]) & (~CPU PIN__MREQ));
+	ROM _CS1 , CPU PIN_A > $1FFF;
+	PULLUP ROM D , RAM D , CPU PIN_D;
 }
 
 
