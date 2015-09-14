@@ -357,7 +357,7 @@ void CodeGenContext::GenerateDisassmTables()
 				ConstantInt* const_int64_13 = ConstantInt::get(getGlobalContext(), APInt(64, StringRef("0"), 10));
 				const_ptr_12_indices.push_back(const_int64_13);
 				const_ptr_12_indices.push_back(const_int64_13);
-				Constant* const_ptr_12 = ConstantExpr::getGetElementPtr(gvar_array__str, const_ptr_12_indices);
+				Constant* const_ptr_12 = ConstantExpr::getGetElementPtr(NULL,gvar_array__str, const_ptr_12_indices);
 
 				gvar_array__str->setInitializer(const_array_9);
 
@@ -427,18 +427,18 @@ void CodeGenContext::generateCode(CBlock& root,CompilerOptions &options)
 
 	if (isRoot)
 	{
+		module->setDataLayout(*ee->getDataLayout());
+
 		/* Print the bytecode in a human-readable format 
 		   to see if our program compiled properly
 		   */
-		PassManager pm;
+		legacy::PassManager pm;
 
 		pm.add(createVerifierPass());
 		
 		if (opts.optimisationLevel>0)
 		{
 			// Add an appropriate TargetData instance for this module...
-			module->setDataLayout(ee->getDataLayout());
-			pm.add(new DataLayoutPass());
 
 			for (int a=0;a<2;a++)		// We add things twice, as the statereferencesquasher will make more improvements once inlining has happened
 			{
@@ -515,7 +515,7 @@ void CodeGenContext::generateCode(CBlock& root,CompilerOptions &options)
 				pm.add(createFunctionAttrsPass());        // Deduce function attrs
 
 				//  if (!DisableInline)
-				pm.add(createFunctionInliningPass());   // Inline small functions
+//3.7//Broken Modules -- opt however works fine				pm.add(createFunctionInliningPass());   // Inline small functions
 				pm.add(createArgumentPromotionPass());    // Scalarize uninlined fn args
 
 				pm.add(createInstructionCombiningPass()); // Cleanup for scalarrepl.
@@ -593,7 +593,7 @@ Value* CString::codeGen(CodeGenContext& context)
 	ConstantInt* const_int64_13 = ConstantInt::get(getGlobalContext(), APInt(64, StringRef("0"), 10));
 	const_ptr_12_indices.push_back(const_int64_13);
 	const_ptr_12_indices.push_back(const_int64_13);
-	Constant* const_ptr_12 = ConstantExpr::getGetElementPtr(gvar_array__str, const_ptr_12_indices);
+	Constant* const_ptr_12 = ConstantExpr::getGetElementPtr(NULL,gvar_array__str, const_ptr_12_indices);
 
 	// Global Variable Definitions
 	gvar_array__str->setInitializer(const_array_9);
@@ -727,7 +727,7 @@ Value* CIdentifier::codeGen(CodeGenContext& context)
  			ConstantInt* index0 = ConstantInt::get(getGlobalContext(), APInt(var.size.getLimitedValue(), StringRef("0"), 10));
 			indices.push_back(index0);
  			indices.push_back(truncExt);
-			Instruction* elementPtr = GetElementPtrInst::Create(var.value,indices,"array index",context.currentBlock());
+			Instruction* elementPtr = GetElementPtrInst::Create(NULL,var.value,indices,"array index",context.currentBlock());
 
 			final = new LoadInst(elementPtr, "", false, context.currentBlock());
 		}
@@ -1296,7 +1296,7 @@ Value* CAssignment::generateAssignmentActual(BitVariable& to,const CIdentifier& 
 		ConstantInt* index0 = ConstantInt::get(getGlobalContext(), APInt(to.size.getLimitedValue(), StringRef("0"), 10));
 		indices.push_back(index0);
 		indices.push_back(truncExt);
-		Instruction* elementPtr = GetElementPtrInst::Create(to.value,indices,"array index",context.currentBlock());
+		Instruction* elementPtr = GetElementPtrInst::Create(NULL,to.value,indices,"array index",context.currentBlock());
 
 		assignTo = elementPtr;//new LoadInst(elementPtr, "", false, context.currentBlock());
 	}
@@ -1350,7 +1350,7 @@ Value* CAssignment::generateAssignmentActual(BitVariable& to,const CIdentifier& 
 			ConstantInt* index0 = ConstantInt::get(getGlobalContext(), APInt(to.size.getLimitedValue(), StringRef("0"), 10));
 			indices.push_back(index0);
 			indices.push_back(truncExt);
-			Instruction* elementPtr = GetElementPtrInst::Create(to.value,indices,"array index",context.currentBlock());
+			Instruction* elementPtr = GetElementPtrInst::Create(NULL,to.value,indices,"array index",context.currentBlock());
 
 			dest = elementPtr;
 		}
@@ -2655,7 +2655,7 @@ Value* CStatePush::codeGen(CodeGenContext& context)
 	ConstantInt* const_intn = ConstantInt::get(getGlobalContext(), APInt(bitsNeeded, StringRef("0"), 10));
 	indices.push_back(const_intn);
 	indices.push_back(index);
-	Value* ref = GetElementPtrInst::Create(topState.stateStackNext, indices,"stackPos",context.currentBlock());
+	Value* ref = GetElementPtrInst::Create(NULL,topState.stateStackNext, indices,"stackPos",context.currentBlock());
 
 	Value* curNext = new LoadInst(topState.nextState,"currentNext",false,context.currentBlock());
 
@@ -2704,7 +2704,7 @@ Value* CStatePop::codeGen(CodeGenContext& context)
 	ConstantInt* const_intn = ConstantInt::get(getGlobalContext(), APInt(bitsNeeded, StringRef("0"), 10));
 	indices.push_back(const_intn);
 	indices.push_back(dec);
-	Value* ref = GetElementPtrInst::Create(topState.stateStackNext, indices,"stackPos",context.currentBlock());
+	Value* ref = GetElementPtrInst::Create(NULL,topState.stateStackNext, indices,"stackPos",context.currentBlock());
 
 	Value* oldNext = new LoadInst(ref,"oldNext",false,context.currentBlock());	// retrieve old next value
 
