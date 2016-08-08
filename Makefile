@@ -16,7 +16,7 @@ END_GROUP=#--end-group
 
 CPPFLAGS = -std=c++11 -g -O0 -Isrc -Iout `$(LLVM_CONFIG) --cppflags`
 LDFLAGS = -g `$(LLVM_CONFIG) --ldflags`
-LIBS = `$(LLVM_CONFIG) --libs $(LLVM_MODULES)` -lpthread -lpsapi -limagehlp -lz
+LIBS = `$(LLVM_CONFIG) --libs $(LLVM_MODULES)` `$(LLVM_CONFIG) --system-libs` -lpthread -lpsapi -limagehlp -lz
 
 clean:
 	$(RM) -rf out/*

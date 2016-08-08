@@ -427,7 +427,7 @@ void CodeGenContext::generateCode(CBlock& root,CompilerOptions &options)
 
 	if (isRoot)
 	{
-		module->setDataLayout(*ee->getDataLayout());
+		module->setDataLayout(ee->getDataLayout());
 
 		/* Print the bytecode in a human-readable format 
 		   to see if our program compiled properly
@@ -484,8 +484,8 @@ void CodeGenContext::generateCode(CBlock& root,CompilerOptions &options)
 				pm.add(createScalarReplAggregatesPass()); // Break up allocas
 
 				// Run a few AA driven optimizations here and now, to cleanup the code.
-				pm.add(createFunctionAttrsPass());        // Add nocapture
-				pm.add(createGlobalsModRefPass());        // IP alias analysis
+				//pm.add(createFunctionAttrsPass());        // Add nocapture
+				//pm.add(createGlobalsModRefPass());        // IP alias analysis
 				pm.add(createLICMPass());                 // Hoist loop invariants
 				pm.add(createGVNPass());                  // Remove common subexprs
 				pm.add(createMemCpyOptPass());            // Remove dead memcpy's
@@ -512,7 +512,7 @@ void CodeGenContext::generateCode(CBlock& root,CompilerOptions &options)
 				pm.add(createCFGSimplificationPass());    // Clean up after IPCP & DAE
 
 				pm.add(createPruneEHPass());              // Remove dead EH info
-				pm.add(createFunctionAttrsPass());        // Deduce function attrs
+				//pm.add(createFunctionAttrsPass());        // Deduce function attrs
 
 				//  if (!DisableInline)
 //3.7//Broken Modules -- opt however works fine				pm.add(createFunctionInliningPass());   // Inline small functions
@@ -1852,7 +1852,7 @@ void CVariableDeclaration::CreateWriteAccessor(CodeGenContext& context,BitVariab
 	context.pushBlock(bblock);
 
 	Function::arg_iterator args = function->arg_begin();
-	Value* setVal=args;
+	Value* setVal=&*args;
 	setVal->setName("InputVal");
 
 	LoadInst* load=new LoadInst(var.value,"",false,bblock);
@@ -3008,7 +3008,7 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 		temp.impedance=NULL;
 		temp.fromExternal=false;
 
-		temp.value=args;
+		temp.value=&*args;
 		temp.value->setName(ident.name);
 		context.locals()[ident.name]=temp;
 		args++;
@@ -3818,7 +3818,7 @@ Value* CFunctionDecl::codeGen(CodeGenContext& context)
 		temp.impedance=NULL;
 		temp.fromExternal=false;
 
-		temp.value=args;
+		temp.value=&*args;
 		temp.value->setName(params[a]->id.name);
 		context.locals()[params[a]->id.name]=temp;
 		a++;
