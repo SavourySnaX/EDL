@@ -682,7 +682,7 @@ void DrawVIADisk(unsigned char* buffer,unsigned int width)
 
 }
 
-#define MAX_CAPTURE		(65536)
+#define MAX_CAPTURE		(32768)
 #define MAX_PINS		(8)
 #define MAX_PINS_A		(9)
 
