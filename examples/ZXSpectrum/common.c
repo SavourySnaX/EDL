@@ -495,7 +495,7 @@ uint8_t GetPort(uint16_t port)
 
 	if ((port&1)==0)			// ula responds on all even addresses
 	{
-		retVal|=CheckKeys(matrixLine&0x80,GLFW_KEY_SPACE,GLFW_KEY_RIGHT_CONTROL,'M','N','B');
+		retVal|=CheckKeys(matrixLine&0x80,GLFW_KEY_SPACE,GLFW_KEY_RIGHT_ALT,'M','N','B');
 		retVal|=CheckKeys(matrixLine&0x40,GLFW_KEY_ENTER,'L','K','J','H');
 		retVal|=CheckKeys(matrixLine&0x20,'P','O','I','U','Y');
 		retVal|=CheckKeys(matrixLine&0x10,'0','9','8','7','6');
