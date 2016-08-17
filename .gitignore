@@ -3,4 +3,8 @@
 *.exe
 *.bak
 *.pdf
+*.out
+*.map
+test.result
 out/*
+**/out/**
