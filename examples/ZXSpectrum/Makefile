@@ -1,7 +1,7 @@
 all: spectrum spectrumSimple
 
 GLLIBS= -lglfw3 -lglu32 -lopengl32 -lgdi32
-ALLIBS= -lOpenAL32
+ALLIBS= -lOpenAL
 EDL=../../bin/edl.exe
 
 clean:
