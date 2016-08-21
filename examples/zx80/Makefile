@@ -3,7 +3,7 @@ all: zx80
 GLINCS= 
 GLLIBS= -lglfw3 -lglu32 -lopengl32 -lgdi32
 ALINCS= 
-ALLIBS= -lOpenAL32
+ALLIBS= -lOpenAL
 ZINCS= 
 ZLIB= -lz
 EDL=../../bin/edl.exe
