@@ -1,5 +1,6 @@
 %{
 #include <string>
+#include <io.h>
 #include "ast.h"
 #include "parser.hpp"
 #define SAVE_TOKEN yylval.string = new std::string(yytext, yyleng)
@@ -7,7 +8,7 @@
 
 unsigned int g_CurLine=1;		/* For error handling */
 
-extern "C" int yywrap() { }
+extern "C" int yywrap() { return 1; }
 %}
 
 %%
@@ -46,8 +47,9 @@ TRANSITION				{ return TOKEN(TOK_TRANSITION); }
 CONNECT					{ return TOKEN(TOK_CONNECT); }
 CLOCK_GEN				{ return TOKEN(TOK_CLOCK_GEN); }
 PULLUP					{ return TOKEN(TOK_PULLUP); }
-HIGH_IMPEDANCE				{ return TOKEN(TOK_HIGH_IMPEDANCE); }
-
+BUS_TAP					{ return TOKEN(TOK_BUS_TAP); }
+HIGH_IMPEDANCE			{ return TOKEN(TOK_HIGH_IMPEDANCE); }
+ISOLATION				{ return TOKEN(TOK_ISOLATION); }
 
 INTERNAL				{ return TOKEN(TOK_INTERNAL); }
 

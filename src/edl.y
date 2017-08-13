@@ -33,6 +33,7 @@
 	CAffect *affect;
 	CTrigger *trigger;
 	CExternDecl *extern_c_decl;
+	CConnect *connect;
 	std::vector<COperand*> *opervec;
 	std::vector<CAliasDeclaration*> *aliasvec;
 	std::vector<CStateDeclaration*> *varvec;
@@ -43,7 +44,7 @@
 	std::vector<CAffect*> *affectvec;
 	std::vector<CInteger*> *externparams;
 	std::vector<CExpression*> *params;
-	std::vector<std::vector<CExpression*> *> *connectvec;
+	std::vector<CConnect*> *connectvec;
 	std::vector<CParamDecl*> *namedParams;
 	std::string *string;
 	int token;
@@ -63,12 +64,13 @@
 %token <token> TOK_DOT TOK_AT TOK_AMP TOK_TILDE TOK_DDOT TOK_CMPNEQ TOK_HAT TOK_MUL TOK_DIV TOK_MOD	/* Operators/Seperators */
 %token <token> TOK_SDIV TOK_SMOD									/* Operators/Seperators */
 %token <token> TOK_CMPLESSEQ TOK_CMPLESS TOK_CMPGREATEREQ TOK_CMPGREATER TOK_INDEXOPEN TOK_INDEXCLOSE	/* Operators/Seperators */
-%token <token>	TOK_CONNECT TOK_CLOCK_GEN TOK_PULLUP TOK_HIGH_IMPEDANCE					/* Reserved words schematic */
+%token <token>	TOK_CONNECT TOK_CLOCK_GEN TOK_PULLUP TOK_BUS_TAP TOK_HIGH_IMPEDANCE TOK_ISOLATION		/* Reserved words schematic */
 
 %type <namedParams> named_params_list named_return
 %type <trigger> trigger
 %type <token> pin_type
-%type <params> params connect_params connect
+%type <params> params connect_params
+%type <connect> connect
 %type <externparams> params_list return_val var_inits
 %type <affect> affector
 %type <mapping> mapping
@@ -79,7 +81,7 @@
 %type <ident> ident_ref
 %type <state_ident> state_ident
 %type <intgr> numeric 
-%type <expr> expr
+%type <expr> expr connect_expr
 %type <varvec> states_list
 %type <aliasvec> aliases
 %type <debugvec> debuglist
@@ -194,12 +196,18 @@ trigger: TOK_ALWAYS 							{ $$ = new CTrigger(TOK_ALWAYS); }
 
 /*	| connect_list TOK_COMMA TOK_CLOCK_GEN TOK_OBR numeric TOK_CBR	{ $$->push_back(new CClock(numeric)); }*/
 
-connect_params : connect_params TOK_COMMA expr				{ $$->push_back($3); }
-	| expr								{ $$ = new ParamsList(); $$->push_back($1); }
+connect_expr : expr								{ $$ = $1; }
+    | TOK_ISOLATION								{ $$ = NULL; }
 	;
 
-connect : connect_params TOK_EOS				{ $$=$1; }
-	| TOK_PULLUP connect_params TOK_EOS			{ $$=$2; }		/* TODO - PULLUP is presently simply assumed! */
+connect_params : connect_params TOK_COMMA connect_expr		{ $$->push_back($3); }
+	| connect_expr											{ $$ = new ParamsList(); $$->push_back($1); }
+	;
+
+connect : connect_params TOK_EOS				{ $$=new CConnect(*$1,ConnectionType::None); }
+	| TOK_BUS_TAP TOK_OBR quoted TOK_CBR connect_params TOK_EOS		{ $$=new CConnect(*$5,*$3,ConnectionType::None); }
+	| TOK_PULLUP connect_params TOK_EOS			{ $$=new CConnect(*$2, ConnectionType::Pullup); }
+	| TOK_BUS_TAP TOK_OBR quoted TOK_CBR TOK_PULLUP connect_params TOK_EOS	{ $$=new CConnect(*$6,*$3,ConnectionType::Pullup); }
 	;
 
 connect_list : connect_list connect				{ $$->push_back($2); }

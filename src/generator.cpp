@@ -9,7 +9,6 @@
 #include "llvm/IR/InstIterator.h"
 #include "llvm/Support/TargetRegistry.h"
 
-
 using namespace llvm;
 
 static LLVMContext TheContext;
@@ -415,6 +414,14 @@ void CodeGenContext::generateCode(CBlock& root,CompilerOptions &options)
 		
 		debugTraceMissing = Function::Create(FuncTy_6,GlobalValue::ExternalLinkage,symbolPrepend+"missing", module); // (external, no body)
 		debugTraceMissing->setCallingConv(CallingConv::C);
+		
+		std::vector<Type*>FuncTy_9_args;
+		FuncTy_9_args.push_back(IntegerType::get(TheContext, 8));
+		FuncTy_9_args.push_back(IntegerType::get(TheContext, 32));
+		FunctionType* FuncTy_9 = FunctionType::get(/*Result=*/Type::getVoidTy(TheContext),/*Params=*/FuncTy_9_args, false);
+
+		debugBusTap = Function::Create(FuncTy_9,GlobalValue::ExternalLinkage,symbolPrepend+"BusTap", module); // (external, no body)
+		debugBusTap->setCallingConv(CallingConv::C);
 	}
 
 	root.prePass(*this);	/* Run a pre-pass on the code */
@@ -3057,21 +3064,83 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 		args++;
 	}
 
+	// This needs a re-write
+	// for now - if a NULL occurs in the input list, it is considered to be an isolation resistor,
+	//
+	// if only one side of the bus is driving, both sides get the final value as inputs
+	// if neither side is driving, both sides get PULLUP
+	// if both sides are driving, left and right sides get their respective values as input
+	//
+	//  A   |  B
+	// Z Z  | Z Z		1
+	// 1 1  | 1 1   
+	//      |
+	// a Z  | Z Z		2
+	// A A  | A A
+	//
+	// Z Z  | b Z		3
+	// B B  | B B
+	//
+	// a Z  | b Z		4
+	// A A  | B B
+	//
+	// We can probably model this as -- Combine A Bus - seperately Combine B Bus - Generate an isDrivingBus for both sides - then select as :
+	//
+	// ~IsDrivingA & ~IsDrivingB - assign A inputs with A and B inputs with B  (both will be FF, but doesn't matter)
+	// IsDrivingA & ~IsDrivingB - assign all inputs with A (simply set B=A)
+	// ~IsDrivingA & IsDrivingB - assign all inputs with B (simply set A=B)
+	// IsDrivingA & IsDrivingB - assign A inputs with A and B inputs with B
+	//
+	// So simplfication should be											1		2		3		4
+	// outputA=Generate Bus A output										 FF		.a		 FF		.a
+	// outputB=Generate Bus B output										 FF		 FF		.b		.b
+	// IF isDrivingA ^ IsDrivingB											false	true	true	false
+	//		outputB = select isDrivingA outputA outputB								a		b
+	//		outputA = select isDrivingB outputB outputA								a		b
+	// assign A inputs with outputA
+	// assign B inputs with outputB
+	//
+	//
+
+
 	for (size_t a=0;a<connects.size();a++)
 	{
-		int outCnt=0,inCnt=0,biCnt=0;
 
 //		std::cerr << "Connection " << a << std::endl;
 	
-		// Do a quick pass to build a list of Inputs and Outputs - Maintaining declaration order (perform some validation as we go)
-		std::vector<CIdentifier*> ins;
-		std::vector<CExpression*> outs;
+		// First step, figure out number of buses
 
-		for (size_t b=0;b<connects[a]->size();b++)
+		int busCount = 1;	// will always be at least 1 bus, but ISOLATION can generate split buses
+		for (size_t b = 0; b < connects[a]->connects.size(); b++)
 		{
-			if ((*connects[a])[b]->IsIdentifierExpression())
+			if ((*connects[a]).connects[b] == NULL)
 			{
-				CIdentifier* ident = (CIdentifier*)(*connects[a])[b];
+				busCount++;
+			}
+		}
+
+		// Do a quick pass to build a list of Inputs and Outputs - Maintaining declaration order (perform some validation as we go)
+		int *outCnt = new int[busCount];
+		int *inCnt = new int[busCount];
+		int *biCnt = new int[busCount];
+		memset(outCnt, 0, busCount * sizeof(int));
+		memset(inCnt, 0, busCount * sizeof(int));
+		memset(biCnt, 0, busCount * sizeof(int));
+		std::vector<CIdentifier*> *ins= new std::vector<CIdentifier*>[busCount];
+		std::vector<CExpression*> *outs = new std::vector<CExpression*>[busCount];
+
+		int curBus = 0;
+		for (size_t b=0;b<connects[a]->connects.size();b++)
+		{
+			if ((*connects[a]).connects[b] == NULL)
+			{
+				// bus split
+				curBus++;
+				continue;
+			}
+			if ((*connects[a]).connects[b]->IsIdentifierExpression())
+			{
+				CIdentifier* ident = (CIdentifier*)(*connects[a]).connects[b];
 
 				BitVariable var;
 				
@@ -3087,24 +3156,24 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 					{
 						case 0:
 //							std::cerr << "Variable : Acts as Output " << ident->name << std::endl;
-							outs.push_back(ident);
-							outCnt++;
+							outs[curBus].push_back(ident);
+							outCnt[curBus]++;
 							break;
 						case TOK_IN:
 //							std::cerr << "PIN : Acts as Input " << ident->name << std::endl;
-							ins.push_back(ident);
-							inCnt++;
+							ins[curBus].push_back(ident);
+							inCnt[curBus]++;
 							break;
 						case TOK_OUT:
 //							std::cerr << "PIN : Acts as Output " << ident->name << std::endl;
-							outs.push_back(ident);
-							outCnt++;
+							outs[curBus].push_back(ident);
+							outCnt[curBus]++;
 							break;
 						case TOK_BIDIRECTIONAL:
 //							std::cerr << "PIN : Acts as Input/Output " << ident->name << std::endl;
-							ins.push_back(ident);
-							outs.push_back(ident);
-							biCnt++;
+							ins[curBus].push_back(ident);
+							outs[curBus].push_back(ident);
+							biCnt[curBus]++;
 							break;
 					}
 				}
@@ -3112,60 +3181,193 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 			else
 			{
 //				std::cerr << "Complex Expression : Acts as Output " << std::endl;
-				outs.push_back((*connects[a])[b]);
-				outCnt++;
+				outs[curBus].push_back((*connects[a]).connects[b]);
+				outCnt[curBus]++;
 			}
 		}
 
-		if (outCnt==0 && inCnt==0 && biCnt==0)
+		for (size_t checkBus = 0; checkBus <= curBus; checkBus++)
 		{
-			std::cerr << "No possible routing! - no connections" << std::endl;
-			context.errorFlagged=true;
-			return NULL;
-		}
-
-		if (outCnt==0 && inCnt>0 && biCnt==0)
-		{
-			std::cerr << "No possible routing! - all connections are input" << std::endl;
-			context.errorFlagged=true;
-			return NULL;
-		}
-
-		if (outCnt>0 && inCnt==0 && biCnt==0)
-		{
-			std::cerr << "No possible routing! - all connections are output" << std::endl;
-			context.errorFlagged=true;
-			return NULL;
-		}
-
-//		std::cerr << "Total Connections : in " << inCnt << " , out " << outCnt << " , bidirect " << biCnt << std::endl;
-
-		Value* last;
-
-		for (size_t o=0;o<outs.size();o++)
-		{
-			Value* tmp = outs[o]->codeGen(context);
-			if (o==0)
+			if (outCnt[checkBus] == 0 && inCnt[checkBus] == 0 && biCnt[checkBus] == 0)
 			{
-				last=tmp;
-			}
-			else
-			{
-				last= BinaryOperator::Create(Instruction::And,tmp,last,"PullUpCombine",context.currentBlock());
-			}
-		}
-
-		for (size_t i=0;i<ins.size();i++)
-		{
-			BitVariable var;
-
-			if (!context.LookupBitVariable(var,ins[i]->module,ins[i]->name))
-			{
-				std::cerr << "Failed to retrieve variable" << std::endl;
-				context.errorFlagged=true;
+				std::cerr << "No possible routing! - no connections" << std::endl;
+				context.errorFlagged = true;
 				return NULL;
 			}
-			CAssignment::generateAssignment(var,*ins[i],last,context);
+
+			if (outCnt[checkBus] == 0 && inCnt[checkBus] > 0 && biCnt[checkBus] == 0)
+			{
+				std::cerr << "No possible routing! - all connections are input" << std::endl;
+				context.errorFlagged = true;
+				return NULL;
+			}
+
+			if (outCnt[checkBus] > 0 && inCnt[checkBus] == 0 && biCnt[checkBus] == 0)
+			{
+				std::cerr << "No possible routing! - all connections are output" << std::endl;
+				context.errorFlagged = true;
+				return NULL;
+			}
+		}
+//		std::cerr << "Total Connections : in " << inCnt << " , out " << outCnt << " , bidirect " << biCnt << std::endl;
+
+		Value** busOutResult=new Value*[busCount];
+		Value** busIsDrivingResult=new Value*[busCount];
+
+		// Generate bus output signals (1 per bus, + HiZ indicator per bus)
+		for (curBus = 0; curBus < busCount; curBus++)
+		{
+			busOutResult[curBus] = NULL;
+			busIsDrivingResult[curBus] = ConstantInt::get(TheContext, APInt(1, 0));	// 0 for not driving bus
+
+			for (size_t o = 0; o < outs[curBus].size(); o++)
+			{
+				CIdentifier* ident;
+				BitVariable var;
+
+				if (!outs[curBus][o]->IsIdentifierExpression())
+				{
+					busIsDrivingResult[curBus] = ConstantInt::get(TheContext, APInt(1, 1));	// complex expression, always a bus driver
+				}
+				else
+				{
+					ident = (CIdentifier*)outs[curBus][o];
+
+					if (!context.LookupBitVariable(var, ident->module, ident->name))
+					{
+						std::cerr << "Unknown Ident : " << ident->name << std::endl;
+						context.errorFlagged = true;
+						return NULL;
+					}
+
+					if (var.impedance == NULL)
+					{
+						busIsDrivingResult[curBus] = ConstantInt::get(TheContext, APInt(1, 1));	// complex expression, always a bus driver
+					}
+					else
+					{
+						Value* fetchDriving = new LoadInst(var.impedance, "fetchImpedanceForIsolation", false, bblock);
+						fetchDriving = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, fetchDriving, ConstantInt::get(TheContext, APInt(var.size.getLimitedValue(), 0)), "isNotImpedance", bblock);
+
+						busIsDrivingResult[curBus] = BinaryOperator::Create(Instruction::Or, fetchDriving, busIsDrivingResult[curBus], "isDriving", context.currentBlock());
+					}
+				}
+
+
+				Value* tmp = outs[curBus][o]->codeGen(context);
+
+				if (o == 0)
+				{
+					busOutResult[curBus] = tmp;
+				}
+				else
+				{
+					Type* lastType = busOutResult[curBus]->getType();
+					Type* tmpType = tmp->getType();
+					if (lastType != tmpType)
+					{
+						// Should be integer types at the point
+						if (!lastType->isIntegerTy() || !tmpType->isIntegerTy())
+						{
+							std::cerr << "Expected integer types!" << std::endl;
+							context.errorFlagged = true;
+							return NULL;
+						}
+						if (lastType->getPrimitiveSizeInBits() < tmpType->getPrimitiveSizeInBits())
+						{
+							// need cast last zeroextend
+							busOutResult[curBus] = new ZExtInst(busOutResult[curBus], tmpType, "ZExt", context.currentBlock());
+						}
+						else
+						{
+							// need cast tmp zeroextend
+							tmp = new ZExtInst(tmp, lastType, "ZExt", context.currentBlock());
+						}
+					}
+
+					busOutResult[curBus] = BinaryOperator::Create(Instruction::And, tmp, busOutResult[curBus], "PullUpCombine", context.currentBlock());
+				}
+			}
+		}
+
+		// Output busses all generated - generate the code to fix up the buses as per the rules above - todo fix this for beyond 2 bus case
+
+		if (busCount == 2)
+		{
+			Value* needsSwap =BinaryOperator::Create(Instruction::Xor, busIsDrivingResult[0], busIsDrivingResult[1], "RequiresSwap", context.currentBlock()); 
+			Value* swapA = BinaryOperator::Create(Instruction::And, busIsDrivingResult[1], needsSwap, "setAtoB", context.currentBlock());
+			Value* swapB = BinaryOperator::Create(Instruction::And, busIsDrivingResult[0], needsSwap, "setBtoA", context.currentBlock());
+
+			{// extend type widths to match
+				Type* lastType = busOutResult[0]->getType();
+				Type* tmpType = busOutResult[1]->getType();
+				if (lastType != tmpType)
+				{
+					// Should be integer types at the point
+					if (!lastType->isIntegerTy() || !tmpType->isIntegerTy())
+					{
+						std::cerr << "Expected integer types!" << std::endl;
+						context.errorFlagged = true;
+						return NULL;
+					}
+					if (lastType->getPrimitiveSizeInBits() < tmpType->getPrimitiveSizeInBits())
+					{
+						// need cast last zeroextend
+						busOutResult[0] = new ZExtInst(busOutResult[0], tmpType, "ZExt", context.currentBlock());
+					}
+					else
+					{
+						// need cast tmp zeroextend
+						busOutResult[1] = new ZExtInst(busOutResult[1], lastType, "ZExt", context.currentBlock());
+					}
+				}
+			}
+
+
+			Value* swapAB = SelectInst::Create(swapA, busOutResult[1], busOutResult[0], "SwapAwithB", context.currentBlock());
+			Value* swapBA = SelectInst::Create(swapB, busOutResult[0], busOutResult[1], "SwapBwithA", context.currentBlock());
+
+			busOutResult[0] = swapAB;
+			busOutResult[1] = swapBA;
+		}
+		if (busCount > 2)
+		{
+			std::cerr << "TODO: Bus arbitration for >2 buses not implemented yet" << std::endl;
+			context.errorFlagged = true;
+			return NULL;
+		}
+
+		for (curBus = 0; curBus < busCount; curBus++)
+		{
+			for (size_t i = 0; i < ins[curBus].size(); i++)
+			{
+				BitVariable var;
+
+				if (!context.LookupBitVariable(var, ins[curBus][i]->module, ins[curBus][i]->name))
+				{
+					std::cerr << "Failed to retrieve variable" << std::endl;
+					context.errorFlagged = true;
+					return NULL;
+				}
+
+				CAssignment::generateAssignment(var, *ins[curBus][i], busOutResult[curBus], context);
+
+				if (i == 0 && connects[a]->hasTap && optlevel < 3)
+				{
+					// Generate a call to AddPinRecord(cnt,val)
+
+					std::vector<Value*> args;
+
+					// Handle variable promotion
+					Type* ty = Type::getIntNTy(TheContext, 32);
+					Instruction::CastOps op = CastInst::getCastOpcode(busOutResult[curBus], false, ty, false);
+
+					Instruction* truncExt = CastInst::Create(op, busOutResult[curBus], ty, "cast", context.currentBlock());
+					args.push_back(ConstantInt::get(TheContext, APInt(8, var.trueSize.getLimitedValue(), false)));
+					args.push_back(truncExt);
+					CallInst *call = CallInst::Create(context.debugBusTap, args, "", context.currentBlock());
+				}
+			}
 		}
 	}
 

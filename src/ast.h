@@ -9,6 +9,12 @@
 #define MAX_SUPPORTED_STACK_DEPTH	(256)
 #define MAX_SUPPORTED_STACK_BITS	(8)
 
+enum ConnectionType
+{
+	None,
+	Pullup
+};
+
 class BitVariable;
 
 class CodeGenContext;
@@ -26,6 +32,7 @@ class CAffect;
 class CString;
 class CInteger;
 class CParamDecl;
+class CConnect;
 
 typedef std::vector<CStatement*> StatementList;
 typedef std::vector<CExpression*> ExpressionList;
@@ -41,7 +48,7 @@ typedef std::vector<CAffect*> AffectorList;
 typedef std::vector<CInteger*> ExternParamsList;
 typedef std::vector<CExpression*> ParamsList;
 typedef std::vector<CParamDecl*> NamedParamsList;
-typedef std::vector<std::vector<CExpression*> *> ConnectList;
+typedef std::vector<CConnect*> ConnectList;
 
 class CNode {
 public:
@@ -500,6 +507,19 @@ public:
 		id(id), trigger(trigger),block(block) { }
 	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
+};
+
+class CConnect{
+public:
+	ParamsList& connects;
+	const CString& tapName;
+	bool hasTap;
+	ConnectionType conType;
+
+	CConnect(ParamsList& connects, const CString& tapName, ConnectionType conType) :
+		connects(connects), tapName(tapName), hasTap(true), conType(conType) { }
+	CConnect(ParamsList& connects, ConnectionType conType) :
+		connects(connects), tapName(*new CString("")),hasTap(false), conType(conType) { }
 };
 
 class CConnectDeclaration : public CStatement {

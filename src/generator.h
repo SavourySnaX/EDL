@@ -115,6 +115,7 @@ public:
     Function *debugTraceString;
     Function *debugTraceChar;
     Function *debugTraceMissing;
+    Function *debugBusTap;
 
     std::string	symbolPrepend;
     std::string moduleName;
