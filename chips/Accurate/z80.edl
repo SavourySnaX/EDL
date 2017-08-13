@@ -1,9 +1,11 @@
-
-
 #
 # BUS_REQ/ACK cycles are not handled yet
 #
 #
+
+PIN IN			PIN_dummy[1];
+PIN IN			PIN_dummy2[1];
+PIN IN			PIN_dummy3[1];
 
 # PINS 
 

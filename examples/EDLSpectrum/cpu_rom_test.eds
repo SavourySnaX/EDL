@@ -1,0 +1,111 @@
+#
+# Quick Hack together of Z80A + ZX80_Rom to test it + RAM (8bit -- original was 4, just makes life easier at the minute - missing support for different bus sizes)
+#
+#
+
+INSTANCE "../chips/spectrum_rom.edl" AS ROM;
+INSTANCE "../../../chips/accurate/z80.edl" AS CPU;
+INSTANCE "../chips/ULA.edl" AS ULA;
+INSTANCE "../chips/4116_8.edl" AS LORAM;	#4116 *8 chips to make interface simpler
+INSTANCE "../chips/4164_8.edl" AS HIRAM;	#4164 *8 chips to make interface simpler
+INSTANCE "../chips/74LS157.edl" AS IC3;
+INSTANCE "../chips/74LS157.edl" AS IC4;
+INSTANCE "../chips/DeadCockroach.edl" AS ROACH;
+
+
+CONNECT RESET1
+{
+	CPU PIN__RESET , 1;
+}
+
+CONNECT RESET2
+{
+	ULA PIN__MREQ, 1;
+	CPU PIN__BUSRQ , 1;
+	CPU PIN__WAIT , 1;
+	CPU PIN__INT , 1;
+	CPU PIN__NMI , 1;
+	CPU PIN__RESET , 0;
+	ROM _CS2 , 0;
+}
+
+# void TEST(uint8_t TEST)
+#CONNECT TEST
+#{
+#	BUS_TAP("MCLK") ULA PIN_Q, TEST;
+#	BUS_TAP("CCLK") CPU PIN__CLK , ULA PIN_CLK;
+###	BUS_TAP("~UIO") ULA PIN__IO, CPU PIN_A[0..0] | CPU PIN__IORQ;
+#	ULA PIN__IO, CPU PIN_A[0..0] | CPU PIN__IORQ;
+#	BUS_TAP("mreq23") ULA PIN_mreq23, CPU PIN_dummy2;
+#	BUS_TAP("~MRQ") ULA PIN__MREQ, CPU PIN__MREQ;
+#	BUS_TAP("~RD") ULA PIN__RD, CPU PIN__RD;
+#	BUS_TAP("~WR") ULA PIN__WR, CPU PIN__WR;
+#	
+#	BUS_TAP("AHI") ULA PIN_AHI, CPU PIN_A[14..15];
+#	BUS_TAP("ALO") ULA PIN_ALO, LORAM A, ISOLATION, CPU PIN_A , ROM A , HIRAM A;
+#
+###	BUS_TAP("~INT") CPU PIN__INT , ULA PIN__INT;
+#	CPU PIN__INT , ULA PIN__INT;
+#	BUS_TAP("AE") CPU PIN_dummy, ULA PIN_AE;
+#	LORAM _WE , ULA PIN__WE;
+#	HIRAM _WE , CPU PIN__WR;
+#	BUS_TAP("~LCS") LORAM _CS , ULA PIN__LCS;
+###	BUS_TAP("~HCS") HIRAM _CS , ~((CPU PIN_A[15..15]) & (~CPU PIN__MREQ));
+#	HIRAM _CS , ~((CPU PIN_A[15..15]) & (~CPU PIN__MREQ));
+#	BUS_TAP("clkwait") CPU PIN_dummy3, ULA PIN_clkwait;
+#	BUS_TAP("~RCS") ROM _CS1 , ULA PIN__ROM;
+#	BUS_TAP("D") PULLUP LORAM D , ULA PIN_D, ISOLATION, CPU PIN_D, ROM D , HIRAM D;
+#	BUS_TAP("M1") CPU PIN__M1, ULA dummy1;
+#	BUS_TAP("RFSH") CPU PIN__RFSH, ULA dummy2;
+#}
+
+CONNECT TEST
+{
+	BUS_TAP("MCLK") ULA PIN_Q, TEST;
+	BUS_TAP("CCLK") CPU PIN__CLK , ULA PIN_CLK;
+	BUS_TAP("~UIO") ULA PIN__IO, CPU PIN_A[0..0] | CPU PIN__IORQ;
+	BUS_TAP("~MRQ") ULA PIN__MREQ, CPU PIN__MREQ;
+	BUS_TAP("~RD") ULA PIN__RD, CPU PIN__RD;
+	BUS_TAP("~WR") ULA PIN__WR, CPU PIN__WR;
+	
+	ROACH CPU_AHI , CPU PIN_A[14..15];
+	ROACH CPU__IORQ , CPU PIN_A[0..0] | CPU PIN__IORQ; 
+	BUS_TAP("AHI") ULA PIN_AHI, CPU PIN_A[14..15];
+#	BUS_TAP("AHI") ULA PIN_AHI, ROACH ULA_AHI;
+	BUS_TAP("ALO") ULA PIN_ALO, LORAM A, ISOLATION, CPU PIN_A , ROM A , HIRAM A;
+
+	BUS_TAP("~INT") CPU PIN__INT , ULA PIN__INT;
+	LORAM _WE , ULA PIN__WE;
+	HIRAM _WE , CPU PIN__WR;
+	BUS_TAP("~LCS") LORAM _CS , ULA PIN__LCS;
+	BUS_TAP("~HCS") HIRAM _CS , ~((CPU PIN_A[15..15]) & (~CPU PIN__MREQ));
+	BUS_TAP("~RCS") ROM _CS1 , ULA PIN__ROM;
+	BUS_TAP("D") PULLUP LORAM D , ULA PIN_D, ISOLATION, CPU PIN_D, ROM D , HIRAM D;
+	BUS_TAP("M1") CPU PIN__M1, ULA dummy1;
+	BUS_TAP("RFSH") CPU PIN__RFSH, ULA dummy2;
+}
+
+
+#CONNECT TESTCPU
+#{
+#	CPU PIN__CLK , TESTCPU;
+#	CPU PIN_A , ROM A , LORAM A, HIRAM A;
+#	#CPU PIN__INT , CPU PIN_A[6..6];
+#	RAM _WE , CPU PIN__WR;
+#	RAM _CS , ~((CPU PIN_A[14..14]) & (~CPU PIN__MREQ));
+#	ROM _CS1 , CPU PIN_A > $3FFF;
+#	PULLUP ROM D , RAM D , CPU PIN_D;
+#}
+
+#CONNECT TESTULA
+#{
+#	BUS_TAP("MCLK") ULA PIN_Q, TESTULA;
+#	BUS_TAP("AHI") ULA PIN_AHI, CPU PIN_A[14..15];
+#	BUS_TAP("ALO") ULA PIN_ALO, LORAM A, ISOLATION, CPU PIN_A, HIRAM A;
+#	LORAM _WE , 1;
+#	ULA PIN__WR, 1;
+#	ULA PIN__RD, 1;
+#	BUS_TAP("~LCS") LORAM _CS , ULA PIN__LCS;
+#	BUS_TAP("D") PULLUP ULA PIN_D, LORAM D;
+#}
+

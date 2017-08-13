@@ -1,0 +1,26 @@
+#
+# Dead Cock Roach Modifcation
+#
+
+PIN IN			CPU_AHI[2];
+PIN IN			CPU__IORQ[1];
+PIN OUT			ULA_AHI[2];
+
+FUNCTION INTERNAL	UpdateAHI
+{
+	ULA_AHI<-CPU_AHI;
+	IF CPU__IORQ==0
+	{
+		ULA_AHI<-%01;
+	}
+}
+
+HANDLER CPU_AHI	ALWAYS
+{
+	CALL UpdateAHI();
+}
+
+HANDLER CPU__IORQ	ALWAYS
+{
+	CALL UpdateAHI();
+}

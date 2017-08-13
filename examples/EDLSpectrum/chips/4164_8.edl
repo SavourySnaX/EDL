@@ -1,0 +1,64 @@
+#
+# 32K
+#
+
+PIN IN			A[15];
+PIN BIDIRECTIONAL	D[8];
+PIN IN			_CS[1];
+PIN IN			_WE[1];
+
+
+DECLARE ram32[[15]][8];
+DECLARE latch[1];
+
+FUNCTION INTERNAL UpdateD
+{
+	IF _CS
+	{
+		D<-HIGH_IMPEDANCE;
+	}
+
+	IF ~_WE & ~_CS
+	{
+		D<-HIGH_IMPEDANCE;
+	}
+}
+
+HANDLER A	ALWAYS
+{
+	CALL UpdateD();
+}
+
+HANDLER _CS	ALWAYS
+{
+	CALL UpdateD();
+}
+
+HANDLER _WE	CHANGED
+{
+	CALL UpdateD();
+	IF ~_WE
+	{
+		latch<-1;
+	}
+}
+
+HANDLER D	ALWAYS
+{
+	IF ~_CS
+	{
+		IF (~_WE) & (latch) 
+		{
+			ram32[[A]]<-D;
+			latch<-0;
+			#DEBUG_TRACE "HRAM WRITE ",BASE 16,A,D;
+		}
+		IF _WE
+		{
+			D<-ram32[[A]];
+			#DEBUG_TRACE "HRAM READ ",BASE 16,A,D;
+		}
+#		DEBUG_TRACE "RAM ",BASE 16,A,D,ram[[A]];
+	}
+
+}

@@ -1,0 +1,44 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <None Include="..\chips\74ls157.edl">
+      <Filter>Chips</Filter>
+    </None>
+    <None Include="..\chips\4116_8.edl">
+      <Filter>Chips</Filter>
+    </None>
+    <None Include="..\chips\spectrum_rom.edl">
+      <Filter>Chips</Filter>
+    </None>
+    <None Include="..\..\..\chips\Accurate\z80.edl">
+      <Filter>Chips</Filter>
+    </None>
+    <None Include="..\chips\ULA.EDL">
+      <Filter>Chips</Filter>
+    </None>
+    <None Include="..\chips\4164_8.edl">
+      <Filter>Chips</Filter>
+    </None>
+    <None Include="..\chips\DeadCockroach.edl">
+      <Filter>Chips</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Chips">
+      <UniqueIdentifier>{a7bf66e3-7193-4b89-a86a-6ae8c817803a}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\Testing.c" />
+    <ClCompile Include="..\gui\debugger.c" />
+    <ClCompile Include="..\tape.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\glext.h" />
+    <ClInclude Include="..\gui\debugger.h" />
+    <ClInclude Include="..\gui\font.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="..\cpu_rom_test.eds" />
+  </ItemGroup>
+</Project>

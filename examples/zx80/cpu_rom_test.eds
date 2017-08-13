@@ -3,9 +3,9 @@
 #
 #
 
-INSTANCE "chips/zx80_rom.edl" AS ROM;
-INSTANCE "../../chips/accurate/z80.edl" AS CPU;
-INSTANCE "chips/2114_8.edl" AS RAM;
+INSTANCE "../chips/zx80_rom.edl" AS ROM;
+INSTANCE "../../../chips/accurate/z80.edl" AS CPU;
+INSTANCE "../chips/2114_8.edl" AS RAM;
 
 CONNECT RESET1
 {
@@ -27,10 +27,10 @@ CONNECT TEST
 {
 	CPU PIN__CLK , TEST;
 	CPU PIN_A , ROM A , RAM A;
-	CPU PIN__INT , CPU PIN_A[6..6];
+	#CPU PIN__INT , CPU PIN_A[6..6];
 	RAM _WE , CPU PIN__WR;
 	RAM _CS , ~((CPU PIN_A[14..14]) & (~CPU PIN__MREQ));
-	ROM _CS1 , CPU PIN_A > $1FFF;
+	ROM _CS1 , CPU PIN_A > $3FFF;
 	PULLUP ROM D , RAM D , CPU PIN_D;
 }
 

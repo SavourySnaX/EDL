@@ -1,0 +1,38 @@
+
+# ZX80 ROM
+
+PIN IN 			A[14];
+PIN BIDIRECTIONAL	D[8];
+PIN IN			_CS1[1];
+PIN IN			_CS2[1];
+
+DECLARE rom[[14]][8];
+
+FUNCTION INTERNAL UpdateD
+{
+	IF ~(_CS1 | _CS2)
+	{
+		D<-rom[[A]];
+		#DEBUG_TRACE BASE 16,"ROM ",A,D;
+	}
+	IF _CS1 | _CS2
+	{
+		D<-HIGH_IMPEDANCE;
+		#DEBUG_TRACE BASE 16,"ROM ",A,"HI_Z";
+	}
+}
+
+HANDLER _CS1	ALWAYS
+{
+	CALL UpdateD();
+}
+
+HANDLER _CS2	ALWAYS
+{
+	CALL UpdateD();
+}
+
+HANDLER A	ALWAYS
+{
+	CALL UpdateD();
+}

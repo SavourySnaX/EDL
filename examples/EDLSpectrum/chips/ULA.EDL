@@ -1,0 +1,498 @@
+#
+# ZX Spectrum Feranti ULA 6C001E-7
+#
+# Note for now the 14bit Address select is full exposed (on the original it was multiplexed row / column style across A0-A6)
+#
+
+#
+# NB: U V /Y are not connected (currently driving the screen ram directly)
+#
+#
+#
+#
+#
+#
+#U    15    
+#V    16    
+#/Y   17    
+#/CAS 1    
+#/RAS 35
+#
+#U,V are the color-difference signals.
+#/Y is the inverted video including sync.
+
+# PINS 
+
+PIN IN			dummy1[1];
+PIN IN			dummy2[1];
+
+PIN OUT			PIN_AE[1];
+PIN OUT			PIN_mreq23[1];
+PIN OUT			PIN_clkwait[1];
+
+PIN BIDIRECTIONAL			PIN_ALO[14];	# A0-A13
+PIN IN						PIN_AHI[2];		# A14-A15
+PIN BIDIRECTIONAL			PIN_D[8];		# D0-D7
+
+PIN OUT						PIN__INT[1];	# INT Request
+
+PIN IN						PIN_T[5];		# KB data (through pull ups) T are the data-lines to the keyboard (address-lines through diodes)
+
+PIN IN						PIN_Q[1];		#14Mhz crystal input
+PIN OUT						PIN_CLK[1];		#CPU Clock output
+
+PIN OUT						PIN_SOUND[1];	#SOUND (OSC) SOUND is the analog-I/O-line for beep, save and load.
+
+PIN IN						PIN__IO[1];		#IO (IO-ULA) IO-ULA is (A0(CPU) OR /IORQ) for the I/O-port 0xfe
+PIN IN						PIN__MREQ[1];	#_MREQ from CPU
+PIN IN						PIN__WR[1];		#_WR from CPU
+PIN IN						PIN__RD[1];		#_RD from CPU
+
+PIN OUT						PIN__WE[1];		#_WE from ULA
+PIN OUT						PIN__ROM[1];	# ROM (ROM CS) chip select for ROM  (decoded from A14/A15)
+
+PIN OUT						PIN__LCS[1];		# RAS/CAS chip select signal
+
+DECLARE BorderCol[3];
+DECLARE Fetching[1];
+
+
+C_FUNC_EXTERN [8] GetPort [16];
+C_FUNC_EXTERN     SetPort [16],[8];
+
+# INTERNAL STATE/REGISTERS
+
+DECLARE DivideCounter[2] ALIAS	CPU_CLK[1]:PIXEL_CLK[1];#:M_CLK[1];
+DECLARE VClock[9];													# 0-311 counter
+DECLARE HClock[9]	ALIAS	_HActive[1]:HInterest[3]:HLower[5];		# 0-447 counter		HInterest is used to decode the HBlank/HSync Timings - _HActive is 0 when we are in the active display area
+
+DECLARE FlashClock[5] ALIAS Flash[1]:FlashRest[4];
+
+DECLARE HSync[1];
+DECLARE HBlank[1];
+DECLARE VActive[1];
+DECLARE VSync[1];
+DECLARE VBlank[1];
+
+DECLARE VidC3[1];
+DECLARE VidEn[1];
+DECLARE AttrLatch[1];
+DECLARE DataLatch[1];
+DECLARE AOLatch[1];
+DECLARE SLoad[1];
+DECLARE AE[1];
+
+DECLARE Border[1];
+DECLARE VidEn[1];
+DECLARE PrevC3[1];
+
+DECLARE AttrData[8];
+DECLARE DispData[8];
+DECLARE ShiftRegister[8];
+DECLARE AttrOutput[8];
+
+FUNCTION INTERNAL SetupAddress
+{
+	IF (~PrevC3) & (HClock[3..3])==1
+	{
+		VidEn<-~Border;
+	}
+	VidC3<-(Border) | (~HClock[3..3]);
+	AttrLatch<- ~(PIXEL_CLK | (~HClock[0..0]) | (~HClock[1..1]) | VidC3);
+	DataLatch<- ~(PIXEL_CLK | (~HClock[0..0]) | (HClock[1..1]) | VidC3);
+	AOLatch<- ~( (~HClock[0..0]) | (HClock[1..1]) | (~HClock[2..2]) );
+	SLoad<- ~( (~HClock[0..0]) | (HClock[1..1]) | (~HClock[2..2]) | (~VidEn) );
+
+	#DEBUG_TRACE VidEn,AOLatch,SLoad,HClock;
+
+	DECLARE C012[1];
+
+	C012<-(HClock[0..0])&(HClock[1..1])&(HClock[2..2]);
+
+	AE<-~( Border | (~( (HClock[3..3]) | C012 )));
+	PIN_AE<-AE;
+	PIN__LCS<-~((PIN_AHI==%01) & (~PIN__MREQ));	
+	PIN__ROM<-~((PIN_AHI==%00) & (~PIN__MREQ));
+
+
+	IF AE
+	{
+		DECLARE VideoAddress[14] ALIAS %0:ColumnAddressA[3]:ColumnAddressB[3]:RowAddressV[2]:RowAddressH[4]:RowAddressHL[1];
+		
+		RowAddressV<-VClock[3..4];
+		RowAddressH<-HClock[4..7];
+		RowAddressHL<-HClock[2..2];
+
+		IF (HClock[1..1])==0
+		{
+			DECLARE dispMapping[6] ALIAS V76[2]:V012[3]:V5[1];
+
+			V76<-VClock[6..7];
+			V012<-VClock[0..2];
+			V5<-VClock[5..5];
+
+			ColumnAddressA<-dispMapping[3..5];
+			ColumnAddressB<-dispMapping[0..2];
+		}
+		IF (HClock[1..1])==1
+		{
+			ColumnAddressA<-%110;
+			ColumnAddressB<-VClock[5..7];
+		}
+
+		#DEBUG_TRACE BASE 16,VideoAddress;
+		PIN_ALO<-VideoAddress;
+		#PIN__ROM<-1;
+		PIN__LCS<-0;	
+	}
+	IF ~AE
+	{
+		#DEBUG_TRACE "HIZ";
+		PIN_ALO<-HIGH_IMPEDANCE;
+	}
+}
+
+DECLARE lastClk35[1];
+DECLARE lastClk[1];
+DECLARE mreq23[1];
+DECLARE waitCanc[1];
+
+FUNCTION INTERNAL clk[1] ContentionHandlerNext
+{
+	DECLARE vBordVC76[1];
+	DECLARE vBordVC8[1];
+	DECLARE nDenHC8[1];
+	DECLARE vBord[1];
+	DECLARE nDen[1];
+	DECLARE c7[1];
+	DECLARE c6[1];
+	DECLARE sWait[1];
+	DECLARE waitReqA14A15[1];
+	DECLARE waitReq[1];
+	DECLARE sWaitCmb[1];
+	DECLARE clk35[1];
+
+	vBordVC76 <- (VClock[7..7]) & (VClock[6..6]);
+	vBordVC8 <- (VClock[8..8]);
+	nDenHC8 <- (HClock[8..8]);
+	vBord <- vBordVC76 | vBordVC8;
+	nDen <- nDenHC8 | vBord;
+	c7 <- nDen | (~(HClock[3..3]) & (HClock[2..2]) & (HClock[1..1]));
+	c6 <- nDen | (~(HClock[3..3]) & (HClock[2..2]) & (~HClock[1..1]));
+
+	sWait <- nDen | (~(c7 & c6));
+
+	waitReqA14A15 <- (PIN_AHI != %01);
+	waitReq <- waitReqA14A15 & PIN__IO;
+
+	IF (~lastClk35) & (HClock[0..0])==1
+	{
+		waitCanc <- ~(PIN__IO & PIN__MREQ);
+	}
+
+	sWaitCmb <- (~(waitReq | waitCanc | sWait));
+
+	clk35 <- (HClock[0..0]) | sWaitCmb;
+
+	clk<- clk35;
+
+	lastClk35 <- clk35;
+}
+
+FUNCTION INTERNAL clk[1] ContentionHandler
+{
+	DECLARE NMWait[1];
+	DECLARE NCPU[1];
+	DECLARE ContCombine[1];
+	DECLARE CombineToClock[1];
+	DECLARE ContCancel[1];
+	DECLARE AHI[2];
+	AHI<-PIN_AHI;
+
+	NMWait<-~((HClock[3..3]) | (HClock[2..2]));
+	
+	IF (~lastClk) & (HClock[0..0])==1
+	{
+		mreq23<-~PIN__MREQ;
+		#PIN_mreq23<-mreq23;
+	}
+	ContCombine<-~((Border) | (mreq23) | (~lastClk));
+
+	CombineToClock<-~((NMWait) | (~AHI[0..0]) | (AHI[1..1]) | (~ContCombine));
+
+	ContCancel<-~(NMWait | Border | (~HClock[0..0]));
+
+	NCPU<-~((HClock[0..0]) | CombineToClock | ContCancel);
+
+	PIN_mreq23<-ContCancel | CombineToClock;
+	PIN_clkwait<-CombineToClock;
+	
+	#DEBUG_TRACE PIN_mreq23,PIN_clkwait,ContCancel,CombineToClock;
+
+	clk<-~NCPU;
+
+	lastClk<-~NCPU;
+
+	DECLARE addL[1];
+	DECLARE addH[1];
+
+	addL<-~(PIN_AHI[0..0]);
+	addH<-(PIN_AHI[1..1]);
+
+#	DEBUG_TRACE AHI,HClock,NMWait,addL,addH,ContCombine,CombineToClock,ContCancel,NCPU,mreq23,PIN__MREQ;
+
+}
+
+DECLARE IOLATCH[1];
+
+HANDLER PIN__WR TRANSITION(1,0)
+{
+	IF ~PIN__IO
+	{
+		IOLATCH<-1;
+	}
+}
+
+HANDLER PIN_Q	TRANSITION(0,1)
+{
+	DECLARE AHI[2];
+	DECLARE RAM16[1];
+	AHI<-PIN_AHI;
+
+	RAM16<-~(PIN__MREQ | (~AHI[0..0]) | (AHI[1..1]));
+
+	PIN_D<-HIGH_IMPEDANCE;
+	PIN__WE<-(PIN__WR | (~RAM16));
+
+	CALL SetupAddress();
+
+	DECLARE IOACT[1];
+
+	IOACT<-((~PIN__IO) & ((~PIN__RD) | (~PIN__WR)));
+	IF IOACT
+	{
+		DECLARE A[16] ALIAS AHI[2]:ALO[14];
+		AHI<-PIN_AHI;
+		ALO<-PIN_ALO;
+		IF ~PIN__RD
+		{
+			PIN_D<-CALL GetPort(A);
+			DEBUG_TRACE PIN_D;
+		}
+		IF ~PIN__WR & IOLATCH
+		{
+			IOLATCH<-0;
+			#DEBUG_TRACE BASE 16, A,PIN__ROM,PIN__WR,PIN__RD,PIN_D;
+			BorderCol<-PIN_D;
+			#CALL SetPort(A,PIN_D);
+			DEBUG_TRACE PIN_D;
+		}
+	}
+	IF ~IOACT
+	{
+		PIN_D<-HIGH_IMPEDANCE;
+	}
+
+	DivideCounter<-DivideCounter+1;
+
+	PIN_CLK<-CALL ContentionHandler();
+}
+
+#
+##
+# Video Output Generation
+##
+#
+
+
+DECLARE FetchState[3];
+
+C_FUNC_EXTERN SetVideo	[16],[16],[32];
+
+FUNCTION outColour[32] GetColour inkPaper[1],inCol[8]
+{
+	DECLARE attribute[8] ALIAS flash[1]:bright[1]:paperG[1]:paperR[1]:paperB[1]:inkG[1]:inkR[1]:inkB[1];
+	DECLARE outCol[32];
+	DECLARE col[32];
+	DECLARE rMask[32] ALIAS $00FF0000;
+	DECLARE gMask[32] ALIAS $0000FF00;
+	DECLARE bMask[32] ALIAS $000000FF;
+
+	attribute<-inCol;
+	col<-$00CCCCCC;
+	IF bright
+	{
+		col<-$00FFFFFF;
+	}
+	outCol<-$00000000;
+	IF (inkPaper ^ (Flash & flash))
+	{
+		IF inkB
+		{
+			outCol<-outCol | (col & bMask);
+		}
+		IF inkR
+		{
+			outCol<-outCol | (col & rMask);
+		}
+		IF inkG
+		{
+			outCol<-outCol | (col & gMask);
+		}
+	}
+	IF ~(inkPaper ^ (Flash & flash))
+	{
+		IF paperB
+		{
+			outCol<-outCol | (col & bMask);
+		}
+		IF paperR
+		{
+			outCol<-outCol | (col & rMask);
+		}
+		IF paperG
+		{
+			outCol<-outCol | (col & gMask);
+		}
+	}
+	outColour<-outCol;
+}
+
+FUNCTION INTERNAL DoWork
+{
+	HSync<- ~((~HClock[8..8]) | (HClock[7..7]) | (~HClock[6..6]));
+	VSync<- ~((~VClock[7..7]) | (~VClock[6..6]) | (~VClock[5..5]) | (~VClock[4..4]) | (~VClock[3..3]) | (VClock[2..2]));
+	Border<- ((HClock[8..8]) | (VClock[8..8]) | (~((~VClock[7..7]) | (~VClock[6..6]))));
+
+	HBlank<-_HActive & (HInterest>=2) & (HInterest<=4);
+	VActive<-(VClock<=191);
+	VBlank<-(VClock>=192) & (~VSync);
+
+	PIN__INT<- (~VSync) | (VClock[2..2]) | (VClock[1..1]) | (VClock[0..0]) | (HClock[8..8]) | (HClock[7..7]) | (HClock[6..6]);
+
+
+
+
+
+
+
+	#DEBUG_TRACE _INT;
+
+	Fetching<-0;
+	FetchState<-FetchState+1;
+	IF (~_HActive) & VActive
+	{
+		DECLARE tCol[32] ALIAS tColV[16]:tColH[16];
+
+		tColV<-VClock;
+		tColH<-HClock;
+
+	#	CALL SetVideo(HClock,VClock,tCol);
+		Fetching<-(FetchState<4) & (PIN_AHI==%01);
+	}
+	IF Border
+	{
+		IF ~(HSync | VSync)
+		{
+	#		CALL SetVideo(HClock,VClock,CALL GetColour(BorderCol));
+		}
+	}
+
+
+	#### timings
+	DECLARE timingInfo[32];
+
+	timingInfo<-$00000000;
+#	IF VidEn
+#	{
+#		timingInfo<-timingInfo + $00404040;
+#	}
+#	IF DataLatch
+#	{
+#		timingInfo<-timingInfo + $00006000;
+#	}
+#	IF AttrLatch
+#	{
+#		timingInfo<-timingInfo + $00600000;
+#	}
+#	IF AOLatch
+#	{
+#		timingInfo<-timingInfo + $000000FF;
+#	}
+#	IF SLoad
+#	{
+#		timingInfo<-timingInfo + $00FF0000;
+#	}
+#	IF AE
+#	{
+#		timingInfo<-timingInfo + $0000FF00;
+#	}
+#	timingInfo<-CALL GetColour(AttrOutput);
+
+	DECLARE ink[1];
+	#DEBUG_TRACE ShiftRegister;
+	ShiftRegister<-ROL(ShiftRegister,ink,1,1);
+	#DEBUG_TRACE ink,ShiftRegister;
+	timingInfo<-CALL GetColour(ink,AttrOutput);
+
+	CALL SetVideo(HClock,VClock,timingInfo);
+
+
+	PrevC3<-(HClock[3..3]);
+	HClock<-HClock+1;
+	IF HClock==448
+	{
+		HClock<-0;
+		VClock<-VClock+1;
+		IF VClock==312
+		{
+			FlashClock<-FlashClock+1;	# Technically changes at V8 transition, but this has the same effect
+			VClock<-0;
+		}
+	}
+}
+
+
+HANDLER PIN_Q	TRANSITION(1,0)
+{
+	CALL SetupAddress();
+	IF PIXEL_CLK
+	{
+		CALL DoWork();
+	}
+	IF ~PIXEL_CLK
+	{
+		IF SLoad
+		{
+			#DEBUG_TRACE "SLOAD",ShiftRegister;
+			ShiftRegister<-DispData;
+			#DEBUG_TRACE "SLOAD",ShiftRegister;
+		}
+		IF AOLatch
+		{
+			#DEBUG_TRACE "AO",AttrOutput;
+			IF VidEn
+			{
+				AttrOutput<-AttrData;
+			}
+			IF ~VidEn
+			{
+				AttrOutput<-BorderCol;
+			}
+			#DEBUG_TRACE "AO",AttrOutput;
+		}
+		IF AttrLatch
+		{
+			AttrData<-PIN_D;
+			#DEBUG_TRACE "ATTR",AttrData;
+		}
+		IF DataLatch
+		{
+			DispData<-PIN_D;
+			#DEBUG_TRACE "DISP",DispData;
+		}
+	}
+	PIN_CLK<-CALL ContentionHandler();
+}
+
+
