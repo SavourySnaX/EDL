@@ -8,3 +8,6 @@
 test.result
 out/*
 **/out/**
+x64/*
+Debug/*
+\.vs/*
