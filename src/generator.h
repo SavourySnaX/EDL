@@ -10,7 +10,7 @@
 #include <llvm/IR/CallingConv.h>
 #include <llvm/LinkAllPasses.h>
 #include <llvm/IR/DataLayout.h>
-#include <llvm/Bitcode/ReaderWriter.h>
+//#include <llvm/Bitcode/ReaderWriter.h>
 #include <llvm/IR/Verifier.h>
 #include <llvm/IR/IRPrintingPasses.h>
 #include <llvm/IR/IRBuilder.h>
@@ -84,10 +84,11 @@ class CompilerOptions
 {
 public:
 
-	CompilerOptions() { symbolModifier=NULL; inputFile=NULL; optimisationLevel=0; traceUnimplemented=0; generateDisassembly=1; }
+	CompilerOptions() { symbolModifier = NULL; inputFile = NULL; outputFile = NULL; optimisationLevel = 0; traceUnimplemented = 0; generateDisassembly = 1; }
 	
 	char *symbolModifier;
 	char *inputFile;
+	char *outputFile;
 	int optimisationLevel;
 	int traceUnimplemented;
 	int generateDisassembly;

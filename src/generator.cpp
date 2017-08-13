@@ -7,8 +7,14 @@
 #include "llvm/IR/Function.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/IR/InstIterator.h"
+#include "llvm/Support/TargetRegistry.h"
+
 
 using namespace llvm;
+
+static LLVMContext TheContext;
+
+int optlevel=0;
 
 CInteger::CInteger(std::string& value )
 {
@@ -283,9 +289,9 @@ CodeGenContext::CodeGenContext(CodeGenContext* parent)
 	if (!parent) 
 	{ 
 		std::string err;
-//		module = new Module("root",getGlobalContext()); 
+//		module = new Module("root",TheContext); 
 
-		std::unique_ptr<Module> Owner = make_unique<Module>("root", getGlobalContext());
+		std::unique_ptr<Module> Owner = llvm::make_unique<Module>("root", TheContext);
 		module = Owner.get();
 		ee = EngineBuilder(std::move(Owner)).setErrorStr(&err).setMCJITMemoryManager(llvm::make_unique<SectionMemoryManager>()).create();
 		if (!ee)
@@ -330,12 +336,12 @@ void CodeGenContext::GenerateDisassmTables()
 		APInt tableSize32=tableSize.zextOrTrunc(32);
 		// Create a global variable to indicate the max size of the table
 
-		GlobalVariable* gvar_int32_DIS_max = new GlobalVariable(*module, IntegerType::get(getGlobalContext(), 32),true,GlobalValue::ExternalLinkage,NULL,symbolPrepend+"DIS_max_"+tableIter->first);
-		ConstantInt* const_int32_1 = ConstantInt::get(getGlobalContext(), tableSize32+1);
+		GlobalVariable* gvar_int32_DIS_max = new GlobalVariable(*module, IntegerType::get(TheContext, 32),true,GlobalValue::ExternalLinkage,NULL,symbolPrepend+"DIS_max_"+tableIter->first);
+		ConstantInt* const_int32_1 = ConstantInt::get(TheContext, tableSize32+1);
 		gvar_int32_DIS_max->setInitializer(const_int32_1);
 
 		// Create a global array to hold the table
-		PointerType* PointerTy_5 = PointerType::get(IntegerType::get(getGlobalContext(), 8), 0);
+		PointerType* PointerTy_5 = PointerType::get(IntegerType::get(TheContext, 8), 0);
 	       	ArrayType* ArrayTy_4 = ArrayType::get(PointerTy_5, tableSize.getLimitedValue()+1);
 		ConstantPointerNull* const_ptr_13 = ConstantPointerNull::get(PointerTy_5);	
 		GlobalVariable* gvar_array_table = new GlobalVariable(*module,ArrayTy_4,true,GlobalValue::ExternalLinkage,NULL, symbolPrepend+"DIS_"+tableIter->first);
@@ -348,13 +354,13 @@ void CodeGenContext::GenerateDisassmTables()
 		{
 			if (CompareEquals(slot->first,trackingSlot))
 			{
-				ArrayType* ArrayTy_0 = ArrayType::get(IntegerType::get(getGlobalContext(), 8), slot->second.length()-1);
+				ArrayType* ArrayTy_0 = ArrayType::get(IntegerType::get(TheContext, 8), slot->second.length()-1);
 				GlobalVariable* gvar_array__str = new GlobalVariable(*module, ArrayTy_0,true,GlobalValue::PrivateLinkage,0,symbolPrepend+".str"+trackingSlot.toString(16,false));
 				gvar_array__str->setAlignment(1);
   
-				Constant* const_array_9 = ConstantDataArray::getString(getGlobalContext(), slot->second.substr(1,slot->second.length()-2), true);
+				Constant* const_array_9 = ConstantDataArray::getString(TheContext, slot->second.substr(1,slot->second.length()-2), true);
 				std::vector<Constant*> const_ptr_12_indices;
-				ConstantInt* const_int64_13 = ConstantInt::get(getGlobalContext(), APInt(64, StringRef("0"), 10));
+				ConstantInt* const_int64_13 = ConstantInt::get(TheContext, APInt(64, StringRef("0"), 10));
 				const_ptr_12_indices.push_back(const_int64_13);
 				const_ptr_12_indices.push_back(const_int64_13);
 				Constant* const_ptr_12 = ConstantExpr::getGetElementPtr(NULL,gvar_array__str, const_ptr_12_indices);
@@ -385,23 +391,24 @@ void CodeGenContext::generateCode(CBlock& root,CompilerOptions &options)
 	if (isRoot)
 	{
 		opts=options;
+		optlevel = opts.optimisationLevel;
 		if (opts.symbolModifier)
 		{
 			symbolPrepend=opts.symbolModifier;
 		}
 
-		PointerType* PointerTy_4 = PointerType::get(IntegerType::get(getGlobalContext(), 8), 0);
+		PointerType* PointerTy_4 = PointerType::get(IntegerType::get(TheContext, 8), 0);
 
 		std::vector<Type*>FuncTy_8_args;
 		FuncTy_8_args.push_back(PointerTy_4);
-		FunctionType* FuncTy_8 = FunctionType::get(/*Result=*/IntegerType::get(getGlobalContext(), 32),/*Params=*/FuncTy_8_args,/*isVarArg=*/false);
+		FunctionType* FuncTy_8 = FunctionType::get(/*Result=*/IntegerType::get(TheContext, 32),/*Params=*/FuncTy_8_args,/*isVarArg=*/false);
 
 		debugTraceString = Function::Create(/*Type=*/FuncTy_8,/*Linkage=*/GlobalValue::ExternalLinkage,/*Name=*/"puts", module); // (external, no body)
 		debugTraceString->setCallingConv(CallingConv::C);
 
 		std::vector<Type*>FuncTy_6_args;
-		FuncTy_6_args.push_back(IntegerType::get(getGlobalContext(), 32));
-		FunctionType* FuncTy_6 = FunctionType::get(/*Result=*/IntegerType::get(getGlobalContext(), 32),/*Params=*/FuncTy_6_args,/*isVarArg=*/false);
+		FuncTy_6_args.push_back(IntegerType::get(TheContext, 32));
+		FunctionType* FuncTy_6 = FunctionType::get(/*Result=*/IntegerType::get(TheContext, 32),/*Params=*/FuncTy_6_args,/*isVarArg=*/false);
 
 		debugTraceChar = Function::Create(/*Type=*/FuncTy_6,/*Linkage=*/GlobalValue::ExternalLinkage,/*Name=*/"putchar", module); // (external, no body)
 		debugTraceChar->setCallingConv(CallingConv::C);
@@ -481,7 +488,7 @@ void CodeGenContext::generateCode(CBlock& root,CompilerOptions &options)
 				// The IPO passes may leave cruft around.  Clean up after them.
 				pm.add(createInstructionCombiningPass());
 				pm.add(createJumpThreadingPass());        // Thread jumps.
-				pm.add(createScalarReplAggregatesPass()); // Break up allocas
+//				pm.add(createScalarReplAggregatesPass()); // Break up allocas
 
 				// Run a few AA driven optimizations here and now, to cleanup the code.
 				//pm.add(createFunctionAttrsPass());        // Add nocapture
@@ -515,13 +522,13 @@ void CodeGenContext::generateCode(CBlock& root,CompilerOptions &options)
 				//pm.add(createFunctionAttrsPass());        // Deduce function attrs
 
 				//  if (!DisableInline)
-//3.7//Broken Modules -- opt however works fine				pm.add(createFunctionInliningPass());   // Inline small functions
+				pm.add(createFunctionInliningPass());   // Inline small functions
 				pm.add(createArgumentPromotionPass());    // Scalarize uninlined fn args
 
 				pm.add(createInstructionCombiningPass()); // Cleanup for scalarrepl.
 				pm.add(createJumpThreadingPass());        // Thread jumps.
 				pm.add(createCFGSimplificationPass());    // Merge & remove BBs
-				pm.add(createScalarReplAggregatesPass()); // Break up aggregate allocas
+//				pm.add(createScalarReplAggregatesPass()); // Break up aggregate allocas
 				pm.add(createInstructionCombiningPass()); // Combine silly seq's
 
 				pm.add(createTailCallEliminationPass());  // Eliminate tail calls
@@ -555,9 +562,42 @@ void CodeGenContext::generateCode(CBlock& root,CompilerOptions &options)
 				pm.add(createVerifierPass());
 			}
 		}
-		pm.add(createPrintModulePass(outs()));
-
-		pm.run(*module);
+		if (opts.outputFile != nullptr)
+		{
+			std::string error;
+			auto triple = sys::getDefaultTargetTriple();
+			auto target = TargetRegistry::lookupTarget(triple,error);
+			if (!target)
+			{
+				errorFlagged = true;
+				cerr << error << endl;
+				return;
+			}
+			TargetOptions opt;
+			auto rm = Optional<Reloc::Model>();
+			auto targetMachine = target->createTargetMachine(triple, "generic", "", opt, rm);
+			std::error_code ec;
+			raw_fd_ostream dest(opts.outputFile, ec,llvm::sys::fs::F_None);
+			if (ec)
+			{
+				errorFlagged = true;
+				cerr << ec.message() << endl;
+				return;
+			}
+			if (targetMachine->addPassesToEmitFile(pm, dest, TargetMachine::CGFT_ObjectFile))
+			{
+				errorFlagged = true;
+				cerr << "Cannot emit object file" << endl;
+				return;
+			}
+			pm.run(*module);
+			dest.flush();
+		}
+		else
+		{
+			pm.add(createPrintModulePass(outs()));
+			pm.run(*module);
+		}
 	}
 }
 
@@ -573,7 +613,7 @@ void CodeGenContext::generateCode(CBlock& root,CompilerOptions &options)
 
 Value* CInteger::codeGen(CodeGenContext& context)
 {
-	return ConstantInt::get(getGlobalContext(), integer);
+	return ConstantInt::get(TheContext, integer);
 }
 
 void CString::prePass(CodeGenContext& context)
@@ -582,15 +622,15 @@ void CString::prePass(CodeGenContext& context)
 
 Value* CString::codeGen(CodeGenContext& context)
 {
-	ArrayType* ArrayTy_0 = ArrayType::get(IntegerType::get(getGlobalContext(), 8), quoted.length()-1);
+	ArrayType* ArrayTy_0 = ArrayType::get(IntegerType::get(TheContext, 8), quoted.length()-1);
  
        	GlobalVariable* gvar_array__str = new GlobalVariable(/*Module=*/*context.module,  /*Type=*/ArrayTy_0,  /*isConstant=*/true,  /*Linkage=*/GlobalValue::PrivateLinkage,  /*Initializer=*/0,  /*Name=*/context.symbolPrepend+".str");
 	gvar_array__str->setAlignment(1);
   
 	// Constant Definitions
-	Constant* const_array_9 = ConstantDataArray::getString(getGlobalContext(), quoted.substr(1,quoted.length()-2), true);
+	Constant* const_array_9 = ConstantDataArray::getString(TheContext, quoted.substr(1,quoted.length()-2), true);
 	std::vector<Constant*> const_ptr_12_indices;
-	ConstantInt* const_int64_13 = ConstantInt::get(getGlobalContext(), APInt(64, StringRef("0"), 10));
+	ConstantInt* const_int64_13 = ConstantInt::get(TheContext, APInt(64, StringRef("0"), 10));
 	const_ptr_12_indices.push_back(const_int64_13);
 	const_ptr_12_indices.push_back(const_int64_13);
 	Constant* const_ptr_12 = ConstantExpr::getGetElementPtr(NULL,gvar_array__str, const_ptr_12_indices);
@@ -610,7 +650,7 @@ Value* CIdentifier::trueSize(Value* in,CodeGenContext& context,BitVariable& var)
 		return NULL;
 	}
 
-	Type* ty = Type::getIntNTy(getGlobalContext(),var.trueSize.getLimitedValue());
+	Type* ty = Type::getIntNTy(TheContext,var.trueSize.getLimitedValue());
 	Instruction::CastOps op = CastInst::getCastOpcode(in,false,ty,false);
 
 	Instruction* truncExt = CastInst::Create(op,in,ty,"cast",context.currentBlock());
@@ -623,9 +663,9 @@ Value* CIdentifier::GetAliasedData(CodeGenContext& context,Value* in,BitVariable
 	if (var.aliased == true)
 	{
 		// We are loading from a partial value - we need to load, mask off correct result and shift result down to correct range
-		ConstantInt* const_intMask = ConstantInt::get(getGlobalContext(), var.mask);	
+		ConstantInt* const_intMask = ConstantInt::get(TheContext, var.mask);	
 		BinaryOperator* andInst = BinaryOperator::Create(Instruction::And, in, const_intMask , "Masking", context.currentBlock());
-		ConstantInt* const_intShift = ConstantInt::get(getGlobalContext(), var.shft);
+		ConstantInt* const_intShift = ConstantInt::get(TheContext, var.shft);
 		BinaryOperator* shiftInst = BinaryOperator::Create(Instruction::LShr,andInst ,const_intShift, "Shifting", context.currentBlock());
 		return trueSize(shiftInst,context,var);
 	}
@@ -716,15 +756,15 @@ Value* CIdentifier::codeGen(CodeGenContext& context)
 		{
 			Value* exprResult=GetExpression()->codeGen(context);
 
-			Type* ty = Type::getIntNTy(getGlobalContext(),var.arraySize.getLimitedValue());
-			Type* ty64 = Type::getIntNTy(getGlobalContext(),64);
+			Type* ty = Type::getIntNTy(TheContext,var.arraySize.getLimitedValue());
+			Type* ty64 = Type::getIntNTy(TheContext,64);
 			Instruction::CastOps op = CastInst::getCastOpcode(exprResult,false,ty,false);
 			Instruction* truncExt0 = CastInst::Create(op,exprResult,ty,"cast",context.currentBlock());		// Cast index to 64 bit type
 			Instruction::CastOps op1 = CastInst::getCastOpcode(exprResult,false,ty64,false);
 			Instruction* truncExt = CastInst::Create(op1,truncExt0,ty64,"cast",context.currentBlock());		// Cast index to 64 bit type
 
  			std::vector<Value*> indices;
- 			ConstantInt* index0 = ConstantInt::get(getGlobalContext(), APInt(var.size.getLimitedValue(), StringRef("0"), 10));
+ 			ConstantInt* index0 = ConstantInt::get(TheContext, APInt(var.size.getLimitedValue(), StringRef("0"), 10));
 			indices.push_back(index0);
  			indices.push_back(truncExt);
 			Instruction* elementPtr = GetElementPtrInst::Create(NULL,var.value,indices,"array index",context.currentBlock());
@@ -749,15 +789,16 @@ Value* CDebugTraceString::codeGen(CodeGenContext& context)
 	{
 		std::vector<Value*> args;
 		
-		args.push_back(ConstantInt::get(getGlobalContext(),APInt(32,string.quoted[a])));
+		args.push_back(ConstantInt::get(TheContext,APInt(32,string.quoted[a])));
 		CallInst *call = CallInst::Create(context.debugTraceChar,args,"DEBUGTRACE",context.currentBlock());
 	}
+	return nullptr;
 }
 
 Value* CDebugTraceInteger::codeGen(CodeGenContext& context)
 {
 	static char tbl[37]="0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-	CallInst* fcall;
+	CallInst* fcall=nullptr;
 	unsigned bitWidth = integer.integer.getBitWidth();
 	// compute max divisor for associated base and bit width
 	int cnt=1;
@@ -784,7 +825,7 @@ Value* CDebugTraceInteger::codeGen(CodeGenContext& context)
 
 		APInt tmp = integer.integer.udiv(baseDivisor);
 
-		args.push_back(ConstantInt::get(getGlobalContext(), APInt(32, tbl[tmp.getLimitedValue()])));
+		args.push_back(ConstantInt::get(TheContext, APInt(32, tbl[tmp.getLimitedValue()])));
 		CallInst *call = CallInst::Create(context.debugTraceChar,args,"DEBUGTRACE",context.currentBlock());
 
 		integer.integer-=tmp*baseDivisor;
@@ -825,17 +866,17 @@ Value* CDebugTraceIdentifier::generate(CodeGenContext& context,Value *loadedValu
 	{
 		std::vector<Value*> args;
 		
-		ConstantInt* const_intDiv = ConstantInt::get(getGlobalContext(), baseDivisor);
+		ConstantInt* const_intDiv = ConstantInt::get(TheContext, baseDivisor);
 		BinaryOperator* shiftInst = BinaryOperator::Create(Instruction::UDiv,loadedValue,const_intDiv, "Dividing", context.currentBlock());
 		
-		Type* ty = Type::getIntNTy(getGlobalContext(),32);
+		Type* ty = Type::getIntNTy(TheContext,32);
 		Instruction::CastOps op = CastInst::getCastOpcode(shiftInst,false,ty,false);
 		Instruction* readyToAdd = CastInst::Create(op,shiftInst,ty,"cast",context.currentBlock());
 		
-		CmpInst* check=CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_ULE,readyToAdd,ConstantInt::get(getGlobalContext(),APInt(32,9)),"rangeCheck",context.currentBlock());
+		CmpInst* check=CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_ULE,readyToAdd,ConstantInt::get(TheContext,APInt(32,9)),"rangeCheck",context.currentBlock());
 
-		BinaryOperator* lowAdd = BinaryOperator::Create(Instruction::Add,readyToAdd,ConstantInt::get(getGlobalContext(),APInt(32,'0')),"lowAdd",context.currentBlock());
-		BinaryOperator* hiAdd = BinaryOperator::Create(Instruction::Add,readyToAdd,ConstantInt::get(getGlobalContext(),APInt(32,'A'-10)),"hiAdd",context.currentBlock());
+		BinaryOperator* lowAdd = BinaryOperator::Create(Instruction::Add,readyToAdd,ConstantInt::get(TheContext,APInt(32,'0')),"lowAdd",context.currentBlock());
+		BinaryOperator* hiAdd = BinaryOperator::Create(Instruction::Add,readyToAdd,ConstantInt::get(TheContext,APInt(32,'A'-10)),"hiAdd",context.currentBlock());
 
 		SelectInst *select = SelectInst::Create(check,lowAdd,hiAdd,"getRightChar",context.currentBlock());
 
@@ -877,7 +918,7 @@ Value* CDebugTraceIdentifier::codeGen(CodeGenContext& context)
 		Value* ret=generate(context,loadedValue);
 
 		std::vector<Value*> args;
-		args.push_back(ConstantInt::get(getGlobalContext(), APInt(32, ')')));
+		args.push_back(ConstantInt::get(TheContext, APInt(32, ')')));
 		CallInst::Create(context.debugTraceChar,args,"DEBUGTRACE",context.currentBlock());
 
 		return ret;
@@ -907,13 +948,13 @@ Value* CDebugTraceIdentifier::codeGen(CodeGenContext& context)
 			if (a!=power2.getLimitedValue()-1)
 			{
 				std::vector<Value*> args;
-				args.push_back(ConstantInt::get(getGlobalContext(), APInt(32, ',')));
+				args.push_back(ConstantInt::get(TheContext, APInt(32, ',')));
 				CallInst::Create(context.debugTraceChar,args,"DEBUGTRACE",context.currentBlock());
 			}
 		}
 		
 		std::vector<Value*> args;
-		args.push_back(ConstantInt::get(getGlobalContext(), APInt(32, ')')));
+		args.push_back(ConstantInt::get(TheContext, APInt(32, ')')));
 		CallInst::Create(context.debugTraceChar,args,"DEBUGTRACE",context.currentBlock());
 	}
 
@@ -925,8 +966,8 @@ Value* CDebugLine::codeGen(CodeGenContext& context)		// Refactored away onto its
 {
 	int currentBase=2;
 
-	BasicBlock *trac = BasicBlock::Create(getGlobalContext(),"debug_trace_helper",context.currentBlock()->getParent());
-	BasicBlock *cont = BasicBlock::Create(getGlobalContext(),"continue",context.currentBlock()->getParent());
+	BasicBlock *trac = BasicBlock::Create(TheContext,"debug_trace_helper",context.currentBlock()->getParent());
+	BasicBlock *cont = BasicBlock::Create(TheContext,"continue",context.currentBlock()->getParent());
 	
 	BranchInst::Create(trac,context.currentBlock());
 
@@ -946,7 +987,7 @@ Value* CDebugLine::codeGen(CodeGenContext& context)		// Refactored away onto its
 	}
 
 	std::vector<Value*> args;
-	args.push_back(ConstantInt::get(getGlobalContext(), APInt(32, '\n')));
+	args.push_back(ConstantInt::get(TheContext, APInt(32, '\n')));
 	CallInst* fcall = CallInst::Create(context.debugTraceChar,args,"DEBUGTRACE",context.currentBlock());
 	
 	BranchInst::Create(cont,context.currentBlock());
@@ -1109,7 +1150,7 @@ Value* CBinaryOperator::codeGen(CodeGenContext& context,Value* left,Value* right
 		case TOK_HAT:
 			return BinaryOperator::Create(Instruction::Xor,left,right,"",context.currentBlock());
 		case TOK_TILDE:
-			return BinaryOperator::Create(Instruction::Xor,left,ConstantInt::get(getGlobalContext(),~APInt(leftType->getBitWidth(),0)),"",context.currentBlock());
+			return BinaryOperator::Create(Instruction::Xor,left,ConstantInt::get(TheContext,~APInt(leftType->getBitWidth(),0)),"",context.currentBlock());
 		}
 	}
 
@@ -1159,8 +1200,8 @@ Value* CCastOperator::codeGen(CodeGenContext& context)
 				loop++;
 			}
 
-			Value *masked=BinaryOperator::Create(Instruction::And,left,ConstantInt::get(getGlobalContext(),mask),"castMask",context.currentBlock());
-			Value *shifted=BinaryOperator::Create(Instruction::LShr,masked,ConstantInt::get(getGlobalContext(),start),"castShift",context.currentBlock());
+			Value *masked=BinaryOperator::Create(Instruction::And,left,ConstantInt::get(TheContext,mask),"castMask",context.currentBlock());
+			Value *shifted=BinaryOperator::Create(Instruction::LShr,masked,ConstantInt::get(TheContext,start),"castShift",context.currentBlock());
 
 			// Final step cast it to correct size - not actually required, will be handled by expr lowering/raising anyway
 			return shifted;
@@ -1212,7 +1253,7 @@ Value* CRotationOperator::codeGen(CodeGenContext& context)
 		Instruction::CastOps oprotby = CastInst::getCastOpcode(rotBy,false,toShiftType,false);
 		Value *rotByCast = CastInst::Create(oprotby,rotBy,toShiftType,"cast",context.currentBlock());
 
-		Value *amountToShift = BinaryOperator::Create(Instruction::Sub,ConstantInt::get(getGlobalContext(),APInt(toShiftType->getBitWidth(),toShiftType->getBitWidth())),rotByCast,"shiftAmount",context.currentBlock());
+		Value *amountToShift = BinaryOperator::Create(Instruction::Sub,ConstantInt::get(TheContext,APInt(toShiftType->getBitWidth(),toShiftType->getBitWidth())),rotByCast,"shiftAmount",context.currentBlock());
 
 		Value *shiftedDown = BinaryOperator::Create(Instruction::LShr,toShift,amountToShift,"carryOutShift",context.currentBlock());
 
@@ -1233,11 +1274,11 @@ Value* CRotationOperator::codeGen(CodeGenContext& context)
 		Instruction::CastOps oprotby = CastInst::getCastOpcode(rotBy,false,toShiftType,false);
 		Value *rotByCast = CastInst::Create(oprotby,rotBy,toShiftType,"cast",context.currentBlock());
 
-		Value *amountToShift = BinaryOperator::Create(Instruction::Sub,ConstantInt::get(getGlobalContext(),APInt(toShiftType->getBitWidth(),toShiftType->getBitWidth())),rotByCast,"shiftAmount",context.currentBlock());
+		Value *amountToShift = BinaryOperator::Create(Instruction::Sub,ConstantInt::get(TheContext,APInt(toShiftType->getBitWidth(),toShiftType->getBitWidth())),rotByCast,"shiftAmount",context.currentBlock());
 
 		APInt downMaskc(toShiftType->getBitWidth(),0);
 		downMaskc=~downMaskc;
-		Value *downMask = BinaryOperator::Create(Instruction::LShr,ConstantInt::get(getGlobalContext(),downMaskc),amountToShift,"downmask",context.currentBlock());
+		Value *downMask = BinaryOperator::Create(Instruction::LShr,ConstantInt::get(TheContext,downMaskc),amountToShift,"downmask",context.currentBlock());
 
 		Value *maskedDown = BinaryOperator::Create(Instruction::And,toShift,downMask,"carryOutMask",context.currentBlock());
 
@@ -1261,7 +1302,7 @@ Value* CRotationOperator::codeGen(CodeGenContext& context)
 
 Value* CAssignment::generateImpedanceAssignment(BitVariable& to,llvm::Value* assignTo,CodeGenContext& context)
 {
-	ConstantInt* impedance = ConstantInt::get(getGlobalContext(), ~APInt(to.size.getLimitedValue(), StringRef("0"), 10));
+	ConstantInt* impedance = ConstantInt::get(TheContext, ~APInt(to.size.getLimitedValue(), StringRef("0"), 10));
 
 	return new StoreInst(impedance, assignTo, false, context.currentBlock());
 }
@@ -1282,18 +1323,18 @@ Value* CAssignment::generateAssignmentActual(BitVariable& to,const CIdentifier& 
 	{
 		Value* exprResult=toIdent.GetExpression()->codeGen(context);
 
-		Type* ty = Type::getIntNTy(getGlobalContext(),to.arraySize.getLimitedValue());
-		Type* ty64 = Type::getIntNTy(getGlobalContext(),64);
+		Type* ty = Type::getIntNTy(TheContext,to.arraySize.getLimitedValue());
+		Type* ty64 = Type::getIntNTy(TheContext,64);
 		Instruction::CastOps op = CastInst::getCastOpcode(exprResult,false,ty,false);
 		Instruction* truncExt0 = CastInst::Create(op,exprResult,ty,"cast",context.currentBlock());		// Cast index to 64 bit type
 		Instruction::CastOps op1 = CastInst::getCastOpcode(exprResult,false,ty64,false);
 		Instruction* truncExt = CastInst::Create(op1,truncExt0,ty64,"cast",context.currentBlock());		// Cast index to 64 bit type
-//		const Type* ty = Type::getIntNTy(getGlobalContext(),to.arraySize.getLimitedValue());
+//		const Type* ty = Type::getIntNTy(TheContext,to.arraySize.getLimitedValue());
 //		Instruction::CastOps op = CastInst::getCastOpcode(exprResult,false,ty,false);
 //		Instruction* truncExt = CastInst::Create(op,exprResult,ty,"cast",context.currentBlock());		// Cast index to 64 bit type
 
 		std::vector<Value*> indices;
-		ConstantInt* index0 = ConstantInt::get(getGlobalContext(), APInt(to.size.getLimitedValue(), StringRef("0"), 10));
+		ConstantInt* index0 = ConstantInt::get(TheContext, APInt(to.size.getLimitedValue(), StringRef("0"), 10));
 		indices.push_back(index0);
 		indices.push_back(truncExt);
 		Instruction* elementPtr = GetElementPtrInst::Create(NULL,to.value,indices,"array index",context.currentBlock());
@@ -1309,15 +1350,15 @@ Value* CAssignment::generateAssignmentActual(BitVariable& to,const CIdentifier& 
 	}
 
 	// Handle variable promotion
-	Type* ty = Type::getIntNTy(getGlobalContext(),to.size.getLimitedValue());
+	Type* ty = Type::getIntNTy(TheContext,to.size.getLimitedValue());
 	Instruction::CastOps op = CastInst::getCastOpcode(from,false,ty,false);
 
 	Instruction* truncExt = CastInst::Create(op,from,ty,"cast",context.currentBlock());
 
 	// Handle masking and constants and shift
-	ConstantInt* const_intShift = ConstantInt::get(getGlobalContext(), to.shft);
+	ConstantInt* const_intShift = ConstantInt::get(TheContext, to.shft);
 	BinaryOperator* shiftInst = BinaryOperator::Create(Instruction::Shl,truncExt,const_intShift, "Shifting", context.currentBlock());
-	ConstantInt* const_intMask = ConstantInt::get(getGlobalContext(), to.mask);	
+	ConstantInt* const_intMask = ConstantInt::get(TheContext, to.mask);	
 	BinaryOperator* andInst = BinaryOperator::Create(Instruction::And, shiftInst, const_intMask , "Masking", context.currentBlock());
 
 	// cnst initialiser only used when we are updating the primary register
@@ -1325,7 +1366,7 @@ Value* CAssignment::generateAssignmentActual(BitVariable& to,const CIdentifier& 
 
 	if (to.aliased == false)
 	{
-		ConstantInt* const_intCnst = ConstantInt::get(getGlobalContext(), to.cnst);
+		ConstantInt* const_intCnst = ConstantInt::get(TheContext, to.cnst);
 		BinaryOperator* orInst = BinaryOperator::Create(Instruction::Or, andInst, const_intCnst, "Constants", context.currentBlock());
 		final=orInst;
 	}
@@ -1336,18 +1377,18 @@ Value* CAssignment::generateAssignmentActual(BitVariable& to,const CIdentifier& 
 		{
 			Value* exprResult=toIdent.GetExpression()->codeGen(context);
 
-			Type* ty = Type::getIntNTy(getGlobalContext(),to.arraySize.getLimitedValue());
-			Type* ty64 = Type::getIntNTy(getGlobalContext(),64);
+			Type* ty = Type::getIntNTy(TheContext,to.arraySize.getLimitedValue());
+			Type* ty64 = Type::getIntNTy(TheContext,64);
 			Instruction::CastOps op = CastInst::getCastOpcode(exprResult,false,ty,false);
 			Instruction* truncExt0 = CastInst::Create(op,exprResult,ty,"cast",context.currentBlock());		// Cast index to 64 bit type
 			Instruction::CastOps op1 = CastInst::getCastOpcode(exprResult,false,ty64,false);
 			Instruction* truncExt = CastInst::Create(op1,truncExt0,ty64,"cast",context.currentBlock());		// Cast index to 64 bit type
-	//		const Type* ty = Type::getIntNTy(getGlobalContext(),to.arraySize.getLimitedValue()/* 64*/);
+	//		const Type* ty = Type::getIntNTy(TheContext,to.arraySize.getLimitedValue()/* 64*/);
 	//		Instruction::CastOps op = CastInst::getCastOpcode(exprResult,false,ty,false);
 	//		Instruction* truncExt = CastInst::Create(op,exprResult,ty,"cast",context.currentBlock());		// Cast index to 64 bit type
 
 			std::vector<Value*> indices;
-			ConstantInt* index0 = ConstantInt::get(getGlobalContext(), APInt(to.size.getLimitedValue(), StringRef("0"), 10));
+			ConstantInt* index0 = ConstantInt::get(TheContext, APInt(to.size.getLimitedValue(), StringRef("0"), 10));
 			indices.push_back(index0);
 			indices.push_back(truncExt);
 			Instruction* elementPtr = GetElementPtrInst::Create(NULL,to.value,indices,"array index",context.currentBlock());
@@ -1356,7 +1397,7 @@ Value* CAssignment::generateAssignmentActual(BitVariable& to,const CIdentifier& 
 		}
 		// Now if the assignment is assigning to an aliased register part, we need to have loaded the original register, masked off the inverse of the section mask, and or'd in the result before we store
 		LoadInst* loadInst=new LoadInst(dest, "", false, context.currentBlock());
-		ConstantInt* const_intInvMask = ConstantInt::get(getGlobalContext(), ~to.mask);
+		ConstantInt* const_intInvMask = ConstantInt::get(TheContext, ~to.mask);
 		BinaryOperator* primaryAndInst = BinaryOperator::Create(Instruction::And, loadInst, const_intInvMask , "InvMasking", context.currentBlock());
 		final = BinaryOperator::Create(Instruction::Or,primaryAndInst,andInst,"Combining",context.currentBlock());
 	}
@@ -1384,7 +1425,7 @@ Value* CAssignment::generateAssignmentActual(BitVariable& to,const CIdentifier& 
 	{
 		if (to.impedance && clearImpedance)	// clear impedance
 		{
-			ConstantInt* impedance = ConstantInt::get(getGlobalContext(), APInt(to.size.getLimitedValue(), StringRef("0"), 10));
+			ConstantInt* impedance = ConstantInt::get(TheContext, APInt(to.size.getLimitedValue(), StringRef("0"), 10));
 			new StoreInst(impedance, to.impedance, false, context.currentBlock());
 		}
 		return new StoreInst(final, assignTo, false, context.currentBlock());
@@ -1503,8 +1544,8 @@ Value* CExpressionStatement::codeGen(CodeGenContext& context)
 Value* CStateDeclaration::codeGen(CodeGenContext& context,Function* parent)
 {
 	// We need to create a bunch of labels - one for each case.. we will need a finaliser for the blocks when we pop out of our current block.
-	entry = BasicBlock::Create(getGlobalContext(),id.name+"entry",parent);
-	exit = BasicBlock::Create(getGlobalContext(),id.name+"exit",parent);
+	entry = BasicBlock::Create(TheContext,id.name+"entry",parent);
+	exit = BasicBlock::Create(TheContext,id.name+"exit",parent);
 
 	return NULL;
 }
@@ -1644,15 +1685,15 @@ Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 		std::string idxStateLbl = "IDX" + context.stateLabelStack;
 		std::string stkStateLbl = "STACK" + context.stateLabelStack;
 
-		GlobalVariable* gcurState = new GlobalVariable(*context.module,Type::getIntNTy(getGlobalContext(),bitsNeeded), false, GlobalValue::PrivateLinkage,NULL,context.symbolPrepend+curStateLbl);
-		GlobalVariable* gnxtState = new GlobalVariable(*context.module,Type::getIntNTy(getGlobalContext(),bitsNeeded), false, GlobalValue::PrivateLinkage,NULL,context.symbolPrepend+nxtStateLbl);
+		GlobalVariable* gcurState = new GlobalVariable(*context.module,Type::getIntNTy(TheContext,bitsNeeded), false, GlobalValue::PrivateLinkage,NULL,context.symbolPrepend+curStateLbl);
+		GlobalVariable* gnxtState = new GlobalVariable(*context.module,Type::getIntNTy(TheContext,bitsNeeded), false, GlobalValue::PrivateLinkage,NULL,context.symbolPrepend+nxtStateLbl);
 
 		curState = gcurState;
 		nxtState = gnxtState;
 
-		ArrayType* ArrayTy_0 = ArrayType::get(IntegerType::get(getGlobalContext(), bitsNeeded), MAX_SUPPORTED_STACK_DEPTH);
+		ArrayType* ArrayTy_0 = ArrayType::get(IntegerType::get(TheContext, bitsNeeded), MAX_SUPPORTED_STACK_DEPTH);
 		GlobalVariable* stkState = new GlobalVariable(*context.module, ArrayTy_0, false,  GlobalValue::PrivateLinkage, NULL, context.symbolPrepend+stkStateLbl);
-		GlobalVariable *stkStateIdx = new GlobalVariable(*context.module,Type::getIntNTy(getGlobalContext(),MAX_SUPPORTED_STACK_BITS), false, GlobalValue::PrivateLinkage,NULL,context.symbolPrepend+idxStateLbl);
+		GlobalVariable *stkStateIdx = new GlobalVariable(*context.module,Type::getIntNTy(TheContext,MAX_SUPPORTED_STACK_BITS), false, GlobalValue::PrivateLinkage,NULL,context.symbolPrepend+idxStateLbl);
 
 		StateVariable newStateVar;
 		newStateVar.currentState = curState;
@@ -1665,8 +1706,8 @@ Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 		context.statesAlt()[this]=newStateVar;
 
 		// Constant Definitions
-		ConstantInt* const_int32_n = ConstantInt::get(getGlobalContext(), APInt(bitsNeeded, 0, false));
-		ConstantInt* const_int4_n = ConstantInt::get(getGlobalContext(), APInt(MAX_SUPPORTED_STACK_BITS, 0, false));
+		ConstantInt* const_int32_n = ConstantInt::get(TheContext, APInt(bitsNeeded, 0, false));
+		ConstantInt* const_int4_n = ConstantInt::get(TheContext, APInt(MAX_SUPPORTED_STACK_BITS, 0, false));
 		ConstantAggregateZero* const_array_n = ConstantAggregateZero::get(ArrayTy_0);
 
 		// Global Variable Definitions
@@ -1697,7 +1738,7 @@ Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 	std::map<std::string,BitVariable> tmp = context.locals();
 
 	// Setup exit from switch statement
-	exitState = BasicBlock::Create(getGlobalContext(),"switchTerm",bb->getParent());
+	exitState = BasicBlock::Create(TheContext,"switchTerm",bb->getParent());
 	context.setBlock(exitState);
 
 	// Step 1, load next state into current state
@@ -1729,7 +1770,7 @@ Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 		for (int b=0;b<total;b++)
 		{
 			//
-			ConstantInt* tt = ConstantInt::get(getGlobalContext(),APInt(bitsNeeded,startIdx+b,false));
+			ConstantInt* tt = ConstantInt::get(TheContext,APInt(bitsNeeded,startIdx+b,false));
 			void_6->addCase(tt,states[a]->entry);
 		}
 		if (!lastStateAutoIncrement)
@@ -1743,7 +1784,7 @@ Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 		{
 			if (children[a]==NULL)
 			{
-				ConstantInt* nextState = ConstantInt::get(getGlobalContext(),APInt(bitsNeeded, a==states.size()-1 ? baseStateIdx : startIdx,false));
+				ConstantInt* nextState = ConstantInt::get(TheContext,APInt(bitsNeeded, a==states.size()-1 ? baseStateIdx : startIdx,false));
 				StoreInst* newState = new StoreInst(nextState,nxtState,false,states[a]->entry);
 			}
 		}
@@ -1751,7 +1792,7 @@ Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 		{
 			if (children[a]==NULL)
 			{
-				ConstantInt* nextState = ConstantInt::get(getGlobalContext(),APInt(bitsNeeded, startOfAutoIncrementIdx,false));
+				ConstantInt* nextState = ConstantInt::get(TheContext,APInt(bitsNeeded, startOfAutoIncrementIdx,false));
 				StoreInst* newState = new StoreInst(nextState,nxtState,false,states[a]->entry);
 			}
 		}
@@ -1814,6 +1855,7 @@ Value* CStateDefinition::codeGen(CodeGenContext& context)
 			block.codeGen(context);
 			pState->entry=context.currentBlock();
 			context.popBlock();
+			return nullptr;
 		}
 		else
 		{
@@ -1834,8 +1876,8 @@ Value* CStateDefinition::codeGen(CodeGenContext& context)
 void CVariableDeclaration::CreateWriteAccessor(CodeGenContext& context,BitVariable& var,const std::string& moduleName,const std::string& name,bool impedance)
 {
 	vector<Type*> argTypes;
-	argTypes.push_back(IntegerType::get(getGlobalContext(), var.size.getLimitedValue()));
-	FunctionType *ftype = FunctionType::get(Type::getVoidTy(getGlobalContext()),argTypes, false);
+	argTypes.push_back(IntegerType::get(TheContext, var.size.getLimitedValue()));
+	FunctionType *ftype = FunctionType::get(Type::getVoidTy(TheContext),argTypes, false);
 	Function* function;
 	if (context.isRoot)
 	{
@@ -1847,7 +1889,7 @@ void CVariableDeclaration::CreateWriteAccessor(CodeGenContext& context,BitVariab
 	}
 	function->onlyReadsMemory(0);	// Mark input read only
 	function->setDoesNotThrow();
-	BasicBlock *bblock = BasicBlock::Create(getGlobalContext(), "entry", function, 0);
+	BasicBlock *bblock = BasicBlock::Create(TheContext, "entry", function, 0);
 
 	context.pushBlock(bblock);
 
@@ -1857,10 +1899,10 @@ void CVariableDeclaration::CreateWriteAccessor(CodeGenContext& context,BitVariab
 
 	LoadInst* load=new LoadInst(var.value,"",false,bblock);
 
-    	if (impedance)
+	if (impedance)
 	{
 		LoadInst* loadImp = new LoadInst(var.impedance,"",false,bblock);
-		CmpInst* check=CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_NE,loadImp,ConstantInt::get(getGlobalContext(),APInt(var.size.getLimitedValue(),0)),"impedance",bblock);
+		CmpInst* check=CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_NE,loadImp,ConstantInt::get(TheContext,APInt(var.size.getLimitedValue(),0)),"impedance",bblock);
 
 		setVal = SelectInst::Create(check,setVal,load,"impOrReal",bblock);
 	}
@@ -1870,7 +1912,7 @@ void CVariableDeclaration::CreateWriteAccessor(CodeGenContext& context,BitVariab
 	var.priorValue=load;
 	var.writeInput=setVal;
 	var.writeAccessor=&writeAccessor;
-	writeAccessor=ReturnInst::Create(getGlobalContext(),bblock);
+	writeAccessor=ReturnInst::Create(TheContext,bblock);
 
 	context.popBlock();
 }
@@ -1878,7 +1920,7 @@ void CVariableDeclaration::CreateWriteAccessor(CodeGenContext& context,BitVariab
 void CVariableDeclaration::CreateReadAccessor(CodeGenContext& context,BitVariable& var,bool impedance)
 {
 	vector<Type*> argTypes;
-	FunctionType *ftype = FunctionType::get(IntegerType::get(getGlobalContext(), var.size.getLimitedValue()),argTypes, false);
+	FunctionType *ftype = FunctionType::get(IntegerType::get(TheContext, var.size.getLimitedValue()),argTypes, false);
 	Function* function;
     if (context.isRoot)
 	{
@@ -1891,18 +1933,18 @@ void CVariableDeclaration::CreateReadAccessor(CodeGenContext& context,BitVariabl
 	function->setOnlyReadsMemory();
 	function->setDoesNotThrow();
 
-	BasicBlock *bblock = BasicBlock::Create(getGlobalContext(), "entry", function, 0);
+	BasicBlock *bblock = BasicBlock::Create(TheContext, "entry", function, 0);
 
 	Value* load = new LoadInst(var.value,"",false,bblock);
     if (impedance)
 	{
 		LoadInst* loadImp = new LoadInst(var.impedance,"",false,bblock);
-		CmpInst* check=CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_EQ,loadImp,ConstantInt::get(getGlobalContext(),APInt(var.size.getLimitedValue(),0)),"impedance",bblock);
+		CmpInst* check=CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_EQ,loadImp,ConstantInt::get(TheContext,APInt(var.size.getLimitedValue(),0)),"impedance",bblock);
 
 		load = SelectInst::Create(check,load,loadImp,"impOrReal",bblock);
 	}
 
-	ReturnInst::Create(getGlobalContext(),load,bblock);
+	ReturnInst::Create(TheContext,load,bblock);
 }
 
 void CVariableDeclaration::prePass(CodeGenContext& context)
@@ -1938,7 +1980,7 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 			return NULL;
 		}
 		// Within a basic block - so must be a stack variable
-		AllocaInst *alloc = new AllocaInst(Type::getIntNTy(getGlobalContext(),size.integer.getLimitedValue()), id.name.c_str(), context.currentBlock());
+		AllocaInst *alloc = new AllocaInst(Type::getIntNTy(TheContext,size.integer.getLimitedValue()), id.name.c_str(), context.currentBlock());
 		temp.value = alloc;
 	}
 	else
@@ -1947,12 +1989,12 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 		// Rules for globals have changed. If we are definining a PIN then the variable should be private to this module, and accessors should be created instead. 
 		if (pinType==0)
 		{
-			Type* type = Type::getIntNTy(getGlobalContext(),size.integer.getLimitedValue());
+			Type* type = Type::getIntNTy(TheContext,size.integer.getLimitedValue());
 			if (arraySize.integer.getLimitedValue())
 			{
 				APInt power2(arraySize.integer.getLimitedValue()+1,1);
 				power2<<=arraySize.integer.getLimitedValue();
-				type=ArrayType::get(Type::getIntNTy(getGlobalContext(),size.integer.getLimitedValue()),power2.getLimitedValue());
+				type=ArrayType::get(Type::getIntNTy(TheContext,size.integer.getLimitedValue()),power2.getLimitedValue());
 			}
 
 			if (internal /*|| !context.isRoot*/)
@@ -1966,7 +2008,7 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 		}
 		else
 		{
-			temp.value = new GlobalVariable(*context.module,Type::getIntNTy(getGlobalContext(),size.integer.getLimitedValue()), false, GlobalValue::PrivateLinkage,NULL,context.symbolPrepend+id.name);
+			temp.value = new GlobalVariable(*context.module,Type::getIntNTy(TheContext,size.integer.getLimitedValue()), false, GlobalValue::PrivateLinkage,NULL,context.symbolPrepend+id.name);
 			switch (pinType)
 			{
 				case TOK_IN:
@@ -1980,7 +2022,7 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 					// In the future we should try to detect if a pin uses impedance and avoid the additional overhead
 
 					// we also need a new variable to hold the impedance mask
-					temp.impedance=new GlobalVariable(*context.module,Type::getIntNTy(getGlobalContext(),size.integer.getLimitedValue()), false, GlobalValue::PrivateLinkage,NULL,context.symbolPrepend+id.name+".HZ");
+					temp.impedance=new GlobalVariable(*context.module,Type::getIntNTy(TheContext,size.integer.getLimitedValue()), false, GlobalValue::PrivateLinkage,NULL,context.symbolPrepend+id.name+".HZ");
 
 					CreateWriteAccessor(context,temp,id.module,id.name,true);
 					CreateReadAccessor(context,temp,true);
@@ -2067,7 +2109,7 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 		}
 	}
 
-	ConstantInt* const_intn_0 = ConstantInt::get(getGlobalContext(), temp.cnst);
+	ConstantInt* const_intn_0 = ConstantInt::get(TheContext, temp.cnst);
 	if (context.currentBlock())
 	{
 		// Initialiser Definitions
@@ -2092,7 +2134,7 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 				t = t.zext(size.integer.getLimitedValue());
 			}
 
-			ConstantInt* constInit=ConstantInt::get(getGlobalContext(),t);
+			ConstantInt* constInit=ConstantInt::get(TheContext,t);
 
 			StoreInst* stor = new StoreInst(constInit,temp.value,false,context.currentBlock());
 		}
@@ -2108,7 +2150,7 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 
 			if (initialiserList.empty())
 			{
-				ConstantAggregateZero* const_array_7 = ConstantAggregateZero::get(ArrayType::get(Type::getIntNTy(getGlobalContext(),size.integer.getLimitedValue()),power2.getLimitedValue()));
+				ConstantAggregateZero* const_array_7 = ConstantAggregateZero::get(ArrayType::get(Type::getIntNTy(TheContext,size.integer.getLimitedValue()),power2.getLimitedValue()));
 				cast<GlobalVariable>(temp.value)->setInitializer(const_array_7);
 			}
 			else
@@ -2122,8 +2164,8 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 		
 				int a;
 				std::vector<Constant*> const_array_9_elems;
-				ArrayType* arrayTy = ArrayType::get(Type::getIntNTy(getGlobalContext(),size.integer.getLimitedValue()),power2.getLimitedValue());
-				ConstantInt* const0 = ConstantInt::get(getGlobalContext(), APInt(size.integer.getLimitedValue(),0));
+				ArrayType* arrayTy = ArrayType::get(Type::getIntNTy(TheContext,size.integer.getLimitedValue()),power2.getLimitedValue());
+				ConstantInt* const0 = ConstantInt::get(TheContext, APInt(size.integer.getLimitedValue(),0));
 
 				for (a=0;a<power2.getLimitedValue();a++)
 				{
@@ -2136,7 +2178,7 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 							t = t.zext(size.integer.getLimitedValue());
 						}
 
-						const_array_9_elems.push_back(ConstantInt::get(getGlobalContext(),t));
+						const_array_9_elems.push_back(ConstantInt::get(TheContext,t));
 					}
 					else
 					{
@@ -2174,7 +2216,7 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 					t = t.zext(size.integer.getLimitedValue());
 				}
 
-				ConstantInt* constInit=ConstantInt::get(getGlobalContext(),t);
+				ConstantInt* constInit=ConstantInt::get(TheContext,t);
 				cast<GlobalVariable>(temp.value)->setInitializer(constInit);
 			}
 		}
@@ -2209,10 +2251,10 @@ Value* CHandlerDeclaration::codeGen(CodeGenContext& context)
 		std::cerr << "Handlers must be tied to Input / Bidirectional pins ONLY! - " << id.name << std::endl;
 	}
 
-	FunctionType *ftype = FunctionType::get(Type::getVoidTy(getGlobalContext()),argTypes, false);
+	FunctionType *ftype = FunctionType::get(Type::getVoidTy(TheContext),argTypes, false);
 	Function* function = Function::Create(ftype, GlobalValue::PrivateLinkage, context.symbolPrepend+"HANDLER."+id.name, context.module);
 	function->setDoesNotThrow();
-	BasicBlock *bblock = BasicBlock::Create(getGlobalContext(), "entry", function, 0);
+	BasicBlock *bblock = BasicBlock::Create(TheContext, "entry", function, 0);
 	
 	context.m_handlers[id.name]=this;
 
@@ -2229,7 +2271,7 @@ Value* CHandlerDeclaration::codeGen(CodeGenContext& context)
 
 	context.parentHandler=NULL;
 
-	ReturnInst::Create(getGlobalContext(), context.currentBlock());			/* block may well have changed by time we reach here */
+	ReturnInst::Create(TheContext, context.currentBlock());			/* block may well have changed by time we reach here */
 
 	context.stateLabelStack=oldStateLabelStack;
 
@@ -2354,10 +2396,10 @@ Value* CInstruction::codeGen(CodeGenContext& context)
 
 		context.disassemblyTable[table.name][opcode]=disassembled.quoted;
 
-		FunctionType *ftype = FunctionType::get(Type::getVoidTy(getGlobalContext()),argTypes, false);
+		FunctionType *ftype = FunctionType::get(Type::getVoidTy(TheContext),argTypes, false);
 		Function* function = Function::Create(ftype, GlobalValue::PrivateLinkage, EscapeString(context.symbolPrepend+"OPCODE_"+opcodeString.string.quoted.substr(1,opcodeString.string.quoted.length()-2) + "_" + table.name+opcode.toString(16,false)),context.module);
 		function->setDoesNotThrow();
-		BasicBlock *bblock = BasicBlock::Create(getGlobalContext(), "entry", function, 0);
+		BasicBlock *bblock = BasicBlock::Create(TheContext, "entry", function, 0);
 
 		context.pushBlock(bblock);
 
@@ -2365,7 +2407,7 @@ Value* CInstruction::codeGen(CodeGenContext& context)
 
 		block.codeGen(context);
 
-		ReturnInst::Create(getGlobalContext(), context.currentBlock());			/* block may well have changed by time we reach here */
+		ReturnInst::Create(TheContext, context.currentBlock());			/* block may well have changed by time we reach here */
 
 		context.popBlock();
 
@@ -2373,11 +2415,11 @@ Value* CInstruction::codeGen(CodeGenContext& context)
 		for (int b=0;b<context.executeLocations[table.name].size();b++)
 		{
 //			std::cout << "Adding execute " << opcode.toString(2,false) << std::endl;
-			BasicBlock* tempBlock = BasicBlock::Create(getGlobalContext(),"callOut" + table.name + opcode.toString(16,false),context.executeLocations[table.name][b].blockEndForExecute->getParent(),0);
+			BasicBlock* tempBlock = BasicBlock::Create(TheContext,"callOut" + table.name + opcode.toString(16,false),context.executeLocations[table.name][b].blockEndForExecute->getParent(),0);
 			std::vector<Value*> args;
 			CallInst* fcall = CallInst::Create(function,args,"",tempBlock);
 			BranchInst::Create(context.executeLocations[table.name][b].blockEndForExecute,tempBlock);
-			context.executeLocations[table.name][b].switchForExecute->addCase(ConstantInt::get(getGlobalContext(),opcode),tempBlock);
+			context.executeLocations[table.name][b].switchForExecute->addCase(ConstantInt::get(TheContext,opcode),tempBlock);
 		}
 
 	}
@@ -2399,16 +2441,16 @@ Value* CExecute::codeGen(CodeGenContext& context)
 
 		ExecuteInformation temp;
 
-		temp.blockEndForExecute = BasicBlock::Create(getGlobalContext(), "execReturn", context.currentBlock()->getParent(), 0);		// Need to cache this block away somewhere
+		temp.blockEndForExecute = BasicBlock::Create(TheContext, "execReturn", context.currentBlock()->getParent(), 0);		// Need to cache this block away somewhere
 	
 		if (context.opts.traceUnimplemented)
 		{
-			BasicBlock* tempBlock=BasicBlock::Create(getGlobalContext(),"default",context.currentBlock()->getParent(),0);
+			BasicBlock* tempBlock=BasicBlock::Create(TheContext,"default",context.currentBlock()->getParent(),0);
 
 			std::vector<Value*> args;
 	
 			// Handle variable promotion
-			Type* ty = Type::getIntNTy(getGlobalContext(),32);
+			Type* ty = Type::getIntNTy(TheContext,32);
 			Instruction::CastOps op = CastInst::getCastOpcode(load,false,ty,false);
 
 			Instruction* truncExt = CastInst::Create(op,load,ty,"cast",tempBlock);
@@ -2549,13 +2591,13 @@ Value* CStateTest::codeGen(CodeGenContext& context)
 
 	if (totalInBlock>1)
 	{
-		CmpInst* cmp = CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_UGE,load, ConstantInt::get(getGlobalContext(), APInt(bitsNeeded,jumpIndex)), "", context.currentBlock());
-		CmpInst* cmp2 = CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_ULT,load, ConstantInt::get(getGlobalContext(), APInt(bitsNeeded,jumpIndex+totalInBlock)), "", context.currentBlock());
+		CmpInst* cmp = CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_UGE,load, ConstantInt::get(TheContext, APInt(bitsNeeded,jumpIndex)), "", context.currentBlock());
+		CmpInst* cmp2 = CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_ULT,load, ConstantInt::get(TheContext, APInt(bitsNeeded,jumpIndex+totalInBlock)), "", context.currentBlock());
 		return BinaryOperator::Create(Instruction::And,cmp,cmp2,"Combining",context.currentBlock());
 	}
 		
 	// Load value from state variable, test against being equal to found index, jump on result
-	return CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_EQ,load, ConstantInt::get(getGlobalContext(), APInt(bitsNeeded,jumpIndex)), "", context.currentBlock());
+	return CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_EQ,load, ConstantInt::get(TheContext, APInt(bitsNeeded,jumpIndex)), "", context.currentBlock());
 }
 
 void CStateJump::prePass(CodeGenContext& context)
@@ -2602,7 +2644,7 @@ Value* CStateJump::codeGen(CodeGenContext& context)
 	APInt overSized(4*numStates.length(),numStates,10);
 	unsigned bitsNeeded = overSized.getActiveBits();
 	
-	return new StoreInst(ConstantInt::get(getGlobalContext(),APInt(bitsNeeded,jumpIndex)),topState.nextState,false,context.currentBlock());
+	return new StoreInst(ConstantInt::get(TheContext,APInt(bitsNeeded,jumpIndex)),topState.nextState,false,context.currentBlock());
 }
 
 void CStatePush::prePass(CodeGenContext& context)
@@ -2652,7 +2694,7 @@ Value* CStatePush::codeGen(CodeGenContext& context)
 	
 	Value* index= new LoadInst(topState.stateStackIndex,"stackIndex",false,context.currentBlock());
 	std::vector<Value*> indices;
-	ConstantInt* const_intn = ConstantInt::get(getGlobalContext(), APInt(bitsNeeded, StringRef("0"), 10));
+	ConstantInt* const_intn = ConstantInt::get(TheContext, APInt(bitsNeeded, StringRef("0"), 10));
 	indices.push_back(const_intn);
 	indices.push_back(index);
 	Value* ref = GetElementPtrInst::Create(NULL,topState.stateStackNext, indices,"stackPos",context.currentBlock());
@@ -2661,11 +2703,11 @@ Value* CStatePush::codeGen(CodeGenContext& context)
 
 	new StoreInst(curNext,ref,false,context.currentBlock());			// Save current next point to stack
 
-	Value* inc = BinaryOperator::Create(Instruction::Add,index,ConstantInt::get(getGlobalContext(),APInt(MAX_SUPPORTED_STACK_BITS,1)),"incrementIndex",context.currentBlock());
+	Value* inc = BinaryOperator::Create(Instruction::Add,index,ConstantInt::get(TheContext,APInt(MAX_SUPPORTED_STACK_BITS,1)),"incrementIndex",context.currentBlock());
 	new StoreInst(inc,topState.stateStackIndex,false,context.currentBlock());	// Save updated index
 
 	// Set next state
-	return new StoreInst(ConstantInt::get(getGlobalContext(),APInt(bitsNeeded,jumpIndex)),topState.nextState,false,context.currentBlock());
+	return new StoreInst(ConstantInt::get(TheContext,APInt(bitsNeeded,jumpIndex)),topState.nextState,false,context.currentBlock());
 }
 	
 void CStatePop::prePass(CodeGenContext& context)
@@ -2697,11 +2739,11 @@ Value* CStatePop::codeGen(CodeGenContext& context)
 
 	// We need to pop from our stack and put next back
 	Value* index= new LoadInst(topState.stateStackIndex,"stackIndex",false,context.currentBlock());
-	Value* dec = BinaryOperator::Create(Instruction::Sub,index,ConstantInt::get(getGlobalContext(),APInt(MAX_SUPPORTED_STACK_BITS,1)),"decrementIndex",context.currentBlock());
+	Value* dec = BinaryOperator::Create(Instruction::Sub,index,ConstantInt::get(TheContext,APInt(MAX_SUPPORTED_STACK_BITS,1)),"decrementIndex",context.currentBlock());
 	new StoreInst(dec,topState.stateStackIndex,false,context.currentBlock());	// store new stack index
 
 	std::vector<Value*> indices;
-	ConstantInt* const_intn = ConstantInt::get(getGlobalContext(), APInt(bitsNeeded, StringRef("0"), 10));
+	ConstantInt* const_intn = ConstantInt::get(TheContext, APInt(bitsNeeded, StringRef("0"), 10));
 	indices.push_back(const_intn);
 	indices.push_back(dec);
 	Value* ref = GetElementPtrInst::Create(NULL,topState.stateStackNext, indices,"stackPos",context.currentBlock());
@@ -2718,8 +2760,8 @@ void CIfStatement::prePass(CodeGenContext& context)
 
 Value* CIfStatement::codeGen(CodeGenContext& context)
 {
-	BasicBlock *then = BasicBlock::Create(getGlobalContext(),"then",context.currentBlock()->getParent());
-	BasicBlock *endif = BasicBlock::Create(getGlobalContext(),"endif",context.currentBlock()->getParent());
+	BasicBlock *then = BasicBlock::Create(TheContext,"then",context.currentBlock()->getParent());
+	BasicBlock *endif = BasicBlock::Create(TheContext,"endif",context.currentBlock()->getParent());
 
 	Value* result = expr.codeGen(context);
 	BranchInst::Create(then,endif,result,context.currentBlock());
@@ -2754,10 +2796,10 @@ void COperandIdent::DeclareLocal(CodeGenContext& context,unsigned num)
 	temp.impedance=NULL;
 	temp.fromExternal=false;
 
-	AllocaInst *alloc = new AllocaInst(Type::getIntNTy(getGlobalContext(),size.integer.getLimitedValue()), ident.name.c_str(), context.currentBlock());
+	AllocaInst *alloc = new AllocaInst(Type::getIntNTy(TheContext,size.integer.getLimitedValue()), ident.name.c_str(), context.currentBlock());
 	temp.value = alloc;
 
-	ConstantInt* const_intn_0 = ConstantInt::get(getGlobalContext(), temp.cnst);
+	ConstantInt* const_intn_0 = ConstantInt::get(TheContext, temp.cnst);
 	StoreInst* stor = new StoreInst(const_intn_0,temp.value,false,context.currentBlock());		// NOT SURE HOW WELL THIS WILL WORK IN FUTURE
 		
 	context.locals()[ident.name] = temp;
@@ -2800,6 +2842,7 @@ BitVariable COperandMapping::GetBitVariable(CodeGenContext& context,unsigned num
 		temp.mappingRef=true;
 		temp.mapping = &mapping->expr;
 	}
+	return temp;
 }
 
 llvm::APInt COperandMapping::GetComputableConstant(CodeGenContext& context,unsigned num)
@@ -2975,9 +3018,9 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 	Function* func = NULL;
 
 	// 1 argument at present, same as the ident - contains a single bit
-	FuncTy_8_args.push_back(IntegerType::get(getGlobalContext(), 1));
+	FuncTy_8_args.push_back(IntegerType::get(TheContext, 1));
 
-	FuncTy_8 = FunctionType::get(Type::getVoidTy(getGlobalContext()),FuncTy_8_args,false);
+	FuncTy_8 = FunctionType::get(Type::getVoidTy(TheContext),FuncTy_8_args,false);
 
 	func=Function::Create(FuncTy_8,GlobalValue::ExternalLinkage,context.symbolPrepend+ident.name,context.module);
 	func->setCallingConv(CallingConv::C);
@@ -2985,7 +3028,7 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 	
 	context.m_externFunctions[ident.name] = func;
 
-	BasicBlock *bblock = BasicBlock::Create(getGlobalContext(), "entry", func, 0);
+	BasicBlock *bblock = BasicBlock::Create(TheContext, "entry", func, 0);
 	
 	context.pushBlock(bblock);
 
@@ -3126,7 +3169,7 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 		}
 	}
 
-	ReturnInst::Create(getGlobalContext(), context.currentBlock());			/* block may well have changed by time we reach here */
+	ReturnInst::Create(TheContext, context.currentBlock());			/* block may well have changed by time we reach here */
 
 	context.popBlock();
 
@@ -3164,7 +3207,7 @@ Value* CAffect::codeGenCarry(CodeGenContext& context,Value* exprResult,Value* lh
 					//((lh & rh) | ((~Result) & rh) | (lh & (~Result)))
 
 					// ~Result
-					Value* cmpResult = BinaryOperator::Create(Instruction::Xor,exprResult,ConstantInt::get(getGlobalContext(),~APInt(resultType->getBitWidth(),0,false)),"",context.currentBlock());
+					Value* cmpResult = BinaryOperator::Create(Instruction::Xor,exprResult,ConstantInt::get(TheContext,~APInt(resultType->getBitWidth(),0,false)),"",context.currentBlock());
 
 					// lh&rh
 					Value* expr1 = BinaryOperator::Create(Instruction::And,rhs,lhs,"",context.currentBlock());
@@ -3183,7 +3226,7 @@ Value* CAffect::codeGenCarry(CodeGenContext& context,Value* exprResult,Value* lh
 					//((~lh&Result) | (~lh&rh) | (rh&Result)
 					
 					// ~lh
-					Value* cmpLhs = BinaryOperator::Create(Instruction::Xor,lhs,ConstantInt::get(getGlobalContext(),~APInt(resultType->getBitWidth(),0,false)),"",context.currentBlock());
+					Value* cmpLhs = BinaryOperator::Create(Instruction::Xor,lhs,ConstantInt::get(TheContext,~APInt(resultType->getBitWidth(),0,false)),"",context.currentBlock());
 
 					// ~lh&Result
 					Value* expr1 = BinaryOperator::Create(Instruction::And,cmpLhs,exprResult,"",context.currentBlock());
@@ -3245,14 +3288,14 @@ Value* CAffect::codeGenFinal(CodeGenContext& context,Value* exprResult)
 				{
 					bits = ~bits;
 				}
-				answer=ConstantInt::get(getGlobalContext(),bits);
+				answer=ConstantInt::get(TheContext,bits);
 			}
 			break;
 		case TOK_ZERO:
-			answer=CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_EQ,exprResult, ConstantInt::get(getGlobalContext(),APInt(resultType->getBitWidth(),0,false)), "", context.currentBlock());
+			answer=CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_EQ,exprResult, ConstantInt::get(TheContext,APInt(resultType->getBitWidth(),0,false)), "", context.currentBlock());
 			break;
 		case TOK_NONZERO:
-			answer=CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_NE,exprResult, ConstantInt::get(getGlobalContext(),APInt(resultType->getBitWidth(),0,false)), "", context.currentBlock());
+			answer=CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_NE,exprResult, ConstantInt::get(TheContext,APInt(resultType->getBitWidth(),0,false)), "", context.currentBlock());
 			break;
 		case TOK_SIGN:
 		case TOK_NOSIGN:
@@ -3261,13 +3304,13 @@ Value* CAffect::codeGenFinal(CodeGenContext& context,Value* exprResult)
 				signBit.setBit(resultType->getBitWidth()-1);
 				if (type==TOK_SIGN)
 				{
-					answer=BinaryOperator::Create(Instruction::And,exprResult,ConstantInt::get(getGlobalContext(),signBit),"",context.currentBlock());
+					answer=BinaryOperator::Create(Instruction::And,exprResult,ConstantInt::get(TheContext,signBit),"",context.currentBlock());
 				}
 				else
 				{
-					answer=BinaryOperator::Create(Instruction::Xor,exprResult,ConstantInt::get(getGlobalContext(),signBit),"",context.currentBlock());
+					answer=BinaryOperator::Create(Instruction::Xor,exprResult,ConstantInt::get(TheContext,signBit),"",context.currentBlock());
 				}
-				answer=BinaryOperator::Create(Instruction::LShr,answer,ConstantInt::get(getGlobalContext(),APInt(resultType->getBitWidth(),(uint64_t)(resultType->getBitWidth()-1),false)),"",context.currentBlock());
+				answer=BinaryOperator::Create(Instruction::LShr,answer,ConstantInt::get(TheContext,APInt(resultType->getBitWidth(),(uint64_t)(resultType->getBitWidth()-1),false)),"",context.currentBlock());
 			}
 			break;
 		case TOK_PARITYODD:
@@ -3282,7 +3325,7 @@ Value* CAffect::codeGenFinal(CodeGenContext& context,Value* exprResult)
 					if (resultType->getBitWidth() <= computeClosestPower2Size.getLimitedValue())
 					{
 						// Output a casting operator to up the size of type
-						Type* ty = Type::getIntNTy(getGlobalContext(),computeClosestPower2Size.getLimitedValue());
+						Type* ty = Type::getIntNTy(TheContext,computeClosestPower2Size.getLimitedValue());
 						Instruction::CastOps op = CastInst::getCastOpcode(exprResult,false,ty,false);
 						answer = CastInst::Create(op,exprResult,ty,"",context.currentBlock());
 						break;
@@ -3299,23 +3342,23 @@ Value* CAffect::codeGenFinal(CodeGenContext& context,Value* exprResult)
 				computeClosestPower2Size=computeClosestPower2Size.lshr(1);
 				for (int a=0;a<count;a++)
 				{
-					Value *shifted = BinaryOperator::Create(Instruction::LShr,answer,ConstantInt::get(getGlobalContext(),computeClosestPower2Size),"",context.currentBlock());
+					Value *shifted = BinaryOperator::Create(Instruction::LShr,answer,ConstantInt::get(TheContext,computeClosestPower2Size),"",context.currentBlock());
 					answer=BinaryOperator::Create(Instruction::Xor,shifted,answer,"",context.currentBlock());
 					computeClosestPower2Size=computeClosestPower2Size.lshr(1);
 				}
 
 				// final part, mask to nibble size and use this to lookup into magic constant 0x6996 (which is simply a table look up for the parities of a nibble)
-				answer=BinaryOperator::Create(Instruction::And,answer,ConstantInt::get(getGlobalContext(),APInt(computeClosestPower2Size.getBitWidth(),0xF,false)),"",context.currentBlock());
-				Type* ty = Type::getIntNTy(getGlobalContext(),16);
+				answer=BinaryOperator::Create(Instruction::And,answer,ConstantInt::get(TheContext,APInt(computeClosestPower2Size.getBitWidth(),0xF,false)),"",context.currentBlock());
+				Type* ty = Type::getIntNTy(TheContext,16);
 				Instruction::CastOps op = CastInst::getCastOpcode(answer,false,ty,false);
 				answer = CastInst::Create(op,answer,ty,"",context.currentBlock());
 				if (type == TOK_PARITYEVEN)
 				{
-					answer=BinaryOperator::Create(Instruction::LShr,ConstantInt::get(getGlobalContext(),~APInt(16,0x6996,false)),answer,"",context.currentBlock());
+					answer=BinaryOperator::Create(Instruction::LShr,ConstantInt::get(TheContext,~APInt(16,0x6996,false)),answer,"",context.currentBlock());
 				}
 				else
 				{
-					answer=BinaryOperator::Create(Instruction::LShr,ConstantInt::get(getGlobalContext(),APInt(16,0x6996,false)),answer,"",context.currentBlock());
+					answer=BinaryOperator::Create(Instruction::LShr,ConstantInt::get(TheContext,APInt(16,0x6996,false)),answer,"",context.currentBlock());
 				}
 			}
 			break;
@@ -3327,13 +3370,13 @@ Value* CAffect::codeGenFinal(CodeGenContext& context,Value* exprResult)
 				bit.setBit(param.integer.getLimitedValue());
 				if (type==TOK_BIT)
 				{
-					answer=BinaryOperator::Create(Instruction::And,exprResult,ConstantInt::get(getGlobalContext(),bit),"",context.currentBlock());
+					answer=BinaryOperator::Create(Instruction::And,exprResult,ConstantInt::get(TheContext,bit),"",context.currentBlock());
 				}
 				else
 				{
-					answer=BinaryOperator::Create(Instruction::Xor,exprResult,ConstantInt::get(getGlobalContext(),bit),"",context.currentBlock());
+					answer=BinaryOperator::Create(Instruction::Xor,exprResult,ConstantInt::get(TheContext,bit),"",context.currentBlock());
 				}
-				answer=BinaryOperator::Create(Instruction::LShr,answer,ConstantInt::get(getGlobalContext(),shift),"",context.currentBlock());
+				answer=BinaryOperator::Create(Instruction::LShr,answer,ConstantInt::get(TheContext,shift),"",context.currentBlock());
 			}
 			break;
 		case TOK_OVERFLOW:
@@ -3342,8 +3385,8 @@ Value* CAffect::codeGenFinal(CodeGenContext& context,Value* exprResult)
 				APInt bit(resultType->getBitWidth(),0,false);
 				APInt shift = param.integer.zextOrTrunc(resultType->getBitWidth());
 				bit.setBit(param.integer.getLimitedValue());
-				ConstantInt* bitC=ConstantInt::get(getGlobalContext(),bit);
-				ConstantInt* shiftC=ConstantInt::get(getGlobalContext(),shift);
+				ConstantInt* bitC=ConstantInt::get(TheContext,bit);
+				ConstantInt* shiftC=ConstantInt::get(TheContext,shift);
 
 				if (param.integer.getLimitedValue() >= resultType->getBitWidth())
 				{
@@ -3390,11 +3433,11 @@ Value* CAffect::codeGenFinal(CodeGenContext& context,Value* exprResult)
 					//((rh & lh & (~Result)) | ((~rh) & (~lh) & Result))
 
 					// ~Result
-					Value* cmpResult = BinaryOperator::Create(Instruction::Xor,exprResult,ConstantInt::get(getGlobalContext(),~APInt(resultType->getBitWidth(),0,false)),"",context.currentBlock());
+					Value* cmpResult = BinaryOperator::Create(Instruction::Xor,exprResult,ConstantInt::get(TheContext,~APInt(resultType->getBitWidth(),0,false)),"",context.currentBlock());
 					// ~lh
-					Value* cmplh = BinaryOperator::Create(Instruction::Xor,lhs,ConstantInt::get(getGlobalContext(),~APInt(resultType->getBitWidth(),0,false)),"",context.currentBlock());
+					Value* cmplh = BinaryOperator::Create(Instruction::Xor,lhs,ConstantInt::get(TheContext,~APInt(resultType->getBitWidth(),0,false)),"",context.currentBlock());
 					// ~rh
-					Value* cmprh = BinaryOperator::Create(Instruction::Xor,rhs,ConstantInt::get(getGlobalContext(),~APInt(resultType->getBitWidth(),0,false)),"",context.currentBlock());
+					Value* cmprh = BinaryOperator::Create(Instruction::Xor,rhs,ConstantInt::get(TheContext,~APInt(resultType->getBitWidth(),0,false)),"",context.currentBlock());
 
 					// lh&rh
 					Value* expr1 = BinaryOperator::Create(Instruction::And,rhs,lhs,"",context.currentBlock());
@@ -3414,11 +3457,11 @@ Value* CAffect::codeGenFinal(CodeGenContext& context,Value* exprResult)
 					//(((~rh) & lh & (~Result)) | (rh & (~lh) & Result))
 					
 					// ~Result
-					Value* cmpResult = BinaryOperator::Create(Instruction::Xor,exprResult,ConstantInt::get(getGlobalContext(),~APInt(resultType->getBitWidth(),0,false)),"",context.currentBlock());
+					Value* cmpResult = BinaryOperator::Create(Instruction::Xor,exprResult,ConstantInt::get(TheContext,~APInt(resultType->getBitWidth(),0,false)),"",context.currentBlock());
 					// ~lh
-					Value* cmplh = BinaryOperator::Create(Instruction::Xor,lhs,ConstantInt::get(getGlobalContext(),~APInt(resultType->getBitWidth(),0,false)),"",context.currentBlock());
+					Value* cmplh = BinaryOperator::Create(Instruction::Xor,lhs,ConstantInt::get(TheContext,~APInt(resultType->getBitWidth(),0,false)),"",context.currentBlock());
 					// ~rh
-					Value* cmprh = BinaryOperator::Create(Instruction::Xor,rhs,ConstantInt::get(getGlobalContext(),~APInt(resultType->getBitWidth(),0,false)),"",context.currentBlock());
+					Value* cmprh = BinaryOperator::Create(Instruction::Xor,rhs,ConstantInt::get(TheContext,~APInt(resultType->getBitWidth(),0,false)),"",context.currentBlock());
 
 					// ~rh&lh
 					Value* expr1 = BinaryOperator::Create(Instruction::And,cmprh,lhs,"",context.currentBlock());
@@ -3450,8 +3493,8 @@ Value* CAffect::codeGenFinal(CodeGenContext& context,Value* exprResult)
 				APInt bit(resultType->getBitWidth(),0,false);
 				APInt shift = param.integer.zextOrTrunc(resultType->getBitWidth());
 				bit.setBit(param.integer.getLimitedValue());
-				ConstantInt* bitC=ConstantInt::get(getGlobalContext(),bit);
-				ConstantInt* shiftC=ConstantInt::get(getGlobalContext(),shift);
+				ConstantInt* bitC=ConstantInt::get(TheContext,bit);
+				ConstantInt* shiftC=ConstantInt::get(TheContext,shift);
 
 				if (tmpResult==NULL)
 				{
@@ -3572,12 +3615,12 @@ Value* CExternDecl::codeGen(CodeGenContext& context)
 			context.errorFlagged=true;
 			return NULL;
 		}
-		FuncTy_8_args.push_back(IntegerType::get(getGlobalContext(), size));
+		FuncTy_8_args.push_back(IntegerType::get(TheContext, size));
 	}
 	FunctionType* FuncTy_8;
 	if (returns.empty())
 	{
-		FuncTy_8 = FunctionType::get(Type::getVoidTy(getGlobalContext()),FuncTy_8_args,false);
+		FuncTy_8 = FunctionType::get(Type::getVoidTy(TheContext),FuncTy_8_args,false);
 	}
 	else
 	{
@@ -3588,7 +3631,7 @@ Value* CExternDecl::codeGen(CodeGenContext& context)
 			context.errorFlagged=true;
 			return NULL;
 		}
-		FuncTy_8 = FunctionType::get(IntegerType::get(getGlobalContext(), size),FuncTy_8_args,false);
+		FuncTy_8 = FunctionType::get(IntegerType::get(TheContext, size),FuncTy_8_args,false);
 	}
 
 	Function* func = Function::Create(FuncTy_8,GlobalValue::ExternalLinkage,context.symbolPrepend+name.name,context.module);
@@ -3642,7 +3685,7 @@ Value* CFuncCall::codeGen(CodeGenContext& context)
 	{
 		call = CallInst::Create(func, args, "", context.currentBlock());
 
-		call = ConstantInt::get(getGlobalContext(),APInt(1,0));		// Forces void returns to actually return 0
+		call = ConstantInt::get(TheContext,APInt(1,0));		// Forces void returns to actually return 0
 	}
 	else
 	{
@@ -3675,8 +3718,8 @@ Value* CTrigger::codeGen(CodeGenContext& context,BitVariable& pin,Value* functio
 				Value* writeInput = CIdentifier::GetAliasedData(context,pin.writeInput,pin);
 				Value* answer=CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_EQ,prior,writeInput, "", context.currentBlock());
 				
-				BasicBlock *ifcall = BasicBlock::Create(getGlobalContext(),"ifcall",parentFunction);
-				BasicBlock *nocall = BasicBlock::Create(getGlobalContext(),"nocall",parentFunction);
+				BasicBlock *ifcall = BasicBlock::Create(TheContext,"ifcall",parentFunction);
+				BasicBlock *nocall = BasicBlock::Create(TheContext,"nocall",parentFunction);
 
 				BranchInst::Create(nocall,ifcall,answer,context.currentBlock());
 				context.popBlock();
@@ -3687,7 +3730,7 @@ Value* CTrigger::codeGen(CodeGenContext& context,BitVariable& pin,Value* functio
 				// Remove return instruction (since we need to create a new basic block set
 				(*pin.writeAccessor)->removeFromParent();
 
-				*pin.writeAccessor=ReturnInst::Create(getGlobalContext(),nocall);
+				*pin.writeAccessor=ReturnInst::Create(TheContext,nocall);
 
 			}
 			return NULL;
@@ -3701,13 +3744,13 @@ Value* CTrigger::codeGen(CodeGenContext& context,BitVariable& pin,Value* functio
 				Value* prior = CIdentifier::GetAliasedData(context,pin.priorValue,pin);
 				Value* writeInput = CIdentifier::GetAliasedData(context,pin.writeInput,pin);
 
-				Value* checkParam2=CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_EQ,ConstantInt::get(getGlobalContext(),param2.integer.zextOrTrunc(pin.trueSize.getLimitedValue())),writeInput, "", context.currentBlock());
-				Value* checkParam1=CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_EQ,ConstantInt::get(getGlobalContext(),param1.integer.zextOrTrunc(pin.trueSize.getLimitedValue())),prior, "", context.currentBlock());
+				Value* checkParam2=CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_EQ,ConstantInt::get(TheContext,param2.integer.zextOrTrunc(pin.trueSize.getLimitedValue())),writeInput, "", context.currentBlock());
+				Value* checkParam1=CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_EQ,ConstantInt::get(TheContext,param1.integer.zextOrTrunc(pin.trueSize.getLimitedValue())),prior, "", context.currentBlock());
 		
 				Value *answer=BinaryOperator::Create(Instruction::And,checkParam1,checkParam2,"",context.currentBlock());
 				
-				BasicBlock *ifcall = BasicBlock::Create(getGlobalContext(),"ifcall",parentFunction);
-				BasicBlock *nocall = BasicBlock::Create(getGlobalContext(),"nocall",parentFunction);
+				BasicBlock *ifcall = BasicBlock::Create(TheContext,"ifcall",parentFunction);
+				BasicBlock *nocall = BasicBlock::Create(TheContext,"nocall",parentFunction);
 
 				BranchInst::Create(ifcall,nocall,answer,context.currentBlock());
 				context.popBlock();
@@ -3718,7 +3761,7 @@ Value* CTrigger::codeGen(CodeGenContext& context,BitVariable& pin,Value* functio
 				// Remove return instruction (since we need to create a new basic block set
 				(*pin.writeAccessor)->removeFromParent();
 
-				*pin.writeAccessor=ReturnInst::Create(getGlobalContext(),nocall);
+				*pin.writeAccessor=ReturnInst::Create(TheContext,nocall);
 
 			}
 			return NULL;
@@ -3746,18 +3789,18 @@ Value* CFunctionDecl::codeGen(CodeGenContext& context)
 	for (a=0;a<params.size();a++)
 	{
 		unsigned size = params[a]->size.integer.getLimitedValue();
-		FuncTy_8_args.push_back(IntegerType::get(getGlobalContext(), size));
+		FuncTy_8_args.push_back(IntegerType::get(TheContext, size));
 	}
 	FunctionType* FuncTy_8;
 
 	if (returns.empty())
 	{
-		FuncTy_8 = FunctionType::get(Type::getVoidTy(getGlobalContext()),FuncTy_8_args,false);
+		FuncTy_8 = FunctionType::get(Type::getVoidTy(TheContext),FuncTy_8_args,false);
 	}
 	else
 	{
 		unsigned size = returns[0]->size.integer.getLimitedValue();
-		FuncTy_8 = FunctionType::get(IntegerType::get(getGlobalContext(), size),FuncTy_8_args,false);
+		FuncTy_8 = FunctionType::get(IntegerType::get(TheContext, size),FuncTy_8_args,false);
 	}
 
 	Function* func = NULL;
@@ -3774,7 +3817,7 @@ Value* CFunctionDecl::codeGen(CodeGenContext& context)
 	
 	context.m_externFunctions[name.name] = func;
 
-	BasicBlock *bblock = BasicBlock::Create(getGlobalContext(), "entry", func, 0);
+	BasicBlock *bblock = BasicBlock::Create(TheContext, "entry", func, 0);
 	
 	context.pushBlock(bblock);
 
@@ -3794,7 +3837,7 @@ Value* CFunctionDecl::codeGen(CodeGenContext& context)
 		returnVal.impedance=NULL;
 		returnVal.fromExternal=false;
 
-		AllocaInst *alloc = new AllocaInst(Type::getIntNTy(getGlobalContext(),returns[0]->size.integer.getLimitedValue()), returns[0]->id.name.c_str(), context.currentBlock());
+		AllocaInst *alloc = new AllocaInst(Type::getIntNTy(TheContext,returns[0]->size.integer.getLimitedValue()), returns[0]->id.name.c_str(), context.currentBlock());
 		returnVal.value = alloc;
 		context.locals()[returns[0]->id.name] = returnVal;
 	}
@@ -3829,11 +3872,11 @@ Value* CFunctionDecl::codeGen(CodeGenContext& context)
 
 	if (returns.empty())
 	{
-		ReturnInst::Create(getGlobalContext(), context.currentBlock());			/* block may well have changed by time we reach here */
+		ReturnInst::Create(TheContext, context.currentBlock());			/* block may well have changed by time we reach here */
 	}
 	else
 	{
-		ReturnInst::Create(getGlobalContext(),new LoadInst(returnVal.value,"",context.currentBlock()),context.currentBlock());
+		ReturnInst::Create(TheContext,new LoadInst(returnVal.value,"",context.currentBlock()),context.currentBlock());
 	}
 
 	context.popBlock();

@@ -17,6 +17,7 @@ int Usage()
 	cerr << "Usage: edl [opts] [inputfile]" << endl;
 	cerr << "Compile edl into llvm source (default reads/writes from/to stdout)" <<endl <<endl;
 	cerr << "-s symbol		prepends symbol to all externally accessable symbols" << endl;
+	cerr << "-o output		emits a native objectfile instead of llvm assembly" << endl;
 	cerr << "-O0			disables optimisations" << endl;
 	cerr << "-O1			enables all but experimental optimisations" << endl;
 	cerr << "-O2			enables O1 plus experimental optimisations" << endl;
@@ -37,6 +38,19 @@ int main(int argc, char **argv)
 	{
 		if (argv[a][0]=='-')
 		{
+			if (strcmp(argv[a],"-o")==0)
+			{
+				if ((a+1)<argc)
+				{
+					opts.outputFile=argv[a+1];
+				}
+				else
+				{
+					return Usage();
+				}
+				a+=1;
+				continue;
+			}
 			if (strcmp(argv[a],"-s")==0)
 			{
 				if ((a+1)<argc)
@@ -103,7 +117,11 @@ int main(int argc, char **argv)
 
 	}
 	
-	InitializeNativeTarget();
+	InitializeAllTargetInfos();
+	InitializeAllTargets();
+	InitializeAllTargetMCs();
+	InitializeAllAsmParsers();
+	InitializeAllAsmPrinters();
 
 	yyparse();
 	if (g_ProgramBlock==0)
