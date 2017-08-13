@@ -53,8 +53,9 @@ DECLARE DIS_INS[16];
 # INTERNAL REGISTERS
 DECLARE	INTERNAL ADDR_BUFF[16];
 DECLARE INTERNAL DATA_BUFF[8];
-DECLARE INTERNAL WZ[16]	ALIAS W[8]:Z[8];
+DECLARE INTERNAL WZ[16]	ALIAS W[8]:Z[8];		# Also known as MEMPTR
 DECLARE INTERNAL TMP[8];
+DECLARE INTERNAL NMI_LATCH[1];
 
 # EMULATION INTERNAL REGISTERS
 DECLARE INTERNAL InstructionTable[4];
@@ -79,7 +80,7 @@ HANDLER PIN__CLK	TRANSITION(0,1)
 {
 	CALL DEBUG_Z80();
 
-	STATES	M1|LONGOP|MEM_READ|MEM_WRITE|INPUT|OUTPUT|BUS_ACK|INT|WAIT|RESET
+	STATES	M1|LONGOP|MEM_READ|MEM_WRITE|INPUT|OUTPUT|BUS_ACK|NMI|INT|WAIT|RESET
 	{
 		STATE M1
 		{
@@ -98,16 +99,19 @@ HANDLER PIN__CLK	TRANSITION(0,1)
 						PC<-PC+1;
 					}
 					PIN__M1<-0;
+					PIN__RFSH<-1;
 				}
 
 	
 				STATE T3
 				{
 					PIN_D->InstructionRegister;
+					#DEBUG_TRACE BASE 16, InstructionRegister;
 					IF ~PIN__HALT
 					{
 						$00->InstructionRegister;
 					}
+					InstructionTable<-NxtTable;
 					PIN__M1<-1;
 					PIN__MREQ<-1;
 					PIN__RD<-1;
@@ -121,6 +125,43 @@ HANDLER PIN__CLK	TRANSITION(0,1)
 				}
 			}	
 		}
+		STATE NMI
+		{
+			STATES T1,T2,T3,T4,T5
+			{
+				STATE T1
+				{
+					MachineCycle<-0;
+					PIN_A<-PC;
+					PIN__M1<-0;
+					PIN__RFSH<-1;					
+				}
+	
+				STATE T3
+				{
+					$CD->InstructionRegister;
+					InstructionTable<-$00;
+					PIN__M1<-1;
+					PIN__RFSH<-0;
+					PIN_A<-IR;
+				}
+
+				STATE T4
+				{
+					R<-R+1;
+				}
+
+				STATE T5
+				{
+					MachineCycle<-2;	## Rest handled by CALL instruction
+					WZ<-$0066;
+					SP<-SP-1;
+					ADDR_BUFF<-SP;
+					DATA_BUFF<-PCH;
+					NEXT PIN__CLK.MEM_WRITE.T1;
+				}
+			}
+		}
 		STATE INT
 		{
 			STATES T1,T2,TW1,TW2,T3
@@ -130,8 +171,8 @@ HANDLER PIN__CLK	TRANSITION(0,1)
 					MachineCycle<-0;
 					PIN_A<-PC;
 					PIN__M1<-0;
+					PIN__RFSH<-1;
 				}
-
 	
 				STATE T3
 				{
@@ -150,6 +191,7 @@ HANDLER PIN__CLK	TRANSITION(0,1)
 						CallUsesVector<-1;
 						$CD->InstructionRegister;
 					}
+					InstructionTable<-$00;
 					PIN__M1<-1;
 					PIN__IORQ<-1;
 					PIN__RFSH<-0;
@@ -165,6 +207,7 @@ HANDLER PIN__CLK	TRANSITION(0,1)
 				STATE T1
 				{
 					MachineCycle<-MachineCycle+1;
+					PIN__RFSH<-1;
 				}
 			}
 		}
@@ -176,10 +219,7 @@ HANDLER PIN__CLK	TRANSITION(0,1)
 				{
 					MachineCycle<-MachineCycle+1;
 					PIN_A<-ADDR_BUFF;
-				}
-				STATE T3
-				{
-					PIN_D->DATA_BUFF;
+					PIN__RFSH<-1;
 				}
 			}
 		}
@@ -191,6 +231,7 @@ HANDLER PIN__CLK	TRANSITION(0,1)
 				{
 					MachineCycle<-MachineCycle+1;
 					PIN_A<-ADDR_BUFF;
+					PIN__RFSH<-1;
 				}
 			}
 		}
@@ -202,6 +243,7 @@ HANDLER PIN__CLK	TRANSITION(0,1)
 				{
 					MachineCycle<-MachineCycle+1;
 					PIN_A<-ADDR_BUFF;
+					PIN__RFSH<-1;
 				}
 				STATE T2
 				{
@@ -209,10 +251,6 @@ HANDLER PIN__CLK	TRANSITION(0,1)
 					PIN__RD<-0;
 					PIN_D<-HIGH_IMPEDANCE;
 #					DEBUG_TRACE "CPU PIN_D Z";
-				}
-				STATE T3
-				{
-					PIN_D->DATA_BUFF;
 				}
 			}
 		}
@@ -224,6 +262,7 @@ HANDLER PIN__CLK	TRANSITION(0,1)
 				{
 					MachineCycle<-MachineCycle+1;
 					PIN_A<-ADDR_BUFF;
+					PIN__RFSH<-1;
 				}
 				STATE T2
 				{
@@ -251,6 +290,7 @@ HANDLER PIN__CLK	TRANSITION(0,1)
 					PIN__RFSH<-1;
 					PIN__HALT<-1;
 					PIN__BUSACK<-1;
+					NMI_LATCH<-0;
 					LastCycle<-0;
 					IFF1<-0;
 					IFF2<-0;
@@ -258,66 +298,18 @@ HANDLER PIN__CLK	TRANSITION(0,1)
 				STATE T2
 				{
 					IR<-0;
+					PC<-0;
 				}
 				STATE T3
 				{
-					PC<-0;
+					SP<-$FFFF;
+					AF<-$FFFF;
 					NEXT PIN__CLK.RESET.TREST;
 				}
 			}
 		}
 	}
 
-	IF InstructionTable == %0000
-	{
-		EXECUTE InstructionRegister;
-	}
-	IF InstructionTable == %0001
-	{
-		EXECUTE FD InstructionRegister;
-	}
-	IF InstructionTable == %0010
-	{
-		EXECUTE ED InstructionRegister;
-	}
-	IF InstructionTable == %0100
-	{
-		EXECUTE DD InstructionRegister;
-	}
-	IF InstructionTable == %1000
-	{
-		EXECUTE CB InstructionRegister;
-	}
-	IF InstructionTable == %1100
-	{
-		EXECUTE DDCB InstructionRegister;
-	}
-	IF InstructionTable == %1001
-	{
-		EXECUTE FDCB InstructionRegister;
-	}
-	InstructionTable<-NxtTable;
-
-	IF LastCycle
-	{
-		LastCycle<-0;
-		IF IntCheck
-		{
-			# TODO NMI PIN CHECK
-			IF (PIN__INT==0) & IFF1
-			{
-				IFF2<-IFF1;
-				IFF1<-0;
-				PIN__HALT<-1;
-				NEXT PIN__CLK.INT.T1;
-			}
-		}
-		IF ~IntCheck
-		{
-			IntCheck<-1;	# This deals with the don't check interrupts for instruction after an EI
-		}
-	}
-	CALL DEBUG_Z80();
 }
 
 HANDLER PIN__CLK	TRANSITION(1,0)
@@ -325,7 +317,8 @@ HANDLER PIN__CLK	TRANSITION(1,0)
 	CALL DEBUG_Z80();
 
 	IF PIN__CLK.M1.T1@ |
-	   PIN__CLK.MEM_READ.T1@
+	   PIN__CLK.MEM_READ.T1@ |
+	   PIN__CLK.NMI.T1@
 	{
 		PIN__MREQ<-0;
 		PIN__RD<-0;
@@ -338,25 +331,28 @@ HANDLER PIN__CLK	TRANSITION(1,0)
 	   PIN__CLK.OUTPUT.TW@ |
 	   PIN__CLK.INT.T2@ |
 	   PIN__CLK.INT.TW1@ |
-	   PIN__CLK.INT.TW2@ 
+	   PIN__CLK.INT.TW2@ |
+	   PIN__CLK.NMI.T2@
 	{
 		IF PIN__WAIT==0
 		{
 			PUSH PIN__CLK.WAIT;
 		}
 	}
-	IF PIN__CLK.M1.T3@
+	IF PIN__CLK.M1.T3@ |
+	   PIN__CLK.NMI.T3@
 	{
 		PIN__MREQ<-0;
 	}
-	IF PIN__CLK.M1.T4@
+	IF PIN__CLK.M1.T4@ |
+	   PIN__CLK.NMI.T4@
 	{
 		PIN__MREQ<-1;
-		PIN__RFSH<-1;
 	}
 
 	IF PIN__CLK.MEM_READ.T3@
 	{
+		PIN_D->DATA_BUFF;
 		PIN__MREQ<-1;
 		PIN__RD<-1;
 	}
@@ -385,6 +381,7 @@ HANDLER PIN__CLK	TRANSITION(1,0)
 
 	IF PIN__CLK.INPUT.T3@
 	{
+		PIN_D->DATA_BUFF;
 		PIN__IORQ<-1;
 		PIN__RD<-1;
 	}
@@ -414,8 +411,67 @@ HANDLER PIN__CLK	TRANSITION(1,0)
 			POP PIN__CLK;
 		}
 	}
+	
+	IF InstructionTable == %0000
+	{
+		EXECUTE InstructionRegister;
+	}
+	IF InstructionTable == %0001
+	{
+		EXECUTE FD InstructionRegister;
+	}
+	IF InstructionTable == %0010
+	{
+		EXECUTE ED InstructionRegister;
+	}
+	IF InstructionTable == %0100
+	{
+		EXECUTE DD InstructionRegister;
+	}
+	IF InstructionTable == %1000
+	{
+		EXECUTE CB InstructionRegister;
+	}
+	IF InstructionTable == %1100
+	{
+		EXECUTE DDCB InstructionRegister;
+	}
+	IF InstructionTable == %1001
+	{
+		EXECUTE FDCB InstructionRegister;
+	}
 
+	IF LastCycle
+	{
+		LastCycle<-0;
+		IF (NMI_LATCH)
+		{
+			NMI_LATCH<-0;
+			IFF1<-0;
+			PIN__HALT<-1;
+			NEXT PIN__CLK.NMI.T1;
+		}
+		IF IntCheck
+		{
+			IF (PIN__INT==0) & IFF1
+			{
+				IFF2<-IFF1;
+				IFF1<-0;
+				PIN__HALT<-1;
+				NEXT PIN__CLK.INT.T1;
+			}
+		}
+		IF ~IntCheck
+		{
+			IntCheck<-1;	# This deals with the don't check interrupts for instruction after an EI
+		}
+	}
 	CALL DEBUG_Z80();
+}
+
+HANDLER PIN__NMI	TRANSITION(1,0)
+{
+	NMI_LATCH<-1;
 }
 
 HANDLER PIN__RESET	ALWAYS
@@ -597,11 +653,16 @@ MAPPING INCDEC[3]
 	%101	"DEC "		AFFECT s AS SIGN, z AS ZERO, b5 AS BIT(5), h AS CARRY(3), b3 AS BIT(3), p AS OVERFLOW(TMP,$01,7), n AS FORCESET { TMP - 1 }->TMP;
 }
 
-MAPPING IMM[2]
+MAPPING IMM[3]	#01:xxx:110   - includes undocumented variants
 {
-	%00	"0"	0;
-	%10	"1"	1;
-	%11	"2"	2;
+	%000	"0"	0;
+	%001	"0" 0;	# undocumented
+	%010	"1"	1;
+	%011	"2"	2;
+	%100	"0"	0;	# undocumented
+	%101	"0" 0;	# undocumented
+	%110	"1"	1;	# undocumented
+	%111	"2"	2;	# undocumented
 }
 
 MAPPING ROT[3]
@@ -674,15 +735,19 @@ INSTRUCTION	DD	"DDCB"			%11001011
 	{
 		TMP<-DATA_BUFF;
 		WZ<-IX++TMP;
-		ADDR_BUFF<-WZ;
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
 		NEXT PIN__CLK.MEM_READ.T1;
 	}
 
 	IF PIN__CLK.MEM_READ.T5@ & (MachineCycle==2)
 	{
-		TMP<-DATA_BUFF;
+		MachineCycle<-0;
+		InstructionRegister<-DATA_BUFF;
 		TableCB<-1;
-		NEXT PIN__CLK.M1.T1;
+		InstructionTable<-NxtTable;
+		ADDR_BUFF<-WZ;
+		NEXT PIN__CLK.MEM_READ.T1;
 	}
 }
 
@@ -699,15 +764,19 @@ INSTRUCTION	FD	"FDCB"			%11001011
 	{
 		TMP<-DATA_BUFF;
 		WZ<-IY++TMP;
-		ADDR_BUFF<-WZ;
+		ADDR_BUFF<-PC;
+		PC<-PC+1;
 		NEXT PIN__CLK.MEM_READ.T1;
 	}
 
 	IF PIN__CLK.MEM_READ.T5@ & (MachineCycle==2)
 	{
-		TMP<-DATA_BUFF;
+		MachineCycle<-0;
+		InstructionRegister<-DATA_BUFF;
 		TableCB<-1;
-		NEXT PIN__CLK.M1.T1;
+		InstructionTable<-NxtTable;
+		ADDR_BUFF<-WZ;
+		NEXT PIN__CLK.MEM_READ.T1;
 	}
 }
 
@@ -1026,6 +1095,7 @@ INSTRUCTION		"LD A,(%M0)"		%00:BCDE:%1010
 	IF PIN__CLK.MEM_READ.T3@
 	{
 		A<-DATA_BUFF;
+		WZ<-BCDE+1;	# MEMPTR is rp+1
 		CALL LastInstructionCycle();
 	}
 }
@@ -1051,6 +1121,7 @@ INSTRUCTION		"LD A,(%$2%$1)"		%00111010,B2[8],B3[8]
 	{
 		W<-DATA_BUFF;
 		ADDR_BUFF<-WZ;
+		WZ<-WZ+1;	# MEMPTR is +1
 		NEXT PIN__CLK.MEM_READ.T1;
 	}
 	
@@ -1067,6 +1138,8 @@ INSTRUCTION		"LD (%M0),A"		%00:BCDE:%0010
 	{
 		ADDR_BUFF<-BCDE;
 		DATA_BUFF<-A;
+		W<-A;				# MEMPTR hi is A
+		Z<-(BCDE[0..7])+1;	# MEMPTR lo is rp+1
 		NEXT PIN__CLK.MEM_WRITE.T1;
 	}
 
@@ -1098,6 +1171,8 @@ INSTRUCTION		"LD (%$2%$1),A"		%00110010,B2[8],B3[8]
 		W<-DATA_BUFF;
 		ADDR_BUFF<-WZ;
 		DATA_BUFF<-A;
+		W<-A;	# MEMPTR hi is A
+		Z<-Z+1;	# MEMPTR lo is MEMLO+1
 		NEXT PIN__CLK.MEM_WRITE.T1;
 	}
 	
@@ -1126,9 +1201,11 @@ INSTRUCTION	ED	"LD A,R"		%01011111
 {
 	IF PIN__CLK.M1.T5@
 	{
+		DECLARE T[8];	# BUG in EDL (Affect IR[0..7] uses 16bit size for SIGN/ZERO - this makes it explicit 8bit)
+		T<-IR[0..7];
 		AFFECT s AS SIGN, z AS ZERO, b5 AS BIT(5), b3 AS BIT(3)
 		{
-			IR[0..7]
+			T
 		}->A;
 		n<-0;
 		h<-0;
@@ -1168,7 +1245,7 @@ INSTRUCTION		"LD %M0,%$2%$1"		%00:rP:%0001,B2[8],B3[8]
 
 	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==1)
 	{
-		Z<-DATA_BUFF;
+		DATA_BUFF->rP[0..7];
 		ADDR_BUFF<-PC;
 		PC<-PC+1;
 		NEXT PIN__CLK.MEM_READ.T1;
@@ -1176,8 +1253,7 @@ INSTRUCTION		"LD %M0,%$2%$1"		%00:rP:%0001,B2[8],B3[8]
 
 	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==2)
 	{
-		W<-DATA_BUFF;
-		rP<-WZ;
+		DATA_BUFF->rP[8..15];
 		CALL LastInstructionCycle();
 	}
 }
@@ -1193,7 +1269,7 @@ INSTRUCTION	DD	"LD IX,%$2%$1"		%00100001,B2[8],B3[8]
 
 	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==1)
 	{
-		Z<-DATA_BUFF;
+		DATA_BUFF->IXl;
 		ADDR_BUFF<-PC;
 		PC<-PC+1;
 		NEXT PIN__CLK.MEM_READ.T1;
@@ -1201,8 +1277,7 @@ INSTRUCTION	DD	"LD IX,%$2%$1"		%00100001,B2[8],B3[8]
 
 	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==2)
 	{
-		W<-DATA_BUFF;
-		IX<-WZ;
+		DATA_BUFF->IXh;
 		CALL LastInstructionCycle();
 	}
 }
@@ -1218,7 +1293,7 @@ INSTRUCTION	FD	"LD IY,%$2%$1"		%00100001,B2[8],B3[8]
 
 	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==1)
 	{
-		Z<-DATA_BUFF;
+		DATA_BUFF->IYl;
 		ADDR_BUFF<-PC;
 		PC<-PC+1;
 		NEXT PIN__CLK.MEM_READ.T1;
@@ -1226,8 +1301,7 @@ INSTRUCTION	FD	"LD IY,%$2%$1"		%00100001,B2[8],B3[8]
 
 	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==2)
 	{
-		W<-DATA_BUFF;
-		IY<-WZ;
+		DATA_BUFF->IYh;
 		CALL LastInstructionCycle();
 	}
 }
@@ -1253,7 +1327,7 @@ INSTRUCTION		"LD HL,(%$2%$1)"	%00101010,B2[8],B3[8]
 	{
 		W<-DATA_BUFF;
 		ADDR_BUFF<-WZ;
-		WZ<-WZ+1;
+		WZ<-WZ+1; # MEMPTR
 		NEXT PIN__CLK.MEM_READ.T1;
 	}
 	
@@ -1292,21 +1366,20 @@ INSTRUCTION	ED	"LD %M0,(%$2%$1)"	%01:rP:%1011,B2[8],B3[8]
 	{
 		W<-DATA_BUFF;
 		ADDR_BUFF<-WZ;
-		WZ<-WZ+1;
+		WZ<-WZ+1;	# MEMPTR is addr+1
 		NEXT PIN__CLK.MEM_READ.T1;
 	}
 	
 	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==3)
 	{
 		ADDR_BUFF<-WZ;
-		Z<-DATA_BUFF;
+		DATA_BUFF->rP[0..7];
 		NEXT PIN__CLK.MEM_READ.T1;
 	}
 	
 	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==4)
 	{
-		W<-DATA_BUFF;
-		rP<-WZ;
+		DATA_BUFF->rP[8..15];
 		CALL LastInstructionCycle();
 	}
 }
@@ -1332,21 +1405,20 @@ INSTRUCTION	DD	"LD IX,(%$2%$1)"	%00101010,B2[8],B3[8]
 	{
 		W<-DATA_BUFF;
 		ADDR_BUFF<-WZ;
-		WZ<-WZ+1;
+		WZ<-WZ+1; #MEMPTR
 		NEXT PIN__CLK.MEM_READ.T1;
 	}
 	
 	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==3)
 	{
 		ADDR_BUFF<-WZ;
-		Z<-DATA_BUFF;
+		IXl<-DATA_BUFF;
 		NEXT PIN__CLK.MEM_READ.T1;
 	}
 	
 	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==4)
 	{
-		W<-DATA_BUFF;
-		IX<-WZ;
+		IXh<-DATA_BUFF;
 		CALL LastInstructionCycle();
 	}
 }
@@ -1372,21 +1444,20 @@ INSTRUCTION	FD	"LD IY,(%$2%$1)"	%00101010,B2[8],B3[8]
 	{
 		W<-DATA_BUFF;
 		ADDR_BUFF<-WZ;
-		WZ<-WZ+1;
+		WZ<-WZ+1; # MEMPTR
 		NEXT PIN__CLK.MEM_READ.T1;
 	}
 	
 	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==3)
 	{
 		ADDR_BUFF<-WZ;
-		Z<-DATA_BUFF;
+		IYl<-DATA_BUFF;
 		NEXT PIN__CLK.MEM_READ.T1;
 	}
 	
 	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==4)
 	{
-		W<-DATA_BUFF;
-		IY<-WZ;
+		IYh<-DATA_BUFF;
 		CALL LastInstructionCycle();
 	}
 }
@@ -1412,7 +1483,7 @@ INSTRUCTION		"LD (%$2%$1),HL"	%00100010,B2[8],B3[8]
 	{
 		W<-DATA_BUFF;
 		ADDR_BUFF<-WZ;
-		WZ<-WZ+1;
+		WZ<-WZ+1; # MEMPTR
 		DATA_BUFF<-L;
 		NEXT PIN__CLK.MEM_WRITE.T1;
 	}
@@ -1451,7 +1522,7 @@ INSTRUCTION	ED	"LD (%$2%$1),%M0"	%01:rP:%0011,B2[8],B3[8]
 	{
 		W<-DATA_BUFF;
 		ADDR_BUFF<-WZ;
-		WZ<-WZ+1;
+		WZ<-WZ+1; # MEMPTR
 		DATA_BUFF<-rP[0..7];
 		NEXT PIN__CLK.MEM_WRITE.T1;
 	}
@@ -1490,7 +1561,7 @@ INSTRUCTION	DD	"LD (%$2%$1),IX"	%00100010,B2[8],B3[8]
 	{
 		W<-DATA_BUFF;
 		ADDR_BUFF<-WZ;
-		WZ<-WZ+1;
+		WZ<-WZ+1; # MEMPTR
 		DATA_BUFF<-IXl;
 		NEXT PIN__CLK.MEM_WRITE.T1;
 	}
@@ -1529,7 +1600,7 @@ INSTRUCTION	FD	"LD (%$2%$1),IY"	%00100010,B2[8],B3[8]
 	{
 		W<-DATA_BUFF;
 		ADDR_BUFF<-WZ;
-		WZ<-WZ+1;
+		WZ<-WZ+1; # MEMPTR
 		DATA_BUFF<-IYl;
 		NEXT PIN__CLK.MEM_WRITE.T1;
 	}
@@ -1783,7 +1854,7 @@ INSTRUCTION		"EX (SP),HL"		%11100011
 	
 	IF PIN__CLK.MEM_WRITE.T5@ & (MachineCycle==4)
 	{
-		HL<-WZ;
+		HL<-WZ;	# MEMPTR 
 		CALL LastInstructionCycle();
 	}
 }
@@ -1822,7 +1893,7 @@ INSTRUCTION	DD	"EX (SP),IX"		%11100011
 	
 	IF PIN__CLK.MEM_WRITE.T5@ & (MachineCycle==4)
 	{
-		IX<-WZ;
+		IX<-WZ;	# MEMPTR
 		CALL LastInstructionCycle();
 	}
 }
@@ -1861,7 +1932,7 @@ INSTRUCTION	FD	"EX (SP),IY"		%11100011
 	
 	IF PIN__CLK.MEM_WRITE.T5@ & (MachineCycle==4)
 	{
-		IY<-WZ;
+		IY<-WZ;	# MEMPTR
 		CALL LastInstructionCycle();
 	}
 }
@@ -1934,6 +2005,7 @@ INSTRUCTION	ED	"LDIR"			%10110000
 	IF PIN__CLK.LONGOP.T5@
 	{
 		PC<-PC-2;
+		WZ<-PC + 1;	# MEMPTR
 		CALL LastInstructionCycle();
 	}
 }
@@ -1992,6 +2064,7 @@ INSTRUCTION	ED	"LDDR"			%10111000
 	IF PIN__CLK.LONGOP.T5@
 	{
 		PC<-PC-2;
+		WZ<-PC + 1;	# MEMPTR
 		CALL LastInstructionCycle();
 	}
 }
@@ -2035,6 +2108,7 @@ INSTRUCTION	ED	"CPI"			%10100001
 	IF PIN__CLK.LONGOP.T5@
 	{
 		CALL SearchFlags(TMP);
+		WZ<-WZ + 1;	# MEMPTR
 		CALL LastInstructionCycle();
 	}
 }
@@ -2060,6 +2134,7 @@ INSTRUCTION	ED	"CPIR"			%10110001
 		NEXT PIN__CLK.LONGOP.T1;
 		IF ~(p & ~z)
 		{
+			WZ<-WZ + 1;	# MEMPTR
 			CALL LastInstructionCycle();
 		}
 	}
@@ -2067,6 +2142,7 @@ INSTRUCTION	ED	"CPIR"			%10110001
 	IF PIN__CLK.LONGOP.T5@ & (MachineCycle==3)
 	{
 		PC<-PC-2;
+		WZ<-PC + 1;	# MEMPTR
 		CALL LastInstructionCycle();
 	}
 }
@@ -2089,6 +2165,7 @@ INSTRUCTION	ED	"CPD"			%10101001
 	IF PIN__CLK.LONGOP.T5@
 	{
 		CALL SearchFlags(TMP);
+		WZ<-WZ - 1;	# MEMPTR
 		CALL LastInstructionCycle();
 	}
 }
@@ -2114,6 +2191,7 @@ INSTRUCTION	ED	"CPDR"			%10111001
 		NEXT PIN__CLK.LONGOP.T1;
 		IF ~(p & ~z)
 		{
+			WZ<-WZ - 1;	# MEMPTR
 			CALL LastInstructionCycle();
 		}
 	}
@@ -2121,6 +2199,7 @@ INSTRUCTION	ED	"CPDR"			%10111001
 	IF PIN__CLK.LONGOP.T5@ & (MachineCycle==3)
 	{
 		PC<-PC-2;
+		WZ<-PC + 1;	# MEMPTR
 		CALL LastInstructionCycle();
 	}
 }
@@ -2425,7 +2504,7 @@ INSTRUCTION		"CPL"			%00101111
 	}
 }
 
-INSTRUCTION	ED	"NEG"			%01000100
+INSTRUCTION	ED	"NEG"			%01:undocumented[3]:%100
 {
 	IF PIN__CLK.M1.T4@
 	{
@@ -2495,14 +2574,23 @@ INSTRUCTION		"EI"			%11111011
 {
 	IF PIN__CLK.M1.T4@
 	{
-		IFF1<-1;
-		IFF2<-1;
-		IntCheck<-0;
-		NEXT PIN__CLK.M1.T1;		# We don't perform Last Instruction Cycle here, since interrupts cannot be accepted straight after an EI
+		IF ~IFF1
+		{
+			IFF1<-1;
+			IFF2<-1;
+			IntCheck<-0;
+			NEXT PIN__CLK.M1.T1;		# We don't perform Last Instruction Cycle here, since interrupts cannot be accepted straight after an EI - unless they are already enabled?
+		}
+		IF IFF1
+		{
+			IFF1<-1;
+			IFF2<-1;
+			CALL LastInstructionCycle();
+		}
 	}
 }
 
-INSTRUCTION	ED	"IM %M0"		%010:IMM:%110
+INSTRUCTION	ED	"IM %M0"		%01:IMM:%110
 {
 	IF PIN__CLK.M1.T4@
 	{
@@ -2526,7 +2614,7 @@ INSTRUCTION		"ADD HL,%M0"		%00:rP:%1001
 		AFFECT c AS CARRY(7)
 		{
 			L + Z
-		} -> L;
+		} -> Z;
 		NEXT PIN__CLK.LONGOP.T1;
 	}
 
@@ -2535,7 +2623,9 @@ INSTRUCTION		"ADD HL,%M0"		%00:rP:%1001
 		AFFECT b5 AS BIT(5),h AS CARRY(3),b3 AS BIT(3),n AS FORCERESET,c AS CARRY(7)
 		{
 			(H + W) + c
-		} -> H;
+		} -> W;
+		HL<->WZ;
+		WZ<-WZ+1;	# MEMPTR
 		CALL LastInstructionCycle();
 	}
 }
@@ -2553,7 +2643,7 @@ INSTRUCTION	ED	"ADC HL,%M0"		%01:rP:%1010
 		AFFECT c AS CARRY(7)
 		{
 			(L + Z) + c
-		} -> L;
+		} -> Z;
 		NEXT PIN__CLK.LONGOP.T1;
 	}
 
@@ -2562,7 +2652,9 @@ INSTRUCTION	ED	"ADC HL,%M0"		%01:rP:%1010
 		AFFECT s AS SIGN, b5 AS BIT(5),h AS CARRY(3),b3 AS BIT(3),p AS OVERFLOW(H,W,7),n AS FORCERESET,c AS CARRY(7)
 		{
 			(H + W)+c
-		}->H;
+		}->W;
+		HL<->WZ;
+		WZ<-WZ+1;	# MEMPTR
 		AFFECT z AS ZERO
 		{
 			HL
@@ -2584,7 +2676,7 @@ INSTRUCTION	ED	"SBC HL,%M0"		%01:rP:%0010
 		AFFECT c AS CARRY(7)
 		{
 			(L - Z) - c
-		} -> L;
+		} -> Z;
 		NEXT PIN__CLK.LONGOP.T1;
 	}
 
@@ -2593,7 +2685,9 @@ INSTRUCTION	ED	"SBC HL,%M0"		%01:rP:%0010
 		AFFECT s AS SIGN, b5 AS BIT(5),h AS CARRY(3),b3 AS BIT(3),p AS OVERFLOW(H,W,7),n AS FORCESET,c AS CARRY(7)
 		{
 			(H - W)-c
-		}->H;
+		}->W;
+		HL<->WZ;
+		WZ<-WZ+1;	# MEMPTR
 		AFFECT z AS ZERO
 		{
 			HL
@@ -2615,7 +2709,7 @@ INSTRUCTION	DD	"ADD IX,%M0"		%00:pP:%1001
 		AFFECT c AS CARRY(7)
 		{
 			IXl + Z
-		} -> IXl;
+		} -> Z;
 		NEXT PIN__CLK.LONGOP.T1;
 	}
 
@@ -2624,7 +2718,9 @@ INSTRUCTION	DD	"ADD IX,%M0"		%00:pP:%1001
 		AFFECT b5 AS BIT(5),h AS CARRY(3),b3 AS BIT(3),n AS FORCERESET,c AS CARRY(7)
 		{
 			(IXh + W) + c
-		} -> IXh;
+		} -> W;
+		IX<->WZ;
+		WZ<-WZ+1;	# MEMPTR
 		CALL LastInstructionCycle();
 	}
 }
@@ -2642,7 +2738,7 @@ INSTRUCTION	FD	"ADD IY,%M0"		%00:qP:%1001
 		AFFECT c AS CARRY(7)
 		{
 			IYl + Z
-		} -> IYl;
+		} -> Z;
 		NEXT PIN__CLK.LONGOP.T1;
 	}
 
@@ -2651,7 +2747,9 @@ INSTRUCTION	FD	"ADD IY,%M0"		%00:qP:%1001
 		AFFECT b5 AS BIT(5),h AS CARRY(3),b3 AS BIT(3),n AS FORCERESET,c AS CARRY(7)
 		{
 			(IYh + W) + c
-		} -> IYh;
+		} -> W;
+		IY<->WZ;
+		WZ<-WZ+1;	# MEMPTR
 		CALL LastInstructionCycle();
 	}
 }
@@ -2793,51 +2891,71 @@ INSTRUCTION	CB	"%M0(HL)"		%00:ROT:%110
 	}
 }
 
-#INSTRUCTION	DDCB	"%M0(IX+%$-1)"		%00:ROT:%110,B[8]
-#{
-#	DECLARE TMP[8];
-#	DECLARE EA[16];
-#	EA<-IX++CALL GetByte(PC-2);
-#	TMP<-CALL GetByte(EA);
-#	ROT;
-#	CALL SetByte(EA,TMP);
-#	23->CYCLES;
-#}
-#
-#INSTRUCTION	FDCB	"%M0(IY+%$-1)"		%00:ROT:%110,B[8]
-#{
-#	DECLARE TMP[8];
-#	DECLARE EA[16];
-#	EA<-IY++CALL GetByte(PC-2);
-#	TMP<-CALL GetByte(EA);
-#	ROT;
-#	CALL SetByte(EA,TMP);
-#	23->CYCLES;
-#}
-#
-#INSTRUCTION	DDCB	"%M0(IX+%$-1),%M1"	%00:ROT:rD,B[8]	
-#{
-#	DECLARE TMP[8];
-#	DECLARE EA[16];
-#	EA<-IX++CALL GetByte(PC-2);
-#	TMP<-CALL GetByte(EA);
-#	ROT;
-#	CALL SetByte(EA,TMP);
-#	rD<-TMP;
-#	23->CYCLES;
-#}
-#
-#INSTRUCTION	FDCB	"%M0(IY+%$-1),%M1"	%00:ROT:rD,B[8]
-#{
-#	DECLARE TMP[8];
-#	DECLARE EA[16];
-#	EA<-IY++CALL GetByte(PC-2);
-#	TMP<-CALL GetByte(EA);
-#	ROT;
-#	CALL SetByte(EA,TMP);
-#	rD<-TMP;
-#	23->CYCLES;
-#}
+INSTRUCTION	DDCB	"%M0(IX+%$-1)"		%00:ROT:%110,B[8]
+{
+	IF PIN__CLK.MEM_READ.T4@
+	{
+		TMP<-DATA_BUFF;
+		ROT;
+		DATA_BUFF<-TMP;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+
+	IF PIN__CLK.MEM_WRITE.T3@
+	{
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	FDCB	"%M0(IY+%$-1)"		%00:ROT:%110,B[8]
+{
+	IF PIN__CLK.MEM_READ.T4@
+	{
+		TMP<-DATA_BUFF;
+		ROT;
+		DATA_BUFF<-TMP;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+
+	IF PIN__CLK.MEM_WRITE.T3@
+	{
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	DDCB	"%M0(IX+%$-1),%M1"		%00:ROT:rD,B[8]
+{
+	IF PIN__CLK.MEM_READ.T4@
+	{
+		TMP<-DATA_BUFF;
+		ROT;
+		DATA_BUFF<-TMP;
+		rD<-TMP;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+
+	IF PIN__CLK.MEM_WRITE.T3@
+	{
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	FDCB	"%M0(IY+%$-1),%M1"	%00:ROT:rD,B[8]
+{
+	IF PIN__CLK.MEM_READ.T4@
+	{
+		TMP<-DATA_BUFF;
+		ROT;
+		DATA_BUFF<-TMP;
+		rD<-TMP;
+		NEXT PIN__CLK.MEM_WRITE.T1;
+	}
+
+	IF PIN__CLK.MEM_WRITE.T3@
+	{
+		CALL LastInstructionCycle();
+	}
+}
 
 INSTRUCTION	ED	"RLD"			%01101111
 {
@@ -2862,6 +2980,7 @@ INSTRUCTION	ED	"RLD"			%01101111
 			(A & $F0) | TMPROT
 		}->A;
 		DATA_BUFF<-TMP;
+		WZ<-HL+1;	# MEMPTR
 		NEXT PIN__CLK.MEM_WRITE.T1;
 	}
 
@@ -2894,6 +3013,7 @@ INSTRUCTION	ED	"RRD"			%01100111
 			(A & $F0) | TMPROT
 		}->A;
 		DATA_BUFF<-TMP;
+		WZ<-HL+1;	# MEMPTR
 		NEXT PIN__CLK.MEM_WRITE.T1;
 	}
 
@@ -2923,16 +3043,12 @@ MAPPING SETRES[2]
 	%11	"SET "		TMP | TMP2 -> TMP;
 }
 
-FUNCTION INTERNAL 	HandleBitFlags	b3b5[8],res[8],BitIndex[8]
+FUNCTION INTERNAL 	HandleBitFlags	b3b5[8],res[8]
 {
-	AFFECT s AS FORCERESET, z AS ZERO,h AS FORCESET,p AS PARITYEVEN,n AS FORCERESET
+	AFFECT s AS SIGN, z AS ZERO,h AS FORCESET,p AS PARITYEVEN,n AS FORCERESET
 	{
 		res
 	};
-	IF (BitIndex & res)==%10000000
-	{
-		s<-1;
-	}
 	AFFECT b5 AS BIT(5),b3 AS BIT(3)
 	{
 		b3b5
@@ -2943,7 +3059,8 @@ INSTRUCTION	CB	"BIT %M0,%M1"		%01:BITINDEX:rS
 {
 	IF PIN__CLK.M1.T4@
 	{
-		CALL HandleBitFlags(rS,rS & BITINDEX,BITINDEX);
+		TMP<-rS & BITINDEX;
+		CALL HandleBitFlags(rS,TMP);
 		CALL LastInstructionCycle();
 	}
 }
@@ -2958,29 +3075,28 @@ INSTRUCTION	CB	"BIT %M0,(HL)"		%01:BITINDEX:%110
 
 	IF PIN__CLK.MEM_READ.T4@
 	{
-		DECLARE TMP2[8];
 		TMP<-DATA_BUFF & BITINDEX;
-		CALL HandleBitFlags(TMP,TMP,BITINDEX);
+		CALL HandleBitFlags(W,TMP);
 		CALL LastInstructionCycle();
 	}
 }
 
 INSTRUCTION	DDCB	"BIT %M0,(IX+%$-1)"	%01:BITINDEX:UNDOCUMENTED[3],B2[8]
 {
-	IF PIN__CLK.M1.T4@
+	IF PIN__CLK.MEM_READ.T4@
 	{
-		TMP<-TMP & BITINDEX;
-		CALL HandleBitFlags(W,TMP,BITINDEX);
+		TMP<-DATA_BUFF & BITINDEX;
+		CALL HandleBitFlags(W,TMP);
 		CALL LastInstructionCycle();
 	}
 }
 
 INSTRUCTION	FDCB	"BIT %M0,(IY+%$-1)"	%01:BITINDEX:UNDOCUMENTED[3],B2[8]
 {
-	IF PIN__CLK.M1.T4@
+	IF PIN__CLK.MEM_READ.T4@
 	{
-		TMP<-TMP & BITINDEX;
-		CALL HandleBitFlags(W,TMP,BITINDEX);
+		TMP<-DATA_BUFF & BITINDEX;
+		CALL HandleBitFlags(W,TMP);
 		CALL LastInstructionCycle();
 	}
 }
@@ -3024,12 +3140,12 @@ INSTRUCTION	CB	"%M0%M1,(HL)"		SETRES:BITINDEX:%110
 
 INSTRUCTION	DDCB	"%M0%M1,(IX+%$-1)"	SETRES:BITINDEX:%110,B2[8]
 {
-	IF PIN__CLK.M1.T4@
+	IF PIN__CLK.MEM_READ.T4@
 	{
 		DECLARE TMP2[8];
+		TMP<-DATA_BUFF;
 		TMP2<-BITINDEX;
 		SETRES;
-		ADDR_BUFF<-WZ;
 		DATA_BUFF<-TMP;
 		NEXT PIN__CLK.MEM_WRITE.T1;
 	}
@@ -3042,12 +3158,12 @@ INSTRUCTION	DDCB	"%M0%M1,(IX+%$-1)"	SETRES:BITINDEX:%110,B2[8]
 
 INSTRUCTION	FDCB	"%M0%M1,(IY+%$-1)"	SETRES:BITINDEX:%110,B2[8]
 {
-	IF PIN__CLK.M1.T4@
+	IF PIN__CLK.MEM_READ.T4@
 	{
 		DECLARE TMP2[8];
+		TMP<-DATA_BUFF;
 		TMP2<-BITINDEX;
 		SETRES;
-		ADDR_BUFF<-WZ;
 		DATA_BUFF<-TMP;
 		NEXT PIN__CLK.MEM_WRITE.T1;
 	}
@@ -3060,12 +3176,12 @@ INSTRUCTION	FDCB	"%M0%M1,(IY+%$-1)"	SETRES:BITINDEX:%110,B2[8]
 
 INSTRUCTION	DDCB	"%M0%M1,(IX+%$-1),%M2"	SETRES:BITINDEX:rD,B2[8]
 {
-	IF PIN__CLK.M1.T4@
+	IF PIN__CLK.MEM_READ.T4@
 	{
 		DECLARE TMP2[8];
+		TMP<-DATA_BUFF;
 		TMP2<-BITINDEX;
 		SETRES;
-		ADDR_BUFF<-WZ;
 		DATA_BUFF<-TMP;
 		rD<-TMP;
 		NEXT PIN__CLK.MEM_WRITE.T1;
@@ -3079,12 +3195,12 @@ INSTRUCTION	DDCB	"%M0%M1,(IX+%$-1),%M2"	SETRES:BITINDEX:rD,B2[8]
 
 INSTRUCTION	FDCB	"%M0%M1,(IY+%$-1),%M2"	SETRES:BITINDEX:rD,B2[8]
 {
-	IF PIN__CLK.M1.T4@
+	IF PIN__CLK.MEM_READ.T4@
 	{
 		DECLARE TMP2[8];
+		TMP<-DATA_BUFF;
 		TMP2<-BITINDEX;
 		SETRES;
-		ADDR_BUFF<-WZ;
 		DATA_BUFF<-TMP;
 		rD<-TMP;
 		NEXT PIN__CLK.MEM_WRITE.T1;
@@ -3118,7 +3234,7 @@ INSTRUCTION		"JP %$2%$1"		%11000011,B2[8],B3[8]
 	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==2)
 	{
 		W<-DATA_BUFF;
-		PC<-WZ;
+		PC<-WZ;	# MEMPTR
 		CALL LastInstructionCycle();
 	}
 }
@@ -3142,7 +3258,7 @@ INSTRUCTION		"JP %M0,%$2%$1"		%11:CCC:%010,B2[8],B3[8]
 
 	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==2)
 	{
-		W<-DATA_BUFF;
+		W<-DATA_BUFF;	# MEMPTR
 		IF CCC
 		{
 			PC<-WZ;
@@ -3163,12 +3279,13 @@ INSTRUCTION		"JR %$1"		%00011000,B2[8]
 	IF PIN__CLK.MEM_READ.T3@ 
 	{
 		TMP<-DATA_BUFF;
+		WZ<-PC++TMP;
 		NEXT PIN__CLK.LONGOP.T1;
 	}
 
 	IF PIN__CLK.LONGOP.T5@
 	{
-		PC<-PC ++ TMP;
+		PC<-WZ;
 		CALL LastInstructionCycle();
 	}
 }
@@ -3195,6 +3312,7 @@ INSTRUCTION		"JR %M0,%$1"		%001:SS:%000,B2[8]
 	IF PIN__CLK.LONGOP.T5@
 	{
 		PC<-PC ++ TMP;
+		WZ<-PC;	# MEMPTR
 		CALL LastInstructionCycle();
 	}
 }
@@ -3249,6 +3367,7 @@ INSTRUCTION		"DJNZ %$1"		%00010000,B2[8]
 	IF PIN__CLK.LONGOP.T5@
 	{
 		PC<-PC ++ TMP;
+		WZ<-PC;	# MEMPTR
 		CALL LastInstructionCycle();
 	}
 }
@@ -3307,7 +3426,7 @@ INSTRUCTION		"CALL %$2%$1"		%11001101,B2[8],B3[8]
 	
 	IF PIN__CLK.MEM_WRITE.T3@ & (MachineCycle==4)
 	{
-		PC<-WZ;
+		PC<-WZ;	# MEMPTR
 		CALL LastInstructionCycle();
 	}
 }
@@ -3331,7 +3450,7 @@ INSTRUCTION		"CALL %M0,%$2%$1"	%11:CCC:%100,B2[8],B3[8]
 
 	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==2)
 	{
-		W<-DATA_BUFF;
+		W<-DATA_BUFF;	# MEMPTR
 		IF ~(CCC)
 		{
 			CALL LastInstructionCycle();
@@ -3381,7 +3500,7 @@ INSTRUCTION		"RET"			%11001001
 	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==2)
 	{
 		DATA_BUFF->W;
-		PC<-WZ;
+		PC<-WZ;	# MEMPTR
 		CALL LastInstructionCycle();
 	}
 }
@@ -3413,12 +3532,12 @@ INSTRUCTION		"RET %M0"		%11:CCC:%000
 	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==2)
 	{
 		DATA_BUFF->W;
-		PC<-WZ;
+		PC<-WZ;	# MEMPTR
 		CALL LastInstructionCycle();
 	}
 }
 
-INSTRUCTION	ED	"RETI"			%01001101
+INSTRUCTION	ED	"RETI/N"		%01:undocumented[3]:%101
 {
 	IF PIN__CLK.M1.T4@
 	{
@@ -3438,33 +3557,7 @@ INSTRUCTION	ED	"RETI"			%01001101
 	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==2)
 	{
 		DATA_BUFF->W;
-		PC<-WZ;
-		IFF1<-IFF2;
-		CALL LastInstructionCycle();
-	}
-}
-
-INSTRUCTION	ED	"RETN"			%01000101
-{
-	IF PIN__CLK.M1.T4@
-	{
-		ADDR_BUFF<-SP;
-		SP<-SP+1;
-		NEXT PIN__CLK.MEM_READ.T1;
-	}
-
-	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==1)
-	{
-		DATA_BUFF->Z;
-		ADDR_BUFF<-SP;
-		SP<-SP+1;
-		NEXT PIN__CLK.MEM_READ.T1;
-	}
-	
-	IF PIN__CLK.MEM_READ.T3@ & (MachineCycle==2)
-	{
-		DATA_BUFF->W;
-		PC<-WZ;
+		PC<-WZ;	# MEMPTR
 		IFF1<-IFF2;
 		CALL LastInstructionCycle();
 	}
@@ -3491,6 +3584,7 @@ INSTRUCTION		"RST %M0"		%11:NNN:%111
 	IF PIN__CLK.MEM_WRITE.T3@ & (MachineCycle==2)
 	{
 		NNN->PC;
+		WZ<-PC;	# MEMPTR
 		CALL LastInstructionCycle();
 	}
 }
@@ -3511,6 +3605,7 @@ INSTRUCTION		"IN A,(%$1)"		%11011011,B2[8]
 		Z<-DATA_BUFF;
 		W<-A;
 		ADDR_BUFF<-WZ;
+		WZ<-WZ+1;	# MEMPTR
 		NEXT PIN__CLK.INPUT.T1;
 	}
 
@@ -3526,6 +3621,7 @@ INSTRUCTION	ED	"IN %M0,(C)"		%01:rD:%000
 	IF PIN__CLK.M1.T4@
 	{
 		ADDR_BUFF<-BC;
+		WZ<-BC + 1;	# MEMPTR
 		NEXT PIN__CLK.INPUT.T1;
 	}
 
@@ -3544,6 +3640,7 @@ INSTRUCTION	ED	"IN F,(C)"		%01110000
 	IF PIN__CLK.M1.T4@
 	{
 		ADDR_BUFF<-BC;
+		WZ<-BC + 1;	# MEMPTR
 		NEXT PIN__CLK.INPUT.T1;
 	}
 
@@ -3585,6 +3682,7 @@ INSTRUCTION	ED	"INI"			%10100010
 {
 	IF PIN__CLK.M1.T5@
 	{
+		WZ<-BC + 1; #MEMPTR
 		B<-B-1;
 		ADDR_BUFF<-BC;
 		NEXT PIN__CLK.INPUT.T1;
@@ -3609,6 +3707,7 @@ INSTRUCTION	ED	"INIR"			%10110010
 {
 	IF PIN__CLK.M1.T5@
 	{
+		WZ<-BC + 1; #MEMPTR
 		B<-B-1;
 		ADDR_BUFF<-BC;
 		NEXT PIN__CLK.INPUT.T1;
@@ -3643,6 +3742,7 @@ INSTRUCTION	ED	"IND"			%10101010
 {
 	IF PIN__CLK.M1.T5@
 	{
+		WZ<-BC - 1; #MEMPTR
 		B<-B-1;
 		ADDR_BUFF<-BC;
 		NEXT PIN__CLK.INPUT.T1;
@@ -3667,6 +3767,7 @@ INSTRUCTION	ED	"INDR"			%10111010
 {
 	IF PIN__CLK.M1.T5@
 	{
+		WZ<-BC - 1; #MEMPTR
 		B<-B-1;
 		ADDR_BUFF<-BC;
 		NEXT PIN__CLK.INPUT.T1;
@@ -3711,6 +3812,7 @@ INSTRUCTION		"OUT (%$1),A"		%11010011,B2[8]
 		Z<-DATA_BUFF;
 		W<-A;
 		ADDR_BUFF<-WZ;
+		Z<-Z+1;	# MEMPTR
 		DATA_BUFF<-A;
 		NEXT PIN__CLK.OUTPUT.T1;
 	}
@@ -3727,6 +3829,7 @@ INSTRUCTION	ED	"OUT (C),%M0"		%01:rS:%001
 	{
 		ADDR_BUFF<-BC;
 		DATA_BUFF<-rS;
+		WZ<-BC+1;	# MEMPTR
 		NEXT PIN__CLK.OUTPUT.T1;
 	}
 
@@ -3741,7 +3844,8 @@ INSTRUCTION	ED	"OUT (C),0"		%01110001
 	IF PIN__CLK.M1.T4@
 	{
 		ADDR_BUFF<-BC;
-		DATA_BUFF<-$00;
+		DATA_BUFF<-$00;		# NMOS Z80 - CMOS would be $FF
+		WZ<-BC+1;	# MEMPTR
 		NEXT PIN__CLK.OUTPUT.T1;
 	}
 
@@ -3787,6 +3891,7 @@ INSTRUCTION	ED	"OUTI"			%10100011
 		TMP<-DATA_BUFF;
 		ADDR_BUFF<-BC;
 		CALL OUTIFlags(TMP);
+		WZ<-BC + 1; #MEMPTR
 		NEXT PIN__CLK.OUTPUT.T1;
 	}
 
@@ -3810,6 +3915,7 @@ INSTRUCTION	ED	"OTIR"			%10110011
 		TMP<-DATA_BUFF;
 		ADDR_BUFF<-BC;
 		CALL OUTIFlags(TMP);
+		WZ<-BC + 1; #MEMPTR
 		NEXT PIN__CLK.OUTPUT.T1;
 	}
 
@@ -3843,6 +3949,7 @@ INSTRUCTION	ED	"OUTD"			%10101011
 		TMP<-DATA_BUFF;
 		ADDR_BUFF<-BC;
 		CALL OUTIFlags(TMP);
+		WZ<-BC - 1; #MEMPTR
 		NEXT PIN__CLK.OUTPUT.T1;
 	}
 
@@ -3866,6 +3973,7 @@ INSTRUCTION	ED	"OTDR"			%10111011
 		TMP<-DATA_BUFF;
 		ADDR_BUFF<-BC;
 		CALL OUTIFlags(TMP);
+		WZ<-BC - 1; #MEMPTR
 		NEXT PIN__CLK.OUTPUT.T1;
 	}
 
@@ -3885,3 +3993,34 @@ INSTRUCTION	ED	"OTDR"			%10111011
 	}
 }
 
+# Undocumented Opcodes - Not covered by above
+
+MAPPING NOPBLOCK[2]
+{
+	%00	""	0;
+	%11	""	0;
+}
+
+INSTRUCTION	ED	"NOP"			NOPBLOCK:undocumented[6]
+{
+	IF PIN__CLK.M1.T4@
+	{
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	ED	"NOP"			%100:undocumented[5]
+{
+	IF PIN__CLK.M1.T4@
+	{
+		CALL LastInstructionCycle();
+	}
+}
+
+INSTRUCTION	ED	"NOP"			%101:undocumented[2]:%1:undoc2[2]
+{
+	IF PIN__CLK.M1.T4@
+	{
+		CALL LastInstructionCycle();
+	}
+}
