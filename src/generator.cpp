@@ -12,6 +12,7 @@
 using namespace llvm;
 
 static LLVMContext TheContext;
+static std::map<Function*,Function*> g_connectFunctions;		// Global for now
 
 int optlevel=0;
 
@@ -163,6 +164,12 @@ namespace
 		{
 			BasicBlock& hoistHere = F.getEntryBlock();
 			TerminatorInst* hoistBefore = hoistHere.getTerminator();
+
+			// InOut squasher re-orders the inputs, this is not a safe operation for CONNECT lists, so we exclude them here
+			if (g_connectFunctions.find(&F)!=g_connectFunctions.end())
+			{
+				return false;
+			}
 
 			std::map<std::string, BitVariable>::iterator bitVars;
 			bool doneSomeWork=false;
@@ -1314,13 +1321,13 @@ Value* CAssignment::generateImpedanceAssignment(BitVariable& to,llvm::Value* ass
 	return new StoreInst(impedance, assignTo, false, context.currentBlock());
 }
 
-Value* CAssignment::generateAssignment(BitVariable& to,const CIdentifier& toIdent, Value* from,CodeGenContext& context)
+Value* CAssignment::generateAssignment(BitVariable& to,const CIdentifier& toIdent, Value* from,CodeGenContext& context,bool isVolatile)
 {
-	return generateAssignmentActual(to,toIdent,from,context,true);
+	return generateAssignmentActual(to,toIdent,from,context,true,isVolatile);
 }
 
 
-Value* CAssignment::generateAssignmentActual(BitVariable& to,const CIdentifier& toIdent, Value* from,CodeGenContext& context,bool clearImpedance)
+Value* CAssignment::generateAssignmentActual(BitVariable& to,const CIdentifier& toIdent, Value* from,CodeGenContext& context,bool clearImpedance,bool isVolatile)
 {
 	Value* assignTo;
 
@@ -1435,7 +1442,7 @@ Value* CAssignment::generateAssignmentActual(BitVariable& to,const CIdentifier& 
 			ConstantInt* impedance = ConstantInt::get(TheContext, APInt(to.size.getLimitedValue(), StringRef("0"), 10));
 			new StoreInst(impedance, to.impedance, false, context.currentBlock());
 		}
-		return new StoreInst(final, assignTo, false, context.currentBlock());
+		return new StoreInst(final, assignTo, isVolatile, context.currentBlock());
 	}
 }
 
@@ -3034,6 +3041,7 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 	func->setDoesNotThrow();
 	
 	context.m_externFunctions[ident.name] = func;
+	g_connectFunctions[func] = func;
 
 	BasicBlock *bblock = BasicBlock::Create(TheContext, "entry", func, 0);
 	

@@ -276,8 +276,8 @@ public:
 	virtual bool IsLeaf() { return false; }
 	virtual bool IsAssignmentExpression() { return true; }
 
-	static llvm::Value* generateAssignment(BitVariable& to,const CIdentifier& identTo,llvm::Value* from,CodeGenContext& context);
-	static llvm::Value* generateAssignmentActual(BitVariable& to,const CIdentifier& identTo,llvm::Value* from,CodeGenContext& context,bool clearImpedance);
+	static llvm::Value* generateAssignment(BitVariable& to,const CIdentifier& identTo,llvm::Value* from,CodeGenContext& context,bool isVolatile=false);
+	static llvm::Value* generateAssignmentActual(BitVariable& to,const CIdentifier& identTo,llvm::Value* from,CodeGenContext& context,bool clearImpedance,bool isVolatile=false);
 	static llvm::Value* generateImpedanceAssignment(BitVariable& to,llvm::Value* assignTo,CodeGenContext& context);
 };
 
