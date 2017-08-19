@@ -512,14 +512,15 @@ public:
 class CConnect{
 public:
 	ParamsList& connects;
-	const CString& tapName;
+	CString& tapName;
+	CInteger& decodeWidth;
 	bool hasTap;
 	ConnectionType conType;
 
-	CConnect(ParamsList& connects, const CString& tapName, ConnectionType conType) :
-		connects(connects), tapName(tapName), hasTap(true), conType(conType) { }
+	CConnect(ParamsList& connects, CString& tapName, CInteger& decodeWidth, ConnectionType conType) :
+		connects(connects), tapName(tapName), decodeWidth(decodeWidth), hasTap(true), conType(conType) { }
 	CConnect(ParamsList& connects, ConnectionType conType) :
-		connects(connects), tapName(*new CString("")),hasTap(false), conType(conType) { }
+		connects(connects), tapName(*new CString("")),decodeWidth(*new CInteger(std::string("0"))),hasTap(false), conType(conType) { }
 };
 
 class CConnectDeclaration : public CStatement {

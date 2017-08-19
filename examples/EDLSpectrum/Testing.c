@@ -45,6 +45,8 @@ extern uint8_t IM;
 extern uint8_t IFF1;
 extern uint8_t IFF2;
 
+#define TEST TESTULA
+
 void TEST(uint8_t a);
 void RESET1(uint8_t a);
 void RESET2(uint8_t a);
@@ -758,7 +760,7 @@ int main(int argc,char**argv)
 
 	//PC = 0x4000;
 
-	//pauseframe = 1;
+	pauseframe = 1;
 	while (1==1)
 	{
 		b++;
@@ -812,16 +814,16 @@ int main(int argc,char**argv)
 
 			glfwPollEvents();
 		}
-		/*if (DIS_INS!=lastIns)
+		if (DIS_INS!=lastIns)
 		{
 			lastIns=DIS_INS;
-			//Disassemble(lastIns,1);
-			if (lastIns != 0)//0x4001 && lastIns != 0x4002)
+/*			Disassemble(lastIns,1);
+			if (lastIns == 0x11D0)//0x4001 && lastIns != 0x4002)
 			{
 				printf("");
 				pause = 1;
-			}
-		}*/
+			}*/
+		}
 		if (!pause)
 		{
 			UpdateTape( (a&3)==0?1:0 );

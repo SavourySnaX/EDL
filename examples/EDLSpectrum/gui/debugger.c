@@ -128,9 +128,10 @@ void PrintAtPixel(unsigned char* buffer,unsigned int width,unsigned char r,unsig
 }
 
 #define MAX_CAPTURE		(1024*1024)
-#define MAX_PINS		(36)
+#define MAX_PINS		(64)
 
 unsigned char lohi[MAX_PINS][MAX_CAPTURE];
+unsigned char* pinNames[MAX_PINS];
 
 int bufferPosition=0;
 int bufferScroll = 0;
@@ -140,6 +141,8 @@ void RecordPin(int pinPos,uint8_t pinVal)
 {
 	lohi[pinPos][bufferPosition]=pinVal&1;
 }
+
+uint32_t pinsToDisplay = 0;
 
 void UpdatePinTick()
 {
@@ -151,37 +154,36 @@ void UpdatePinTick()
 #define TOT_PINS 6+16+8+2+2+2
 //#define TOT_PINS 26
 
-#define NUM_PIN_DATA	2
-uint8_t pinData[2] = { TOT_PINS - 8 - 2, TOT_PINS - 8 - 2 - 4 - 16 };
-uint8_t pinWidth[2] = { 8, 16 };
+uint32_t numPinData = 0;
+uint8_t pinsSet = 0;
 
-void BusTap(uint8_t bits, uint32_t val)
+#define MAX_PIN_DATA	32
+uint8_t pinData[MAX_PIN_DATA];
+uint8_t pinWidth[MAX_PIN_DATA];
+
+void BusTap(uint8_t bits, uint32_t val,const char* name,uint32_t decodeWidth, uint8_t last)
 {
-	static int done14 = 0;
-	static int done8 = 0;
-	if (done14==1 && bits == 14)
+	if (!pinsSet)
 	{
-		done14 = 0;
-		return;
+		pinNames[pinNum] = name;
+		if (decodeWidth)
+		{
+			pinData[numPinData] = pinNum;
+			pinWidth[numPinData] = decodeWidth;
+			numPinData++;
+		}
 	}
-	if (done8==1 && bits == 8)
-	{
-		done8 = 0;
-		return;
-	}
-	if (bits == 14)
-		done14 = 1;
-	if (bits == 8)
-		done8 = 1;
 	for (int a = 0; a < bits; a++)
 	{
 		RecordPin(pinNum, (val>>((bits-1)-a)) & 1);
 		pinNum++;
-		if (pinNum == TOT_PINS)
-		{
-			UpdatePinTick();
-			pinNum = 0;
-		}
+	}
+	if (last)
+	{
+		pinsToDisplay = pinNum;
+		UpdatePinTick();
+		pinNum = 0;
+		pinsSet = 1;
 	}
 }
 
@@ -193,27 +195,13 @@ void DrawTiming(unsigned char* buffer,unsigned int width,unsigned int height)
 
 	memset(buffer, 0, width*height * 4);
 
-	PrintAt(buffer,width,255,255,255,0,0,"MCLK");
-	PrintAt(buffer,width,255,255,255,0,3,"CCLK");
-	PrintAt(buffer,width,255,255,255,0,6,"~IO");
-	PrintAt(buffer,width,255,255,255,0,9,"~MRQ");
-	PrintAt(buffer,width,255,255,255,0,12,"~RD");
-	PrintAt(buffer,width,255,255,255,0,15,"~WR");
-	PrintAt(buffer,width,255,255,255,0,18,"A");
-	PrintAt(buffer,width,255,255,255,0,18+16*3,"~INT");
-	PrintAt(buffer,width,255,255,255,0,18+17*3,"~LRMCS");
-	PrintAt(buffer,width,255,255,255,0,18+18*3,"~HRMCS");
-	PrintAt(buffer,width,255,255,255,0,18+19*3,"~ROMCS");
-	PrintAt(buffer,width,255,255,255,0,18+20*3,"D");
-	PrintAt(buffer, width, 255, 255, 255, 0, 18 + 28 * 3, "M1");
-	PrintAt(buffer, width, 255, 255, 255, 0, 18 + 29 * 3, "RFSH");
-	//	PrintAt(buffer,width,255,255,255,0,24,"SID 1");
-//	PrintAt(buffer,width,255,255,255,0,27,"SID 2");
-//	PrintAt(buffer,width,255,255,255,0,30,"SID 3");
-
 	bufferPosition = 0;
-	for (a=0;a<MAX_PINS;a++)
+	for (a=0;a<pinsToDisplay;a++)
 	{
+		if (pinNames[a] != NULL)
+		{
+			PrintAt(buffer, width, 255, 255, 255, 0, a * 3, pinNames[a]);
+		}
 		pulsepos = bufferPosition << 8;
 		prevpulsepos = bufferPosition << 8;
 
@@ -225,6 +213,7 @@ void DrawTiming(unsigned char* buffer,unsigned int width,unsigned int height)
 		prevpulsepos = pulsepos;
 		for (b=0;b<640*2 - 90;b++)
 		{
+			// TODO make the vertical lines optional (part of the extended bus tap args?)
 			if (a<2 && b != 0 && lohi[a][prevpulsepos >> 8] != lohi[a][pulsepos >> 8])
 			{
 				int c;
@@ -240,15 +229,9 @@ void DrawTiming(unsigned char* buffer,unsigned int width,unsigned int height)
 				buffer[(80+b+(a*8*3+5)*width)*4+0]=0xFF;
 				buffer[(80+b+(a*8*3+5)*width)*4+1]=0xFF;
 				buffer[(80+b+(a*8*3+5)*width)*4+2]=0xFF;
-				/*buffer[(80+b+(a*8*3+8*2+1)*width)*4+0]=0x00;
-				buffer[(80+b+(a*8*3+8*2+1)*width)*4+1]=0x00;
-				buffer[(80+b+(a*8*3+8*2+1)*width)*4+2]=0x00;*/
 			}
 			else
 			{
-				/*buffer[(80+b+(a*8*3+5)*width)*4+0]=0x00;
-				buffer[(80+b+(a*8*3+5)*width)*4+1]=0x00;
-				buffer[(80+b+(a*8*3+5)*width)*4+2]=0x00;*/
 				buffer[(80+b+(a*8*3+8*2+1)*width)*4+0]=0xFF;
 				buffer[(80+b+(a*8*3+8*2+1)*width)*4+1]=0xFF;
 				buffer[(80+b+(a*8*3+8*2+1)*width)*4+2]=0xFF;
@@ -264,16 +247,6 @@ void DrawTiming(unsigned char* buffer,unsigned int width,unsigned int height)
 					buffer[(80+b+(a*8*3+c)*width)*4+2]=0xFF;
 				}
 			}
-			/*else
-			{
-				int c;
-				for (c=6;c<8*2+1;c++)
-				{
-					buffer[(80+b+(a*8*3+c)*width)*4+0]=0x00;
-					buffer[(80+b+(a*8*3+c)*width)*4+1]=0x00;
-					buffer[(80+b+(a*8*3+c)*width)*4+2]=0x00;
-				}
-			}*/
 
 			prevpulsepos=pulsepos;
 			pulsepos+=timeStretch;
@@ -284,9 +257,9 @@ void DrawTiming(unsigned char* buffer,unsigned int width,unsigned int height)
 		}
 	}
 
-	// Test decode D
+	// Decode data routine (for display hex values of pin groups)
 	bufferPosition = 0;
-	for (int a=0;a<NUM_PIN_DATA;a++)
+	for (int a=0;a<numPinData;a++)
 	{
 		uint32_t lastDataValue = 0xFFFFFFFF;
 		uint8_t dataPos = pinData[a];

@@ -423,8 +423,11 @@ void CodeGenContext::generateCode(CBlock& root,CompilerOptions &options)
 		debugTraceMissing->setCallingConv(CallingConv::C);
 		
 		std::vector<Type*>FuncTy_9_args;
-		FuncTy_9_args.push_back(IntegerType::get(TheContext, 8));
-		FuncTy_9_args.push_back(IntegerType::get(TheContext, 32));
+		FuncTy_9_args.push_back(IntegerType::get(TheContext, 8));	//bitWidth (max 32)
+		FuncTy_9_args.push_back(IntegerType::get(TheContext, 32));	//value
+		FuncTy_9_args.push_back(PointerType::get(IntegerType::get(TheContext, 8), 0));	// char* busname
+		FuncTy_9_args.push_back(IntegerType::get(TheContext, 32));	//dataDecode Width
+		FuncTy_9_args.push_back(IntegerType::get(TheContext, 8));	// 0 / 1 - if 1 indicates the last tap in a connection list
 		FunctionType* FuncTy_9 = FunctionType::get(/*Result=*/Type::getVoidTy(TheContext),/*Params=*/FuncTy_9_args, false);
 
 		debugBusTap = Function::Create(FuncTy_9,GlobalValue::ExternalLinkage,symbolPrepend+"BusTap", module); // (external, no body)
@@ -3072,6 +3075,16 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 		args++;
 	}
 
+	// Quickly spin through connection list and find the last bus tap
+	size_t lastTap = 0;
+	for (size_t searchLastTap = 0; searchLastTap < connects.size(); searchLastTap++)
+	{
+		if (connects[searchLastTap]->hasTap)
+		{
+			lastTap = searchLastTap;
+		}
+	}
+
 	// This needs a re-write
 	// for now - if a NULL occurs in the input list, it is considered to be an isolation resistor,
 	//
@@ -3109,7 +3122,6 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 	// assign B inputs with outputB
 	//
 	//
-
 
 	for (size_t a=0;a<connects.size();a++)
 	{
@@ -3360,11 +3372,22 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 
 				CAssignment::generateAssignment(var, *ins[curBus][i], busOutResult[curBus], context);
 
-				if (i == 0 && connects[a]->hasTap && optlevel < 3)
+				if (curBus==0 && i == 0 && connects[a]->hasTap && optlevel < 3)		// only tap the first bus for now
 				{
-					// Generate a call to AddPinRecord(cnt,val)
+					// Generate a call to AddPinRecord(cnt,val,name,last)
 
 					std::vector<Value*> args;
+
+					// Create global string for bus tap name
+					Value* nameRef=connects[a]->tapName.codeGen(context);
+
+					// Handle decode width promotion
+					Value* DW = connects[a]->decodeWidth.codeGen(context);
+					Type* tyDW = Type::getIntNTy(TheContext, 32);
+					Instruction::CastOps opDW = CastInst::getCastOpcode(DW, false, tyDW, false);
+
+					Instruction* truncExtDW = CastInst::Create(opDW, DW, tyDW, "cast", context.currentBlock());
+
 
 					// Handle variable promotion
 					Type* ty = Type::getIntNTy(TheContext, 32);
@@ -3373,6 +3396,9 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 					Instruction* truncExt = CastInst::Create(op, busOutResult[curBus], ty, "cast", context.currentBlock());
 					args.push_back(ConstantInt::get(TheContext, APInt(8, var.trueSize.getLimitedValue(), false)));
 					args.push_back(truncExt);
+					args.push_back(nameRef);
+					args.push_back(truncExtDW);
+					args.push_back(ConstantInt::get(TheContext, APInt(8, a==lastTap?1:0, false)));
 					CallInst *call = CallInst::Create(context.debugBusTap, args, "", context.currentBlock());
 				}
 			}

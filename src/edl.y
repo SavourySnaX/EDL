@@ -205,9 +205,9 @@ connect_params : connect_params TOK_COMMA connect_expr		{ $$->push_back($3); }
 	;
 
 connect : connect_params TOK_EOS				{ $$=new CConnect(*$1,ConnectionType::None); }
-	| TOK_BUS_TAP TOK_OBR quoted TOK_CBR connect_params TOK_EOS		{ $$=new CConnect(*$5,*$3,ConnectionType::None); }
+	| TOK_BUS_TAP TOK_OBR quoted TOK_COMMA numeric TOK_CBR connect_params TOK_EOS		{ $$=new CConnect(*$7,*$3,*$5,ConnectionType::None); }
 	| TOK_PULLUP connect_params TOK_EOS			{ $$=new CConnect(*$2, ConnectionType::Pullup); }
-	| TOK_BUS_TAP TOK_OBR quoted TOK_CBR TOK_PULLUP connect_params TOK_EOS	{ $$=new CConnect(*$6,*$3,ConnectionType::Pullup); }
+	| TOK_BUS_TAP TOK_OBR quoted TOK_COMMA numeric TOK_CBR TOK_PULLUP connect_params TOK_EOS	{ $$=new CConnect(*$8,*$3,*$5,ConnectionType::Pullup); }
 	;
 
 connect_list : connect_list connect				{ $$->push_back($2); }

@@ -277,15 +277,18 @@ HANDLER PIN_Q	TRANSITION(0,1)
 		IF ~PIN__RD
 		{
 			PIN_D<-CALL GetPort(A);
-			DEBUG_TRACE PIN_D;
+			DEBUG_TRACE "IO_READ ", BASE 16, PIN_D;
 		}
-		IF ~PIN__WR & IOLATCH
+		IF ~PIN__WR
 		{
-			IOLATCH<-0;
-			#DEBUG_TRACE BASE 16, A,PIN__ROM,PIN__WR,PIN__RD,PIN_D;
-			BorderCol<-PIN_D;
-			#CALL SetPort(A,PIN_D);
-			DEBUG_TRACE PIN_D;
+			IF IOLATCH
+			{
+				IOLATCH<-0;
+				#DEBUG_TRACE BASE 16, A,PIN__ROM,PIN__WR,PIN__RD,PIN_D;
+				BorderCol<-PIN_D;
+				#CALL SetPort(A,PIN_D);
+				DEBUG_TRACE "IO_WRITE ", BASE 16, PIN_D;
+			}
 		}
 	}
 	IF ~IOACT
