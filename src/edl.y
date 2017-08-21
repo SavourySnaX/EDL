@@ -1,4 +1,5 @@
 %{
+#include "yyltype.h"
 	#include "ast.h"
         #include <cstdio>
         #include <cstdlib>
@@ -10,7 +11,9 @@
 	#define YYERROR_VERBOSE	/* Better error reporting */
 
 	extern int yylex();
-	void yyerror(const char *s) { std::printf("Error: %s (line %d)\n",s,g_CurLine); }
+	extern void PrintError(const char *errorstring, ...);
+
+	void yyerror(const char *s) { PrintError(s); }
 %}
 
 %union {
@@ -130,7 +133,7 @@ stmt : TOK_INSTANCE quoted TOK_AS ident TOK_EOS { $$ = new CInstance(*$2,*$4); }
      | instruction_decl
      | mapping_decl
      | ifblock
-     | ident TOK_EXCHANGE ident TOK_EOS { $$ = new CExchange(*$1,*$3); }
+     | ident TOK_EXCHANGE ident TOK_EOS { $$ = new CExchange(*$1,*$3,&@2); }
      | TOK_EXECUTE ident ident TOK_EOS { $$ = new CExecute(*$2,*$3); }
      | TOK_EXECUTE ident TOK_EOS { $$ = new CExecute(*$2); }
      | TOK_NEXT state_ident_list TOK_EOS { $$ = new CStateJump(*$2); delete $2; }
@@ -148,8 +151,8 @@ params_list : params_list TOK_COMMA TOK_LSQR numeric TOK_RSQR { $$->push_back($<
 return_val : TOK_LSQR numeric TOK_RSQR { $$ = new ExternParamsList(); $$->push_back($<intgr>2); }
 	   ;
 
-extern_c_decl : TOK_C_FUNC_EXTERN return_val ident params_list TOK_EOS	{ $$ = new CExternDecl(*$2,*$3,*$4); delete $4; }
-	      | TOK_C_FUNC_EXTERN ident params_list TOK_EOS             { $$ = new CExternDecl(*$2,*$3); delete $3; }
+extern_c_decl : TOK_C_FUNC_EXTERN return_val ident params_list TOK_EOS	{ $$ = new CExternDecl(*$2,*$3,*$4,CombineTokenLocations(@1,@5)); delete $4; }
+	      | TOK_C_FUNC_EXTERN ident params_list TOK_EOS             { $$ = new CExternDecl(*$2,*$3,CombineTokenLocations(@1,@4)); delete $3; }
 	      ;
 
 named_params_list : named_params_list TOK_COMMA ident TOK_LSQR numeric TOK_RSQR { $$->push_back(new CParamDecl(*$3,*$5)); }
@@ -179,7 +182,7 @@ debuglist : debuglist TOK_COMMA debug { $1->push_back($<debug>3); }
 ifblock : TOK_IF expr block { $$ = new CIfStatement(*$2,*$3); }
 	;
 
-state_ident : TOK_IDENTIFIER { $$ = new CStateIdent(*$1); delete $1; }
+state_ident : TOK_IDENTIFIER { $$ = new CStateIdent(*$1,&@1); delete $1; }
 	    ;
 
 state_ident_list : state_ident_list TOK_DOT state_ident { $$->push_back($<state_ident>3); }
@@ -204,10 +207,10 @@ connect_params : connect_params TOK_COMMA connect_expr		{ $$->push_back($3); }
 	| connect_expr											{ $$ = new ParamsList(); $$->push_back($1); }
 	;
 
-connect : connect_params TOK_EOS				{ $$=new CConnect(*$1,ConnectionType::None); }
-	| TOK_BUS_TAP TOK_OBR quoted TOK_COMMA numeric TOK_CBR connect_params TOK_EOS		{ $$=new CConnect(*$7,*$3,*$5,ConnectionType::None); }
-	| TOK_PULLUP connect_params TOK_EOS			{ $$=new CConnect(*$2, ConnectionType::Pullup); }
-	| TOK_BUS_TAP TOK_OBR quoted TOK_COMMA numeric TOK_CBR TOK_PULLUP connect_params TOK_EOS	{ $$=new CConnect(*$8,*$3,*$5,ConnectionType::Pullup); }
+connect : connect_params TOK_EOS				{ $$=new CConnect(*$1,ConnectionType::None,&@2); }
+	| TOK_BUS_TAP TOK_OBR quoted TOK_COMMA numeric TOK_CBR connect_params TOK_EOS		{ $$=new CConnect(*$7,*$3,*$5,ConnectionType::None,&@1); }
+	| TOK_PULLUP connect_params TOK_EOS			{ $$=new CConnect(*$2, ConnectionType::Pullup,&@1); }
+	| TOK_BUS_TAP TOK_OBR quoted TOK_COMMA numeric TOK_CBR TOK_PULLUP connect_params TOK_EOS	{ $$=new CConnect(*$8,*$3,*$5,ConnectionType::Pullup,&@1); }
 	;
 
 connect_list : connect_list connect				{ $$->push_back($2); }
@@ -216,7 +219,7 @@ connect_list : connect_list connect				{ $$->push_back($2); }
 
 connect_decl : TOK_CONNECT ident TOK_LBRACE connect_list TOK_RBRACE	{ $$ = new CConnectDeclaration(*$2,*$4); }
 
-handler_decl : TOK_HANDLER ident trigger block	{ $$ = new CHandlerDeclaration(*$2,*$3,*$4); }
+handler_decl : TOK_HANDLER ident trigger block	{ $$ = new CHandlerDeclaration(*$2,*$3,*$4,&@1); }
 
 state_decl : ident { $$ = new CStateDeclaration(*$1); }
 
@@ -225,7 +228,7 @@ states_list : states_list TOK_COMMA state_decl { $1->back()->autoIncrement=true;
 	    | state_decl { $$ = new StateList(); $$->push_back($<state_decl>1); }
 		;
 
-states_decl : TOK_STATES states_list block { $$ = new CStatesDeclaration(*$2,*$3); delete $2; }
+states_decl : TOK_STATES states_list block { $$ = new CStatesDeclaration(*$2,*$3,&@1); delete $2; }
 		;
 
 state_def : TOK_STATE ident block { $$ = new CStateDefinition(*$2,*$3); }
@@ -251,8 +254,8 @@ operandList : operandList TOK_COMMA partialOperands { $$->push_back($<operand>3)
 	    | partialOperands { $$ = new OperandList(); $$->push_back($<operand>1); }
 	;
 
-instruction_decl : TOK_INSTRUCTION ident quoted operandList block { $$ = new CInstruction(*$2,*$3,*$4,*$5); }
-		 | TOK_INSTRUCTION quoted operandList block { $$ = new CInstruction(*$2,*$3,*$4); }
+instruction_decl : TOK_INSTRUCTION ident quoted operandList block { $$ = new CInstruction(*$2,*$3,*$4,*$5, &@1); }
+		 | TOK_INSTRUCTION quoted operandList block { $$ = new CInstruction(*$2,*$3,*$4, &@1); }
 		 ;
 
 mapping : numeric quoted expr TOK_EOS { $$ = new CMapping(*$1,*$2,*$3); }
@@ -270,16 +273,16 @@ pin_type: TOK_IN
 	| TOK_BIDIRECTIONAL
 	;
 
-var_decl : TOK_DECLARE TOK_INTERNAL ident TOK_LSQR numeric TOK_RSQR { $$ = new CVariableDeclaration(CVariableDeclaration::notArray,true, *$3, *$5); }
-	| TOK_DECLARE TOK_INTERNAL ident TOK_LSQR numeric TOK_RSQR TOK_ALIAS aliases { $$ = new CVariableDeclaration(CVariableDeclaration::notArray,true, *$3, *$5, *$8); delete $8; }
-	| TOK_DECLARE ident TOK_LSQR numeric TOK_RSQR { $$ = new CVariableDeclaration(CVariableDeclaration::notArray,false, *$2, *$4); }
-	| TOK_DECLARE ident TOK_LSQR numeric TOK_RSQR TOK_ALIAS aliases { $$ = new CVariableDeclaration(CVariableDeclaration::notArray,false, *$2, *$4, *$7); delete $7; }
-	| TOK_DECLARE TOK_INTERNAL ident TOK_INDEXOPEN numeric TOK_INDEXCLOSE TOK_LSQR numeric TOK_RSQR { $$ = new CVariableDeclaration(*$5,true, *$3, *$8); }
-	| TOK_DECLARE TOK_INTERNAL ident TOK_INDEXOPEN numeric TOK_INDEXCLOSE TOK_LSQR numeric TOK_RSQR TOK_ALIAS aliases { $$ = new CVariableDeclaration(*$5, true, *$3, *$8, *$11); delete $11; }
-	| TOK_DECLARE ident TOK_INDEXOPEN numeric TOK_INDEXCLOSE TOK_LSQR numeric TOK_RSQR { $$ = new CVariableDeclaration(*$4, false, *$2, *$7); }
-	| TOK_DECLARE ident TOK_INDEXOPEN numeric TOK_INDEXCLOSE TOK_LSQR numeric TOK_RSQR TOK_ALIAS aliases { $$ = new CVariableDeclaration(*$4, false, *$2, *$7, *$10); delete $10; }
-	| TOK_PIN pin_type ident TOK_LSQR numeric TOK_RSQR { $$ = new CVariableDeclaration(*$3,*$5,$2); }
-	| TOK_PIN pin_type ident TOK_LSQR numeric TOK_RSQR TOK_ALIAS aliases { $$ = new CVariableDeclaration(*$3,*$5,*$8,$2); delete $8; }
+var_decl : TOK_DECLARE TOK_INTERNAL ident TOK_LSQR numeric TOK_RSQR { $$ = new CVariableDeclaration(CVariableDeclaration::notArray,true, *$3, *$5,CombineTokenLocations(@1,@6)); }
+	| TOK_DECLARE TOK_INTERNAL ident TOK_LSQR numeric TOK_RSQR TOK_ALIAS aliases { $$ = new CVariableDeclaration(CVariableDeclaration::notArray,true, *$3, *$5, *$8,CombineTokenLocations(@1,@6)); delete $8; }
+	| TOK_DECLARE ident TOK_LSQR numeric TOK_RSQR { $$ = new CVariableDeclaration(CVariableDeclaration::notArray,false, *$2, *$4,CombineTokenLocations(@1,@5)); }
+	| TOK_DECLARE ident TOK_LSQR numeric TOK_RSQR TOK_ALIAS aliases { $$ = new CVariableDeclaration(CVariableDeclaration::notArray,false, *$2, *$4, *$7,CombineTokenLocations(@1,@5)); delete $7; }
+	| TOK_DECLARE TOK_INTERNAL ident TOK_INDEXOPEN numeric TOK_INDEXCLOSE TOK_LSQR numeric TOK_RSQR { $$ = new CVariableDeclaration(*$5,true, *$3, *$8,CombineTokenLocations(@1,@9)); }
+	| TOK_DECLARE TOK_INTERNAL ident TOK_INDEXOPEN numeric TOK_INDEXCLOSE TOK_LSQR numeric TOK_RSQR TOK_ALIAS aliases { $$ = new CVariableDeclaration(*$5, true, *$3, *$8, *$11,CombineTokenLocations(@1,@9)); delete $11; }
+	| TOK_DECLARE ident TOK_INDEXOPEN numeric TOK_INDEXCLOSE TOK_LSQR numeric TOK_RSQR { $$ = new CVariableDeclaration(*$4, false, *$2, *$7,CombineTokenLocations(@1,@8)); }
+	| TOK_DECLARE ident TOK_INDEXOPEN numeric TOK_INDEXCLOSE TOK_LSQR numeric TOK_RSQR TOK_ALIAS aliases { $$ = new CVariableDeclaration(*$4, false, *$2, *$7, *$10,CombineTokenLocations(@1,@8)); delete $10; }
+	| TOK_PIN pin_type ident TOK_LSQR numeric TOK_RSQR { $$ = new CVariableDeclaration(*$3,*$5,$2,CombineTokenLocations(@1,@6)); }
+	| TOK_PIN pin_type ident TOK_LSQR numeric TOK_RSQR TOK_ALIAS aliases { $$ = new CVariableDeclaration(*$3,*$5,*$8,$2,CombineTokenLocations(@1,@6)); delete $8; }
 	;
 
 affector : ident TOK_AS TOK_ZERO { $$ = new CAffect(*$1,TOK_ZERO); }
@@ -309,50 +312,50 @@ params : params TOK_COMMA expr	{ $$->push_back($3); }
 
 expr : ident_ref TOK_ASSIGNLEFT expr { $$ = new CAssignment(*$<ident>1,*$3); }
      | expr TOK_ASSIGNRIGHT ident_ref { $$ = new CAssignment(*$<ident>3,*$1); }
-     | expr TOK_ADD expr { $$ = new CBinaryOperator(*$1,TOK_ADD,*$3); }
-     | expr TOK_SUB expr { $$ = new CBinaryOperator(*$1,TOK_SUB,*$3); }
-     | expr TOK_MUL expr { $$ = new CBinaryOperator(*$1,TOK_MUL,*$3); }
-     | expr TOK_DIV expr { $$ = new CBinaryOperator(*$1,TOK_DIV,*$3); }
-     | expr TOK_MOD expr { $$ = new CBinaryOperator(*$1,TOK_MOD,*$3); }
-     | expr TOK_SDIV expr { $$ = new CBinaryOperator(*$1,TOK_SDIV,*$3); }
-     | expr TOK_SMOD expr { $$ = new CBinaryOperator(*$1,TOK_SMOD,*$3); }
-     | expr TOK_DADD expr { $$ = new CBinaryOperator(*$1,TOK_DADD,*$3); }
-     | expr TOK_DSUB expr { $$ = new CBinaryOperator(*$1,TOK_DSUB,*$3); }
-     | expr TOK_CMPEQ expr { $$ = new CBinaryOperator(*$1,TOK_CMPEQ,*$3); }
-     | expr TOK_CMPNEQ expr { $$ = new CBinaryOperator(*$1,TOK_CMPNEQ,*$3); }
-     | expr TOK_CMPLESSEQ expr { $$ = new CBinaryOperator(*$1,TOK_CMPLESSEQ,*$3); }
-     | expr TOK_CMPLESS expr { $$ = new CBinaryOperator(*$1,TOK_CMPLESS,*$3); }
-     | expr TOK_CMPGREATEREQ expr { $$ = new CBinaryOperator(*$1,TOK_CMPGREATEREQ,*$3); }
-     | expr TOK_CMPGREATER expr { $$ = new CBinaryOperator(*$1,TOK_CMPGREATER,*$3); }
-     | expr TOK_BAR expr { $$ = new CBinaryOperator(*$1,TOK_BAR,*$3); }
-     | expr TOK_AMP expr { $$ = new CBinaryOperator(*$1,TOK_AMP,*$3); }
-     | expr TOK_HAT expr { $$ = new CBinaryOperator(*$1,TOK_HAT,*$3); }
+     | expr TOK_ADD expr { $$ = new CBinaryOperator(*$1,TOK_ADD,*$3, &@2); }
+     | expr TOK_SUB expr { $$ = new CBinaryOperator(*$1,TOK_SUB,*$3, &@2); }
+     | expr TOK_MUL expr { $$ = new CBinaryOperator(*$1,TOK_MUL,*$3, &@2); }
+     | expr TOK_DIV expr { $$ = new CBinaryOperator(*$1,TOK_DIV,*$3, &@2); }
+     | expr TOK_MOD expr { $$ = new CBinaryOperator(*$1,TOK_MOD,*$3, &@2); }
+     | expr TOK_SDIV expr { $$ = new CBinaryOperator(*$1,TOK_SDIV,*$3, &@2); }
+     | expr TOK_SMOD expr { $$ = new CBinaryOperator(*$1,TOK_SMOD,*$3, &@2); }
+     | expr TOK_DADD expr { $$ = new CBinaryOperator(*$1,TOK_DADD,*$3, &@2); }
+     | expr TOK_DSUB expr { $$ = new CBinaryOperator(*$1,TOK_DSUB,*$3, &@2); }
+     | expr TOK_CMPEQ expr { $$ = new CBinaryOperator(*$1,TOK_CMPEQ,*$3, &@2); }
+     | expr TOK_CMPNEQ expr { $$ = new CBinaryOperator(*$1,TOK_CMPNEQ,*$3, &@2); }
+     | expr TOK_CMPLESSEQ expr { $$ = new CBinaryOperator(*$1,TOK_CMPLESSEQ,*$3, &@2); }
+     | expr TOK_CMPLESS expr { $$ = new CBinaryOperator(*$1,TOK_CMPLESS,*$3, &@2); }
+     | expr TOK_CMPGREATEREQ expr { $$ = new CBinaryOperator(*$1,TOK_CMPGREATEREQ,*$3, &@2); }
+     | expr TOK_CMPGREATER expr { $$ = new CBinaryOperator(*$1,TOK_CMPGREATER,*$3, &@2); }
+     | expr TOK_BAR expr { $$ = new CBinaryOperator(*$1,TOK_BAR,*$3, &@2); }
+     | expr TOK_AMP expr { $$ = new CBinaryOperator(*$1,TOK_AMP,*$3, &@2); }
+     | expr TOK_HAT expr { $$ = new CBinaryOperator(*$1,TOK_HAT,*$3, &@2); }
      | state_ident_list TOK_AT { $$ = new CStateTest(*$1); }
-     | TOK_TILDE expr { $$ = new CBinaryOperator(*$2,TOK_TILDE,*$2); }
+     | TOK_TILDE expr { $$ = new CBinaryOperator(*$2,TOK_TILDE,*$2, &@1); }
      | TOK_ROL TOK_OBR expr TOK_COMMA ident_ref TOK_COMMA expr TOK_COMMA expr TOK_CBR { $$ = new CRotationOperator(TOK_ROL,*$3,*$5,*$7,*$9); }
      | TOK_ROR TOK_OBR expr TOK_COMMA ident_ref TOK_COMMA expr TOK_COMMA expr TOK_CBR { $$ = new CRotationOperator(TOK_ROR,*$3,*$5,*$7,*$9); }
-     | expr TOK_LSQR numeric TOK_RSQR { $3->Decrement(); $$ = new CCastOperator(*$1,*$3); }
-     | expr TOK_LSQR numeric TOK_DDOT numeric TOK_RSQR { $$ = new CCastOperator(*$1,*$3,*$5); }
+     | expr TOK_LSQR numeric TOK_RSQR { $3->Decrement(); $$ = new CCastOperator(*$1,*$3,CombineTokenLocations(@2,@4)); }
+     | expr TOK_LSQR numeric TOK_DDOT numeric TOK_RSQR { $$ = new CCastOperator(*$1,*$3,*$5,CombineTokenLocations(@2,@6)); }
      | TOK_CALL ident_ref TOK_OBR params TOK_CBR { $$ = new CFuncCall(*$2,*$4); }
-     | TOK_AFFECT affectors TOK_LBRACE expr TOK_RBRACE { $$ = new CAffector(*$2,*$4); }
+     | TOK_AFFECT affectors TOK_LBRACE expr TOK_RBRACE { $$ = new CAffector(*$2,*$4,CombineTokenLocations(@3,@5)); }
      | ident_ref { $<ident>$ = $1; }
-     | numeric { $$ = new CInteger(*$1); delete $1; }
+     | numeric { $$ = $1; }
      | TOK_HIGH_IMPEDANCE { $$ = new CHighImpedance(); }
      | TOK_OBR expr TOK_CBR { $$ = $2; }
 	;
 
-quoted : TOK_STRING { $$ = new CString(*$1); delete $1; }
+quoted : TOK_STRING { $$ = new CString(*$1,&@1); delete $1; }
        ;
 
-ident : TOK_IDENTIFIER { $$ = new CIdentifier(*$1); delete $1; }
+ident : TOK_IDENTIFIER { $$ = new CIdentifier(*$1, &@1); delete $1; }
 	  ;
 
-ident_ref : TOK_IDENTIFIER { $$ = new CIdentifier(*$1); }
-	  | TOK_IDENTIFIER TOK_INDEXOPEN expr TOK_INDEXCLOSE { $$ = new CIdentifierArray(*$3,*$1); }
-	  | TOK_IDENTIFIER TOK_IDENTIFIER { $$ = new CIdentifier(*$1,*$2); }
+ident_ref : TOK_IDENTIFIER { $$ = new CIdentifier(*$1, &@1); }
+	  | TOK_IDENTIFIER TOK_INDEXOPEN expr TOK_INDEXCLOSE { $$ = new CIdentifierArray(*$3,*$1,&@1); }
+	  | TOK_IDENTIFIER TOK_IDENTIFIER { $$ = new CIdentifier(*$1,*$2,&@1,&@2); }
 	  ;
 
-numeric : TOK_INTEGER { $$ = new CInteger(*$1); delete $1; }
+numeric : TOK_INTEGER { $$ = new CInteger(*$1,&@1); delete $1; }
 		;
 
 %%

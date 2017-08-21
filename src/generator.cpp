@@ -1,3 +1,4 @@
+#include "yyltype.h"
 #include "ast.h"
 #include "generator.h"
 #include "parser.hpp"
@@ -13,6 +14,24 @@ using namespace llvm;
 
 static LLVMContext TheContext;
 static std::map<Function*,Function*> g_connectFunctions;		// Global for now
+
+extern YYLTYPE CombineTokenLocations(const YYLTYPE &a, const YYLTYPE &b);
+extern void PrintErrorWholeLine(const YYLTYPE &location, const char *errorstring, ...);
+extern void PrintErrorFromLocation(const YYLTYPE &location, const char *errorstring, ...);
+extern void PrintErrorDuplication(const YYLTYPE &location, const YYLTYPE &originalLocation, const char *errorstring, ...);
+extern void PrintError(const char *errorstring, ...);
+
+Value* UndefinedStateError(StateIdentList &stateIdents,CodeGenContext &context)
+{
+	YYLTYPE combined = stateIdents[0]->nameLoc;
+	for (int a = 0; a < stateIdents.size(); a++)
+	{
+		combined = CombineTokenLocations(combined, stateIdents[a]->nameLoc);
+	}
+	PrintErrorFromLocation(combined, "Unknown state requested");
+	context.errorFlagged = true;
+	return NULL;
+}
 
 int optlevel=0;
 
@@ -445,7 +464,6 @@ void CodeGenContext::generateCode(CBlock& root,CompilerOptions &options)
 	
 	if (errorFlagged)
 	{
-		std::cerr << "Compilation Failed" << std::endl;
 		return;
 	}
 
@@ -662,7 +680,7 @@ Value* CIdentifier::trueSize(Value* in,CodeGenContext& context,BitVariable& var)
 {
 	if (var.mappingRef)
 	{
-		std::cerr << "Cannot perform operation on a mapping Ref!" << std::endl;
+		PrintErrorFromLocation(var.refLoc, "(TODO)Cannot perform operation on a mapping reference");
 		context.errorFlagged=true;
 		return NULL;
 	}
@@ -690,11 +708,12 @@ Value* CIdentifier::GetAliasedData(CodeGenContext& context,Value* in,BitVariable
 	return in;
 }
 
-bool CodeGenContext::LookupBitVariable(BitVariable& outVar,const std::string& module, const std::string& name)
+bool CodeGenContext::LookupBitVariable(BitVariable& outVar,const std::string& module, const std::string& name,const YYLTYPE &modLoc,const YYLTYPE &nameLoc)
 {
 	if ((currentBlock()!=NULL) && (locals().find(name) != locals().end()))
 	{
 		outVar=locals()[name];
+		outVar.refLoc = nameLoc;
 	}
 	else
 	{
@@ -702,22 +721,46 @@ bool CodeGenContext::LookupBitVariable(BitVariable& outVar,const std::string& mo
 		{
 			if (m_includes.find(module)!=m_includes.end())
 			{
-				if (m_includes[module]->LookupBitVariable(outVar,"",name))
+				if (m_includes[module]->LookupBitVariable(outVar,"",name,modLoc,nameLoc))
 				{
 					if (outVar.pinType!=0)		// TODO: Globals Vars!
 					{
 						outVar.fromExternal=true;
+						outVar.refLoc = CombineTokenLocations(nameLoc,modLoc);
 						return true;
 					}
+					else
+					{
+						PrintErrorFromLocation(CombineTokenLocations(nameLoc, modLoc), "TODO: Globals");
+						errorFlagged = true;
+						return false;
+					}
+				}
+				else
+				{
+					PrintErrorFromLocation(CombineTokenLocations(nameLoc,modLoc), "undeclared variable %s%s", module.c_str(), name.c_str());
+					errorFlagged = true;
+					return false;
 				}
 			}
-			std::cerr << "undeclared variable " << name << endl;
-			errorFlagged=true;
+			else if (isRoot)
+			{
+				if (module.c_str() == "")
+				{
+					PrintErrorFromLocation(nameLoc, "undeclared variable %s", name.c_str());
+				}
+				else
+				{
+					PrintErrorFromLocation(CombineTokenLocations(nameLoc,modLoc), "undeclared variable %s%s", module.c_str(), name.c_str());
+				}
+				errorFlagged = true;
+			}
 			return false;
 		}
 		else
 		{
 			outVar=globals()[name];
+			outVar.refLoc = nameLoc;
 		}
 	}
 
@@ -736,7 +779,7 @@ Value* CIdentifier::codeGen(CodeGenContext& context)
 {
 	BitVariable var;
 
-	if (!context.LookupBitVariable(var,module,name))
+	if (!context.LookupBitVariable(var,module,name,modLoc,nameLoc))
 	{
 		return NULL;
 	}
@@ -750,7 +793,7 @@ Value* CIdentifier::codeGen(CodeGenContext& context)
 	{
 		if (var.pinType!=TOK_OUT && var.pinType!=TOK_BIDIRECTIONAL)
 		{
-			std::cerr << "Pin marked as non readable in module!" << name << std::endl;
+			PrintErrorFromLocation(var.refLoc,"Pin marked as not readable");
 			context.errorFlagged=true;
 			return NULL;
 		}
@@ -915,7 +958,7 @@ Value* CDebugTraceIdentifier::codeGen(CodeGenContext& context)
 	int a;
 	BitVariable var;
 
-	if (!context.LookupBitVariable(var,ident.module,ident.name))
+	if (!context.LookupBitVariable(var,ident.module,ident.name,ident.modLoc,ident.nameLoc))
 	{
 		return NULL;
 	}
@@ -1047,7 +1090,7 @@ Value* CBinaryOperator::codeGen(CodeGenContext& context)
 
 Value* CBinaryOperator::codeGen(CodeGenContext& context,Value* left,Value* right)
 {
-	if (left->getType()->isIntegerTy() && right->getType()->isIntegerTy())
+	if (left && right && left->getType()->isIntegerTy() && right->getType()->isIntegerTy())
 	{
 		IntegerType* leftType = cast<IntegerType>(left->getType());
 		IntegerType* rightType = cast<IntegerType>(right->getType());
@@ -1085,7 +1128,7 @@ Value* CBinaryOperator::codeGen(CodeGenContext& context,Value* left,Value* right
 		case TOK_DSUB:
 			{
 				Value* result;
-			       	if (op==TOK_ADD || op==TOK_DADD)
+				if (op==TOK_ADD || op==TOK_DADD)
 				{
 					result=BinaryOperator::Create(Instruction::Add,left,right,"",context.currentBlock());
 				}
@@ -1094,45 +1137,52 @@ Value* CBinaryOperator::codeGen(CodeGenContext& context,Value* left,Value* right
 					result=BinaryOperator::Create(Instruction::Sub,left,right,"",context.currentBlock());
 				}
 				
-				for (int a=0;a<context.curAffectors.size();a++)
+				if (context.curAffectors.size())
 				{
-					switch (context.curAffectors[a]->type)
+					bool hasMixedOperations = false;
+					for (int a = 0; a < context.curAffectors.size(); a++)
 					{
+						switch (context.curAffectors[a]->type)
+						{
 						case TOK_NOOVERFLOW:
 						case TOK_OVERFLOW:
-							if (context.curAffectors[a]->opType==TOK_NOOVERFLOW || context.curAffectors[a]->opType==TOK_OVERFLOW)
+							if (context.curAffectors[a]->opType == TOK_NOOVERFLOW || context.curAffectors[a]->opType == TOK_OVERFLOW)
 							{
-								context.curAffectors[a]->opType=op;
+								context.curAffectors[a]->opType = op;
 							}
 							else
 							{
-								switch(context.curAffectors[a]->opType)
+								switch (context.curAffectors[a]->opType)
 								{
-									case TOK_ADD:
-									case TOK_DADD:
-										if (op!=TOK_ADD && op!=TOK_DADD)
-										{
-											std::cerr<<"Can't Compute OVERFLOW for differing mathematical operations"<<std::endl;
-											context.errorFlagged=true;
-											return NULL;
-										}
-										break;
-									case TOK_SUB:
-									case TOK_DSUB:
-										if (op!=TOK_SUB && op!=TOK_DSUB)
-										{
-											std::cerr<<"Can't Compute OVERFLOW for differing mathematical operations"<<std::endl;
-											context.errorFlagged=true;
-											return NULL;
-										}
-										break;
+								case TOK_ADD:
+								case TOK_DADD:
+									if (op != TOK_ADD && op != TOK_DADD)
+									{
+										hasMixedOperations = true;
+									}
+									break;
+								case TOK_SUB:
+								case TOK_DSUB:
+									if (op != TOK_SUB && op != TOK_DSUB)
+									{
+										hasMixedOperations = true;
+									}
+									break;
 								}
 							}
 							break;
 						case TOK_NOCARRY:
 						case TOK_CARRY:
-							context.curAffectors[a]->codeGenCarry(context,result,left,right,op);
+							context.curAffectors[a]->codeGenCarry(context, result, left, right, op);
 							break;
+						}
+					}
+
+					if (hasMixedOperations)
+					{
+						PrintErrorFromLocation(operatorLoc,"OVERFLOW requires all operators to be either +(+) or -(-) only");
+						context.errorFlagged = true;
+						return NULL;
 					}
 				}
 
@@ -1171,10 +1221,8 @@ Value* CBinaryOperator::codeGen(CodeGenContext& context,Value* left,Value* right
 		}
 	}
 
-	std::cerr << "Illegal types in expression" << std::endl;
-	
+	PrintErrorWholeLine(operatorLoc, "Illegal types in expression");
 	context.errorFlagged=true;
-
 	return NULL;
 }
 
@@ -1190,7 +1238,6 @@ void CCastOperator::prePass(CodeGenContext& context)
 Value* CCastOperator::codeGen(CodeGenContext& context)
 {
 	// Compute a mask between specified bits, shift result down by start bits
-	
     if (lhs.IsAssignmentExpression())
 	{
 		CAssignment* assign=(CAssignment*)&lhs;
@@ -1199,7 +1246,7 @@ Value* CCastOperator::codeGen(CodeGenContext& context)
 	else
 	{
 		Value* left = lhs.codeGen(context);
-		if (left->getType()->isIntegerTy())
+		if (left && left->getType()->isIntegerTy())
 		{
 			const IntegerType* leftType = cast<IntegerType>(left->getType());
 
@@ -1224,10 +1271,9 @@ Value* CCastOperator::codeGen(CodeGenContext& context)
 			return shifted;
 		}
 	}
-	std::cerr << "Illegal type in cast" << std::endl;
-	
-	context.errorFlagged=true;
 
+	PrintErrorFromLocation(operatorLoc,"(TODO)Illegal type in cast");
+	context.errorFlagged=true;
 	return NULL;
 }
 
@@ -1244,21 +1290,21 @@ Value* CRotationOperator::codeGen(CodeGenContext& context)
 	Value* shiftIn = bitsIn.codeGen(context);
 	Value* rotBy = rotAmount.codeGen(context);
 	BitVariable var;
-	if (!context.LookupBitVariable(var,bitsOut.module,bitsOut.name))
+	if (!context.LookupBitVariable(var,bitsOut.module,bitsOut.name,bitsOut.modLoc,bitsOut.nameLoc))
 	{
 		return NULL;
 	}
 	
 	if ((!toShift->getType()->isIntegerTy())||(!rotBy->getType()->isIntegerTy()))
 	{
-		std::cerr << "Unsupported operation" << std::endl;
+		PrintErrorWholeLine(var.refLoc, "(TODO)Unsupported operation");
 		context.errorFlagged=true;
 		return NULL;
 	}
 
 	if (var.mappingRef)
 	{
-		std::cerr << "Cannot perform operation on a mappingRef" << std::endl;
+		PrintErrorWholeLine(var.refLoc, "(TODO)Cannot perform operation on a mappingRef");
 		context.errorFlagged=true;
 		return NULL;
 	}
@@ -1361,7 +1407,7 @@ Value* CAssignment::generateAssignmentActual(BitVariable& to,const CIdentifier& 
 
 	if (!assignTo->getType()->isPointerTy())
 	{
-		std::cerr << "You cannot assign a value to a non variable (or input parameter to function)!" << std::endl;
+		PrintErrorFromLocation(to.refLoc, "You cannot assign a value to a non variable (or input parameter to function)");
 		context.errorFlagged=true;
 		return NULL;
 	}
@@ -1423,7 +1469,7 @@ Value* CAssignment::generateAssignmentActual(BitVariable& to,const CIdentifier& 
 	{
 		if (to.pinType!=TOK_IN && to.pinType!=TOK_BIDIRECTIONAL)
 		{
-			std::cerr << "Pin marked as non writable in module!" << toIdent.name << std::endl;
+			PrintErrorFromLocation(to.refLoc,"Pin marked as not writable");
 			context.errorFlagged=true;
 			return NULL;
 		}
@@ -1458,14 +1504,14 @@ Value* CAssignment::codeGen(CodeGenContext& context)
 {
 	BitVariable var;
 	Value* assignWith;
-	if (!context.LookupBitVariable(var,lhs.module,lhs.name))
+	if (!context.LookupBitVariable(var,lhs.module,lhs.name,lhs.modLoc,lhs.nameLoc))
 	{
 		return NULL;
 	}
 
 	if (var.mappingRef)
 	{
-		std::cerr << "Cannot perform operation on a mappingRef" << std::endl;
+		PrintErrorFromLocation(var.refLoc, "Cannot assign to a mapping reference");
 		context.errorFlagged=true;
 		return NULL;
 	}
@@ -1475,7 +1521,7 @@ Value* CAssignment::codeGen(CodeGenContext& context)
 		// special case, impedance uses hidden bit variable (which is only accessed during bus muxing)	- Going to need a few fixups to support this
 		if (var.pinType!=TOK_BIDIRECTIONAL)
 		{
-			std::cerr << "HIGH_IMPEDANCE only makes sense for BIDIRECTIONAL pins!";
+			PrintErrorFromLocation(var.refLoc,"HIGH_IMPEDANCE only makes sense for BIDIRECTIONAL pins");
 			context.errorFlagged=true;
 			return NULL;
 		}
@@ -1483,6 +1529,10 @@ Value* CAssignment::codeGen(CodeGenContext& context)
 		return CAssignment::generateImpedanceAssignment(var,var.impedance,context);
 	}
 	assignWith = rhs.codeGen(context);
+	if (assignWith == NULL)
+	{
+		return NULL;
+	}
 
 	return CAssignment::generateAssignment(var,lhs,assignWith,context);
 }
@@ -1491,14 +1541,14 @@ Value* CAssignment::codeGen(CodeGenContext& context,CCastOperator* cast)
 {
 	BitVariable var;
 	Value* assignWith;
-	if (!context.LookupBitVariable(var,lhs.module,lhs.name))
+	if (!context.LookupBitVariable(var,lhs.module,lhs.name,lhs.modLoc,lhs.nameLoc))
 	{
 		return NULL;
 	}
 
 	if (var.mappingRef)
 	{
-		std::cerr << "Cannot perform operation on a mappingRef" << std::endl;
+		PrintErrorFromLocation(var.refLoc, "Cannot assign to a mapping reference");
 		context.errorFlagged=true;
 		return NULL;
 	}
@@ -1544,6 +1594,10 @@ Value* CBlock::codeGen(CodeGenContext& context)
 	for (it = statements.begin(); it != statements.end(); it++) 
 	{
 		last = (**it).codeGen(context);
+		if (context.errorFlagged)
+		{
+			return NULL;
+		}
 	}
 	return last;
 }
@@ -1666,7 +1720,7 @@ Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 	{
 		if (context.parentHandler==NULL)
 		{
-			std::cerr << "It is illegal to declare STATES outside of a handler!" << std::endl;
+			PrintErrorFromLocation(statementLoc,"It is illegal to declare STATES outside of a handler");
 			context.errorFlagged=true;
 			return NULL;
 		}
@@ -1839,24 +1893,13 @@ void CStateDefinition::prePass(CodeGenContext& context)
 	{
 		CStateDeclaration* pState = pStates->getStateDeclaration(id);
 
-	       	if (pState)
+		if (pState)
 		{
 			context.pushIdent(&id);
 			block.prePass(context);
 			context.popIdent();
 		}
-		else
-		{
-			std::cerr << "Attempt to define unknown state : " << id.name.c_str() << endl;
-			context.errorFlagged=true;
-		}
 	}
-	else
-	{
-		std::cerr << "Attempt to define state entry when no states on stack" << endl;
-		context.errorFlagged=true;
-	}
-
 }
 
 Value* CStateDefinition::codeGen(CodeGenContext& context)
@@ -1876,14 +1919,14 @@ Value* CStateDefinition::codeGen(CodeGenContext& context)
 		}
 		else
 		{
-			std::cerr << "Attempt to define unknown state : " << id.name.c_str() << endl;
+			PrintErrorFromLocation(id.nameLoc, "Attempt to define unknown state");
 			context.errorFlagged=true;
 			return NULL;
 		}
 	}
 	else
 	{
-		std::cerr << "Attempt to define state entry when no states on stack" << endl;
+		PrintErrorFromLocation(id.nameLoc, "Attempt to define state entry when no states on stack");
 		context.errorFlagged=true;
 		return NULL;
 	}
@@ -1992,7 +2035,7 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 	{
 		if (pinType!=0)
 		{
-			std::cerr << "Cannot declare pins anywhere but global scope" << std::endl;
+			PrintErrorFromLocation(declarationLoc, "Cannot declare pins anywhere but global scope");
 			context.errorFlagged=true;
 			return NULL;
 		}
@@ -2045,9 +2088,8 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 					CreateReadAccessor(context,temp,true);
 					break;
 				default:
-					std::cerr << "Unhandled pin type" << std::endl;
-					context.errorFlagged=true;
-					return NULL;
+					assert(0,"Unhandled pin type");
+					break;
 			}
 		}
 
@@ -2129,7 +2171,7 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 	ConstantInt* const_intn_0 = ConstantInt::get(TheContext, temp.cnst);
 	if (context.currentBlock())
 	{
-		// Initialiser Definitions
+		// Initialiser Definitions for local scope (arrays are not supported at present)
 
 		if (initialiserList.empty())
 		{
@@ -2139,7 +2181,7 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 		{
 			if (initialiserList.size()!=1)
 			{
-				std::cerr << "Too many initialisers" << endl;
+				PrintErrorWholeLine(declarationLoc,"Too many initialisers (note array initialisers not currently supported in local scope)");
 				context.errorFlagged=true;
 				return NULL;
 			}
@@ -2159,7 +2201,7 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 	}
 	else
 	{
-		// Initialiser Definitions
+		// Initialiser Definitions for global scope
 		if (temp.arraySize.getLimitedValue())
 		{
 			APInt power2(arraySize.integer.getLimitedValue()+1,1);
@@ -2174,7 +2216,7 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 			{
 				if (initialiserList.size()>power2.getLimitedValue())
 				{
-					std::cerr << "Too many initialisers" << endl;
+					PrintErrorWholeLine(declarationLoc,"Too many initialisers, initialiser list bigger than array storage");
 					context.errorFlagged=true;
 					return NULL;
 				}
@@ -2221,7 +2263,7 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 			{
 				if (initialiserList.size()!=1)
 				{
-					std::cerr << "Too many initialisers" << endl;
+					PrintErrorWholeLine(declarationLoc,"Too many initialisers");
 					context.errorFlagged=true;
 					return NULL;
 				}
@@ -2256,7 +2298,7 @@ Value* CHandlerDeclaration::codeGen(CodeGenContext& context)
 
 	if (context.globals().find(id.name) == context.globals().end())
 	{
-		std::cerr << "undeclared pin " << id.name << " - Handlers MUST be tied to pin definitions!" << std::endl;
+		PrintErrorFromLocation(id.nameLoc,"undeclared pin %s - Handlers MUST be tied to pin definitions",id.name.c_str());
 		context.errorFlagged=true;
 		return NULL;
 	}
@@ -2265,7 +2307,9 @@ Value* CHandlerDeclaration::codeGen(CodeGenContext& context)
 
 	if (pinVariable.writeAccessor==NULL)
 	{
-		std::cerr << "Handlers must be tied to Input / Bidirectional pins ONLY! - " << id.name << std::endl;
+		PrintErrorFromLocation(id.nameLoc,"Handlers must be tied to Input / Bidirectional pins ONLY");
+		context.errorFlagged=true;
+		return NULL;
 	}
 
 	FunctionType *ftype = FunctionType::get(Type::getVoidTy(TheContext),argTypes, false);
@@ -2397,7 +2441,7 @@ Value* CInstruction::codeGen(CodeGenContext& context)
 	unsigned numOpcodes = operands[0]->GetNumComputableConstants(context);
 	if (numOpcodes==0)
 	{
-		std::cerr << "Opcode for instruction must be able to generate constants" << std::endl;
+		PrintErrorWholeLine(statementLoc,"Opcode for instruction must be able to generate constants");
 		context.errorFlagged=true;
 		return NULL;
 	}
@@ -2427,6 +2471,11 @@ Value* CInstruction::codeGen(CodeGenContext& context)
 		ReturnInst::Create(TheContext, context.currentBlock());			/* block may well have changed by time we reach here */
 
 		context.popBlock();
+
+		if (context.errorFlagged)
+		{
+			return NULL;
+		}
 
 		// Glue callee back into execute (assumes execute comes before instructions at all times for now)
 		for (int b=0;b<context.executeLocations[table.name].size();b++)
@@ -2570,7 +2619,7 @@ Value* CStateTest::codeGen(CodeGenContext& context)
 
 	if (context.states().find(stateLabel)==context.states().end())
 	{
-		std::cerr << "Unknown handler : " << stateIdents[0]->name << std::endl;
+		PrintErrorFromLocation(stateIdents[0]->nameLoc, "Unknown handler, can't look up state reference");
 		context.errorFlagged=true;
 		return NULL;
 	}
@@ -2584,18 +2633,7 @@ Value* CStateTest::codeGen(CodeGenContext& context)
 	
 	if (jumpIndex==-1)
 	{
-		std::cerr << "Unknown state requested!";
-		for (int a=0;a<stateIdents.size();a++)
-		{
-			std::cerr << stateIdents[a]->name;
-			if (a!=stateIdents.size()-1)
-			{
-				std::cerr << ".";
-			}
-		}
-		std::cerr << std::endl;
-		context.errorFlagged=true;
-		return NULL;
+		return UndefinedStateError(stateIdents, context);
 	}
 
 	Twine numStatesTwine(totalStates);
@@ -2628,7 +2666,7 @@ Value* CStateJump::codeGen(CodeGenContext& context)
 
 	if (context.states().find(stateLabel)==context.states().end())
 	{
-		std::cerr << "Unknown handler : " << stateIdents[0]->name << std::endl;
+		PrintErrorFromLocation(stateIdents[0]->nameLoc, "Unknown handler, can't look up state reference");
 		context.errorFlagged=true;
 		return NULL;
 	}
@@ -2642,18 +2680,7 @@ Value* CStateJump::codeGen(CodeGenContext& context)
 	
 	if (jumpIndex==-1)
 	{
-		std::cerr << "Unknown state requested!";
-		for (int a=0;a<stateIdents.size();a++)
-		{
-			std::cerr << stateIdents[a]->name;
-			if (a!=stateIdents.size()-1)
-			{
-				std::cerr << ".";
-			}
-		}
-		std::cerr << std::endl;
-		context.errorFlagged=true;
-		return NULL;
+		return UndefinedStateError(stateIdents,context);
 	}
 
 	Twine numStatesTwine(totalStates);
@@ -2676,7 +2703,7 @@ Value* CStatePush::codeGen(CodeGenContext& context)
 
 	if (context.states().find(stateLabel)==context.states().end())
 	{
-		std::cerr << "Unknown handler : " << stateIdents[0]->name << std::endl;
+		PrintErrorFromLocation(stateIdents[0]->nameLoc, "Unknown handler, can't look up state reference");
 		context.errorFlagged=true;
 		return NULL;
 	}
@@ -2690,18 +2717,7 @@ Value* CStatePush::codeGen(CodeGenContext& context)
 	
 	if (jumpIndex==-1)
 	{
-		std::cerr << "Unknown state requested!";
-		for (int a=0;a<stateIdents.size();a++)
-		{
-			std::cerr << stateIdents[a]->name;
-			if (a!=stateIdents.size()-1)
-			{
-				std::cerr << ".";
-			}
-		}
-		std::cerr << std::endl;
-		context.errorFlagged=true;
-		return NULL;
+		return UndefinedStateError(stateIdents,context);
 	}
 
 	Twine numStatesTwine(totalStates);
@@ -2739,7 +2755,7 @@ Value* CStatePop::codeGen(CodeGenContext& context)
 
 	if (context.states().find(stateLabel)==context.states().end())
 	{
-		std::cerr << "Unknown handler : " << ident.name << std::endl;
+		PrintErrorFromLocation(ident.nameLoc, "Unknown handler, can't look up state reference");
 		context.errorFlagged=true;
 		return NULL;
 	}
@@ -2833,7 +2849,7 @@ BitVariable COperandMapping::GetBitVariable(CodeGenContext& context,unsigned num
 
 	if (context.m_mappings.find(ident.name)==context.m_mappings.end())
 	{
-		std::cerr << "Undeclared mapping : " << ident.name << std::endl;
+		PrintErrorFromLocation(ident.nameLoc, "Undeclared mapping : %s", ident.name);
 		context.errorFlagged=true;
 		return temp;
 	}
@@ -2847,7 +2863,7 @@ BitVariable COperandMapping::GetBitVariable(CodeGenContext& context,unsigned num
 
 		CIdentifier* identifier = (CIdentifier*)&mapping->expr;
 
-		if (!context.LookupBitVariable(temp,identifier->module,identifier->name))
+		if (!context.LookupBitVariable(temp,identifier->module,identifier->name,identifier->modLoc,identifier->nameLoc))
 		{
 			return temp;
 		}
@@ -2868,7 +2884,7 @@ llvm::APInt COperandMapping::GetComputableConstant(CodeGenContext& context,unsig
 
 	if (context.m_mappings.find(ident.name)==context.m_mappings.end())
 	{
-		std::cerr << "Undeclared mapping : " << ident.name << std::endl;
+		PrintErrorFromLocation(ident.nameLoc, "Undeclared mapping : %s", ident.name);
 		context.errorFlagged=true;
 		return error;
 	}
@@ -2880,7 +2896,7 @@ unsigned COperandMapping::GetNumComputableConstants(CodeGenContext& context)
 {
 	if (context.m_mappings.find(ident.name)==context.m_mappings.end())
 	{
-		std::cerr << "Undeclared mapping : " << ident.name << std::endl;
+		PrintErrorFromLocation(ident.nameLoc, "Undeclared mapping : %s", ident.name);
 		context.errorFlagged=true;
 		return 0;
 	}
@@ -2892,7 +2908,7 @@ const CString* COperandMapping::GetString(CodeGenContext& context,unsigned num,u
 {
 	if (context.m_mappings.find(ident.name)==context.m_mappings.end())
 	{
-		std::cerr << "Undeclared mapping : " << ident.name << std::endl;
+		PrintErrorFromLocation(ident.nameLoc, "Undeclared mapping : %s", ident.name);
 		context.errorFlagged=true;
 		return NULL;
 	}
@@ -2965,7 +2981,7 @@ APInt COperandPartial::GetComputableConstant(CodeGenContext& context,unsigned nu
 
 	if (operands.size()==0)
 	{
-		std::cerr << "Illegal (0) number of operands for computable constant" << std::endl;
+		assert(0, "Illegal (0) number of operands for computable constant");
 		context.errorFlagged=true;
 		return result;
 	}
@@ -3014,7 +3030,7 @@ Value* CMappingDeclaration::codeGen(CodeGenContext& context)
 {
 	if (context.m_mappings.find(ident.name)!=context.m_mappings.end())
 	{
-		std::cerr << "Multiple declaration for mapping : " << ident.name << std::endl;
+		PrintErrorDuplication(ident.nameLoc,context.m_mappings[ident.name]->ident.nameLoc,"Multiple declaration for mapping");
 		context.errorFlagged=true;
 		return NULL;
 	}
@@ -3125,9 +3141,6 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 
 	for (size_t a=0;a<connects.size();a++)
 	{
-
-//		std::cerr << "Connection " << a << std::endl;
-	
 		// First step, figure out number of buses
 
 		int busCount = 1;	// will always be at least 1 bus, but ISOLATION can generate split buses
@@ -3164,10 +3177,8 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 
 				BitVariable var;
 				
-				if (!context.LookupBitVariable(var,ident->module,ident->name))
+				if (!context.LookupBitVariable(var,ident->module,ident->name,ident->modLoc,ident->nameLoc))
 				{
-					std::cerr << "Unknown Ident : " << ident->name << std::endl;
-					context.errorFlagged=true;
 					return NULL;
 				}
 				else
@@ -3210,21 +3221,21 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 		{
 			if (outCnt[checkBus] == 0 && inCnt[checkBus] == 0 && biCnt[checkBus] == 0)
 			{
-				std::cerr << "No possible routing! - no connections" << std::endl;
+				PrintErrorWholeLine(connects[a]->statementLoc,"No possible routing! - no connections");
 				context.errorFlagged = true;
 				return NULL;
 			}
 
 			if (outCnt[checkBus] == 0 && inCnt[checkBus] > 0 && biCnt[checkBus] == 0)
 			{
-				std::cerr << "No possible routing! - all connections are input" << std::endl;
+				PrintErrorWholeLine(connects[a]->statementLoc,"No possible routing! - all connections are input");
 				context.errorFlagged = true;
 				return NULL;
 			}
 
 			if (outCnt[checkBus] > 0 && inCnt[checkBus] == 0 && biCnt[checkBus] == 0)
 			{
-				std::cerr << "No possible routing! - all connections are output" << std::endl;
+				PrintErrorWholeLine(connects[a]->statementLoc,"No possible routing! - all connections are output");
 				context.errorFlagged = true;
 				return NULL;
 			}
@@ -3253,10 +3264,8 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 				{
 					ident = (CIdentifier*)outs[curBus][o];
 
-					if (!context.LookupBitVariable(var, ident->module, ident->name))
+					if (!context.LookupBitVariable(var, ident->module, ident->name,ident->modLoc,ident->nameLoc))
 					{
-						std::cerr << "Unknown Ident : " << ident->name << std::endl;
-						context.errorFlagged = true;
 						return NULL;
 					}
 
@@ -3289,7 +3298,7 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 						// Should be integer types at the point
 						if (!lastType->isIntegerTy() || !tmpType->isIntegerTy())
 						{
-							std::cerr << "Expected integer types!" << std::endl;
+							PrintErrorWholeLine(connects[a]->statementLoc, "(TODO) Expected integer types");
 							context.errorFlagged = true;
 							return NULL;
 						}
@@ -3326,7 +3335,7 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 					// Should be integer types at the point
 					if (!lastType->isIntegerTy() || !tmpType->isIntegerTy())
 					{
-						std::cerr << "Expected integer types!" << std::endl;
+						PrintErrorWholeLine(connects[a]->statementLoc, "(TODO) Expected integer types");
 						context.errorFlagged = true;
 						return NULL;
 					}
@@ -3352,7 +3361,7 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 		}
 		if (busCount > 2)
 		{
-			std::cerr << "TODO: Bus arbitration for >2 buses not implemented yet" << std::endl;
+			PrintErrorWholeLine(connects[a]->statementLoc, "(TODO) Bus arbitration for >2 buses not implemented yet");
 			context.errorFlagged = true;
 			return NULL;
 		}
@@ -3363,10 +3372,8 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 			{
 				BitVariable var;
 
-				if (!context.LookupBitVariable(var, ins[curBus][i]->module, ins[curBus][i]->name))
+				if (!context.LookupBitVariable(var, ins[curBus][i]->module, ins[curBus][i]->name, ins[curBus][i]->modLoc, ins[curBus][i]->nameLoc))
 				{
-					std::cerr << "Failed to retrieve variable" << std::endl;
-					context.errorFlagged = true;
 					return NULL;
 				}
 
@@ -3425,7 +3432,7 @@ Value* CAffect::codeGenCarry(CodeGenContext& context,Value* exprResult,Value* lh
 			{
 				if (param.integer.getLimitedValue() >= resultType->getBitWidth())
 				{
-					std::cerr << "Bit to carry is outside of range for result" << std::endl;
+					PrintErrorFromLocation(param.integerLoc,"Bit to carry is outside of range for result");
 					context.errorFlagged=true;
 					return NULL;
 				}
@@ -3480,9 +3487,8 @@ Value* CAffect::codeGenCarry(CodeGenContext& context,Value* exprResult,Value* lh
 			break;
 
 		default:
-			std::cerr << "Unknown affector" << std::endl;
-			context.errorFlagged=true;
-			return NULL;
+			assert(0, "Unknown affector");
+			break;
 	}
 
 	if (tmpResult)
@@ -3500,14 +3506,14 @@ Value* CAffect::codeGenCarry(CodeGenContext& context,Value* exprResult,Value* lh
 Value* CAffect::codeGenFinal(CodeGenContext& context,Value* exprResult)
 {
 	BitVariable var;
-	if (!context.LookupBitVariable(var,ident.module,ident.name))
+	if (!context.LookupBitVariable(var,ident.module,ident.name,ident.modLoc,ident.nameLoc))
 	{
 		return NULL;
 	}
 	
 	if (var.mappingRef)
 	{
-		std::cerr << "Cannot perform operation on a mappingRef" << std::endl;
+		PrintErrorFromLocation(var.refLoc, "Cannot perform operation on a mapping reference");
 		context.errorFlagged=true;
 		return NULL;
 	}
@@ -3626,7 +3632,7 @@ Value* CAffect::codeGenFinal(CodeGenContext& context,Value* exprResult)
 
 				if (param.integer.getLimitedValue() >= resultType->getBitWidth())
 				{
-					std::cerr << "Bit for overflow detection is outside of range for result" << std::endl;
+					PrintErrorFromLocation(param.integerLoc,"Bit for overflow detection is outside of range for result");
 					context.errorFlagged=true;
 					return NULL;
 				}
@@ -3648,13 +3654,14 @@ Value* CAffect::codeGenFinal(CodeGenContext& context,Value* exprResult)
 				
 				if (param.integer.getLimitedValue() >= lhsType->getBitWidth())
 				{
+					PrintErrorFromLocation(param.integerLoc,"Bit for overflow detection is outside of range of lhs");
 					std::cerr << "Bit for overflow detection is outside of range for source1" << std::endl;
 					context.errorFlagged=true;
 					return NULL;
 				}
 				if (param.integer.getLimitedValue() >= rhsType->getBitWidth())
 				{
-					std::cerr << "Bit for overflow detection is outside of range for source2" << std::endl;
+					PrintErrorFromLocation(param.integerLoc,"Bit for overflow detection is outside of range of rhs");
 					context.errorFlagged=true;
 					return NULL;
 				}
@@ -3734,9 +3741,7 @@ Value* CAffect::codeGenFinal(CodeGenContext& context,Value* exprResult)
 
 				if (tmpResult==NULL)
 				{
-					std::cerr<<"Failed to compute CARRY/OVERFLOW for expression (possible bug in compiler)"<<std::endl;
-					context.errorFlagged=true;
-					return NULL;
+					assert(0, "Failed to compute CARRY/OVERFLOW for expression (possible bug in compiler)");
 				}
 
 				if (type==TOK_CARRY)
@@ -3752,9 +3757,8 @@ Value* CAffect::codeGenFinal(CodeGenContext& context,Value* exprResult)
 			break;
 
 		default:
-			std::cerr << "Unknown affector" << std::endl;
-			context.errorFlagged=true;
-			return NULL;
+			assert(0, "Unknown affector");
+			break;
 	}
 
 	return CAssignment::generateAssignment(var,ident,answer,context);
@@ -3775,7 +3779,7 @@ Value* CAffector::codeGen(CodeGenContext& context)
 
 	if (context.curAffectors.size())
 	{
-		std::cerr<<"Cannot currently supply nested affectors!"<<std::endl;
+		PrintErrorFromLocation(exprLoc, "(TODO) Cannot currently supply nested affectors");
 		context.errorFlagged=true;
 		return NULL;
 	}
@@ -3809,7 +3813,7 @@ Value* CAffector::codeGen(CodeGenContext& context)
 	{
 		if (expr.IsLeaf() /*|| (!expr.IsCarryExpression())*/)
 		{
-			std::cerr << "OVERFLOW/CARRY is not supported for non carry/overflow expressions" << expr.IsLeaf() << std::endl;
+			PrintErrorFromLocation(exprLoc, "OVERFLOW/CARRY is not supported for non carry/overflow expressions");
 			context.errorFlagged=true;
 			return NULL;
 		}
@@ -3817,12 +3821,14 @@ Value* CAffector::codeGen(CodeGenContext& context)
 
 	exprResult=expr.codeGen(context);
 
-	// Final result is in exprResult (+affectors for carry/overflow).. do final operations
-	for (int a=0;a<affectors.size();a++)
+	if (exprResult)
 	{
-		affectors[a]->codeGenFinal(context,exprResult);
+		// Final result is in exprResult (+affectors for carry/overflow).. do final operations
+		for (int a = 0; a < affectors.size(); a++)
+		{
+			affectors[a]->codeGenFinal(context, exprResult);
+		}
 	}
-
 	context.curAffectors.clear();
 
 	return exprResult;
@@ -3847,7 +3853,7 @@ Value* CExternDecl::codeGen(CodeGenContext& context)
 		unsigned size = params[a]->integer.getLimitedValue();
 		if (size!=8 && size!=16 && size!=32)
 		{
-			std::cerr << "External C functions must use C size parameters (8,16 or 32 bits!) " << std::endl;
+			PrintErrorFromLocation(params[a]->integerLoc,"External C functions must use C size parameters (8,16 or 32 bits)");
 			context.errorFlagged=true;
 			return NULL;
 		}
@@ -3863,7 +3869,7 @@ Value* CExternDecl::codeGen(CodeGenContext& context)
 		unsigned size = returns[0]->integer.getLimitedValue();
 		if (size!=8 && size!=16 && size!=32)
 		{
-			std::cerr << "External C functions must use C size parameters (8,16 or 32 bits!) " << std::endl;
+			PrintErrorFromLocation(returns[0]->integerLoc,"External C functions must use C size parameters (8,16 or 32 bits)");
 			context.errorFlagged=true;
 			return NULL;
 		}
@@ -3890,7 +3896,7 @@ Value* CFuncCall::codeGen(CodeGenContext& context)
 {
 	if (context.m_externFunctions.find(name.name)==context.m_externFunctions.end())
 	{
-		std::cerr << "Function Declaration Required to use a Function : " << name.name << std::endl;
+		PrintErrorFromLocation(name.nameLoc,"Function Declaration Required to use a Function");
 		context.errorFlagged=true;
 		return NULL;
 	}
@@ -3903,7 +3909,7 @@ Value* CFuncCall::codeGen(CodeGenContext& context)
 	{
 		if (b==funcType->getNumParams())
 		{
-			std::cerr << "Wrong Number Of Arguments To Function : " << name.name << std::endl;
+			PrintErrorWholeLine(name.nameLoc,"Wrong Number Of Arguments To Function");
 			context.errorFlagged=true;
 			return NULL;
 		}
@@ -4003,9 +4009,8 @@ Value* CTrigger::codeGen(CodeGenContext& context,BitVariable& pin,Value* functio
 			return NULL;
 
 		default:
-			std::cerr<< "Unhandled trigger type" << std::endl;
-			context.errorFlagged=true;
-			return NULL;
+			assert(0,"Unhandled trigger type");
+			break;
 	}
 
 	return NULL;
@@ -4122,7 +4127,7 @@ Value* CFunctionDecl::codeGen(CodeGenContext& context)
 
 extern int yyparse();
 extern CBlock* g_ProgramBlock;
-extern FILE *yyin;
+extern int resetFileInput(const char* filename);
 
 #include <stdio.h>
 
@@ -4131,19 +4136,16 @@ void CInstance::prePass(CodeGenContext& context)
 	// On the prepass, we need to generate the code for this module
 	std::string includeName = filename.quoted.substr(1,filename.quoted.length()-2);
 
-	yyin = fopen(includeName.c_str(),"r");
-	if (!yyin)
+	if (resetFileInput(includeName.c_str())!=0)
 	{
-		std::cerr << "Unable to instance module : " << includeName << endl;
+		PrintErrorFromLocation(filename.quotedLoc, "Unable to instance module %s", includeName.c_str());
 		context.errorFlagged=true;
 		return;
 	}
-
-	g_ProgramBlock=0;
 	yyparse();
 	if (g_ProgramBlock==0)
 	{
-		std::cerr << "Error : Unable to parse module : " << includeName << endl;
+		PrintErrorFromLocation(filename.quotedLoc, "Unable to parse module %s", includeName.c_str());
 		context.errorFlagged=true;
 		return;
 	}
@@ -4156,6 +4158,12 @@ void CInstance::prePass(CodeGenContext& context)
 	includefile->moduleName=ident.name+".";
 	includefile->generateCode(*g_ProgramBlock,dummy);
 
+	if (includefile->errorFlagged)
+	{
+		PrintErrorFromLocation(filename.quotedLoc, "Unable to parse module %s", includeName.c_str());
+		context.errorFlagged = true;
+		return;
+	}
 	context.m_includes[ident.name+"."]=includefile;
 }
 
@@ -4169,11 +4177,11 @@ Value* CExchange::codeGen(CodeGenContext& context)
 {
 	BitVariable lhsVar,rhsVar;
 
-	if (!context.LookupBitVariable(lhsVar,lhs.module,lhs.name))
+	if (!context.LookupBitVariable(lhsVar,lhs.module,lhs.name,lhs.modLoc,lhs.nameLoc))
 	{
 		return NULL;
 	}
-	if (!context.LookupBitVariable(rhsVar,rhs.module,rhs.name))
+	if (!context.LookupBitVariable(rhsVar,rhs.module,rhs.name,rhs.modLoc,rhs.nameLoc))
 	{
 		return NULL;
 	}
@@ -4192,7 +4200,7 @@ Value* CExchange::codeGen(CodeGenContext& context)
 
 			if (leftType->getBitWidth() != rightType->getBitWidth())
 			{
-				std::cerr << "Both operands to exchange must be same size!" << std::endl;
+				PrintErrorFromLocation(operatorLoc,"Both operands to exchange must be same size");
 				context.errorFlagged=true;
 				return NULL;
 			}
@@ -4204,7 +4212,7 @@ Value* CExchange::codeGen(CodeGenContext& context)
 		return NULL;
 	}
 	
-	std::cerr<<"Illegal operands to exchange"<<std::endl;
+	PrintErrorFromLocation(operatorLoc, "Illegal operands to exchange");
 	context.errorFlagged=true;
 	return NULL;
 }

@@ -1,126 +1,139 @@
 %{
-#include <string>
+#include "yyltype.h"
 #include <io.h>
 #include "ast.h"
 #include "parser.hpp"
-#define SAVE_TOKEN yylval.string = new std::string(yytext, yyleng)
-#define TOKEN(t) (yylval.token = t)
+
+extern void BeginToken(const char*);
+
+#define SAVE_TOKEN yylval.string = new std::string(yytext, yyleng); BeginToken(yylval.string->c_str())
+#define TOKEN(t) BeginToken(yytext); return yylval.token = t
 
 unsigned int g_CurLine=1;		/* For error handling */
 
 extern "C" int yywrap() { return 1; }
+
+extern void SkipChar();
+extern void PrintError(const char*,...);
+extern int GetNextChar(char*,int);
+
+#define YY_INPUT(buf,result,max_size)  {\
+    result = GetNextChar(buf, max_size); \
+    if (  result <= 0  ) \
+      result = YY_NULL; \
+    }
+
+ 
 %}
 
 %%
 
-DECLARE					{ return TOKEN(TOK_DECLARE); }
-HANDLER					{ return TOKEN(TOK_HANDLER); }
-STATES					{ return TOKEN(TOK_STATES); }
-STATE					{ return TOKEN(TOK_STATE); }
-ALIAS					{ return TOKEN(TOK_ALIAS); }
-IF					{ return TOKEN(TOK_IF); }
-NEXT					{ return TOKEN(TOK_NEXT); }
-PUSH					{ return TOKEN(TOK_PUSH); }
-POP					{ return TOKEN(TOK_POP); }
-INSTRUCTION				{ return TOKEN(TOK_INSTRUCTION); }
-EXECUTE					{ return TOKEN(TOK_EXECUTE); }
-ROL					{ return TOKEN(TOK_ROL); }
-ROR					{ return TOKEN(TOK_ROR); }
-MAPPING					{ return TOKEN(TOK_MAPPING); }
-AFFECT					{ return TOKEN(TOK_AFFECT); }
-AS					{ return TOKEN(TOK_AS); }
-PIN					{ return TOKEN(TOK_PIN); }
-FUNCTION				{ return TOKEN(TOK_FUNCTION); }
-CALL					{ return TOKEN(TOK_CALL); }
+DECLARE					{ TOKEN(TOK_DECLARE); }
+HANDLER					{ TOKEN(TOK_HANDLER); }
+STATES					{ TOKEN(TOK_STATES); }
+STATE					{ TOKEN(TOK_STATE); }
+ALIAS					{ TOKEN(TOK_ALIAS); }
+IF						{ TOKEN(TOK_IF); }
+NEXT					{ TOKEN(TOK_NEXT); }
+PUSH					{ TOKEN(TOK_PUSH); }
+POP						{ TOKEN(TOK_POP); }
+INSTRUCTION				{ TOKEN(TOK_INSTRUCTION); }
+EXECUTE					{ TOKEN(TOK_EXECUTE); }
+ROL						{ TOKEN(TOK_ROL); }
+ROR						{ TOKEN(TOK_ROR); }
+MAPPING					{ TOKEN(TOK_MAPPING); }
+AFFECT					{ TOKEN(TOK_AFFECT); }
+AS						{ TOKEN(TOK_AS); }
+PIN						{ TOKEN(TOK_PIN); }
+FUNCTION				{ TOKEN(TOK_FUNCTION); }
+CALL					{ TOKEN(TOK_CALL); }
 
-INSTANCE				{ return TOKEN(TOK_INSTANCE); }
+INSTANCE				{ TOKEN(TOK_INSTANCE); }
 
-IN					{ return TOKEN(TOK_IN); }
-OUT					{ return TOKEN(TOK_OUT); }
-BIDIRECTIONAL				{ return TOKEN(TOK_BIDIRECTIONAL); }
+IN						{ TOKEN(TOK_IN); }
+OUT						{ TOKEN(TOK_OUT); }
+BIDIRECTIONAL			{ TOKEN(TOK_BIDIRECTIONAL); }
 
-ALWAYS					{ return TOKEN(TOK_ALWAYS); }
-CHANGED					{ return TOKEN(TOK_CHANGED); }
-TRANSITION				{ return TOKEN(TOK_TRANSITION); }
+ALWAYS					{ TOKEN(TOK_ALWAYS); }
+CHANGED					{ TOKEN(TOK_CHANGED); }
+TRANSITION				{ TOKEN(TOK_TRANSITION); }
 
 
-CONNECT					{ return TOKEN(TOK_CONNECT); }
-CLOCK_GEN				{ return TOKEN(TOK_CLOCK_GEN); }
-PULLUP					{ return TOKEN(TOK_PULLUP); }
-BUS_TAP					{ return TOKEN(TOK_BUS_TAP); }
-HIGH_IMPEDANCE			{ return TOKEN(TOK_HIGH_IMPEDANCE); }
-ISOLATION				{ return TOKEN(TOK_ISOLATION); }
+CONNECT					{ TOKEN(TOK_CONNECT); }
+CLOCK_GEN				{ TOKEN(TOK_CLOCK_GEN); }
+PULLUP					{ TOKEN(TOK_PULLUP); }
+BUS_TAP					{ TOKEN(TOK_BUS_TAP); }
+HIGH_IMPEDANCE			{ TOKEN(TOK_HIGH_IMPEDANCE); }
+ISOLATION				{ TOKEN(TOK_ISOLATION); }
 
-INTERNAL				{ return TOKEN(TOK_INTERNAL); }
+INTERNAL				{ TOKEN(TOK_INTERNAL); }
 
-ZERO					{ return TOKEN(TOK_ZERO); }
-NONZERO					{ return TOKEN(TOK_NONZERO); }
-SIGN					{ return TOKEN(TOK_SIGN); }
-NOSIGN					{ return TOKEN(TOK_NOSIGN); }
-PARITYEVEN				{ return TOKEN(TOK_PARITYEVEN); }
-PARITYODD				{ return TOKEN(TOK_PARITYODD); }
-CARRY					{ return TOKEN(TOK_CARRY); }
-NOCARRY					{ return TOKEN(TOK_NOCARRY); }
-BIT					{ return TOKEN(TOK_BIT); }
-INVBIT					{ return TOKEN(TOK_INVBIT); }
-FORCERESET				{ return TOKEN(TOK_FORCERESET); }
-FORCESET				{ return TOKEN(TOK_FORCESET); }
-OVERFLOW				{ return TOKEN(TOK_OVERFLOW); }
-NOOVERFLOW				{ return TOKEN(TOK_NOOVERFLOW); }
+ZERO					{ TOKEN(TOK_ZERO); }
+NONZERO					{ TOKEN(TOK_NONZERO); }
+SIGN					{ TOKEN(TOK_SIGN); }
+NOSIGN					{ TOKEN(TOK_NOSIGN); }
+PARITYEVEN				{ TOKEN(TOK_PARITYEVEN); }
+PARITYODD				{ TOKEN(TOK_PARITYODD); }
+CARRY					{ TOKEN(TOK_CARRY); }
+NOCARRY					{ TOKEN(TOK_NOCARRY); }
+BIT						{ TOKEN(TOK_BIT); }
+INVBIT					{ TOKEN(TOK_INVBIT); }
+FORCERESET				{ TOKEN(TOK_FORCERESET); }
+FORCESET				{ TOKEN(TOK_FORCESET); }
+OVERFLOW				{ TOKEN(TOK_OVERFLOW); }
+NOOVERFLOW				{ TOKEN(TOK_NOOVERFLOW); }
 
-DEBUG_TRACE				{ return TOKEN(TOK_TRACE); }
-BASE					{ return TOKEN(TOK_BASE); }
+DEBUG_TRACE				{ TOKEN(TOK_TRACE); }
+BASE					{ TOKEN(TOK_BASE); }
 
-C_FUNC_EXTERN				{ return TOKEN(TOK_C_FUNC_EXTERN); }
+C_FUNC_EXTERN			{ TOKEN(TOK_C_FUNC_EXTERN); }
 
-[a-zA-Z_][a-zA-Z0-9_]*			{ SAVE_TOKEN; return TOK_IDENTIFIER; }
+[a-zA-Z_][a-zA-Z0-9_]*	{ SAVE_TOKEN; return TOK_IDENTIFIER; }
 [0-9]+					{ SAVE_TOKEN; return TOK_INTEGER; /* decimal */}
 \%[01]+					{ SAVE_TOKEN; return TOK_INTEGER; /* binary */}
-\$[0-9a-fA-F]+				{ SAVE_TOKEN; return TOK_INTEGER; /* hexadecimal */}
-\"(\\.|[^"])*\"				{ SAVE_TOKEN; return TOK_STRING; }
+\$[0-9a-fA-F]+			{ SAVE_TOKEN; return TOK_INTEGER; /* hexadecimal */}
+\"(\\.|[^"])*\"			{ SAVE_TOKEN; return TOK_STRING; }
 
-"<->"					{ return TOKEN(TOK_EXCHANGE); }
-"[["					{ return TOKEN(TOK_INDEXOPEN); }
-"]]"					{ return TOKEN(TOK_INDEXCLOSE); }
-"++"					{ return TOKEN(TOK_DADD); }
-"--"					{ return TOKEN(TOK_DSUB); }
-".."					{ return TOKEN(TOK_DDOT); }
-"!="					{ return TOKEN(TOK_CMPNEQ); }
-"=="					{ return TOKEN(TOK_CMPEQ); }
-"//"					{ return TOKEN(TOK_SDIV); }
-"%%"					{ return TOKEN(TOK_SMOD); }
-"{"					{ return TOKEN(TOK_LBRACE); }
-"}"					{ return TOKEN(TOK_RBRACE); }
-"["					{ return TOKEN(TOK_LSQR); }
-"]"					{ return TOKEN(TOK_RSQR); }
-":"					{ return TOKEN(TOK_COLON); }
-";"					{ return TOKEN(TOK_EOS); }
-","					{ return TOKEN(TOK_COMMA); }
-"<-"					{ return TOKEN(TOK_ASSIGNLEFT); }
-"->"					{ return TOKEN(TOK_ASSIGNRIGHT); }
-"+"					{ return TOKEN(TOK_ADD); }
-"-"					{ return TOKEN(TOK_SUB); }
-"*"					{ return TOKEN(TOK_MUL); }
-"/"					{ return TOKEN(TOK_DIV); }
-"%"					{ return TOKEN(TOK_MOD); }
-"("					{ return TOKEN(TOK_OBR); }
-")"					{ return TOKEN(TOK_CBR); }
-"|"					{ return TOKEN(TOK_BAR); }
-"&"					{ return TOKEN(TOK_AMP); }
-"^"					{ return TOKEN(TOK_HAT); }
-"."					{ return TOKEN(TOK_DOT); }
-"@"					{ return TOKEN(TOK_AT); }
-"~"					{ return TOKEN(TOK_TILDE); }
-"<="					{ return TOKEN(TOK_CMPLESSEQ); }
-"<"					{ return TOKEN(TOK_CMPLESS); }
-">="					{ return TOKEN(TOK_CMPGREATEREQ); }
-">"					{ return TOKEN(TOK_CMPGREATER); }
+"<->"					{ TOKEN(TOK_EXCHANGE); }
+"[["					{ TOKEN(TOK_INDEXOPEN); }
+"]]"					{ TOKEN(TOK_INDEXCLOSE); }
+"++"					{ TOKEN(TOK_DADD); }
+"--"					{ TOKEN(TOK_DSUB); }
+".."					{ TOKEN(TOK_DDOT); }
+"!="					{ TOKEN(TOK_CMPNEQ); }
+"=="					{ TOKEN(TOK_CMPEQ); }
+"//"					{ TOKEN(TOK_SDIV); }
+"%%"					{ TOKEN(TOK_SMOD); }
+"{"						{ TOKEN(TOK_LBRACE); }
+"}"						{ TOKEN(TOK_RBRACE); }
+"["						{ TOKEN(TOK_LSQR); }
+"]"						{ TOKEN(TOK_RSQR); }
+":"						{ TOKEN(TOK_COLON); }
+";"						{ TOKEN(TOK_EOS); }
+","						{ TOKEN(TOK_COMMA); }
+"<-"					{ TOKEN(TOK_ASSIGNLEFT); }
+"->"					{ TOKEN(TOK_ASSIGNRIGHT); }
+"+"						{ TOKEN(TOK_ADD); }
+"-"						{ TOKEN(TOK_SUB); }
+"*"						{ TOKEN(TOK_MUL); }
+"/"						{ TOKEN(TOK_DIV); }
+"%"						{ TOKEN(TOK_MOD); }
+"("						{ TOKEN(TOK_OBR); }
+")"						{ TOKEN(TOK_CBR); }
+"|"						{ TOKEN(TOK_BAR); }
+"&"						{ TOKEN(TOK_AMP); }
+"^"						{ TOKEN(TOK_HAT); }
+"."						{ TOKEN(TOK_DOT); }
+"@"						{ TOKEN(TOK_AT); }
+"~"						{ TOKEN(TOK_TILDE); }
+"<="					{ TOKEN(TOK_CMPLESSEQ); }
+"<"						{ TOKEN(TOK_CMPLESS); }
+">="					{ TOKEN(TOK_CMPGREATEREQ); }
+">"						{ TOKEN(TOK_CMPGREATER); }
 
-[ \t\r]					{ /* Consume white space */ }
-#.*					{ /* Ignore comments */ }
+[ \t\r\n]				{ SkipChar(); /* Consume white space */ }
+#.*						{ /* Ignore comments */ }
 
-[\n]					{ g_CurLine++; }
-
-.					{ printf("Unrecognised character in input : %c  (line %d)\n",*yytext,g_CurLine); yyterminate(); }
+.						{ PrintError("Unrecognised character in input"); SkipChar(); }
 
 %%

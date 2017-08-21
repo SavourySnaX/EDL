@@ -15,6 +15,8 @@ enum ConnectionType
 	Pullup
 };
 
+struct YYLTYPE;
+
 class BitVariable;
 
 class CodeGenContext;
@@ -82,8 +84,9 @@ public:
 class CInteger : public CExpression {
 public:
 	llvm::APInt	integer;
-
-	CInteger(std::string& value );
+	YYLTYPE integerLoc;
+	CInteger(std::string& value);
+	CInteger(std::string& value, YYLTYPE *_integerLoc) : CInteger(value) { integerLoc = *_integerLoc;}
 
 	void Decrement()
 	{
@@ -114,8 +117,11 @@ class CIdentifier : public CBaseIdentifier {
 public:
 	std::string module;
 	std::string name;
+	YYLTYPE nameLoc;
+	YYLTYPE modLoc;
 	CIdentifier(const std::string& name) : name(name) { }
-	CIdentifier(const std::string& module, const std::string& name) : module(module+"."),name(name) { }
+	CIdentifier(const std::string& name, YYLTYPE *nameLoc) : name(name),nameLoc(*nameLoc) { }
+	CIdentifier(const std::string& module, const std::string& name, YYLTYPE *modLoc, YYLTYPE *nameLoc) : module(module+"."),name(name),nameLoc(*nameLoc),modLoc(*modLoc) { }
 	static llvm::Value* trueSize(llvm::Value*,CodeGenContext& context,BitVariable& var);
 	static llvm::Value* GetAliasedData(CodeGenContext& context,llvm::Value* in,BitVariable& var);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
@@ -128,7 +134,8 @@ class CIdentifierArray : public CIdentifier
 public:
 	CExpression& arrayIndex;
 	CIdentifierArray(CExpression& expr,const std::string& name): CIdentifier(name),arrayIndex(expr) {};
-	CIdentifierArray(CExpression& expr,const std::string& module, const std::string& name): CIdentifier(module,name),arrayIndex(expr) {};
+	CIdentifierArray(CExpression& expr,const std::string& name, YYLTYPE *nameLoc): CIdentifier(name,nameLoc),arrayIndex(expr) {};
+	CIdentifierArray(CExpression& expr,const std::string& module, const std::string& name,YYLTYPE *modLoc, YYLTYPE *nameLoc): CIdentifier(module,name,modLoc,nameLoc),arrayIndex(expr) {};
 	virtual CExpression *GetExpression() const { return &arrayIndex; }
 	virtual bool IsArray() const { return true; }
 };
@@ -136,13 +143,16 @@ public:
 class CStateIdent : public CExpression {
 public:
 	std::string name;
-	CStateIdent(const std::string& name) : name(name) { }
+	YYLTYPE nameLoc;
+	CStateIdent(const std::string& name, YYLTYPE *nameLoc) : name(name),nameLoc(*nameLoc) { }
 };
 
 class CString : public CExpression {
 public:
 	std::string quoted;
+	YYLTYPE quotedLoc;
 	CString(const std::string& quoted) : quoted(quoted) { }
+	CString(const std::string& quoted,YYLTYPE *quotedLoc) : quoted(quoted),quotedLoc(*quotedLoc) { }
 	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
@@ -210,8 +220,9 @@ public:
 	int op;
 	CExpression& lhs;
 	CExpression& rhs;
-	CBinaryOperator(CExpression& lhs, int op, CExpression& rhs) :
-		lhs(lhs), rhs(rhs), op(op) { }
+	YYLTYPE operatorLoc;
+	CBinaryOperator(CExpression& lhs, int op, CExpression& rhs, YYLTYPE *operatorLoc) :
+		lhs(lhs), rhs(rhs), op(op), operatorLoc(*operatorLoc) { }
 
 	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
@@ -228,10 +239,11 @@ public:
 	CInteger& beg;
 	CInteger& end;
 	static CInteger begZero;
-	CCastOperator(CExpression& lhs, CInteger& end) :
-		lhs(lhs), beg(begZero),end(end) { }
-	CCastOperator(CExpression& lhs, CInteger& beg, CInteger& end) :
-		lhs(lhs), beg(beg), end(end) { }
+	YYLTYPE operatorLoc;
+	CCastOperator(CExpression& lhs, CInteger& end, YYLTYPE operatorLoc) :
+		lhs(lhs), beg(begZero),end(end),operatorLoc(operatorLoc) { }
+	CCastOperator(CExpression& lhs, CInteger& beg, CInteger& end,YYLTYPE operatorLoc) :
+		lhs(lhs), beg(beg), end(end),operatorLoc(operatorLoc) { }
 	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 	
@@ -359,15 +371,16 @@ public:
 	AliasList aliases;
 	int pinType;
 	ExternParamsList initialiserList;
+	YYLTYPE declarationLoc;
 
-	CVariableDeclaration(CInteger& arraySize,bool internal,CIdentifier& id, CInteger& size) :
-		internal(internal), id(id), arraySize(arraySize),size(size),pinType(0) { }
-	CVariableDeclaration(CInteger& arraySize,bool internal,CIdentifier& id, CInteger& size,AliasList& aliases) :
-		internal(internal), id(id), arraySize(arraySize),size(size),aliases(aliases),pinType(0) { }
-	CVariableDeclaration(CIdentifier& id, CInteger& size,int pinType) :
-		id(id), arraySize(notArray),size(size),pinType(pinType) { }
-	CVariableDeclaration(CIdentifier& id, CInteger& size,AliasList& aliases,int pinType) :
-		id(id), arraySize(notArray),size(size),aliases(aliases),pinType(pinType) { }
+	CVariableDeclaration(CInteger& arraySize,bool internal,CIdentifier& id, CInteger& size, YYLTYPE declarationLoc) :
+		internal(internal), id(id), arraySize(arraySize),size(size),pinType(0),declarationLoc(declarationLoc) { }
+	CVariableDeclaration(CInteger& arraySize,bool internal,CIdentifier& id, CInteger& size,AliasList& aliases, YYLTYPE declarationLoc) :
+		internal(internal), id(id), arraySize(arraySize),size(size),aliases(aliases),pinType(0),declarationLoc(declarationLoc) { }
+	CVariableDeclaration(CIdentifier& id, CInteger& size,int pinType, YYLTYPE declarationLoc) :
+		id(id), arraySize(notArray),size(size),pinType(pinType),declarationLoc(declarationLoc) { }
+	CVariableDeclaration(CIdentifier& id, CInteger& size,AliasList& aliases,int pinType, YYLTYPE declarationLoc) :
+		id(id), arraySize(notArray),size(size),aliases(aliases),pinType(pinType),declarationLoc(declarationLoc) { }
 
 	void AddInitialisers(ExternParamsList &initialisers) {initialiserList=initialisers;}
 
@@ -409,8 +422,9 @@ public:
 	llvm::BasicBlock* exitState;
 	llvm::Value* optocurState;
 	CBlock& block;
-	CStatesDeclaration(StateList& states,CBlock& block) :
-		states(states),block(block) { }
+	YYLTYPE statementLoc;
+	CStatesDeclaration(StateList& states,CBlock& block,YYLTYPE *statementLoc) :
+		states(states),block(block),statementLoc(*statementLoc) { }
 
 	CStateDeclaration* getStateDeclaration(const CIdentifier& id) { for (int a=0;a<states.size();a++) { if (states[a]->id.name == id.name) return states[a]; } return NULL; }
 	int getStateDeclarationIndex(const CIdentifier& id) { for (int a=0;a<states.size();a++) { if (states[a]->id.name == id.name) return a; } return -1; }
@@ -503,8 +517,9 @@ public:
 	llvm::GlobalVariable* depthTree;
 	llvm::GlobalVariable* depthTreeIdx;
 	CStatesDeclaration* child;
-	CHandlerDeclaration(const CIdentifier& id, CTrigger& trigger,CBlock& block) :
-		id(id), trigger(trigger),block(block) { }
+	YYLTYPE handlerLoc;
+	CHandlerDeclaration(const CIdentifier& id, CTrigger& trigger,CBlock& block, YYLTYPE *handlerLoc) :
+		id(id), trigger(trigger),block(block),handlerLoc(*handlerLoc) { }
 	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
@@ -516,11 +531,12 @@ public:
 	CInteger& decodeWidth;
 	bool hasTap;
 	ConnectionType conType;
+	YYLTYPE statementLoc;
 
-	CConnect(ParamsList& connects, CString& tapName, CInteger& decodeWidth, ConnectionType conType) :
-		connects(connects), tapName(tapName), decodeWidth(decodeWidth), hasTap(true), conType(conType) { }
-	CConnect(ParamsList& connects, ConnectionType conType) :
-		connects(connects), tapName(*new CString("")),decodeWidth(*new CInteger(std::string("0"))),hasTap(false), conType(conType) { }
+	CConnect(ParamsList& connects, CString& tapName, CInteger& decodeWidth, ConnectionType conType, YYLTYPE *statementLoc) :
+		connects(connects), tapName(tapName), decodeWidth(decodeWidth), hasTap(true), conType(conType), statementLoc(*statementLoc) { }
+	CConnect(ParamsList& connects, ConnectionType conType, YYLTYPE *statementLoc) :
+		connects(connects), tapName(*new CString("")),decodeWidth(*new CInteger(std::string("0"))),hasTap(false), conType(conType), statementLoc(*statementLoc) { }
 };
 
 class CConnectDeclaration : public CStatement {
@@ -555,11 +571,12 @@ public:
 	OperandList operands;
 	CBlock& block;
 	static CIdentifier emptyTable;
+	YYLTYPE statementLoc;
 
-	CInstruction(CIdentifier& table,CString& mnemonic,OperandList& operands, CBlock& block) :
-		table(table),mnemonic(mnemonic),operands(operands), block(block) { }
-	CInstruction(CString& mnemonic,OperandList& operands, CBlock& block) :
-		table(emptyTable),mnemonic(mnemonic),operands(operands), block(block) { }
+	CInstruction(CIdentifier& table,CString& mnemonic,OperandList& operands, CBlock& block, YYLTYPE *statementLoc) :
+		table(table),mnemonic(mnemonic),operands(operands), block(block), statementLoc(*statementLoc) { }
+	CInstruction(CString& mnemonic,OperandList& operands, CBlock& block, YYLTYPE *statementLoc) :
+		table(emptyTable),mnemonic(mnemonic),operands(operands), block(block), statementLoc(*statementLoc) { }
 	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 
@@ -607,9 +624,10 @@ class CAffector : public CExpression {
 public:
 	AffectorList affectors;
 	CExpression& expr;
+	YYLTYPE exprLoc;
 	
-	CAffector(AffectorList& affectors,CExpression& expr) :
-		affectors(affectors),expr(expr) { }
+	CAffector(AffectorList& affectors,CExpression& expr, YYLTYPE exprLoc) :
+		affectors(affectors),expr(expr),exprLoc(exprLoc) { }
 
 	virtual void prePass(CodeGenContext& context);
 
@@ -621,11 +639,12 @@ public:
 	ExternParamsList returns;
 	CIdentifier& name;
 	ExternParamsList params;
+	YYLTYPE declarationLoc;
 
-	CExternDecl(ExternParamsList& returns,CIdentifier& name,ExternParamsList& params) :
-		returns(returns), name(name), params(params) { }
-	CExternDecl(CIdentifier& name,ExternParamsList& params) :
-		name(name), params(params) { }
+	CExternDecl(ExternParamsList& returns,CIdentifier& name,ExternParamsList& params,YYLTYPE declarationLoc) :
+		returns(returns), name(name), params(params), declarationLoc(declarationLoc) { }
+	CExternDecl(CIdentifier& name,ExternParamsList& params,YYLTYPE declarationLoc) :
+		name(name), params(params),declarationLoc(declarationLoc) { }
 
 	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
@@ -684,9 +703,10 @@ class CExchange : public CStatement {
 public:
 	CIdentifier&	lhs;
 	CIdentifier&	rhs;
+	YYLTYPE operatorLoc;
 
-	CExchange(CIdentifier& lhs,CIdentifier& rhs) :
-		lhs(lhs), rhs(rhs) { }
+	CExchange(CIdentifier& lhs,CIdentifier& rhs,YYLTYPE *operatorLoc) :
+		lhs(lhs), rhs(rhs),operatorLoc(*operatorLoc) { }
 
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };

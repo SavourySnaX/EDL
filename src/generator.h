@@ -38,6 +38,7 @@ typedef std::vector<CAffect*> AffectorList;
 class BitVariable
 {
 public:
+	YYLTYPE refLoc;
 	Value* value;
 	APInt	arraySize;
 	APInt	size;
@@ -151,7 +152,7 @@ public:
     std::map<std::string, std::map<APInt,std::string,myAPIntCompare> >     disassemblyTable;
 
     Function* LookupFunctionInExternalModule(const std::string& module, const std::string& name);
-    bool LookupBitVariable(BitVariable& outVar,const std::string& module, const std::string& name);
+    bool LookupBitVariable(BitVariable& outVar,const std::string& module, const std::string& name,const YYLTYPE &modLoc,const YYLTYPE &nameLoc);
 
     std::map<std::string, CodeGenContext*> m_includes;
     std::map<std::string, BitVariable> m_globals;
