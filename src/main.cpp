@@ -1,3 +1,5 @@
+#include <fstream>
+#include <string>
 #include <iostream>
 #include <stdio.h>
 #include <cstdarg>
@@ -9,7 +11,6 @@ using namespace std;
 
 extern int yyparse();
 extern CBlock* g_ProgramBlock;
-extern FILE *yyin;
 
 #define EDL_LANGUAGE_VERSION		"0.4"
 #define EDL_COMPILER_VERSION		"1.1"
@@ -41,8 +42,8 @@ static int lBuffer = 0;
 static int nTokenStart = 0;
 static int nTokenLength = 0;
 static int nTokenNextStart = 0;
-const int lMaxBuffer = 1000;
-static char buffer[lMaxBuffer] = { 0 };
+std::ifstream inputFile;
+std::string buffer;
 std::string currentFileName;
 std::map<std::string, std::vector<std::string> > fileLineMap;
 
@@ -55,8 +56,14 @@ int resetFileInput(const char* filename)
 	nBuffer = lBuffer = 0;
 
 	currentFileName = filename;
-	yyin = fopen(filename,"r");
-	if (!yyin)
+
+	if (inputFile.is_open())
+	{
+		inputFile.close();
+	}
+	
+	inputFile.open(currentFileName,std::ifstream::in);
+	if (!inputFile.good())
 	{
 		return 1;
 	}
@@ -76,22 +83,23 @@ static int getNextLine(void)
 	nTokenNextStart = 0;
 	eof = false;
 
-	p = fgets(buffer, lMaxBuffer, yyin);
-	if (p == NULL) 
+	std::getline(inputFile, buffer);
+	if (inputFile.eof())
 	{
-		if (ferror(yyin))
-			return -1;
 		eof = true;
 		return 1;
 	}
-	std::string tmp(buffer);
-	std::replace(tmp.begin(), tmp.end(), '\t', ' ');
+	if (inputFile.fail())
+	{
+		return -1;
+	}
 
-	strcpy(buffer, tmp.c_str());// Copy back so we process what we display
+	buffer += "\n";
+	std::replace(buffer.begin(), buffer.end(), '\t', ' ');
 
-	fileLineMap[currentFileName].push_back(tmp);
+	fileLineMap[currentFileName].push_back(buffer);
 	nRow += 1;
-	lBuffer = strlen(buffer);
+	lBuffer = buffer.length();
 
 	return 0;
 }
@@ -307,7 +315,7 @@ int main(int argc, char **argv)
 		}
 		else
 		{
-			if (opts.inputFile==NULL)
+			if (opts.inputFile==nullptr)
 			{
 				opts.inputFile=argv[a];
 			}
@@ -341,7 +349,7 @@ int main(int argc, char **argv)
 		return 1;
 	}
 	
-	CodeGenContext rootContext(NULL);
+	CodeGenContext rootContext(nullptr);
 	rootContext.generateCode(*g_ProgramBlock,opts);
 
 	if (rootContext.errorFlagged)

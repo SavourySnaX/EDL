@@ -85,7 +85,7 @@ class CompilerOptions
 {
 public:
 
-	CompilerOptions() { symbolModifier = NULL; inputFile = NULL; outputFile = NULL; optimisationLevel = 0; traceUnimplemented = 0; generateDisassembly = 1; }
+	CompilerOptions() { symbolModifier = nullptr; inputFile = nullptr; outputFile = nullptr; optimisationLevel = 0; traceUnimplemented = 0; generateDisassembly = 1; }
 	
 	char *symbolModifier;
 	char *inputFile;
@@ -170,7 +170,7 @@ public:
     std::map<std::string, BitVariable>& globals() { return m_globals; }
     std::map<std::string, StateVariable>& states() { return m_states; }
     std::map<CStatesDeclaration*, StateVariable>& statesAlt() { return m_statesAlt; }
-    BasicBlock *currentBlock() { if (blocks.size()>0) return blocks.top()->block; else return NULL; }
+    BasicBlock *currentBlock() { if (blocks.size()>0) return blocks.top()->block; else return nullptr; }
     void setBlock(BasicBlock *block) { blocks.top()->block = block; }
     void pushBlock(BasicBlock *block) 
     { 
@@ -182,11 +182,11 @@ public:
 	    blocks.top()->locals = tLocals;
     }
     void popBlock() { CodeGenBlock *top = blocks.top(); blocks.pop(); delete top; }
-    CStatesDeclaration* currentState() { if (statesStack.empty()) return NULL; else return statesStack.top(); }
+    CStatesDeclaration* currentState() { if (statesStack.empty()) return nullptr; else return statesStack.top(); }
     void pushState(CStatesDeclaration *state) { statesStack.push(state); }
     void popState() { statesStack.pop(); }
     const std::stack<const CIdentifier*>& getIdentStack() { return identifierStack; }
-    const CIdentifier* currentIdent() { if (identifierStack.empty()) return NULL; else return identifierStack.top(); }
+    const CIdentifier* currentIdent() { if (identifierStack.empty()) return nullptr; else return identifierStack.top(); }
     void pushIdent(const CIdentifier* id) { identifierStack.push(id); }
     void popIdent() { identifierStack.pop(); }
 };

@@ -430,7 +430,7 @@ const char* decodeDisasm(uint8_t *table[256],unsigned int address,int *count,int
 	uint8_t byte = GetByte(address);
 	if (byte>realLength)
 	{
-		sprintf(temporaryBuffer,"UNKNOWN OPCODE");
+		sprintf_s(temporaryBuffer,sizeof(temporaryBuffer),"UNKNOWN OPCODE");
 		return temporaryBuffer;
 	}
 	else
@@ -443,7 +443,7 @@ const char* decodeDisasm(uint8_t *table[256],unsigned int address,int *count,int
 	
 	if (sPtr==NULL)
 	{
-		sprintf(temporaryBuffer,"UNKNOWN OPCODE");
+		sprintf_s(temporaryBuffer,sizeof(temporaryBuffer),"UNKNOWN OPCODE");
 		return temporaryBuffer;
 	}
 
@@ -513,7 +513,7 @@ const char* decodeDisasm(uint8_t *table[256],unsigned int address,int *count,int
 				negOffs=-1;
 			}
 			int offset=(*sPtr-'0')*negOffs;
-			sprintf(sprintBuffer,"%02X",GetByte(address+offset));
+			sprintf_s(sprintBuffer,sizeof(sprintBuffer),"%02X",GetByte(address+offset));
 			while (*tPtr)
 			{
 				*dPtr++=*tPtr++;
@@ -676,6 +676,19 @@ void SetVideo(uint16_t h, uint16_t v, uint32_t col)
 	*outputTexture = col;
 }
 
+int LoadRom(const char* romName, uint8_t* buffer, int size)
+{
+	FILE* rom = NULL;
+	if (fopen_s(&rom, romName, "rb"))
+	{
+		printf("Failed to load %s\n",romName);
+		return 1;
+	}
+	fread(buffer, 1, size, rom);
+	fclose(rom);
+	return 0;
+}
+
 int main(int argc,char**argv)
 {
 	uint16_t lastIns=0xAAAA;
@@ -707,7 +720,7 @@ int main(int argc,char**argv)
 
 #if USE_TIMING
 	// Open timing OpenGL window 
-	if (!(windows[TIMING_WINDOW] = glfwCreateWindow(TIMING_WIDTH, TIMING_HEIGHT, "Serial Bus", NULL, NULL)))
+	if (!(windows[TIMING_WINDOW] = glfwCreateWindow(TIMING_WIDTH, TIMING_HEIGHT, "Logic Analyser", NULL, NULL)))
 	{
 		glfwTerminate();
 		return 1;
@@ -720,16 +733,18 @@ int main(int argc,char**argv)
 	glfwSetWindowSizeCallback(windows[TIMING_WINDOW],sizeHandler);
 #endif
 
-	FILE* trom = fopen("roms/zx.rom", "rb");
-	//FILE* trom = fopen("roms/horacespiders.rom", "rb");
-	fread(rom, 1, 16384, trom);
-	fclose(trom);
+	//if (LoadRom("roms/horacespiders.rom", rom, 16384))
+	if (LoadRom("roms/zx.rom", rom, 16384))
+	{
+		return 1;
+	}
 
-	FILE* tram = fopen("c:/speccywork/next/zxnext/scr/fairlight.scr", "rb");
-	//FILE* tram = fopen("c:/speccywork/next/zxnext/scr/test.scr", "rb");
-	//FILE* tram = fopen("c:/speccywork/next/zxnext/scr/manicminer.scr", "rb");
-	fread(ram, 1, 6912, tram);
-	fclose(tram);
+	//if (LoadRom("c:/speccywork/next/zxnext/scr/test.scr", ram, 6912))
+	//if (LoadRom("c:/speccywork/next/zxnext/scr/manicminer.scr", ram, 6912))
+	if (LoadRom("c:/speccywork/next/zxnext/scr/fairlight.scr", ram, 6912))
+	{
+		return 1;
+	}
 
 /*	ram[0] = 0x00;
 	ram[1] = 0x18;

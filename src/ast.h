@@ -56,7 +56,7 @@ class CNode {
 public:
 	virtual ~CNode() {}
 	virtual void prePass(CodeGenContext& context) { }
-	virtual llvm::Value* codeGen(CodeGenContext& context) { return NULL; }
+	virtual llvm::Value* codeGen(CodeGenContext& context) { return nullptr; }
 };
 
 class CExpression : public CNode {
@@ -103,7 +103,7 @@ public:
 	
 	virtual bool IsImpedance() { return true; }
 
-	virtual llvm::Value* codeGen(CodeGenContext& context) { return NULL; } 
+	virtual llvm::Value* codeGen(CodeGenContext& context) { return nullptr; } 
 };
 
 class CBaseIdentifier : public CExpression
@@ -126,7 +126,7 @@ public:
 	static llvm::Value* GetAliasedData(CodeGenContext& context,llvm::Value* in,BitVariable& var);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 	virtual bool IsIdentifierExpression() { return true; }
-	virtual CExpression *GetExpression() const { return NULL; }
+	virtual CExpression *GetExpression() const { return nullptr; }
 };
 
 class CIdentifierArray : public CIdentifier
@@ -166,7 +166,7 @@ public:
 	virtual void DeclareLocal(CodeGenContext& context,unsigned num) {}
 	virtual llvm::APInt GetComputableConstant(CodeGenContext& context,unsigned num) { return integer.integer; }
 	virtual unsigned GetNumComputableConstants(CodeGenContext& context) { return 1; }
-	virtual const CString* GetString(CodeGenContext& context,unsigned num,unsigned slot) { return NULL; };
+	virtual const CString* GetString(CodeGenContext& context,unsigned num,unsigned slot) { return nullptr; };
 };
 
 class COperandIdent : public COperand {
@@ -179,7 +179,7 @@ public:
 	virtual void DeclareLocal(CodeGenContext& context,unsigned num);
 	virtual llvm::APInt GetComputableConstant(CodeGenContext& context,unsigned num) { return llvm::APInt((unsigned int)size.integer.getLimitedValue(),(uint64_t)num,false); }
 	virtual unsigned GetNumComputableConstants(CodeGenContext& context) { return 1<<size.integer.getLimitedValue(); }
-	virtual const CString* GetString(CodeGenContext& context,unsigned num,unsigned slot) { return NULL; };
+	virtual const CString* GetString(CodeGenContext& context,unsigned num,unsigned slot) { return nullptr; };
 };
 
 class COperandMapping : public COperand {
@@ -410,7 +410,7 @@ public:
 	llvm::BasicBlock* exit;
 	CStatesDeclaration* child;
 	CStateDeclaration(CIdentifier& id) :
-		id(id),autoIncrement(false),entry(NULL),exit(NULL),child(NULL) { }
+		id(id),autoIncrement(false),entry(nullptr),exit(nullptr),child(nullptr) { }
 	virtual llvm::Value* codeGen(CodeGenContext& context,llvm::Function* parent);
 };
 
@@ -426,7 +426,7 @@ public:
 	CStatesDeclaration(StateList& states,CBlock& block,YYLTYPE *statementLoc) :
 		states(states),block(block),statementLoc(*statementLoc) { }
 
-	CStateDeclaration* getStateDeclaration(const CIdentifier& id) { for (int a=0;a<states.size();a++) { if (states[a]->id.name == id.name) return states[a]; } return NULL; }
+	CStateDeclaration* getStateDeclaration(const CIdentifier& id) { for (int a=0;a<states.size();a++) { if (states[a]->id.name == id.name) return states[a]; } return nullptr; }
 	int getStateDeclarationIndex(const CIdentifier& id) { for (int a=0;a<states.size();a++) { if (states[a]->id.name == id.name) return a; } return -1; }
 
 	virtual void prePass(CodeGenContext& context);

@@ -30,7 +30,7 @@ Value* UndefinedStateError(StateIdentList &stateIdents,CodeGenContext &context)
 	}
 	PrintErrorFromLocation(combined, "Unknown state requested");
 	context.errorFlagged = true;
-	return NULL;
+	return nullptr;
 }
 
 int optlevel=0;
@@ -89,7 +89,7 @@ namespace
 		CodeGenContext *ourContext;
 
 		static char ID;
-		StateReferenceSquasher() : ourContext(NULL),FunctionPass(ID) {}
+		StateReferenceSquasher() : ourContext(nullptr),FunctionPass(ID) {}
 		StateReferenceSquasher(CodeGenContext* context) : ourContext(context),FunctionPass(ID) {}
 
 		bool DoWork(Function &F,CodeGenContext* context)
@@ -102,7 +102,7 @@ namespace
 				std::cerr << "-" << F.getName().str() << " " << stateVars->first << std::endl;
 #endif
 				// Search the instructions in the function, and find Load instructions
-				Value* foundReference=NULL;
+				Value* foundReference=nullptr;
 				for (inst_iterator I = inst_begin(F), E = inst_end(F); I != E; ++I)
 				{
 					LoadInst* iRef = dyn_cast<LoadInst>(&*I);
@@ -176,7 +176,7 @@ namespace
 		CodeGenContext *ourContext;
 
 		static char ID;
-		InOutReferenceSquasher() : ourContext(NULL),FunctionPass(ID) {}
+		InOutReferenceSquasher() : ourContext(nullptr),FunctionPass(ID) {}
 		InOutReferenceSquasher(CodeGenContext* context) : ourContext(context),FunctionPass(ID) {}
 
 		bool DoWork(Function &F,CodeGenContext* context)
@@ -200,7 +200,7 @@ namespace
 					std::cerr << "-" << F.getName().str() << " " << bitVars->first << std::endl;
 #endif
 					// Search the instructions in the function, and find Load instructions
-					Value* foundReference=NULL;
+					Value* foundReference=nullptr;
 				
 					// Find and hoist all Pin loads to entry (avoids need to phi - hopefully llvm later passes will clean up)
 					bool hoisted=false;
@@ -361,7 +361,7 @@ void CodeGenContext::GenerateDisassmTables()
 		APInt tableSize32=tableSize.zextOrTrunc(32);
 		// Create a global variable to indicate the max size of the table
 
-		GlobalVariable* gvar_int32_DIS_max = new GlobalVariable(*module, IntegerType::get(TheContext, 32),true,GlobalValue::ExternalLinkage,NULL,symbolPrepend+"DIS_max_"+tableIter->first);
+		GlobalVariable* gvar_int32_DIS_max = new GlobalVariable(*module, IntegerType::get(TheContext, 32),true,GlobalValue::ExternalLinkage,nullptr,symbolPrepend+"DIS_max_"+tableIter->first);
 		ConstantInt* const_int32_1 = ConstantInt::get(TheContext, tableSize32+1);
 		gvar_int32_DIS_max->setInitializer(const_int32_1);
 
@@ -369,7 +369,7 @@ void CodeGenContext::GenerateDisassmTables()
 		PointerType* PointerTy_5 = PointerType::get(IntegerType::get(TheContext, 8), 0);
 	       	ArrayType* ArrayTy_4 = ArrayType::get(PointerTy_5, tableSize.getLimitedValue()+1);
 		ConstantPointerNull* const_ptr_13 = ConstantPointerNull::get(PointerTy_5);	
-		GlobalVariable* gvar_array_table = new GlobalVariable(*module,ArrayTy_4,true,GlobalValue::ExternalLinkage,NULL, symbolPrepend+"DIS_"+tableIter->first);
+		GlobalVariable* gvar_array_table = new GlobalVariable(*module,ArrayTy_4,true,GlobalValue::ExternalLinkage,nullptr, symbolPrepend+"DIS_"+tableIter->first);
 		std::vector<Constant*> const_array_9_elems;
 
 		std::map<APInt,std::string,myAPIntCompare>::iterator slot=tableIter->second.begin();
@@ -388,7 +388,7 @@ void CodeGenContext::GenerateDisassmTables()
 				ConstantInt* const_int64_13 = ConstantInt::get(TheContext, APInt(64, StringRef("0"), 10));
 				const_ptr_12_indices.push_back(const_int64_13);
 				const_ptr_12_indices.push_back(const_int64_13);
-				Constant* const_ptr_12 = ConstantExpr::getGetElementPtr(NULL,gvar_array__str, const_ptr_12_indices);
+				Constant* const_ptr_12 = ConstantExpr::getGetElementPtr(nullptr,gvar_array__str, const_ptr_12_indices);
 
 				gvar_array__str->setInitializer(const_array_9);
 
@@ -668,7 +668,7 @@ Value* CString::codeGen(CodeGenContext& context)
 	ConstantInt* const_int64_13 = ConstantInt::get(TheContext, APInt(64, StringRef("0"), 10));
 	const_ptr_12_indices.push_back(const_int64_13);
 	const_ptr_12_indices.push_back(const_int64_13);
-	Constant* const_ptr_12 = ConstantExpr::getGetElementPtr(NULL,gvar_array__str, const_ptr_12_indices);
+	Constant* const_ptr_12 = ConstantExpr::getGetElementPtr(nullptr,gvar_array__str, const_ptr_12_indices);
 
 	// Global Variable Definitions
 	gvar_array__str->setInitializer(const_array_9);
@@ -682,7 +682,7 @@ Value* CIdentifier::trueSize(Value* in,CodeGenContext& context,BitVariable& var)
 	{
 		PrintErrorFromLocation(var.refLoc, "(TODO)Cannot perform operation on a mapping reference");
 		context.errorFlagged=true;
-		return NULL;
+		return nullptr;
 	}
 
 	Type* ty = Type::getIntNTy(TheContext,var.trueSize.getLimitedValue());
@@ -710,7 +710,7 @@ Value* CIdentifier::GetAliasedData(CodeGenContext& context,Value* in,BitVariable
 
 bool CodeGenContext::LookupBitVariable(BitVariable& outVar,const std::string& module, const std::string& name,const YYLTYPE &modLoc,const YYLTYPE &nameLoc)
 {
-	if ((currentBlock()!=NULL) && (locals().find(name) != locals().end()))
+	if ((currentBlock()!=nullptr) && (locals().find(name) != locals().end()))
 	{
 		outVar=locals()[name];
 		outVar.refLoc = nameLoc;
@@ -781,7 +781,7 @@ Value* CIdentifier::codeGen(CodeGenContext& context)
 
 	if (!context.LookupBitVariable(var,module,name,modLoc,nameLoc))
 	{
-		return NULL;
+		return nullptr;
 	}
 
 	if (var.mappingRef)
@@ -795,7 +795,7 @@ Value* CIdentifier::codeGen(CodeGenContext& context)
 		{
 			PrintErrorFromLocation(var.refLoc,"Pin marked as not readable");
 			context.errorFlagged=true;
-			return NULL;
+			return nullptr;
 		}
 		else
 		{
@@ -811,7 +811,7 @@ Value* CIdentifier::codeGen(CodeGenContext& context)
 
 	if (var.value->getType()->isPointerTy())
 	{
-		Value* final = NULL;
+		Value* final = nullptr;
 		if (IsArray())
 		{
 			Value* exprResult=GetExpression()->codeGen(context);
@@ -827,7 +827,7 @@ Value* CIdentifier::codeGen(CodeGenContext& context)
  			ConstantInt* index0 = ConstantInt::get(TheContext, APInt(var.size.getLimitedValue(), StringRef("0"), 10));
 			indices.push_back(index0);
  			indices.push_back(truncExt);
-			Instruction* elementPtr = GetElementPtrInst::Create(NULL,var.value,indices,"array index",context.currentBlock());
+			Instruction* elementPtr = GetElementPtrInst::Create(nullptr,var.value,indices,"array index",context.currentBlock());
 
 			final = new LoadInst(elementPtr, "", false, context.currentBlock());
 		}
@@ -950,7 +950,7 @@ Value* CDebugTraceIdentifier::generate(CodeGenContext& context,Value *loadedValu
 			baseDivisor=baseDivisor.udiv(APInt(bitWidth,currentBase));
 		}
 	}
-	return NULL;
+	return nullptr;
 }
 
 Value* CDebugTraceIdentifier::codeGen(CodeGenContext& context)
@@ -960,7 +960,7 @@ Value* CDebugTraceIdentifier::codeGen(CodeGenContext& context)
 
 	if (!context.LookupBitVariable(var,ident.module,ident.name,ident.modLoc,ident.nameLoc))
 	{
-		return NULL;
+		return nullptr;
 	}
 
 	if (var.arraySize.getLimitedValue()==0 || ident.IsArray())
@@ -1018,7 +1018,7 @@ Value* CDebugTraceIdentifier::codeGen(CodeGenContext& context)
 		CallInst::Create(context.debugTraceChar,args,"DEBUGTRACE",context.currentBlock());
 	}
 
-	return NULL;
+	return nullptr;
 }
 
 
@@ -1056,7 +1056,7 @@ Value* CDebugLine::codeGen(CodeGenContext& context)		// Refactored away onto its
 
 	context.setBlock(cont);
 
-	return NULL;
+	return nullptr;
 }
 
 bool CBinaryOperator::IsCarryExpression()
@@ -1182,7 +1182,7 @@ Value* CBinaryOperator::codeGen(CodeGenContext& context,Value* left,Value* right
 					{
 						PrintErrorFromLocation(operatorLoc,"OVERFLOW requires all operators to be either +(+) or -(-) only");
 						context.errorFlagged = true;
-						return NULL;
+						return nullptr;
 					}
 				}
 
@@ -1223,7 +1223,7 @@ Value* CBinaryOperator::codeGen(CodeGenContext& context,Value* left,Value* right
 
 	PrintErrorWholeLine(operatorLoc, "Illegal types in expression");
 	context.errorFlagged=true;
-	return NULL;
+	return nullptr;
 }
 
 std::string stringZero("0");
@@ -1274,7 +1274,7 @@ Value* CCastOperator::codeGen(CodeGenContext& context)
 
 	PrintErrorFromLocation(operatorLoc,"(TODO)Illegal type in cast");
 	context.errorFlagged=true;
-	return NULL;
+	return nullptr;
 }
 
 void CRotationOperator::prePass(CodeGenContext& context)
@@ -1292,21 +1292,21 @@ Value* CRotationOperator::codeGen(CodeGenContext& context)
 	BitVariable var;
 	if (!context.LookupBitVariable(var,bitsOut.module,bitsOut.name,bitsOut.modLoc,bitsOut.nameLoc))
 	{
-		return NULL;
+		return nullptr;
 	}
 	
 	if ((!toShift->getType()->isIntegerTy())||(!rotBy->getType()->isIntegerTy()))
 	{
 		PrintErrorWholeLine(var.refLoc, "(TODO)Unsupported operation");
 		context.errorFlagged=true;
-		return NULL;
+		return nullptr;
 	}
 
 	if (var.mappingRef)
 	{
 		PrintErrorWholeLine(var.refLoc, "(TODO)Cannot perform operation on a mappingRef");
 		context.errorFlagged=true;
-		return NULL;
+		return nullptr;
 	}
 
 	IntegerType* toShiftType = cast<IntegerType>(toShift->getType());
@@ -1400,7 +1400,7 @@ Value* CAssignment::generateAssignmentActual(BitVariable& to,const CIdentifier& 
 		ConstantInt* index0 = ConstantInt::get(TheContext, APInt(to.size.getLimitedValue(), StringRef("0"), 10));
 		indices.push_back(index0);
 		indices.push_back(truncExt);
-		Instruction* elementPtr = GetElementPtrInst::Create(NULL,to.value,indices,"array index",context.currentBlock());
+		Instruction* elementPtr = GetElementPtrInst::Create(nullptr,to.value,indices,"array index",context.currentBlock());
 
 		assignTo = elementPtr;//new LoadInst(elementPtr, "", false, context.currentBlock());
 	}
@@ -1409,7 +1409,7 @@ Value* CAssignment::generateAssignmentActual(BitVariable& to,const CIdentifier& 
 	{
 		PrintErrorFromLocation(to.refLoc, "You cannot assign a value to a non variable (or input parameter to function)");
 		context.errorFlagged=true;
-		return NULL;
+		return nullptr;
 	}
 
 	// Handle variable promotion
@@ -1454,7 +1454,7 @@ Value* CAssignment::generateAssignmentActual(BitVariable& to,const CIdentifier& 
 			ConstantInt* index0 = ConstantInt::get(TheContext, APInt(to.size.getLimitedValue(), StringRef("0"), 10));
 			indices.push_back(index0);
 			indices.push_back(truncExt);
-			Instruction* elementPtr = GetElementPtrInst::Create(NULL,to.value,indices,"array index",context.currentBlock());
+			Instruction* elementPtr = GetElementPtrInst::Create(nullptr,to.value,indices,"array index",context.currentBlock());
 
 			dest = elementPtr;
 		}
@@ -1471,7 +1471,7 @@ Value* CAssignment::generateAssignmentActual(BitVariable& to,const CIdentifier& 
 		{
 			PrintErrorFromLocation(to.refLoc,"Pin marked as not writable");
 			context.errorFlagged=true;
-			return NULL;
+			return nullptr;
 		}
 		else
 		{
@@ -1506,14 +1506,14 @@ Value* CAssignment::codeGen(CodeGenContext& context)
 	Value* assignWith;
 	if (!context.LookupBitVariable(var,lhs.module,lhs.name,lhs.modLoc,lhs.nameLoc))
 	{
-		return NULL;
+		return nullptr;
 	}
 
 	if (var.mappingRef)
 	{
 		PrintErrorFromLocation(var.refLoc, "Cannot assign to a mapping reference");
 		context.errorFlagged=true;
-		return NULL;
+		return nullptr;
 	}
 
 	if (rhs.IsImpedance())
@@ -1523,15 +1523,15 @@ Value* CAssignment::codeGen(CodeGenContext& context)
 		{
 			PrintErrorFromLocation(var.refLoc,"HIGH_IMPEDANCE only makes sense for BIDIRECTIONAL pins");
 			context.errorFlagged=true;
-			return NULL;
+			return nullptr;
 		}
 
 		return CAssignment::generateImpedanceAssignment(var,var.impedance,context);
 	}
 	assignWith = rhs.codeGen(context);
-	if (assignWith == NULL)
+	if (assignWith == nullptr)
 	{
-		return NULL;
+		return nullptr;
 	}
 
 	return CAssignment::generateAssignment(var,lhs,assignWith,context);
@@ -1543,14 +1543,14 @@ Value* CAssignment::codeGen(CodeGenContext& context,CCastOperator* cast)
 	Value* assignWith;
 	if (!context.LookupBitVariable(var,lhs.module,lhs.name,lhs.modLoc,lhs.nameLoc))
 	{
-		return NULL;
+		return nullptr;
 	}
 
 	if (var.mappingRef)
 	{
 		PrintErrorFromLocation(var.refLoc, "Cannot assign to a mapping reference");
 		context.errorFlagged=true;
-		return NULL;
+		return nullptr;
 	}
 
 	var.aliased=true;		// We pretend we are assigning to an alias, even if we are not, this forces the compiler to generate the correct code
@@ -1590,13 +1590,13 @@ void CBlock::prePass(CodeGenContext& context)
 Value* CBlock::codeGen(CodeGenContext& context)
 {
 	StatementList::const_iterator it;
-	Value *last = NULL;
+	Value *last = nullptr;
 	for (it = statements.begin(); it != statements.end(); it++) 
 	{
 		last = (**it).codeGen(context);
 		if (context.errorFlagged)
 		{
-			return NULL;
+			return nullptr;
 		}
 	}
 	return last;
@@ -1618,7 +1618,7 @@ Value* CStateDeclaration::codeGen(CodeGenContext& context,Function* parent)
 	entry = BasicBlock::Create(TheContext,id.name+"entry",parent);
 	exit = BasicBlock::Create(TheContext,id.name+"exit",parent);
 
-	return NULL;
+	return nullptr;
 }
 
 void CStatesDeclaration::prePass(CodeGenContext& context)
@@ -1627,7 +1627,7 @@ void CStatesDeclaration::prePass(CodeGenContext& context)
 
 	for (a=0;a<states.size();a++)
 	{
-		children.push_back(NULL);
+		children.push_back(nullptr);
 	}
 
 	context.pushState(this);
@@ -1636,7 +1636,7 @@ void CStatesDeclaration::prePass(CodeGenContext& context)
 
 	context.popState();
 
-	if (context.currentIdent()!=NULL)
+	if (context.currentIdent()!=nullptr)
 	{
 		int stateIndex = context.currentState()->getStateDeclarationIndex(*context.currentIdent());
 
@@ -1652,14 +1652,14 @@ int GetNumStates(CStatesDeclaration* state)
 	int a;
 	int totalStates=0;
 
-	if (state==NULL)
+	if (state==nullptr)
 		return 1;
 
 	for (a=0;a<state->states.size();a++)
 	{
 		CStatesDeclaration* downState=state->children[a];
 
-		if (downState==NULL)
+		if (downState==nullptr)
 		{
 			totalStates++;
 		}
@@ -1678,7 +1678,7 @@ int ComputeBaseIdx(CStatesDeclaration* cur,CStatesDeclaration* find)
 	int totalStates=0;
 	static bool found = false;
 
-	if (cur==NULL)
+	if (cur==nullptr)
 	{
 		return 0;
 	}
@@ -1695,7 +1695,7 @@ int ComputeBaseIdx(CStatesDeclaration* cur,CStatesDeclaration* find)
 			return totalStates;
 		}
 
-		if (downState==NULL)
+		if (downState==nullptr)
 		{
 			totalStates++;
 		}
@@ -1716,13 +1716,13 @@ Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 {
 	bool TopMostState=false;
 
-	if (context.currentState()==NULL)
+	if (context.currentState()==nullptr)
 	{
-		if (context.parentHandler==NULL)
+		if (context.parentHandler==nullptr)
 		{
 			PrintErrorFromLocation(statementLoc,"It is illegal to declare STATES outside of a handler");
 			context.errorFlagged=true;
-			return NULL;
+			return nullptr;
 		}
 
 		TopMostState=true;
@@ -1741,7 +1741,7 @@ Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 	Value *nxtState;
 	std::string stateLabel = "STATE" + context.stateLabelStack;
 
-	Value* int32_5=NULL;
+	Value* int32_5=nullptr;
 	if (TopMostState)
 	{
 		totalStates = GetNumStates(this);
@@ -1756,15 +1756,15 @@ Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 		std::string idxStateLbl = "IDX" + context.stateLabelStack;
 		std::string stkStateLbl = "STACK" + context.stateLabelStack;
 
-		GlobalVariable* gcurState = new GlobalVariable(*context.module,Type::getIntNTy(TheContext,bitsNeeded), false, GlobalValue::PrivateLinkage,NULL,context.symbolPrepend+curStateLbl);
-		GlobalVariable* gnxtState = new GlobalVariable(*context.module,Type::getIntNTy(TheContext,bitsNeeded), false, GlobalValue::PrivateLinkage,NULL,context.symbolPrepend+nxtStateLbl);
+		GlobalVariable* gcurState = new GlobalVariable(*context.module,Type::getIntNTy(TheContext,bitsNeeded), false, GlobalValue::PrivateLinkage,nullptr,context.symbolPrepend+curStateLbl);
+		GlobalVariable* gnxtState = new GlobalVariable(*context.module,Type::getIntNTy(TheContext,bitsNeeded), false, GlobalValue::PrivateLinkage,nullptr,context.symbolPrepend+nxtStateLbl);
 
 		curState = gcurState;
 		nxtState = gnxtState;
 
 		ArrayType* ArrayTy_0 = ArrayType::get(IntegerType::get(TheContext, bitsNeeded), MAX_SUPPORTED_STACK_DEPTH);
-		GlobalVariable* stkState = new GlobalVariable(*context.module, ArrayTy_0, false,  GlobalValue::PrivateLinkage, NULL, context.symbolPrepend+stkStateLbl);
-		GlobalVariable *stkStateIdx = new GlobalVariable(*context.module,Type::getIntNTy(TheContext,MAX_SUPPORTED_STACK_BITS), false, GlobalValue::PrivateLinkage,NULL,context.symbolPrepend+idxStateLbl);
+		GlobalVariable* stkState = new GlobalVariable(*context.module, ArrayTy_0, false,  GlobalValue::PrivateLinkage, nullptr, context.symbolPrepend+stkStateLbl);
+		GlobalVariable *stkStateIdx = new GlobalVariable(*context.module,Type::getIntNTy(TheContext,MAX_SUPPORTED_STACK_BITS), false, GlobalValue::PrivateLinkage,nullptr,context.symbolPrepend+idxStateLbl);
 
 		StateVariable newStateVar;
 		newStateVar.currentState = curState;
@@ -1853,7 +1853,7 @@ Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 		// Compute next state and store for future
 		if (states[a]->autoIncrement)
 		{
-			if (children[a]==NULL)
+			if (children[a]==nullptr)
 			{
 				ConstantInt* nextState = ConstantInt::get(TheContext,APInt(bitsNeeded, a==states.size()-1 ? baseStateIdx : startIdx,false));
 				StoreInst* newState = new StoreInst(nextState,nxtState,false,states[a]->entry);
@@ -1861,7 +1861,7 @@ Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 		}
 		else
 		{
-			if (children[a]==NULL)
+			if (children[a]==nullptr)
 			{
 				ConstantInt* nextState = ConstantInt::get(TheContext,APInt(bitsNeeded, startOfAutoIncrementIdx,false));
 				StoreInst* newState = new StoreInst(nextState,nxtState,false,states[a]->entry);
@@ -1883,7 +1883,7 @@ Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 		BranchInst::Create(exitState,states[a]->exit);			// this terminates the final blocks from our states
 	}
 	
-	return NULL;
+	return nullptr;
 }
 
 void CStateDefinition::prePass(CodeGenContext& context)
@@ -1921,14 +1921,14 @@ Value* CStateDefinition::codeGen(CodeGenContext& context)
 		{
 			PrintErrorFromLocation(id.nameLoc, "Attempt to define unknown state");
 			context.errorFlagged=true;
-			return NULL;
+			return nullptr;
 		}
 	}
 	else
 	{
 		PrintErrorFromLocation(id.nameLoc, "Attempt to define state entry when no states on stack");
 		context.errorFlagged=true;
-		return NULL;
+		return nullptr;
 	}
 }
 
@@ -2025,10 +2025,10 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 	temp.aliased = false;
 	temp.mappingRef = false;
 	temp.pinType=pinType;
-	temp.writeAccessor=NULL;
-	temp.writeInput=NULL;
-	temp.priorValue=NULL;
-	temp.impedance=NULL;
+	temp.writeAccessor=nullptr;
+	temp.writeInput=nullptr;
+	temp.priorValue=nullptr;
+	temp.impedance=nullptr;
 	temp.fromExternal=false;
 
 	if (context.currentBlock())
@@ -2037,7 +2037,7 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 		{
 			PrintErrorFromLocation(declarationLoc, "Cannot declare pins anywhere but global scope");
 			context.errorFlagged=true;
-			return NULL;
+			return nullptr;
 		}
 		// Within a basic block - so must be a stack variable
 		AllocaInst *alloc = new AllocaInst(Type::getIntNTy(TheContext,size.integer.getLimitedValue()),0, id.name.c_str(), context.currentBlock());
@@ -2059,16 +2059,16 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 
 			if (internal /*|| !context.isRoot*/)
 			{
-				temp.value = new GlobalVariable(*context.module,type, false, GlobalValue::PrivateLinkage,NULL,context.symbolPrepend+id.name);
+				temp.value = new GlobalVariable(*context.module,type, false, GlobalValue::PrivateLinkage,nullptr,context.symbolPrepend+id.name);
 			}
 			else
 			{
-				temp.value = new GlobalVariable(*context.module,type, false, GlobalValue::ExternalLinkage,NULL,context.symbolPrepend+id.name);
+				temp.value = new GlobalVariable(*context.module,type, false, GlobalValue::ExternalLinkage,nullptr,context.symbolPrepend+id.name);
 			}
 		}
 		else
 		{
-			temp.value = new GlobalVariable(*context.module,Type::getIntNTy(TheContext,size.integer.getLimitedValue()), false, GlobalValue::PrivateLinkage,NULL,context.symbolPrepend+id.name);
+			temp.value = new GlobalVariable(*context.module,Type::getIntNTy(TheContext,size.integer.getLimitedValue()), false, GlobalValue::PrivateLinkage,nullptr,context.symbolPrepend+id.name);
 			switch (pinType)
 			{
 				case TOK_IN:
@@ -2082,7 +2082,7 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 					// In the future we should try to detect if a pin uses impedance and avoid the additional overhead
 
 					// we also need a new variable to hold the impedance mask
-					temp.impedance=new GlobalVariable(*context.module,Type::getIntNTy(TheContext,size.integer.getLimitedValue()), false, GlobalValue::PrivateLinkage,NULL,context.symbolPrepend+id.name+".HZ");
+					temp.impedance=new GlobalVariable(*context.module,Type::getIntNTy(TheContext,size.integer.getLimitedValue()), false, GlobalValue::PrivateLinkage,nullptr,context.symbolPrepend+id.name+".HZ");
 
 					CreateWriteAccessor(context,temp,id.module,id.name,true);
 					CreateReadAccessor(context,temp,true);
@@ -2142,7 +2142,7 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 			alias.writeInput=temp.writeInput;
 			alias.priorValue=temp.priorValue;
 			alias.fromExternal=false;
-			alias.impedance=NULL;
+			alias.impedance=nullptr;
 
 			APInt newMask = ~APInt(aliases[a]->sizeOrValue.integer.getLimitedValue(),0);
 			if (newMask.getBitWidth()!=size.integer.getLimitedValue())
@@ -2183,7 +2183,7 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 			{
 				PrintErrorWholeLine(declarationLoc,"Too many initialisers (note array initialisers not currently supported in local scope)");
 				context.errorFlagged=true;
-				return NULL;
+				return nullptr;
 			}
 
 			APInt t = initialiserList[0]->integer;
@@ -2218,7 +2218,7 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 				{
 					PrintErrorWholeLine(declarationLoc,"Too many initialisers, initialiser list bigger than array storage");
 					context.errorFlagged=true;
-					return NULL;
+					return nullptr;
 				}
 		
 				int a;
@@ -2265,7 +2265,7 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 				{
 					PrintErrorWholeLine(declarationLoc,"Too many initialisers");
 					context.errorFlagged=true;
-					return NULL;
+					return nullptr;
 				}
 
 				APInt t = initialiserList[0]->integer;
@@ -2300,16 +2300,16 @@ Value* CHandlerDeclaration::codeGen(CodeGenContext& context)
 	{
 		PrintErrorFromLocation(id.nameLoc,"undeclared pin %s - Handlers MUST be tied to pin definitions",id.name.c_str());
 		context.errorFlagged=true;
-		return NULL;
+		return nullptr;
 	}
 
 	pinVariable=context.globals()[id.name];
 
-	if (pinVariable.writeAccessor==NULL)
+	if (pinVariable.writeAccessor==nullptr)
 	{
 		PrintErrorFromLocation(id.nameLoc,"Handlers must be tied to Input / Bidirectional pins ONLY");
 		context.errorFlagged=true;
-		return NULL;
+		return nullptr;
 	}
 
 	FunctionType *ftype = FunctionType::get(Type::getVoidTy(TheContext),argTypes, false);
@@ -2330,7 +2330,7 @@ Value* CHandlerDeclaration::codeGen(CodeGenContext& context)
 
 	block.codeGen(context);
 
-	context.parentHandler=NULL;
+	context.parentHandler=nullptr;
 
 	ReturnInst::Create(TheContext, context.currentBlock());			/* block may well have changed by time we reach here */
 
@@ -2419,7 +2419,7 @@ std::string EscapeString(const std::string &in)
 
 	for (int a=0;a<in.length();a++)
 	{
-		if (strchr(okChars,in[a])==NULL)
+		if (strchr(okChars,in[a])==nullptr)
 		{
 			out+='_';
 		}
@@ -2443,7 +2443,7 @@ Value* CInstruction::codeGen(CodeGenContext& context)
 	{
 		PrintErrorWholeLine(statementLoc,"Opcode for instruction must be able to generate constants");
 		context.errorFlagged=true;
-		return NULL;
+		return nullptr;
 	}
 			
 //	std::cout << "Adding ins " << numOpcodes << std::endl;
@@ -2474,7 +2474,7 @@ Value* CInstruction::codeGen(CodeGenContext& context)
 
 		if (context.errorFlagged)
 		{
-			return NULL;
+			return nullptr;
 		}
 
 		// Glue callee back into execute (assumes execute comes before instructions at all times for now)
@@ -2489,7 +2489,7 @@ Value* CInstruction::codeGen(CodeGenContext& context)
 		}
 
 	}
-	return NULL;
+	return nullptr;
 }
 
 void CExecute::prePass(CodeGenContext& context)
@@ -2537,7 +2537,7 @@ Value* CExecute::codeGen(CodeGenContext& context)
 
 		context.executeLocations[table.name].push_back(temp);
 	}
-	return NULL;
+	return nullptr;
 }
 
 int ComputeBaseIdx(CStatesDeclaration* cur,StateIdentList& list, int index,int &total)
@@ -2559,7 +2559,7 @@ int ComputeBaseIdx(CStatesDeclaration* cur,StateIdentList& list, int index,int &
 			if (index==list.size()-1)
 			{
 				found=true;
-				if (downState==NULL)
+				if (downState==nullptr)
 				{
 					total=1;
 				}
@@ -2570,7 +2570,7 @@ int ComputeBaseIdx(CStatesDeclaration* cur,StateIdentList& list, int index,int &
 				return totalStates;
 			}
 
-			if (downState==NULL)
+			if (downState==nullptr)
 			{
 				totalStates++;
 			}
@@ -2588,7 +2588,7 @@ int ComputeBaseIdx(CStatesDeclaration* cur,StateIdentList& list, int index,int &
 		{
 			CStatesDeclaration* downState=cur->children[a];
 
-			if (downState==NULL)
+			if (downState==nullptr)
 			{
 				totalStates++;
 			}
@@ -2621,7 +2621,7 @@ Value* CStateTest::codeGen(CodeGenContext& context)
 	{
 		PrintErrorFromLocation(stateIdents[0]->nameLoc, "Unknown handler, can't look up state reference");
 		context.errorFlagged=true;
-		return NULL;
+		return nullptr;
 	}
 
 	StateVariable topState = context.states()[stateLabel];
@@ -2668,7 +2668,7 @@ Value* CStateJump::codeGen(CodeGenContext& context)
 	{
 		PrintErrorFromLocation(stateIdents[0]->nameLoc, "Unknown handler, can't look up state reference");
 		context.errorFlagged=true;
-		return NULL;
+		return nullptr;
 	}
 
 	StateVariable topState = context.states()[stateLabel];
@@ -2705,7 +2705,7 @@ Value* CStatePush::codeGen(CodeGenContext& context)
 	{
 		PrintErrorFromLocation(stateIdents[0]->nameLoc, "Unknown handler, can't look up state reference");
 		context.errorFlagged=true;
-		return NULL;
+		return nullptr;
 	}
 
 	StateVariable topState = context.states()[stateLabel];
@@ -2730,7 +2730,7 @@ Value* CStatePush::codeGen(CodeGenContext& context)
 	ConstantInt* const_intn = ConstantInt::get(TheContext, APInt(bitsNeeded, StringRef("0"), 10));
 	indices.push_back(const_intn);
 	indices.push_back(index);
-	Value* ref = GetElementPtrInst::Create(NULL,topState.stateStackNext, indices,"stackPos",context.currentBlock());
+	Value* ref = GetElementPtrInst::Create(nullptr,topState.stateStackNext, indices,"stackPos",context.currentBlock());
 
 	Value* curNext = new LoadInst(topState.nextState,"currentNext",false,context.currentBlock());
 
@@ -2757,7 +2757,7 @@ Value* CStatePop::codeGen(CodeGenContext& context)
 	{
 		PrintErrorFromLocation(ident.nameLoc, "Unknown handler, can't look up state reference");
 		context.errorFlagged=true;
-		return NULL;
+		return nullptr;
 	}
 
 	StateVariable topState = context.states()[stateLabel];
@@ -2779,7 +2779,7 @@ Value* CStatePop::codeGen(CodeGenContext& context)
 	ConstantInt* const_intn = ConstantInt::get(TheContext, APInt(bitsNeeded, StringRef("0"), 10));
 	indices.push_back(const_intn);
 	indices.push_back(dec);
-	Value* ref = GetElementPtrInst::Create(NULL,topState.stateStackNext, indices,"stackPos",context.currentBlock());
+	Value* ref = GetElementPtrInst::Create(nullptr,topState.stateStackNext, indices,"stackPos",context.currentBlock());
 
 	Value* oldNext = new LoadInst(ref,"oldNext",false,context.currentBlock());	// retrieve old next value
 
@@ -2808,7 +2808,7 @@ Value* CIfStatement::codeGen(CodeGenContext& context)
 
 	context.setBlock(endif);
 
-	return NULL;
+	return nullptr;
 }
 
 void COperandIdent::DeclareLocal(CodeGenContext& context,unsigned num)
@@ -2823,10 +2823,10 @@ void COperandIdent::DeclareLocal(CodeGenContext& context,unsigned num)
 	temp.aliased = false;
 	temp.mappingRef=false;
 	temp.pinType=0;
-	temp.writeAccessor=NULL;
-	temp.writeInput=NULL;
-	temp.priorValue=NULL;
-	temp.impedance=NULL;
+	temp.writeAccessor=nullptr;
+	temp.writeInput=nullptr;
+	temp.priorValue=nullptr;
+	temp.impedance=nullptr;
 	temp.fromExternal=false;
 
 	AllocaInst *alloc = new AllocaInst(Type::getIntNTy(TheContext,size.integer.getLimitedValue()),0, ident.name.c_str(), context.currentBlock());
@@ -2910,7 +2910,7 @@ const CString* COperandMapping::GetString(CodeGenContext& context,unsigned num,u
 	{
 		PrintErrorFromLocation(ident.nameLoc, "Undeclared mapping : %s", ident.name);
 		context.errorFlagged=true;
-		return NULL;
+		return nullptr;
 	}
 
 	return &context.m_mappings[ident.name]->mappings[num]->label;
@@ -2949,7 +2949,7 @@ const CString* COperandPartial::GetString(CodeGenContext& context,unsigned num,u
 	{
 		unsigned tNum=num % operands[a]->GetNumComputableConstants(context);
 		const CString* temp= operands[a]->GetString(context,tNum,slot);
-		if (temp!=NULL)
+		if (temp!=nullptr)
 		{
 			if (slot==0)
 				return temp;
@@ -2958,7 +2958,7 @@ const CString* COperandPartial::GetString(CodeGenContext& context,unsigned num,u
 		num/=operands[a]->GetNumComputableConstants(context);
 	}
 
-	return NULL;
+	return nullptr;
 }
 
 void COperandPartial::DeclareLocal(CodeGenContext& context,unsigned num)
@@ -3032,11 +3032,11 @@ Value* CMappingDeclaration::codeGen(CodeGenContext& context)
 	{
 		PrintErrorDuplication(ident.nameLoc,context.m_mappings[ident.name]->ident.nameLoc,"Multiple declaration for mapping");
 		context.errorFlagged=true;
-		return NULL;
+		return nullptr;
 	}
 	context.m_mappings[ident.name]=this;
 
-	return NULL;
+	return nullptr;
 }
 
 void CConnectDeclaration::prePass(CodeGenContext& context)
@@ -3048,7 +3048,7 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 {
   	std::vector<Type*> FuncTy_8_args;
 	FunctionType* FuncTy_8;
-	Function* func = NULL;
+	Function* func = nullptr;
 
 	// 1 argument at present, same as the ident - contains a single bit
 	FuncTy_8_args.push_back(IntegerType::get(TheContext, 1));
@@ -3079,10 +3079,10 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 		temp.aliased = false;
 		temp.mappingRef = false;
 		temp.pinType=0;
-		temp.writeAccessor=NULL;
-		temp.writeInput=NULL;
-		temp.priorValue=NULL;
-		temp.impedance=NULL;
+		temp.writeAccessor=nullptr;
+		temp.writeInput=nullptr;
+		temp.priorValue=nullptr;
+		temp.impedance=nullptr;
 		temp.fromExternal=false;
 
 		temp.value=&*args;
@@ -3102,7 +3102,7 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 	}
 
 	// This needs a re-write
-	// for now - if a NULL occurs in the input list, it is considered to be an isolation resistor,
+	// for now - if a nullptr occurs in the input list, it is considered to be an isolation resistor,
 	//
 	// if only one side of the bus is driving, both sides get the final value as inputs
 	// if neither side is driving, both sides get PULLUP
@@ -3146,7 +3146,7 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 		int busCount = 1;	// will always be at least 1 bus, but ISOLATION can generate split buses
 		for (size_t b = 0; b < connects[a]->connects.size(); b++)
 		{
-			if ((*connects[a]).connects[b] == NULL)
+			if ((*connects[a]).connects[b] == nullptr)
 			{
 				busCount++;
 			}
@@ -3165,7 +3165,7 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 		int curBus = 0;
 		for (size_t b=0;b<connects[a]->connects.size();b++)
 		{
-			if ((*connects[a]).connects[b] == NULL)
+			if ((*connects[a]).connects[b] == nullptr)
 			{
 				// bus split
 				curBus++;
@@ -3179,7 +3179,7 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 				
 				if (!context.LookupBitVariable(var,ident->module,ident->name,ident->modLoc,ident->nameLoc))
 				{
-					return NULL;
+					return nullptr;
 				}
 				else
 				{
@@ -3223,21 +3223,21 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 			{
 				PrintErrorWholeLine(connects[a]->statementLoc,"No possible routing! - no connections");
 				context.errorFlagged = true;
-				return NULL;
+				return nullptr;
 			}
 
 			if (outCnt[checkBus] == 0 && inCnt[checkBus] > 0 && biCnt[checkBus] == 0)
 			{
 				PrintErrorWholeLine(connects[a]->statementLoc,"No possible routing! - all connections are input");
 				context.errorFlagged = true;
-				return NULL;
+				return nullptr;
 			}
 
 			if (outCnt[checkBus] > 0 && inCnt[checkBus] == 0 && biCnt[checkBus] == 0)
 			{
 				PrintErrorWholeLine(connects[a]->statementLoc,"No possible routing! - all connections are output");
 				context.errorFlagged = true;
-				return NULL;
+				return nullptr;
 			}
 		}
 //		std::cerr << "Total Connections : in " << inCnt << " , out " << outCnt << " , bidirect " << biCnt << std::endl;
@@ -3248,7 +3248,7 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 		// Generate bus output signals (1 per bus, + HiZ indicator per bus)
 		for (curBus = 0; curBus < busCount; curBus++)
 		{
-			busOutResult[curBus] = NULL;
+			busOutResult[curBus] = nullptr;
 			busIsDrivingResult[curBus] = ConstantInt::get(TheContext, APInt(1, 0));	// 0 for not driving bus
 
 			for (size_t o = 0; o < outs[curBus].size(); o++)
@@ -3266,10 +3266,10 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 
 					if (!context.LookupBitVariable(var, ident->module, ident->name,ident->modLoc,ident->nameLoc))
 					{
-						return NULL;
+						return nullptr;
 					}
 
-					if (var.impedance == NULL)
+					if (var.impedance == nullptr)
 					{
 						busIsDrivingResult[curBus] = ConstantInt::get(TheContext, APInt(1, 1));	// complex expression, always a bus driver
 					}
@@ -3300,7 +3300,7 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 						{
 							PrintErrorWholeLine(connects[a]->statementLoc, "(TODO) Expected integer types");
 							context.errorFlagged = true;
-							return NULL;
+							return nullptr;
 						}
 						if (lastType->getPrimitiveSizeInBits() < tmpType->getPrimitiveSizeInBits())
 						{
@@ -3337,7 +3337,7 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 					{
 						PrintErrorWholeLine(connects[a]->statementLoc, "(TODO) Expected integer types");
 						context.errorFlagged = true;
-						return NULL;
+						return nullptr;
 					}
 					if (lastType->getPrimitiveSizeInBits() < tmpType->getPrimitiveSizeInBits())
 					{
@@ -3363,7 +3363,7 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 		{
 			PrintErrorWholeLine(connects[a]->statementLoc, "(TODO) Bus arbitration for >2 buses not implemented yet");
 			context.errorFlagged = true;
-			return NULL;
+			return nullptr;
 		}
 
 		for (curBus = 0; curBus < busCount; curBus++)
@@ -3374,7 +3374,7 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 
 				if (!context.LookupBitVariable(var, ins[curBus][i]->module, ins[curBus][i]->name, ins[curBus][i]->modLoc, ins[curBus][i]->nameLoc))
 				{
-					return NULL;
+					return nullptr;
 				}
 
 				CAssignment::generateAssignment(var, *ins[curBus][i], busOutResult[curBus], context);
@@ -3434,7 +3434,7 @@ Value* CAffect::codeGenCarry(CodeGenContext& context,Value* exprResult,Value* lh
 				{
 					PrintErrorFromLocation(param.integerLoc,"Bit to carry is outside of range for result");
 					context.errorFlagged=true;
-					return NULL;
+					return nullptr;
 				}
 				
 				IntegerType* lhsType = cast<IntegerType>(lhs->getType());
@@ -3508,14 +3508,14 @@ Value* CAffect::codeGenFinal(CodeGenContext& context,Value* exprResult)
 	BitVariable var;
 	if (!context.LookupBitVariable(var,ident.module,ident.name,ident.modLoc,ident.nameLoc))
 	{
-		return NULL;
+		return nullptr;
 	}
 	
 	if (var.mappingRef)
 	{
 		PrintErrorFromLocation(var.refLoc, "Cannot perform operation on a mapping reference");
 		context.errorFlagged=true;
-		return NULL;
+		return nullptr;
 	}
 
 	IntegerType* resultType = cast<IntegerType>(exprResult->getType());
@@ -3634,19 +3634,19 @@ Value* CAffect::codeGenFinal(CodeGenContext& context,Value* exprResult)
 				{
 					PrintErrorFromLocation(param.integerLoc,"Bit for overflow detection is outside of range for result");
 					context.errorFlagged=true;
-					return NULL;
+					return nullptr;
 				}
 				Value* lhs = ov1Val;		// Lhs and Rhs are provided in the overflow affector
-				if (lhs==NULL)
+				if (lhs==nullptr)
 				{
 					context.errorFlagged=true;
-					return NULL;
+					return nullptr;
 				}
 				Value* rhs = ov2Val;
-				if (rhs==NULL)
+				if (rhs==nullptr)
 				{
 					context.errorFlagged=true;
-					return NULL;
+					return nullptr;
 				}
 				
 				IntegerType* lhsType = cast<IntegerType>(lhs->getType());
@@ -3657,13 +3657,13 @@ Value* CAffect::codeGenFinal(CodeGenContext& context,Value* exprResult)
 					PrintErrorFromLocation(param.integerLoc,"Bit for overflow detection is outside of range of lhs");
 					std::cerr << "Bit for overflow detection is outside of range for source1" << std::endl;
 					context.errorFlagged=true;
-					return NULL;
+					return nullptr;
 				}
 				if (param.integer.getLimitedValue() >= rhsType->getBitWidth())
 				{
 					PrintErrorFromLocation(param.integerLoc,"Bit for overflow detection is outside of range of rhs");
 					context.errorFlagged=true;
-					return NULL;
+					return nullptr;
 				}
 		       		
 				Instruction::CastOps lhsOp = CastInst::getCastOpcode(lhs,false,resultType,false);
@@ -3739,7 +3739,7 @@ Value* CAffect::codeGenFinal(CodeGenContext& context,Value* exprResult)
 				ConstantInt* bitC=ConstantInt::get(TheContext,bit);
 				ConstantInt* shiftC=ConstantInt::get(TheContext,shift);
 
-				if (tmpResult==NULL)
+				if (tmpResult==nullptr)
 				{
 					assert(0, "Failed to compute CARRY/OVERFLOW for expression (possible bug in compiler)");
 				}
@@ -3771,9 +3771,9 @@ void CAffector::prePass(CodeGenContext& context)
 
 Value* CAffector::codeGen(CodeGenContext& context)
 {
-	Value* left=NULL;
-	Value* right=NULL;
-	Value* exprResult=NULL;
+	Value* left=nullptr;
+	Value* right=nullptr;
+	Value* exprResult=nullptr;
 	bool containsCarryOverflow=false;
 	int type=0;
 
@@ -3781,7 +3781,7 @@ Value* CAffector::codeGen(CodeGenContext& context)
 	{
 		PrintErrorFromLocation(exprLoc, "(TODO) Cannot currently supply nested affectors");
 		context.errorFlagged=true;
-		return NULL;
+		return nullptr;
 	}
 
 	// If there is more than 1 expr that is used to compute CARRY/OVERFLOW, we need to test at each stage.
@@ -3793,13 +3793,13 @@ Value* CAffector::codeGen(CodeGenContext& context)
 			case TOK_CARRY:
 			case TOK_NOCARRY:
 				containsCarryOverflow=true;
-				affectors[a]->tmpResult=NULL;
+				affectors[a]->tmpResult=nullptr;
 				context.curAffectors.push_back(affectors[a]);
 				break;
 			case TOK_OVERFLOW:
 			case TOK_NOOVERFLOW:
 				containsCarryOverflow=true;
-				affectors[a]->tmpResult=NULL;
+				affectors[a]->tmpResult=nullptr;
 				affectors[a]->ov1Val=affectors[a]->ov1.codeGen(context);
 				affectors[a]->ov2Val=affectors[a]->ov2.codeGen(context);
 				context.curAffectors.push_back(affectors[a]);
@@ -3815,7 +3815,7 @@ Value* CAffector::codeGen(CodeGenContext& context)
 		{
 			PrintErrorFromLocation(exprLoc, "OVERFLOW/CARRY is not supported for non carry/overflow expressions");
 			context.errorFlagged=true;
-			return NULL;
+			return nullptr;
 		}
 	}
 
@@ -3855,7 +3855,7 @@ Value* CExternDecl::codeGen(CodeGenContext& context)
 		{
 			PrintErrorFromLocation(params[a]->integerLoc,"External C functions must use C size parameters (8,16 or 32 bits)");
 			context.errorFlagged=true;
-			return NULL;
+			return nullptr;
 		}
 		FuncTy_8_args.push_back(IntegerType::get(TheContext, size));
 	}
@@ -3871,7 +3871,7 @@ Value* CExternDecl::codeGen(CodeGenContext& context)
 		{
 			PrintErrorFromLocation(returns[0]->integerLoc,"External C functions must use C size parameters (8,16 or 32 bits)");
 			context.errorFlagged=true;
-			return NULL;
+			return nullptr;
 		}
 		FuncTy_8 = FunctionType::get(IntegerType::get(TheContext, size),FuncTy_8_args,false);
 	}
@@ -3881,7 +3881,7 @@ Value* CExternDecl::codeGen(CodeGenContext& context)
 
 	context.m_externFunctions[name.name] = func;
 
-	return NULL;
+	return nullptr;
 }
 
 void CFuncCall::prePass(CodeGenContext& context)
@@ -3898,7 +3898,7 @@ Value* CFuncCall::codeGen(CodeGenContext& context)
 	{
 		PrintErrorFromLocation(name.nameLoc,"Function Declaration Required to use a Function");
 		context.errorFlagged=true;
-		return NULL;
+		return nullptr;
 	}
 	Function* func = context.m_externFunctions[name.name];
 
@@ -3911,7 +3911,7 @@ Value* CFuncCall::codeGen(CodeGenContext& context)
 		{
 			PrintErrorWholeLine(name.nameLoc,"Wrong Number Of Arguments To Function");
 			context.errorFlagged=true;
-			return NULL;
+			return nullptr;
 		}
 
 		Value* exprResult = params[a]->codeGen(context);
@@ -3948,7 +3948,7 @@ Value* CTrigger::codeGen(CodeGenContext& context,BitVariable& pin,Value* functio
 			{
 				CallInst* fcall = CallInst::Create(function,"",*pin.writeAccessor);
 			}
-			return NULL;
+			return nullptr;
 		case TOK_CHANGED:
 			// Compare input value to old value, if different then call function 
 			{
@@ -3975,7 +3975,7 @@ Value* CTrigger::codeGen(CodeGenContext& context,BitVariable& pin,Value* functio
 				*pin.writeAccessor=ReturnInst::Create(TheContext,nocall);
 
 			}
-			return NULL;
+			return nullptr;
 		case TOK_TRANSITION:
 			// Compare input value to param2 and old value to param1 , if same call function 
 			{
@@ -4006,14 +4006,14 @@ Value* CTrigger::codeGen(CodeGenContext& context,BitVariable& pin,Value* functio
 				*pin.writeAccessor=ReturnInst::Create(TheContext,nocall);
 
 			}
-			return NULL;
+			return nullptr;
 
 		default:
 			assert(0,"Unhandled trigger type");
 			break;
 	}
 
-	return NULL;
+	return nullptr;
 }
 
 void CFunctionDecl::prePass(CodeGenContext& context)
@@ -4044,7 +4044,7 @@ Value* CFunctionDecl::codeGen(CodeGenContext& context)
 		FuncTy_8 = FunctionType::get(IntegerType::get(TheContext, size),FuncTy_8_args,false);
 	}
 
-	Function* func = NULL;
+	Function* func = nullptr;
 	if (internal || !context.isRoot)
 	{
 		func=Function::Create(FuncTy_8,GlobalValue::PrivateLinkage,context.symbolPrepend+name.name,context.module);
@@ -4072,10 +4072,10 @@ Value* CFunctionDecl::codeGen(CodeGenContext& context)
 		returnVal.aliased = false;
 		returnVal.mappingRef = false;
 		returnVal.pinType=0;
-		returnVal.writeAccessor=NULL;
-		returnVal.writeInput=NULL;
-		returnVal.priorValue=NULL;
-		returnVal.impedance=NULL;
+		returnVal.writeAccessor=nullptr;
+		returnVal.writeInput=nullptr;
+		returnVal.priorValue=nullptr;
+		returnVal.impedance=nullptr;
 		returnVal.fromExternal=false;
 
 		AllocaInst *alloc = new AllocaInst(Type::getIntNTy(TheContext,returns[0]->size.integer.getLimitedValue()),0, returns[0]->id.name.c_str(), context.currentBlock());
@@ -4096,10 +4096,10 @@ Value* CFunctionDecl::codeGen(CodeGenContext& context)
 		temp.aliased = false;
 		temp.mappingRef = false;
 		temp.pinType=0;
-		temp.writeAccessor=NULL;
-		temp.writeInput=NULL;
-		temp.priorValue=NULL;
-		temp.impedance=NULL;
+		temp.writeAccessor=nullptr;
+		temp.writeInput=nullptr;
+		temp.priorValue=nullptr;
+		temp.impedance=nullptr;
 		temp.fromExternal=false;
 
 		temp.value=&*args;
@@ -4170,7 +4170,7 @@ void CInstance::prePass(CodeGenContext& context)
 Value* CInstance::codeGen(CodeGenContext& context)
 {
 	// At present doesn't generate any code - maybe never will
-	return NULL;
+	return nullptr;
 }
 
 Value* CExchange::codeGen(CodeGenContext& context)
@@ -4179,11 +4179,11 @@ Value* CExchange::codeGen(CodeGenContext& context)
 
 	if (!context.LookupBitVariable(lhsVar,lhs.module,lhs.name,lhs.modLoc,lhs.nameLoc))
 	{
-		return NULL;
+		return nullptr;
 	}
 	if (!context.LookupBitVariable(rhsVar,rhs.module,rhs.name,rhs.modLoc,rhs.nameLoc))
 	{
-		return NULL;
+		return nullptr;
 	}
 
 	if (lhsVar.value->getType()->isPointerTy() && rhsVar.value->getType()->isPointerTy())
@@ -4202,18 +4202,18 @@ Value* CExchange::codeGen(CodeGenContext& context)
 			{
 				PrintErrorFromLocation(operatorLoc,"Both operands to exchange must be same size");
 				context.errorFlagged=true;
-				return NULL;
+				return nullptr;
 			}
 		
 			CAssignment::generateAssignment(lhsVar,lhs,right,context);
 			CAssignment::generateAssignment(rhsVar,rhs,left,context);
 		}
 		
-		return NULL;
+		return nullptr;
 	}
 	
 	PrintErrorFromLocation(operatorLoc, "Illegal operands to exchange");
 	context.errorFlagged=true;
-	return NULL;
+	return nullptr;
 }
 
