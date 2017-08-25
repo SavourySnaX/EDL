@@ -279,8 +279,10 @@ class CAssignment : public CExpression {
 public:
 	CIdentifier& lhs;
 	CExpression& rhs;
-	CAssignment(CIdentifier& lhs, CExpression& rhs) : 
-		lhs(lhs), rhs(rhs) { }
+	YYLTYPE operatorLoc;
+
+	CAssignment(CIdentifier& lhs, CExpression& rhs, YYLTYPE* operatorLoc) : 
+		lhs(lhs), rhs(rhs),operatorLoc(*operatorLoc) { }
 	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context,CCastOperator* cast);

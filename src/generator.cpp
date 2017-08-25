@@ -1590,7 +1590,12 @@ Value* CAssignment::codeGen(CodeGenContext& context)
 			return nullptr;
 		}
 
-		return CAssignment::generateImpedanceAssignment(var,var.impedance,context);
+		Instruction* I = CAssignment::generateImpedanceAssignment(var,var.impedance,context);
+		if (context.opts.generateDebug && scopingStack.size()>2)//tmp hack for missing scopes
+		{
+			I->setDebugLoc(DebugLoc::get(operatorLoc.first_line, operatorLoc.first_column, scopingStack.top()));
+		}
+		return I;
 	}
 	assignWith = rhs.codeGen(context);
 	if (assignWith == nullptr)
@@ -1598,7 +1603,12 @@ Value* CAssignment::codeGen(CodeGenContext& context)
 		return nullptr;
 	}
 
-	return CAssignment::generateAssignment(var,lhs,assignWith,context);
+	Instruction* I = CAssignment::generateAssignment(var,lhs,assignWith,context);
+	if (context.opts.generateDebug && scopingStack.size()>2)//tmp hack for missing scopes
+	{
+		I->setDebugLoc(DebugLoc::get(operatorLoc.first_line, operatorLoc.first_column, scopingStack.top()));
+	}
+	return I;
 }
 
 Value* CAssignment::codeGen(CodeGenContext& context,CCastOperator* cast)

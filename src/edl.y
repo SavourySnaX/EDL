@@ -310,8 +310,8 @@ params : params TOK_COMMA expr	{ $$->push_back($3); }
 	|			{ $$ = new ParamsList(); }
 	;
 
-expr : ident_ref TOK_ASSIGNLEFT expr { $$ = new CAssignment(*$<ident>1,*$3); }
-     | expr TOK_ASSIGNRIGHT ident_ref { $$ = new CAssignment(*$<ident>3,*$1); }
+expr : ident_ref TOK_ASSIGNLEFT expr { $$ = new CAssignment(*$<ident>1,*$3, &@2); }
+     | expr TOK_ASSIGNRIGHT ident_ref { $$ = new CAssignment(*$<ident>3,*$1, &@2); }
      | expr TOK_ADD expr { $$ = new CBinaryOperator(*$1,TOK_ADD,*$3, &@2); }
      | expr TOK_SUB expr { $$ = new CBinaryOperator(*$1,TOK_SUB,*$3, &@2); }
      | expr TOK_MUL expr { $$ = new CBinaryOperator(*$1,TOK_MUL,*$3, &@2); }
