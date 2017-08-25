@@ -116,7 +116,7 @@ public:
     Module *module;
     bool isRoot;
     ExecutionEngine		*ee;
-    CodeGenContext(CodeGenContext* parent);
+    CodeGenContext(CodeGenContext* parent,const CompilerOptions& options);
     Function *debugTraceString;
     Function *debugTraceChar;
     Function *debugTraceMissing;
@@ -168,7 +168,7 @@ public:
 
     CompilerOptions opts;
 
-    void generateCode(CBlock& root,CompilerOptions &opts);
+    void generateCode(CBlock& root);
    // GenericValue runCode();
     std::map<std::string, BitVariable>& locals() { return blocks.top()->locals; }
     std::map<std::string, BitVariable>& globals() { return m_globals; }

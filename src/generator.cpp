@@ -338,8 +338,9 @@ namespace
 
 using namespace std;
 
-CodeGenContext::CodeGenContext(CodeGenContext* parent) 
-{ 
+CodeGenContext::CodeGenContext(CodeGenContext* parent,const CompilerOptions& options) 
+{
+	opts = options;
 	moduleName="";
 	if (!parent) 
 	{ 
@@ -440,13 +441,12 @@ void CodeGenContext::GenerateDisassmTables()
 }
 
 /* Compile the AST into a module */
-void CodeGenContext::generateCode(CBlock& root,CompilerOptions &options)
+void CodeGenContext::generateCode(CBlock& root)
 {
 	errorFlagged = false;
 
 	if (isRoot)
 	{
-		opts=options;
 		optlevel = opts.optimisationLevel;
 		if (opts.symbolModifier)
 		{
@@ -4246,9 +4246,7 @@ void CInstance::prePass(CodeGenContext& context)
 	
 	CodeGenContext* includefile;
 
-	CompilerOptions dummy=context.opts;	//ugh -- FIX ME
-
-	includefile = new CodeGenContext(&context);
+	includefile = new CodeGenContext(&context,context.opts);
 	includefile->moduleName=ident.name+".";
 
 	if (context.opts.generateDebug)
@@ -4256,7 +4254,7 @@ void CInstance::prePass(CodeGenContext& context)
 		scopingStack.push(createNewDbgFile(includeName.c_str(), includefile->dbgBuilder));
 	}
 
-	includefile->generateCode(*g_ProgramBlock,dummy);
+	includefile->generateCode(*g_ProgramBlock);
 
 	if (context.opts.generateDebug)
 	{

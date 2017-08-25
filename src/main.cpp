@@ -354,8 +354,8 @@ int main(int argc, char **argv)
 		return 1;
 	}
 	
-	CodeGenContext rootContext(nullptr);
-	rootContext.generateCode(*g_ProgramBlock,opts);
+	CodeGenContext rootContext(nullptr,opts);
+	rootContext.generateCode(*g_ProgramBlock);
 
 	if (rootContext.errorFlagged)
 	{
