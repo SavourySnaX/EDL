@@ -12,8 +12,8 @@ using namespace std;
 extern int yyparse();
 extern CBlock* g_ProgramBlock;
 
-#define EDL_LANGUAGE_VERSION		"0.4"
-#define EDL_COMPILER_VERSION		"1.1"
+#define EDL_LANGUAGE_VERSION		"0.5"
+#define EDL_COMPILER_VERSION		"2.0"
 
 int Usage()
 {
