@@ -217,7 +217,7 @@ connect_list : connect_list connect				{ $$->push_back($2); }
 	| connect			{ $$ = new ConnectList(); $$->push_back($1); }
 	;
 
-connect_decl : TOK_CONNECT ident TOK_LBRACE connect_list TOK_RBRACE	{ $$ = new CConnectDeclaration(*$2,*$4); }
+connect_decl : TOK_CONNECT ident TOK_LBRACE connect_list TOK_RBRACE	{ $$ = new CConnectDeclaration(*$2,*$4,&@1,&@3,&@5); }
 
 handler_decl : TOK_HANDLER ident trigger block	{ $$ = new CHandlerDeclaration(*$2,*$3,*$4,&@1); }
 

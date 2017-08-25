@@ -288,9 +288,9 @@ public:
 	virtual bool IsLeaf() { return false; }
 	virtual bool IsAssignmentExpression() { return true; }
 
-	static llvm::Value* generateAssignment(BitVariable& to,const CIdentifier& identTo,llvm::Value* from,CodeGenContext& context,bool isVolatile=false);
-	static llvm::Value* generateAssignmentActual(BitVariable& to,const CIdentifier& identTo,llvm::Value* from,CodeGenContext& context,bool clearImpedance,bool isVolatile=false);
-	static llvm::Value* generateImpedanceAssignment(BitVariable& to,llvm::Value* assignTo,CodeGenContext& context);
+	static llvm::Instruction* generateAssignment(BitVariable& to,const CIdentifier& identTo,llvm::Value* from,CodeGenContext& context,bool isVolatile=false);
+	static llvm::Instruction* generateAssignmentActual(BitVariable& to,const CIdentifier& identTo,llvm::Value* from,CodeGenContext& context,bool clearImpedance,bool isVolatile=false);
+	static llvm::Instruction* generateImpedanceAssignment(BitVariable& to,llvm::Value* assignTo,CodeGenContext& context);
 };
 
 class CBlock : public CExpression {
@@ -550,9 +550,12 @@ class CConnectDeclaration : public CStatement {
 public:
 	ConnectList connects;
 	const CIdentifier& ident;
+	YYLTYPE statementLoc;
+	YYLTYPE blockStartLoc;
+	YYLTYPE blockEndLoc;
 
-	CConnectDeclaration(const CIdentifier& ident, ConnectList& connects) :
-		connects(connects), ident(ident) { }
+	CConnectDeclaration(const CIdentifier& ident, ConnectList& connects, YYLTYPE *statementLoc, YYLTYPE *blockStartLoc, YYLTYPE *blockEndLoc) :
+		connects(connects), ident(ident),statementLoc(*statementLoc),blockStartLoc(*blockStartLoc),blockEndLoc(*blockEndLoc) { }
 	
 	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);

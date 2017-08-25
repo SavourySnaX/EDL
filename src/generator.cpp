@@ -1427,20 +1427,20 @@ Value* CRotationOperator::codeGen(CodeGenContext& context)
 	return value.codeGen(context);
 }
 
-Value* CAssignment::generateImpedanceAssignment(BitVariable& to,llvm::Value* assignTo,CodeGenContext& context)
+Instruction* CAssignment::generateImpedanceAssignment(BitVariable& to,llvm::Value* assignTo,CodeGenContext& context)
 {
 	ConstantInt* impedance = ConstantInt::get(TheContext, ~APInt(to.size.getLimitedValue(), StringRef("0"), 10));
 
 	return new StoreInst(impedance, assignTo, false, context.currentBlock());
 }
 
-Value* CAssignment::generateAssignment(BitVariable& to,const CIdentifier& toIdent, Value* from,CodeGenContext& context,bool isVolatile)
+Instruction* CAssignment::generateAssignment(BitVariable& to,const CIdentifier& toIdent, Value* from,CodeGenContext& context,bool isVolatile)
 {
 	return generateAssignmentActual(to,toIdent,from,context,true,isVolatile);
 }
 
 
-Value* CAssignment::generateAssignmentActual(BitVariable& to,const CIdentifier& toIdent, Value* from,CodeGenContext& context,bool clearImpedance,bool isVolatile)
+Instruction* CAssignment::generateAssignmentActual(BitVariable& to,const CIdentifier& toIdent, Value* from,CodeGenContext& context,bool clearImpedance,bool isVolatile)
 {
 	Value* assignTo;
 
@@ -2400,7 +2400,7 @@ Value* CHandlerDeclaration::codeGen(CodeGenContext& context)
 			FContext, SanitiseNameForDebug(function->getName()), StringRef(), scopingStack.top()->getFile(), LineNo,
 			dbgFuncTy,
 			false /* internal linkage */, true /* definition */, ScopeLine,
-			DINode::FlagPrototyped, false);
+			DINode::FlagZero, false);
 		function->setSubprogram(SP);
 
 		scopingStack.push(SP);
@@ -3156,14 +3156,45 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 
 	FuncTy_8 = FunctionType::get(Type::getVoidTy(TheContext),FuncTy_8_args,false);
 
-	func=Function::Create(FuncTy_8,GlobalValue::ExternalLinkage,context.symbolPrepend+ident.name,context.module);
+	func=Function::Create(FuncTy_8,GlobalValue::ExternalLinkage,context.moduleName + context.symbolPrepend+ident.name,context.module);
 	func->setCallingConv(CallingConv::C);
 	func->setDoesNotThrow();
+	
+	if (context.opts.generateDebug)
+	{
+		// Create function type information
+
+		SmallVector<Metadata *, 2> EltTys;
+
+		// Add the result type.
+		EltTys.push_back(nullptr);
+		EltTys.push_back(context.dbgBuilder->createBasicType("Bit<1>", 1, 0));
+
+		DISubroutineType* dbgFuncTy = context.dbgBuilder->createSubroutineType(context.dbgBuilder->getOrCreateTypeArray(EltTys));
+
+		// Create function definition in debug information
+
+		DIScope *FContext = scopingStack.top()->getFile();	// temporary - should come from the location information
+		unsigned LineNo = statementLoc.first_line;
+		unsigned ScopeLine = LineNo;
+		DISubprogram *SP = context.dbgBuilder->createFunction(
+			FContext, SanitiseNameForDebug(func->getName()), StringRef(), scopingStack.top()->getFile(), LineNo,
+			dbgFuncTy,
+			false /* internal linkage */, true /* definition */, ScopeLine,
+			DINode::FlagZero, false);
+		func->setSubprogram(SP);
+
+		scopingStack.push(SP);
+	}
 	
 	context.m_externFunctions[ident.name] = func;
 	g_connectFunctions[func] = func;
 
 	BasicBlock *bblock = BasicBlock::Create(TheContext, "entry", func, 0);
+	if (context.opts.generateDebug)
+	{
+		scopingStack.push(context.dbgBuilder->createLexicalBlock(scopingStack.top(), scopingStack.top()->getFile(), blockStartLoc.first_line, blockStartLoc.first_column));
+	}
 	
 	context.pushBlock(bblock);
 
@@ -3379,7 +3410,12 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 						Value* fetchDriving = new LoadInst(var.impedance, "fetchImpedanceForIsolation", false, bblock);
 						fetchDriving = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, fetchDriving, ConstantInt::get(TheContext, APInt(var.size.getLimitedValue(), 0)), "isNotImpedance", bblock);
 
-						busIsDrivingResult[curBus] = BinaryOperator::Create(Instruction::Or, fetchDriving, busIsDrivingResult[curBus], "isDriving", context.currentBlock());
+						Instruction* I = BinaryOperator::Create(Instruction::Or, fetchDriving, busIsDrivingResult[curBus], "isDriving", context.currentBlock());
+						if (context.opts.generateDebug)
+						{
+							I->setDebugLoc(DebugLoc::get((*connects[a]).statementLoc.first_line, (*connects[a]).statementLoc.first_column, scopingStack.top()));
+						}
+						busIsDrivingResult[curBus] = I;
 					}
 				}
 
@@ -3415,7 +3451,12 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 						}
 					}
 
-					busOutResult[curBus] = BinaryOperator::Create(Instruction::And, tmp, busOutResult[curBus], "PullUpCombine", context.currentBlock());
+					Instruction* I = BinaryOperator::Create(Instruction::And, tmp, busOutResult[curBus], "PullUpCombine", context.currentBlock());
+					if (context.opts.generateDebug)
+					{
+						I->setDebugLoc(DebugLoc::get((*connects[a]).statementLoc.first_line, (*connects[a]).statementLoc.first_column, scopingStack.top()));
+					}
+					busOutResult[curBus] = I;
 				}
 			}
 		}
@@ -3454,8 +3495,13 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 			}
 
 
-			Value* swapAB = SelectInst::Create(swapA, busOutResult[1], busOutResult[0], "SwapAwithB", context.currentBlock());
-			Value* swapBA = SelectInst::Create(swapB, busOutResult[0], busOutResult[1], "SwapBwithA", context.currentBlock());
+			Instruction* swapAB = SelectInst::Create(swapA, busOutResult[1], busOutResult[0], "SwapAwithB", context.currentBlock());
+			Instruction* swapBA = SelectInst::Create(swapB, busOutResult[0], busOutResult[1], "SwapBwithA", context.currentBlock());
+			if (context.opts.generateDebug)
+			{
+				swapAB->setDebugLoc(DebugLoc::get((*connects[a]).statementLoc.first_line, (*connects[a]).statementLoc.first_column, scopingStack.top()));
+				swapBA->setDebugLoc(DebugLoc::get((*connects[a]).statementLoc.first_line, (*connects[a]).statementLoc.first_column, scopingStack.top()));
+			}
 
 			busOutResult[0] = swapAB;
 			busOutResult[1] = swapBA;
@@ -3478,7 +3524,11 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 					return nullptr;
 				}
 
-				CAssignment::generateAssignment(var, *ins[curBus][i], busOutResult[curBus], context);
+				Instruction* I = CAssignment::generateAssignment(var, *ins[curBus][i], busOutResult[curBus], context);
+				if (context.opts.generateDebug)
+				{
+					I->setDebugLoc(DebugLoc::get((*connects[a]).statementLoc.first_line, (*connects[a]).statementLoc.first_column, scopingStack.top()));
+				}
 
 				if (curBus==0 && i == 0 && connects[a]->hasTap && optlevel < 3)		// only tap the first bus for now
 				{
@@ -3513,9 +3563,19 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 		}
 	}
 
-	ReturnInst::Create(TheContext, context.currentBlock());			/* block may well have changed by time we reach here */
+	Instruction* I=ReturnInst::Create(TheContext, context.currentBlock());			/* block may well have changed by time we reach here */
+	if (context.opts.generateDebug)
+	{
+		I->setDebugLoc(DebugLoc::get(blockEndLoc.first_line, blockEndLoc.first_column, scopingStack.top()));
+	}
 
 	context.popBlock();
+
+	if (context.opts.generateDebug)
+	{
+		scopingStack.pop();	//lexical block
+		scopingStack.pop(); //function
+	}
 
 	return func;
 }
