@@ -9,7 +9,8 @@
 #include "font.h"
 
 void ClearKey(int key);
-int CheckKeyWindow(int key,GLFWwindow* window);
+int KeyDown(int key);
+int CheckKey(int key);
 
 unsigned short breakpoints[2][20]={
 	{0x44E,0},
@@ -22,7 +23,7 @@ int Offs[2]={0,0};
 
 void ToggleBreakPoint(int chip)
 {
-	int a,c;
+	size_t a,c;
 
 	for (a=0;a<numBreakpoints[chip];a++)
 	{
@@ -43,7 +44,7 @@ void ToggleBreakPoint(int chip)
 
 int isBreakpoint(int chip,uint16_t address)
 {
-	int a;
+	size_t a;
 	for (a=0;a<numBreakpoints[chip];a++)
 	{
 		if (address==breakpoints[chip][a])
@@ -98,7 +99,7 @@ void PrintAt(unsigned char* buffer,unsigned int width,unsigned char r,unsigned c
 	va_list args;
 
 	va_start (args, msg);
-	vsprintf (tStringBuffer,msg, args);
+	vsprintf_s(tStringBuffer,sizeof(tStringBuffer),msg, args);
 	va_end (args);
 
 	while (*pMsg)
@@ -116,7 +117,7 @@ void PrintAtPixel(unsigned char* buffer,unsigned int width,unsigned char r,unsig
 	va_list args;
 
 	va_start (args, msg);
-	vsprintf (tStringBuffer,msg, args);
+	vsprintf_s(tStringBuffer,sizeof(tStringBuffer),msg, args);
 	va_end (args);
 
 	while (*pMsg)
@@ -131,7 +132,7 @@ void PrintAtPixel(unsigned char* buffer,unsigned int width,unsigned char r,unsig
 #define MAX_PINS		(64)
 
 unsigned char lohi[MAX_PINS][MAX_CAPTURE];
-unsigned char* pinNames[MAX_PINS];
+const char* pinNames[MAX_PINS];
 
 int bufferPosition=0;
 int bufferScroll = 0;
@@ -189,7 +190,8 @@ void BusTap(uint8_t bits, uint32_t val,const char* name,uint32_t decodeWidth, ui
 
 void DrawTiming(unsigned char* buffer,unsigned int width,unsigned int height)
 {
-	int a,b;
+	uint32_t a;
+	int b;
 	unsigned int pulsepos;
 	unsigned int prevpulsepos;
 
@@ -216,7 +218,7 @@ void DrawTiming(unsigned char* buffer,unsigned int width,unsigned int height)
 			// TODO make the vertical lines optional (part of the extended bus tap args?)
 			if (a<2 && b != 0 && lohi[a][prevpulsepos >> 8] != lohi[a][pulsepos >> 8])
 			{
-				int c;
+				unsigned int c;
 				for (c=6;c<height - a*8*3;c++)
 				{
 					buffer[(80+b+(a*8*3+c)*width)*4+0]=64 + a*48;
@@ -259,7 +261,7 @@ void DrawTiming(unsigned char* buffer,unsigned int width,unsigned int height)
 
 	// Decode data routine (for display hex values of pin groups)
 	bufferPosition = 0;
-	for (int a=0;a<numPinData;a++)
+	for (uint32_t a=0;a<numPinData;a++)
 	{
 		uint32_t lastDataValue = 0xFFFFFFFF;
 		uint8_t dataPos = pinData[a];
