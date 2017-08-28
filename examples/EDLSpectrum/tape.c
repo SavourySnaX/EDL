@@ -50,8 +50,7 @@ unsigned char *qLoad(const char *romName,uint32_t *length)
 	unsigned char *romData;
 	*length=0;
 
-	if (fopen_s(&inRom, romName, "rb"))
-		inRom = NULL;
+	inRom = fopen(romName, "rb");
 	if (!inRom)
 	{
 		return 0;

@@ -3,14 +3,14 @@
 #
 #
 
-INSTANCE "../chips/spectrum_rom.edl" AS ROM;
-INSTANCE "../../../chips/accurate/z80.edl" AS CPU;
-INSTANCE "../chips/ULA.edl" AS ULA;
-INSTANCE "../chips/4116_8.edl" AS LORAM;	#4116 *8 chips to make interface simpler
-INSTANCE "../chips/4164_8.edl" AS HIRAM;	#4164 *8 chips to make interface simpler
-INSTANCE "../chips/74LS157.edl" AS IC3;
-INSTANCE "../chips/74LS157.edl" AS IC4;
-INSTANCE "../chips/DeadCockroach.edl" AS ROACH;
+INSTANCE "chips/spectrum_rom.edl" AS ROM;
+INSTANCE "../../chips/Accurate/z80.edl" AS CPU;
+INSTANCE "chips/ULA.edl" AS ULA;
+INSTANCE "chips/4116_8.edl" AS LORAM;	#4116 *8 chips to make interface simpler
+INSTANCE "chips/4164_8.edl" AS HIRAM;	#4164 *8 chips to make interface simpler
+INSTANCE "chips/74LS157.edl" AS IC3;
+INSTANCE "chips/74LS157.edl" AS IC4;
+INSTANCE "chips/DeadCockroach.edl" AS ROACH;
 
 
 CONNECT RESET1

@@ -13,6 +13,8 @@
 
 using namespace llvm;
 
+const size_t PATH_DEFAULT_LEN=2048;
+
 static LLVMContext TheContext;
 static std::stack<DIScope*> scopingStack;
 static std::map<Function*,Function*> g_connectFunctions;		// Global for now
@@ -32,7 +34,7 @@ std::string SanitiseNameForDebug(StringRef inputName)
 
 DIFile* CreateNewDbgFile(const char* filepath,DIBuilder* dbgBuilder)
 {
-	SmallString<_MAX_PATH> fullpath(filepath);
+	SmallString<PATH_DEFAULT_LEN> fullpath(filepath);
 	sys::path::native(fullpath);
 	sys::fs::make_absolute(fullpath);
 	StringRef filename = sys::path::filename(fullpath);
@@ -72,7 +74,7 @@ Value* UndefinedStateError(StateIdentList &stateIdents,CodeGenContext &context)
 
 int optlevel=0;
 
-CInteger::CInteger(std::string& value )
+CInteger::CInteger(std::string value )
 {
 	unsigned char radix;
 	const char* data;
@@ -2960,7 +2962,7 @@ BitVariable COperandMapping::GetBitVariable(CodeGenContext& context,unsigned num
 
 	if (context.m_mappings.find(ident.name)==context.m_mappings.end())
 	{
-		PrintErrorFromLocation(ident.nameLoc, "Undeclared mapping : %s", ident.name);
+		PrintErrorFromLocation(ident.nameLoc, "Undeclared mapping : %s", ident.name.c_str());
 		context.errorFlagged=true;
 		return temp;
 	}
@@ -2995,7 +2997,7 @@ llvm::APInt COperandMapping::GetComputableConstant(CodeGenContext& context,unsig
 
 	if (context.m_mappings.find(ident.name)==context.m_mappings.end())
 	{
-		PrintErrorFromLocation(ident.nameLoc, "Undeclared mapping : %s", ident.name);
+		PrintErrorFromLocation(ident.nameLoc, "Undeclared mapping : %s", ident.name.c_str());
 		context.errorFlagged=true;
 		return error;
 	}
@@ -3007,7 +3009,7 @@ unsigned COperandMapping::GetNumComputableConstants(CodeGenContext& context)
 {
 	if (context.m_mappings.find(ident.name)==context.m_mappings.end())
 	{
-		PrintErrorFromLocation(ident.nameLoc, "Undeclared mapping : %s", ident.name);
+		PrintErrorFromLocation(ident.nameLoc, "Undeclared mapping : %s", ident.name.c_str());
 		context.errorFlagged=true;
 		return 0;
 	}
@@ -3019,7 +3021,7 @@ const CString* COperandMapping::GetString(CodeGenContext& context,unsigned num,u
 {
 	if (context.m_mappings.find(ident.name)==context.m_mappings.end())
 	{
-		PrintErrorFromLocation(ident.nameLoc, "Undeclared mapping : %s", ident.name);
+		PrintErrorFromLocation(ident.nameLoc, "Undeclared mapping : %s", ident.name.c_str());
 		context.errorFlagged=true;
 		return nullptr;
 	}

@@ -17,8 +17,8 @@ extern CBlock* g_ProgramBlock;
 
 int Usage()
 {
-	cerr << "Usage: edl [opts] [inputfile]" << endl;
-	cerr << "Compile edl into llvm source (default reads/writes from/to stdout)" <<endl <<endl;
+	cerr << "Usage: edl [opts] inputfile" << endl;
+	cerr << "Compile edl into llvm source (to stdout) / native object (-o outputobject)" <<endl <<endl;
 	cerr << "-s symbol      prepends symbol to all externally accessable symbols" << endl;
 	cerr << "-o output      emits a native objectfile instead of llvm assembly" << endl;
 	cerr << "-g             generate debug information" << endl;
@@ -176,14 +176,17 @@ void PrintDetailedError(const char* errmsg,int start,int end,int srow,int erow, 
 	}
 	for (int b = srow; b <= erow; b++)
 	{
-		fprintf(stderr, "%6d |%s", b, fileLineMap[filename][b - 1].c_str());
+		if (b>=1)
 		{
-			fprintf(stderr, "       !");
-			for (i = 0; i < start; i++)
-				fprintf(stderr, " ");
-			for (i = start; i <= end; i++)
-				fprintf(stderr, "^");
-			fprintf(stderr, "\n");
+			fprintf(stderr, "%6d |%s", b, fileLineMap[filename][b - 1].c_str());
+			{
+				fprintf(stderr, "       !");
+				for (i = 0; i < start; i++)
+					fprintf(stderr, " ");
+				for (i = start; i <= end; i++)
+					fprintf(stderr, "^");
+				fprintf(stderr, "\n");
+			}
 		}
 	}
 }
@@ -331,14 +334,15 @@ int main(int argc, char **argv)
 		}
 	}
 
-	if (opts.inputFile)
+	if (opts.inputFile == nullptr)
 	{
-		if (resetFileInput(opts.inputFile)!=0)
-		{
-			cerr << "Unable to open " << opts.inputFile << " for reading." << endl;
-			return 2;
-		}
+		return Usage();
+	}
 
+	if (resetFileInput(opts.inputFile) != 0)
+	{
+		cerr << "Unable to open " << opts.inputFile << " for reading." << endl;
+		return 2;
 	}
 	
 	InitializeAllTargetInfos();

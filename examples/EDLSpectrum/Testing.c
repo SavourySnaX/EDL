@@ -5,13 +5,13 @@
 
 #include <stdlib.h>
 #include <stdio.h>
-#include <conio.h>
 #include <string.h>
 #include <stdint.h>
 
-#include <GLFW\glfw3.h>
+#include <GLFW/glfw3.h>
 #include "glext.h"
-#include "gui\debugger.h"
+#include "gui/debugger.h"
+
 #if !defined(NDEBUG)
 #define USE_TIMING 1
 #else
@@ -430,7 +430,7 @@ const char* decodeDisasm(uint8_t *table[256],unsigned int address,int *count,int
 	uint8_t byte = GetByte(address);
 	if (byte>realLength)
 	{
-		sprintf_s(temporaryBuffer,sizeof(temporaryBuffer),"UNKNOWN OPCODE");
+		snprintf(temporaryBuffer,sizeof(temporaryBuffer),"UNKNOWN OPCODE");
 		return temporaryBuffer;
 	}
 	else
@@ -443,7 +443,7 @@ const char* decodeDisasm(uint8_t *table[256],unsigned int address,int *count,int
 	
 	if (sPtr==NULL)
 	{
-		sprintf_s(temporaryBuffer,sizeof(temporaryBuffer),"UNKNOWN OPCODE");
+		snprintf(temporaryBuffer,sizeof(temporaryBuffer),"UNKNOWN OPCODE");
 		return temporaryBuffer;
 	}
 
@@ -513,7 +513,7 @@ const char* decodeDisasm(uint8_t *table[256],unsigned int address,int *count,int
 				negOffs=-1;
 			}
 			int offset=(*sPtr-'0')*negOffs;
-			sprintf_s(sprintBuffer,sizeof(sprintBuffer),"%02X",GetByte(address+offset));
+			snprintf(sprintBuffer,sizeof(sprintBuffer),"%02X",GetByte(address+offset));
 			while (*tPtr)
 			{
 				*dPtr++=*tPtr++;
@@ -543,7 +543,7 @@ int Disassemble(unsigned int address,int registers)
 			printf("%02X ",GetByte(address+a));
 		}
 		printf("\n");
-		__debugbreak();
+		abort();
 	}
 
 	if (registers)
@@ -679,7 +679,8 @@ void SetVideo(uint16_t h, uint16_t v, uint32_t col)
 int LoadRom(const char* romName, uint8_t* buffer, int size)
 {
 	FILE* rom = NULL;
-	if (fopen_s(&rom, romName, "rb"))
+	rom = fopen(romName, "rb");
+	if (rom==NULL)
 	{
 		printf("Failed to load %s\n",romName);
 		return 1;
@@ -689,6 +690,11 @@ int LoadRom(const char* romName, uint8_t* buffer, int size)
 	return 0;
 }
 
+static void glfwError(int id, const char* description)
+{
+	printf("GLFW ERROR : [%d] %s",id,description);
+}
+
 int main(int argc,char**argv)
 {
 	uint16_t lastIns=0xAAAA;
@@ -696,6 +702,7 @@ int main(int argc,char**argv)
 	LoadTapeFormat(argv[1]);
 
 	/// Initialize GLFW 
+	glfwSetErrorCallback(&glfwError);
 	glfwInit(); 
 
 	// Open invaders OpenGL window 
@@ -741,7 +748,7 @@ int main(int argc,char**argv)
 
 	//if (LoadRom("c:/speccywork/next/zxnext/scr/test.scr", ram, 6912))
 	//if (LoadRom("c:/speccywork/next/zxnext/scr/manicminer.scr", ram, 6912))
-	if (LoadRom("c:/speccywork/next/zxnext/scr/fairlight.scr", ram, 6912))
+	if (LoadRom("scr/Fairlight.scr", ram, 6912))
 	{
 		return 1;
 	}

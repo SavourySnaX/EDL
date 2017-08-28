@@ -1,6 +1,9 @@
 %{
+
+#if defined(EDL_PLATFORM_MSVC)
+#include <io.h>	// isatty
+#endif
 #include "yyltype.h"
-#include <io.h>
 #include "ast.h"
 #include "parser.hpp"
 

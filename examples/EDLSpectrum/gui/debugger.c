@@ -99,7 +99,7 @@ void PrintAt(unsigned char* buffer,unsigned int width,unsigned char r,unsigned c
 	va_list args;
 
 	va_start (args, msg);
-	vsprintf_s(tStringBuffer,sizeof(tStringBuffer),msg, args);
+	vsnprintf(tStringBuffer,sizeof(tStringBuffer),msg, args);
 	va_end (args);
 
 	while (*pMsg)
@@ -117,7 +117,7 @@ void PrintAtPixel(unsigned char* buffer,unsigned int width,unsigned char r,unsig
 	va_list args;
 
 	va_start (args, msg);
-	vsprintf_s(tStringBuffer,sizeof(tStringBuffer),msg, args);
+	vsnprintf(tStringBuffer,sizeof(tStringBuffer),msg, args);
 	va_end (args);
 
 	while (*pMsg)
