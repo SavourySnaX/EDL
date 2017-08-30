@@ -469,7 +469,11 @@ void CodeGenContext::generateCode(CBlock& root)
 
 			compileUnit = dbgBuilder->createCompileUnit(/*0x9999*/dwarf::DW_LANG_C99, scopingStack.top()->getFile(), "edlVxx", optlevel > 0, ""/*command line flags*/, 0);
 
+#if defined(EDL_PLATFORM_MSVC)
 			module->addModuleFlag(llvm::Module::Warning, "CodeView", 1);
+#else
+			module->addModuleFlag(llvm::Module::Warning, "Dwarf Version", 2);
+#endif
 			module->addModuleFlag(llvm::Module::Warning, "Debug Info Version", llvm::DEBUG_METADATA_VERSION);
 		}
 
