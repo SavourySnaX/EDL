@@ -13,6 +13,9 @@
 *.idb
 *.rom
 *.o
+roms/
+scr/
+tags
 test.result
 out/*
 **/out/**
