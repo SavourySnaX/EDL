@@ -9,6 +9,8 @@ find_package(BISON REQUIRED)
 find_package(glfw3 3.2 CONFIG)
 find_package(OpenGL)
 
+enable_testing()
+
 if (UNIX)
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-rtti -fno-exceptions")
 endif()
@@ -64,6 +66,7 @@ llvm_map_components_to_libnames(llvm_libs Core MC Support MCParser BinaryFormat 
 target_link_libraries(EDLCMakeTest ${llvm_libs})
 
 add_subdirectory(examples/EDLSpectrum)
+add_subdirectory(tests/74154)
 
 #
 # For debugging

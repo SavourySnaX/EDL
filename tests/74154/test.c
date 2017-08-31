@@ -38,7 +38,7 @@ int main(int argc,char** argv)
 			if (PinGetOUTPUTS() != Results[c*16+a])
 			{
 				printf("Test failed on Strobe %d Inputs %d\n",c,a);
-				return -1;
+				return 1;
 			}
 			for (b=0;b<16;b++)
 			{
