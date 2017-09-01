@@ -1,7 +1,7 @@
 
 # Testing HIGH_IMPEDANCE implementation
 
-PIN IN			PIN_A[1];			# Address Bus
+PIN IN				PIN_A[1];			# Address Bus
 PIN BIDIRECTIONAL	PIN_D[1];			# Data Bus
 
 DECLARE INTERNAL	INC[1];

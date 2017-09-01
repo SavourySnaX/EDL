@@ -5,7 +5,6 @@
 
 #include <stdlib.h>
 #include <stdio.h>
-#include <conio.h>
 #include <string.h>
 #include <stdint.h>
 
@@ -244,7 +243,7 @@ int main(int argc,char**argv)
 {
 	uint16_t lastIns=0xAA;
 	CPU_RESET();
-//	for (size_t a=0;a<640000*10;a++)
+
 	int a=0;
 	while (1==1)
 	{

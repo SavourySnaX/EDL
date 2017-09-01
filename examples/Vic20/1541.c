@@ -8,7 +8,7 @@
 #include <string.h>
 #include <stdint.h>
 
-#include "gui\debugger.h"
+#include "gui/debugger.h"
 
 uint16_t DISK_PinGetPIN_AB();
 uint8_t DISK_PinGetPIN_DB();
@@ -543,7 +543,7 @@ void HandleDiskControllerHardware()		// Every 13(14,15,16) clocks.. advance 1 bi
 				byteAvailable=1;
 				bufBits=0;
 			}
-			DISK_VIA1_PinSetPIN_PA(pBuffer);
+			DISK_VIA1_PinSetPIN_PA((uint8_t)pBuffer);
 		}
 		else
 		{

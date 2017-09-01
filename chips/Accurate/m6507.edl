@@ -1,0 +1,54 @@
+# MOS 6507 (NMOS) - Accurate Version - Includes the 6502 core - since the 6507 is the same core with
+#reduced footprint
+#
+# This should be used like the real CPU, ie interact with the PIN's
+#
+#  RDY is ignored
+#
+
+INSTANCE "../../chips/Accurate/m6502.edl" AS m6502;
+
+PIN IN			_RES[1];		# RESet
+PIN IN			RDY[1];			# ReaDY signal for external devices
+PIN OUT			AB[13];			# Address Bus
+PIN BIDIRECTIONAL	DB[8];			# Data Bus
+PIN OUT			RW[1];			# Read/Write indicator - 0 is write
+PIN IN			O0[1];			# O0 Clock control - currently used as clock signal
+PIN OUT			O2[1];			# O2 Phase Clock Output (currently 1 clk delay lag from O0)
+
+## Not on real 6507 - just exposed for debug purposes
+PIN OUT			SYNC[1];
+
+DECLARE O2_PhaseDelay[1];
+
+HANDLER _RES	ALWAYS
+{
+	m6502 PIN_SO<-0;
+	m6502 PIN__IRQ<-1;
+	m6502 PIN__NMI<-1;
+	m6502 PIN__RES<-_RES;
+}
+
+HANDLER RDY		ALWAYS
+{
+	m6502 PIN_RDY<-RDY;
+}
+
+HANDLER DB		ALWAYS
+{
+	m6502 PIN_DB<-DB;
+}
+
+HANDLER O0		ALWAYS
+{
+	O2<-O2_PhaseDelay;
+	IF RDY | (~m6502 PIN_RW)
+	{
+		m6502 PIN_O0<-O0;	# Hack for now, stops 6502 operations by no longer toggling clock (ignored for write cycles)- as far as i can tell, remaining operations should continue -e.g. RIOT clocking
+	}
+	AB<-m6502 PIN_AB;
+	DB<-m6502 PIN_DB;
+	O2_PhaseDelay<-O0;
+	RW<-m6502 PIN_RW;
+	SYNC<-m6502 PIN_SYNC;
+}

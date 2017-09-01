@@ -1,0 +1,111 @@
+#
+#
+# 8K Cart Atari 2600	(Parker Brothers 8K)
+#
+#	Pins reflect pins available on cartridge port from 2600
+#
+#	8 1K Roms + Bank Register + Address Watch + Mapper Writes seen at $1FE0-$1FE7 (slot1) $1FE8-$1FEF (slot2) $1FF0-$1FF7 (slot3)
+#
+#  Note roms are handled as single large rom to keep logic to a minimum
+#
+# 3 bankable slots of 1K + fixed bank to last, for 4th quarter
+#
+#
+# LoadRom function can be used to place contents into ROM
+# GetDebugByte function can be used to safely query ROM without side effects
+#
+
+
+PIN IN			A[13]	ALIAS	CS[1]:bk[2]:addr[10];			# Address Pins - bk indicates upper or lower 2K rom bank
+PIN BIDIRECTIONAL	D[8];							# Data BUS 
+
+DECLARE	ROM[[13]][8];
+
+DECLARE INTERNAL slot0[3];
+DECLARE INTERNAL slot1[3];
+DECLARE INTERNAL slot2[3];
+
+HANDLER A	ALWAYS
+{
+	IF CS
+	{
+		DECLARE linear[13]	ALIAS	bnk[3]:ad[10];
+
+		IF (A>=$1FE0) & (A<=$1FE7)
+		{
+			slot0<-(A[0..2]);
+		}
+		IF (A>=$1FE8) & (A<=$1FEF)
+		{
+			slot1<-(A[0..2]);
+		}
+		IF (A>=$1FF0) & (A<=$1FF7)
+		{
+			slot2<-(A[0..2]);
+		}
+
+		IF bk==%00
+		{
+			bnk<-slot0;
+		}
+		IF bk==%01
+		{
+			bnk<-slot1;
+		}
+		IF bk==%10
+		{
+			bnk<-slot2;
+		}
+		IF bk==%11
+		{
+			bnk<-%111;
+		}
+		ad<-addr;
+
+		D<-ROM[[linear]];
+	}
+}
+
+
+
+
+### Emulator access functions (loading rom data and debug)
+
+FUNCTION	full[8]	LoadRom		offs[32],byte[8]
+{
+	full<-1;
+	IF offs<=8191
+	{
+		ROM[[offs&$1FFF]]<-byte;
+		full<-0;
+	}
+}
+
+FUNCTION	byte[8]	GetDebugByte	offs[32]
+{
+	DECLARE linear[13]	ALIAS	bnk[3]:ad[10];
+	DECLARE bk[2];
+
+	bk<-offs[10..11];
+	IF bk==%00
+	{
+		bnk<-slot0;
+	}
+	IF bk==%01
+	{
+		bnk<-slot1;
+	}
+	IF bk==%10
+	{
+		bnk<-slot2;
+	}
+	IF bk==%11
+	{
+		bnk<-%111;
+	}
+	ad<-offs;
+		
+	byte<-ROM[[linear]];
+}
+
+

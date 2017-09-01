@@ -1,0 +1,78 @@
+#
+#
+# 32K Cart Atari 2600	(Tigervision 32K)
+#
+#	Pins reflect pins available on cartridge port from 2600
+#
+#	16 2K Roms + Bank Register + Address Watch + Mapper Writes seen at $00-$3F
+#
+#  Note roms are handled as single large rom to keep logic to a minimum
+#
+# LoadRom function can be used to place contents into ROM
+# GetDebugByte function can be used to safely query ROM without side effects
+#
+
+
+PIN IN			A[13]	ALIAS	CS[1]:bk[1]:addr[11];			# Address Pins - bk indicates upper or lower 2K rom bank
+PIN BIDIRECTIONAL	D[8];							# Data BUS 
+
+DECLARE	ROM[[15]][8];
+
+DECLARE INTERNAL bank[4];
+
+HANDLER A	ALWAYS
+{
+	IF (A>=$00) & (A<=$3F)
+	{
+		bank<-D;
+	}
+	IF CS
+	{
+		DECLARE linear[15]	ALIAS	bnk[4]:ad[11];
+
+		IF bk
+		{
+			bnk<-%1111;
+		}
+		IF ~bk
+		{
+			bnk<-bank;
+		}
+		ad<-addr;
+
+		D<-ROM[[linear]];
+	}
+}
+
+
+
+
+### Emulator access functions (loading rom data and debug)
+
+FUNCTION	full[8]	LoadRom		offs[32],byte[8]
+{
+	full<-1;
+	IF offs<=32767
+	{
+		ROM[[offs&$7FFF]]<-byte;
+		full<-0;
+	}
+}
+
+FUNCTION	byte[8]	GetDebugByte	offs[32]
+{
+	DECLARE linear[15]	ALIAS	bnk[4]:ad[11];
+
+	IF (offs[11..11])==1
+	{
+		bnk<-%1111;
+	}
+	IF (offs[11..11])==0
+	{
+		bnk<-bank;
+	}
+	ad<-offs;
+		
+	byte<-ROM[[linear]];
+}
+

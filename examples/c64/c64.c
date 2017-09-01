@@ -10,17 +10,19 @@
  */
 
 #include <GLFW/glfw3.h>
-#include <GL/glext.h>
+#include <glext.h>
 
+#if defined(EDL_PLATFORM_OPENAL)
 #include <AL/al.h>
 #include <AL/alc.h>
+#endif
 
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
 
-#include "gui\debugger.h"
+#include "gui/debugger.h"
 
 #define DEBUG_WINDOWS	0
 #define JIFFY	0 
@@ -121,13 +123,13 @@ int recDown=0;
 
 uint8_t M6569_IRQ=1;
 
-int LoadRom(unsigned char* rom,unsigned int size,const char* fname)
+int LoadRom(unsigned char* rom,size_t size,const char* fname)
 {
-	unsigned int readFileSize=0;
+	size_t readFileSize=0;
 	FILE* inFile = fopen(fname,"rb");
 	if (!inFile || size != (readFileSize = fread(rom,1,size,inFile)))
 	{
-		printf("Failed to open rom : %s - %d/%d",fname,readFileSize,size);
+		printf("Failed to open rom : %s - %zu/%zu",fname,readFileSize,size);
 		return 1;
 	}
 	fclose(inFile);
@@ -182,7 +184,7 @@ void WriteRam(uint16_t addr,uint8_t byte)
 
 void SwitchBank(uint8_t bank)
 {
-	int a;
+	uint32_t a;
 	for (a=0;a<extraNumChips;a++)
 	{
 		if (bank==extraBank[a])
@@ -421,7 +423,6 @@ uint8_t lastMemControl=0x1F;
 
 void ChangeMemoryMap()
 {
-	int a;
 	uint8_t curMemControl=MAIN_PinGetPIN_P()&0x07;
 	curMemControl|=PLA_GAME<<4;
 	curMemControl|=PLA_EXROM<<3;
@@ -736,13 +737,13 @@ void ShowScreen(int windowNum,int w,int h)
 	glTexCoord2f(0.0f, 0.0f);
 	glVertex2f(-1.0f,1.0f);
 
-	glTexCoord2f(0.0f, h);
+	glTexCoord2f(0.0f, h+0.0f);
 	glVertex2f(-1.0f, -1.0f);
 
-	glTexCoord2f(w, h);
+	glTexCoord2f(w+0.0f, h+0.0f);
 	glVertex2f(1.0f, -1.0f);
 
-	glTexCoord2f(w, 0.0f);
+	glTexCoord2f(w+0.0f, 0.0f);
 	glVertex2f(1.0f, 1.0f);
 	glEnd();
 	
@@ -1054,7 +1055,7 @@ uint16_t DISK_lastPC;
 
 void UpdateDiskInterface()
 {
-	uint8_t tmp,newpa;
+	uint8_t tmp;
 	uint8_t clk,dat,atn;
 	uint8_t clko,dato;
 
@@ -1105,12 +1106,14 @@ uint32_t MAIN_missing(uint32_t opcode)
 {
 	printf("MAIN:Executing Missing Instruction!! : %04X:%02X\n",MAIN_PC-1,opcode);
 	stopTheClock=1;
+	return 0;
 }
 
 uint32_t DISK_missing(uint32_t opcode)
 {
 	printf("DISK:Executing Missing Instruction!! : %04X:%02X\n",DISK_PC-1,opcode);
 	stopTheClock=1;
+	return 0;
 }
 
 
@@ -1669,7 +1672,7 @@ void Tick6569_OnePix();
 
 void Tick6569()		// Needs to do 8 pixels - or 4 if ticked properly - ie once per half cpu clock
 {
-	int a,b;
+	int b;
 
 	if (xCnt==0)
 	{
@@ -2075,6 +2078,8 @@ void Tick6569_OnePix()
 
 //////////////////////// NOISES //////////////////////////
 
+#if defined(EDL_PLATFORM_OPENAL)
+
 #define NUMBUFFERS            (3)				/* living dangerously*/
 
 ALuint		  uiBuffers[NUMBUFFERS];
@@ -2151,8 +2156,11 @@ int curAudioBuffer=0;
 int firstUsedBuffer=0;
 int amountAdded=0;
 
+#endif
+
 void AudioInitialise()
 {
+#if defined(EDL_PLATFORM_OPENAL)
 	int a=0,b;
 	for (b=0;b<NUM_SRC_BUFFERS;b++)
 	{
@@ -2178,12 +2186,15 @@ void AudioInitialise()
 	}
 
 	alSourcePlay(uiSource);
+#endif
 }
 
 
 void AudioKill()
 {
+#if defined(EDL_PLATFORM_OPENAL)
 	ALFWShutdownOpenAL();
+#endif
 }
 
 int16_t currentDAC[4] = {0,0,0,0};
@@ -2199,6 +2210,7 @@ uint32_t tickRate=((63*312*4096)/(44100/50));
 /* audio ticked at same clock as everything else... so need a step down */
 void UpdateAudio()
 {
+#if defined(EDL_PLATFORM_OPENAL)
 	tickCnt+=1*4096;
 	
 	if (tickCnt>=tickRate*50)
@@ -2270,6 +2282,7 @@ void UpdateAudio()
 			alSourcePlay(uiSource);
 		}
 	}
+#endif
 }
 
 
@@ -2390,7 +2403,6 @@ void SaveTAP(const char* filename)
 {
 	uint32_t tapeLength;
 	uint32_t length;
-	uint32_t tapePos;
 	uint8_t *tapeBuffer;
 
 	tapeBuffer=malloc(0x14);//qLoad(fileName,&length);
@@ -2717,9 +2729,7 @@ void OutputData(uint8_t* tapeBuffer,uint16_t length)
 int LoadPRG(const char* fileName)
 {
 	uint16_t startAddress;
-	uint32_t tapeLength;
 	uint32_t length;
-	uint32_t tapePos;
 	uint8_t *tapeBuffer;
 
 	tapeBuffer=qLoad(fileName,&length);
@@ -2749,7 +2759,6 @@ int LoadPRG(const char* fileName)
 int LoadT64(const char* fileName)
 {
 	uint16_t startAddress;
-	uint32_t tapeLength;
 	uint32_t length;
 	uint32_t tapePos;
 	uint32_t dataStart;

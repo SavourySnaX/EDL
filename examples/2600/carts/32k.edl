@@ -1,0 +1,63 @@
+#
+#
+# 32K Cart Atari 2600	(Standard Bank Switched Atari Cart)
+#
+#	Pins reflect pins available on cartridge port from 2600
+#
+#	8 4K Roms + Bank Register + Address Watch
+#
+#  Note roms are handled as single large rom to keep logic to a minimum
+#
+# LoadRom function can be used to place contents into ROM
+# GetDebugByte function can be used to safely query ROM without side effects
+#
+
+
+PIN IN			A[13]	ALIAS	CS[1]:addr[12];				# Address Pins - 4K rom uses A[12] for chip select
+PIN BIDIRECTIONAL	D[8];							# Data BUS 
+
+DECLARE	ROM[[15]][8];
+
+DECLARE INTERNAL bank[3];
+
+HANDLER A	ALWAYS
+{
+	IF CS
+	{
+		DECLARE linear[15]	ALIAS	bk[3]:ad[12];
+
+		IF (A>=$1FF4) & (A<=$1FFB)
+		{
+			bank<-(A[0..2]) ^ %100;		# 4 = %100 .....
+		}
+		bk<-bank;
+		ad<-addr;
+			
+		D<-ROM[[linear]];
+	}
+}
+
+
+
+
+### Emulator access functions (loading rom data and debug)
+
+FUNCTION	full[8]	LoadRom		offs[32],byte[8]
+{
+	full<-1;
+	IF offs<=32767
+	{
+		ROM[[offs&$7FFF]]<-byte;
+		full<-0;
+	}
+}
+
+FUNCTION	byte[8]	GetDebugByte	offs[32]
+{
+	DECLARE linear[15]	ALIAS	bk[3]:ad[12];
+
+	bk<-bank;
+	ad<-offs;
+		
+	byte<-ROM[[linear]];
+}

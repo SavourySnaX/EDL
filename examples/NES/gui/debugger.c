@@ -23,7 +23,7 @@ int Offs[2]={0,0};
 
 void ToggleBreakPoint(int chip)
 {
-	int a,c;
+	unsigned int a,c;
 
 	for (a=0;a<numBreakpoints[chip];a++)
 	{
@@ -44,7 +44,7 @@ void ToggleBreakPoint(int chip)
 
 int isBreakpoint(int chip,uint16_t address)
 {
-	int a;
+	unsigned int a;
 	for (a=0;a<numBreakpoints[chip];a++)
 	{
 		if (address==breakpoints[chip][a])
@@ -375,8 +375,6 @@ int KeyDownWindow(int key,GLFWwindow* window);
 
 void UpdateTimingWindow(GLFWwindow* window)
 {
-	int a;
-
 	if (CheckKeyWindow(GLFW_KEY_DOWN,window))
 	{
 		if (timeStretch>1)

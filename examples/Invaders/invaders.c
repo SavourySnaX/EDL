@@ -13,7 +13,7 @@
  */
 
 #include <GLFW/glfw3.h>
-#include <GL/glext.h>
+#include <glext.h>
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -71,13 +71,13 @@ unsigned char Ram[0x2000];
 
 unsigned char RamCmp[0x2000];
 
-int LoadRom(unsigned int address,unsigned int size,const char* fname)
+int LoadRom(unsigned int address,size_t size,const char* fname)
 {
-	unsigned int readFileSize=0;
+	size_t readFileSize=0;
 	FILE* inFile = fopen(fname,"rb");
 	if (!inFile || size != (readFileSize = fread(&Rom[address],1,size,inFile)))
 	{
-		printf("Failed to open rom : %s - %d/%d",fname,readFileSize,size);
+		printf("Failed to open rom : %s - %zu/%zu",fname,readFileSize,size);
 		return 1;
 	}
 	fclose(inFile);
@@ -403,13 +403,13 @@ void ShowScreen(int windowNum,int w,int h)
 		glTexCoord2f(0.0f, 0.0f);
 		glVertex2f((-1.0f * 0) - (1.0f*1.f), (1.0f*0) + (-1.f*1.0f));
 
-		glTexCoord2f(0.0f, h);
+		glTexCoord2f(0.0f, h+0.0f);
 		glVertex2f((-1.0f * 0) - (-1.0f*1.f), (-1.0f*0) + (-1.f*1.0f));
 
-		glTexCoord2f(w, h);
+		glTexCoord2f(w+0.0f, h+0.0f);
 		glVertex2f((1.0f * 0) - (-1.0f*1.f), (-1.0f*0) + (1.f*1.0f));
 
-		glTexCoord2f(w, 0.0f);
+		glTexCoord2f(w+0.0f, 0.0f);
 		glVertex2f((1.0f * 0) - (1.0f*1.f), (1.0f*0) + (1.f*1.0f));
 	}
 	else
@@ -417,13 +417,13 @@ void ShowScreen(int windowNum,int w,int h)
 		glTexCoord2f(0.0f, 0.0f);
 		glVertex2f(-1.0f,1.0f);
 
-		glTexCoord2f(0.0f, h);
+		glTexCoord2f(0.0f, h+0.0f);
 		glVertex2f(-1.0f, -1.0f);
 
-		glTexCoord2f(w, h);
+		glTexCoord2f(w+0.0f, h+0.0f);
 		glVertex2f(1.0f, -1.0f);
 
-		glTexCoord2f(w, 0.0f);
+		glTexCoord2f(w+0.0f, 0.0f);
 		glVertex2f(1.0f, 1.0f);
 	}
 	glEnd();

@@ -9,7 +9,7 @@
 #include <stdint.h>
 
 #include <GLFW/glfw3.h>
-#include "glext.h"
+#include <glext.h>
 #include "gui/debugger.h"
 
 #if !defined(NDEBUG)

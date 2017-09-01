@@ -6,10 +6,12 @@
  */
 
 #include <GLFW/glfw3.h>
-#include <GL/glext.h>
+#include <glext.h>
 
+#if defined(EDL_PLATFORM_OPENAL)
 #include <AL/al.h>
 #include <AL/alc.h>
+#endif
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -28,13 +30,13 @@ void _AudioAddData(int channel,int16_t dacValue);
 #define TSTATES_PER_ROW		224
 #define	ROWS_PER_VBLANK		312
 
-int LoadRom(unsigned int address,unsigned int size,const char* fname)
+int LoadRom(unsigned int address,size_t size,const char* fname)
 {
-	unsigned int readFileSize=0;
+	size_t readFileSize=0;
 	FILE* inFile = fopen(fname,"rb");
 	if (!inFile || size != (readFileSize = fread(&Rom[address],1,size,inFile)))
 	{
-		printf("Failed to open rom : %s - %d/%d",fname,readFileSize,size);
+		printf("Failed to open rom : %s - %zu/%zu",fname,readFileSize,size);
 		return 1;
 	}
 	fclose(inFile);
@@ -323,25 +325,25 @@ void ShowScreen(int windowNum,int w,int h)
 	glTexCoord2f(0.0f, 0.0f);
 	glVertex2f(-1.0f+(96.f/WIDTH)*2,1.0f);
 
-	glTexCoord2f(0.0f, h);
+	glTexCoord2f(0.0f, h+0.0f);
 	glVertex2f(-1.0f+(96.f/WIDTH)*2,-1.0f);
 
-	glTexCoord2f(w-96, h);
+	glTexCoord2f(w-96.0f, h+0.0f);
 	glVertex2f(1.0f,-1.0f);
 
-	glTexCoord2f(w-96, 0.0f);
+	glTexCoord2f(w-96.0f, 0.0f);
 	glVertex2f(1.0f,1.0f);
 	
-	glTexCoord2f(w-96, 0.0f-1);
+	glTexCoord2f(w-96.0f, 0.0f-1);
 	glVertex2f(-1.0f,1.0f);
 
-	glTexCoord2f(w-96, h-1);
+	glTexCoord2f(w-96.0f, h-1.0f);
 	glVertex2f(-1.0f,-1.0f);
 
-	glTexCoord2f(w, h-1);
+	glTexCoord2f(w+0.0f, h-1.0f);
 	glVertex2f(-1.0f+(96.f/WIDTH)*2,-1.0f);
 
-	glTexCoord2f(w, 0.0f-1);
+	glTexCoord2f(w+0.0f, 0.0f-1);
 	glVertex2f(-1.0f+(96.f/WIDTH)*2,1.0f);
 
 	glEnd();
@@ -430,6 +432,7 @@ uint8_t GetByte(uint16_t addr)
 		case 0xC000:
 			return RamExtra[addr&0x7FFF];
 	}
+	return 0xFF; // silence warning - unreachable
 }
 
 void SetByte(uint16_t addr,uint8_t byte)
@@ -746,7 +749,6 @@ int CPU_STEP(int intClocks,int doDebug);
 int main(int argc,char**argv)
 {
 	double	atStart,now,remain;
-	int a;
 	int numClocks;
 
 	/// Initialize GLFW 
@@ -962,7 +964,6 @@ int CheckTAP()
 
 int CheckTZX()
 {
-	uint32_t a;
 	uint32_t blockLength;
 	uint32_t curPos=0;
 
@@ -1086,7 +1087,7 @@ void LoadTapeFormat(const char* filename)		// Currently handles (raw audio, .TAP
 	tapeFile=qLoad(filename,&tapeLength);
 	if (!tapeFile)
 	{
-		printf("Failed to load file - %s (ignoring)\n");
+		printf("Failed to load file - %s (ignoring)\n",filename);
 		tapeFormat=99;
 		return;
 	}
@@ -1259,7 +1260,7 @@ uint8_t GetNextBlockTZX()
 				tapePos+=blockLength;
 				break;
 			default:
-				printf("UnhandledID \n",blockId);
+				printf("UnhandledID %02X\n",blockId);
 				break;
 		}
 	}
@@ -1279,7 +1280,7 @@ int GetNextBlockParamsTape()
 		}
 		tapeDataLength=tapeFile[tapePos++];
 		tapeDataLength|=tapeFile[tapePos++]<<8;
-		tapeParamDelayLength=1*3494.4f;
+		tapeParamDelayLength=3494;
 		tapeParamPilotPulseLength=2168;
 		if (tapeFile[tapePos]<0x80)
 		{
@@ -1303,6 +1304,7 @@ int GetNextBlockParamsTape()
 	{
 		return GetNextBlockTZX(); 
 	}
+	return 99;
 }
 
 void UpdateTape(uint8_t cycles)
@@ -1425,7 +1427,7 @@ void UpdateTape(uint8_t cycles)
 								}
 								else
 								{
-									tapePilotPulseLength=1*3494.4f;
+									tapePilotPulseLength=3494;
 									tapePhase=7;
 								}
 							}
@@ -1438,7 +1440,7 @@ void UpdateTape(uint8_t cycles)
 				if (tapeTCounter>=tapePilotPulseLength)
 				{
 					tapeTCounter-=tapePilotPulseLength;
-					tapePilotPulseLength=(tapeParamDelayLength-1)*3494.4f;
+					tapePilotPulseLength=(uint32_t)((tapeParamDelayLength-1)*3494.4f);
 					tapePhase=8;
 					if (tapePilotPulseLength==0)
 					{
@@ -1535,6 +1537,7 @@ void LoadSNA()
 	IFF1=IFF2;
 }
 
+#if defined(EDL_PLATFORM_OPENAL)
 #define NUMBUFFERS            (3)				/* living dangerously*/
 
 ALuint		  uiBuffers[NUMBUFFERS];
@@ -1602,9 +1605,11 @@ int curPlayBuffer=0;
 
 BUFFER_FORMAT audioBuffer[BUFFER_LEN];
 int amountAdded=0;
+#endif
 
 void AudioInitialise()
 {
+#if defined(EDL_PLATFORM_OPENAL)
 	int a=0;
 	for (a=0;a<BUFFER_LEN;a++)
 	{
@@ -1626,12 +1631,15 @@ void AudioInitialise()
 	}
 
 	alSourcePlay(uiSource);
+#endif
 }
 
 
 void AudioKill()
 {
+#if defined(EDL_PLATFORM_OPENAL)
 	ALFWShutdownOpenAL();
+#endif
 }
 
 int16_t currentDAC[2] = {0,0};
@@ -1647,6 +1655,7 @@ uint32_t tickRate=((TSTATES_PER_ROW*ROWS_PER_VBLANK*4096)/(44100/50));
 /* audio ticked at same clock as everything else... so need a step down */
 void UpdateAudio(int numClocks)
 {
+#if defined(EDL_PLATFORM_OPENAL)
 	tickCnt+=numClocks*4096;
 	
 	if (tickCnt>=tickRate*50)
@@ -1687,5 +1696,6 @@ void UpdateAudio(int numClocks)
 			alSourcePlay(uiSource);
 		}
 	}
+#endif
 }
 

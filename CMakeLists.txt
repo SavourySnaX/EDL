@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.4.3)
 set (CMAKE_CXX_STANDARD 11)
-project(EDLCMakeTest)
+set_property(GLOBAL PROPERTY USE_FOLDERS ON)
+project(edl)
 
 find_package(LLVM REQUIRED CONFIG)
 find_package(FLEX REQUIRED)
@@ -28,7 +29,7 @@ FLEX_TARGET(MyLexer src/edl.l
 ADD_FLEX_BISON_DEPENDENCY(MyLexer MyParser)
 
 # Now build our tools
-add_executable(EDLCMakeTest 
+add_executable(edl 
 	src/main.cpp src/generator.cpp
 	src/ast.h src/generator.h
 	src/edl.l src/edl.y
@@ -36,13 +37,13 @@ add_executable(EDLCMakeTest
 	${BISON_MyParser_OUTPUTS} 
 	)
 
-target_include_directories(EDLCMakeTest PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
-target_include_directories(EDLCMakeTest PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_include_directories(EDLCMakeTest PUBLIC ${LLVM_INCLUDE_DIRS})
-target_compile_definitions(EDLCMakeTest PUBLIC ${LLVM_DEFINITIONS})
+target_include_directories(edl PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
+target_include_directories(edl PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_include_directories(edl PUBLIC ${LLVM_INCLUDE_DIRS})
+target_compile_definitions(edl PUBLIC ${LLVM_DEFINITIONS})
 
 if (WIN32)
-	target_compile_definitions(EDLCMakeTest PUBLIC -DYY_NO_UNISTD_H)
+	target_compile_definitions(edl PUBLIC -DYY_NO_UNISTD_H)
 	add_definitions(/wd4996 /wd4624 /wd4291 /wd4141)
 	if(MSVC)
 		# Force to always compile with W1 (too many warnings with llvm headers otherwise)
@@ -63,10 +64,26 @@ source_group(Generated FILES ${FLEX_MyLexer_OUTPUTS} ${BISON_MyParser_OUTPUTS})
 llvm_map_components_to_libnames(llvm_libs Core MC Support MCParser BinaryFormat Analysis BitReader BitWriter Coroutines Coverage ipo IRReader InstCombine Instrumentation LTO Linker ObjCARCopts Object Passes ProfileData ScalarOpts Target TransformUtils Option MCJIT ${LLVM_ALL_TARGETS})
 
 # Link against LLVM libraries
-target_link_libraries(EDLCMakeTest ${llvm_libs})
+target_link_libraries(edl ${llvm_libs})
 
+add_subdirectory(examples/2600)
+add_subdirectory(examples/c64)
 add_subdirectory(examples/EDLSpectrum)
+add_subdirectory(examples/NES)
+add_subdirectory(examples/SimpleInvaders)
+add_subdirectory(examples/Invaders)
+add_subdirectory(examples/zx80)
+add_subdirectory(examples/Vic20)
+add_subdirectory(examples/ZXSpectrum)
+add_subdirectory(examples/Language/NamedExecute)
+add_subdirectory(examples/Language/MultiTest)
+add_subdirectory(examples/Language/HelloWorld)
+add_subdirectory(examples/Language/Memory)
 add_subdirectory(tests/74154)
+add_subdirectory(tests/mb14241)
+add_subdirectory(tests/Intel8080)
+add_subdirectory(tests/contention)
+add_subdirectory(tests/states)
 
 #
 # For debugging

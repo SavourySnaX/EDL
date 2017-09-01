@@ -3,17 +3,19 @@
  *
  */
 #include <GLFW/glfw3.h>
-#include <GL/glext.h>
+#include <glext.h>
 
+#if defined(EDL_PLATFORM_OPENAL)
 #include <AL/al.h>
 #include <AL/alc.h>
+#endif
 
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
 
-#include "gui\debugger.h"
+#include "gui/debugger.h"
 
 #define USE_THREADS		0
 
@@ -109,13 +111,13 @@ int usingAOROM=0;
 
 // Step 1. Memory
 
-int LoadRom(unsigned char* rom,unsigned int size,const char* fname)
+int LoadRom(unsigned char* rom,size_t size,const char* fname)
 {
-	unsigned int readFileSize=0;
+	size_t readFileSize=0;
 	FILE* inFile = fopen(fname,"rb");
 	if (!inFile || size != (readFileSize = fread(rom,1,size,inFile)))
 	{
-		printf("Failed to open rom : %s - %d/%d",fname,readFileSize,size);
+		printf("Failed to open rom : %s - %zu/%zu",fname,readFileSize,size);
 		return 1;
 	}
 	fclose(inFile);
@@ -760,7 +762,7 @@ WriteMapper mapperWriteByte[8]={WRITE_RAM,WRITE_UNMAPPED,WRITE_APU,WRITE_PRGRAM,
 
 void SetByte(uint16_t addr,uint8_t byte)
 {
-	return mapperWriteByte[addr>>13](addr&0x1FFF,byte);
+	mapperWriteByte[addr>>13](addr&0x1FFF,byte);
 }
 
 int masterClock=0;
@@ -895,13 +897,13 @@ void ShowScreen(int windowNum,int w,int h)
 	glTexCoord2f(0.0f, 0.0f);
 	glVertex2f(-1.0f,1.0f);
 
-	glTexCoord2f(0.0f, h);
+	glTexCoord2f(0.0f, h+0.0f);
 	glVertex2f(-1.0f, -1.0f);
 
-	glTexCoord2f(w, h);
+	glTexCoord2f(w+0.0f, h+0.0f);
 	glVertex2f(1.0f, -1.0f);
 
-	glTexCoord2f(w, 0.0f);
+	glTexCoord2f(w+0.0f, 0.0f);
 	glVertex2f(1.0f, 1.0f);
 	glEnd();
 	
@@ -1681,7 +1683,6 @@ void ClockAPU(int apuClock)
 		APU_CPUClockRate++;
 		if (APU_CPUClockRate==6)
 		{
-			int a;
 			APU_CPUClockRate=0;
 
 			GenerateSqr1();
@@ -1834,7 +1835,6 @@ int main(int argc,char**argv)
 {
 	int w,h;
 	double	atStart,now,remain;
-	uint16_t bp;
 	
 	if (argc==2)
 	{
@@ -2149,6 +2149,7 @@ void PPU_SetVideo(uint8_t x,uint8_t y,uint8_t col)
 
 //////////////////////// NOISES //////////////////////////
 
+#if defined(EDL_PLATFORM_OPENAL)
 #define NUMBUFFERS            (2)				/* living dangerously*/
 
 ALuint		  uiBuffers[NUMBUFFERS];
@@ -2216,9 +2217,11 @@ int curPlayBuffer=0;
 
 BUFFER_FORMAT audioBuffer[BUFFER_LEN];
 int amountAdded=0;
+#endif
 
 void AudioInitialise()
 {
+#if defined(EDL_PLATFORM_OPENAL)
 	int a=0;
 	for (a=0;a<BUFFER_LEN;a++)
 	{
@@ -2240,12 +2243,15 @@ void AudioInitialise()
 	}
 
 	alSourcePlay(uiSource);
+#endif
 }
 
 
 void AudioKill()
 {
+#if defined(EDL_PLATFORM_OPENAL)
 	ALFWShutdownOpenAL();
+#endif
 }
 
 int16_t currentDAC[4] = {0,0,0,0};
@@ -2263,6 +2269,7 @@ uint32_t tickRate=((341*262*2*4)/(44100/60));
 /* audio ticked at same clock as everything else... so need a step down */
 void UpdateAudio()
 {
+#if defined(EDL_PLATFORM_OPENAL)
 	tickCnt+=1;
 	
 	if (tickCnt>=tickRate*60)
@@ -2317,9 +2324,12 @@ void UpdateAudio()
 			alSourcePlay(uiSource);
 		}
 	}
+#endif
 }
 
+#if defined(EDL_PLATFORM_MINIZIP)
 unsigned char * LoadFirstFileInZip(const char* path,unsigned int *length);
+#endif
 
 unsigned char *qLoad(const char *romName,uint32_t *length)
 {
@@ -2327,10 +2337,11 @@ unsigned char *qLoad(const char *romName,uint32_t *length)
 	unsigned char *romData=NULL;
 	*length=0;
 
+#if defined(EDL_PLATFORM_MINIZIP)
 	romData = LoadFirstFileInZip(romName,length);
 	if (romData!=0)
 		return romData;
-
+#endif
 	inRom = fopen(romName,"rb");
 	if (!inRom)
 	{

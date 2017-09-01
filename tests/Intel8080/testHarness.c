@@ -153,7 +153,7 @@ void EXECUTE_CYCLES(unsigned char instruction,int cnt,char *named)
 									else
 									{
 										printf("PIN_D = %02X\n",PinGetPIN_D());
-										exit(12);
+										exit(2);
 									}
 								}
 							}
@@ -227,13 +227,13 @@ void MEM_Handler(unsigned char* memory)
 			else
 			{
 				printf("Execution of ROM completed - Failure\n");
-				exit(-1);
+				exit(1);
 			}
 		}
 		else
 		{
 			printf("Error unknown sync state!!! PIN_D = %02X\n",PinGetPIN_D());
-			exit(12);
+			exit(2);
 		}
 	}
 	
@@ -245,7 +245,7 @@ void MEM_Handler(unsigned char* memory)
 			if (PinGetPIN_A()<0x4E4)
 			{
 				printf("Attempting to write to program area\n");
-				exit(-1);
+				exit(1);
 			}
 			memory[PinGetPIN_A()]=PinGetPIN_D();
 		}
@@ -260,7 +260,7 @@ void TEST_VIA_BINARY(const char *filename)
 
 	if (infile==NULL)
 	{
-		exit(-3);
+		exit(3);
 	}
 	fread(someMemory,1,1262,infile);
 
@@ -324,7 +324,7 @@ int main(int argc,char**argv)
 	if (PC!=0)
 	{
 		printf("ERROR: Reset failed test\n");
-		exit(-1);
+		exit(1);
 	}
 
 	EXECUTE_CYCLES(0,4,"NOP");

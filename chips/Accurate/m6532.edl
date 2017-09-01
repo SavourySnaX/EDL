@@ -1,0 +1,189 @@
+#
+# MOS 6532 (RIOT)
+#
+# Missing edge detect. Everything else should be there.
+
+PIN IN			AD[7];		# Address bits
+PIN BIDIRECTIONAL	PA[8];		# Peripheral A
+PIN BIDIRECTIONAL	PB[8];		# Peripheral B
+PIN OUT			_IRQ[1];	# IRQ signal to processor
+PIN BIDIRECTIONAL	DB[8];		# Data Bus
+PIN IN			_RES[1];	# Reset
+PIN IN			RW[1];		# Read(1) / Write(0)
+PIN IN			_RS[1];		# Ram Select
+PIN IN			_CS2[1];	# Chip Select
+PIN IN			CS1[1];		# Chip Select
+PIN IN			O2[1];		# Input Clock
+
+
+DECLARE		RAM[[7]][8];
+
+DECLARE		Counter[18]	ALIAS	CounterRW[8]:CounterRest[10]	{ %111111111111111111 };		# Timer with preScaler 
+DECLARE		CounterRate[18]						{ %000000010000000000 };
+
+DECLARE		TimerTypeLatch[2];
+DECLARE		ILatch[1];
+DECLARE		ELatch[1];
+
+DECLARE		DDRA[8];
+DECLARE		DDRB[8];
+
+
+HANDLER	O2	TRANSITION(0,1)
+{
+	DECLARE reg[2];
+
+	IF RW
+	{
+		IF (~_CS2) & CS1
+		{
+			IF ~_RS
+			{
+				DB<-RAM[[AD]];
+			}
+			IF _RS
+			{
+				IF AD[2..2]==0
+				{
+					reg<-AD[2];
+					EXECUTE ReadRegister	reg;
+				}
+				IF AD[2..2]==1
+				{
+					IF AD[0..0]==0
+					{
+						DB<-CounterRW;
+						ILatch<-0;
+					}
+					IF AD[0..0]==1
+					{
+						DECLARE IFlag[8] ALIAS	i[1]:e[1]:%000000;
+						i<-ILatch;
+						e<-ELatch;
+						DB<-IFlag;
+						ELatch<-0;
+					}
+				} 
+			}
+		}
+	}
+	IF ~RW
+	{
+		IF (~_CS2) & CS1
+		{
+			IF ~_RS
+			{
+				RAM[[AD]]<-DB;
+			}
+			IF _RS
+			{
+				IF AD[2..2]==0
+				{
+					reg<-AD[2];
+					EXECUTE WriteRegister	reg;
+				}
+				IF AD[2..2]==1
+				{
+					IF AD[4..4]==0
+					{
+						DEBUG_TRACE "RIOT - Edge Detect Write : ",BASE 16,AD;
+					}
+					IF AD[4..4]==1
+					{
+						TimerTypeLatch<-AD[2];
+
+						EXECUTE LoadCounter TimerTypeLatch;
+
+						ILatch<-0;
+					}
+				}
+			}
+		}
+	}
+}
+
+HANDLER O2	TRANSITION(1,0)
+{
+	DECLARE	cRate[18];
+	cRate<-CounterRate;
+
+	IF ILatch
+	{
+		Counter-%000000010000000000->Counter;
+	}
+	IF ~ILatch
+	{
+		AFFECT ILatch AS CARRY(17) {Counter-CounterRate}->Counter;
+	}
+}
+
+### Register Read/Write Tables
+
+
+INSTRUCTION ReadRegister	"RegA"	%00
+{
+	(PA&(~DDRA))|(DB&DDRA)->DB;
+}
+
+INSTRUCTION ReadRegister	"DDRA"	%01
+{
+	DDRA->DB;
+}
+
+INSTRUCTION ReadRegister	"RegB"	%10
+{
+	(PB&(~DDRB))|(DB&DDRB)->DB;
+}
+
+INSTRUCTION ReadRegister	"DDRB"	%11
+{
+	DDRB->DB;
+}
+
+INSTRUCTION WriteRegister	"RegA"	%00
+{
+	(PA&(~DDRA))|(DB&DDRA)->PA;
+}
+
+INSTRUCTION WriteRegister	"DDRA"	%01
+{
+	DB->DDRA;
+}
+
+INSTRUCTION WriteRegister	"RegB"	%10
+{
+	(PB&(~DDRB))|(DB&DDRB)->PB;
+}
+
+INSTRUCTION WriteRegister	"DDRB"	%11
+{
+	DB->DDRB;
+}
+
+INSTRUCTION LoadCounter	"/1"	%00
+{
+	DB->CounterRW;
+	%1111111111->CounterRest;
+	%000000010000000000->CounterRate;
+}
+
+INSTRUCTION LoadCounter	"/8"	%01
+{
+	DB->CounterRW;
+	%1111111111->CounterRest;
+	%000000000010000000->CounterRate;
+}
+
+INSTRUCTION LoadCounter	"/64"	%10
+{
+	DB->CounterRW;
+	%1111111111->CounterRest;
+	%000000000000010000->CounterRate;
+}
+
+INSTRUCTION LoadCounter	"/1024"	%11
+{
+	DB->CounterRW;
+	%1111111111->CounterRest;
+	%000000000000000001->CounterRate;
+}

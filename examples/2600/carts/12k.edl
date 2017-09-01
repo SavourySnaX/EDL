@@ -1,0 +1,119 @@
+#
+#
+# 12K Cart Atari 2600	(CBS RAM Plus)
+#
+#	Pins reflect pins available on cartridge port from 2600
+#
+#	3 4K Roms + 256 bytes Ram + Bank Register + Address Watch
+#
+# LoadRom function can be used to place contents into ROM
+# GetDebugByte function can be used to safely query ROM without side effects
+#
+
+
+PIN IN			A[13]	ALIAS	CS[1]:addr[12];				# Address Pins - 4K rom uses A[12] for chip select
+PIN BIDIRECTIONAL	D[8];							# Data BUS 
+
+DECLARE ROM0[[12]][8];
+DECLARE ROM1[[12]][8];
+DECLARE ROM2[[12]][8];
+
+DECLARE RAM[[8]][8];
+
+DECLARE INTERNAL bank[2];
+
+HANDLER A	ALWAYS
+{
+	IF CS
+	{
+		IF A==$1FF8
+		{
+			bank<-0;
+		}
+		IF A==$1FF9
+		{
+			bank<-1;
+		}
+		IF A==$1FFA
+		{
+			bank<-2;
+		}
+
+		IF A>=$1200
+		{
+			IF bank==0
+			{
+			       D<-ROM0[[addr]];
+			}
+			IF bank==1
+			{
+			       D<-ROM1[[addr]];
+			}
+			IF bank==2
+			{
+				D<-ROM2[[addr]];
+			}
+		}
+		IF (A>=$1000) & (A<=$10FF)
+		{
+			RAM[[addr]]<-D;
+		}
+		IF (A>=$1100) & (A<=$11FF)
+		{
+			D<-RAM[[addr]];
+		}
+	}
+}
+
+
+
+
+### Emulator access functions (loading rom data and debug)
+
+FUNCTION	full[8]	LoadRom		offs[32],byte[8]
+{
+	full<-1;
+	IF offs<=4095
+	{
+		ROM0[[offs]]<-byte;
+		full<-0;
+	}
+	IF (offs>=4096) & (offs<=8191)
+	{
+		ROM1[[offs]]<-byte;
+		full<-0;
+	}
+	IF (offs>=8192) & (offs<=12287)
+	{
+		ROM2[[offs]]<-byte;
+		full<-0;
+	}
+}
+
+FUNCTION	byte[8]	GetDebugByte	offs[32]
+{
+	IF offs>=$1200
+	{
+		IF (bank==0)
+		{
+			byte<-ROM0[[offs]];
+		}
+		IF (bank==1)
+		{
+			byte<-ROM1[[offs]];
+		}
+		IF (bank==2)
+		{
+			byte<-ROM2[[offs]];
+		}
+	}
+	IF (offs>=$1100) & (offs<=$11FF)
+	{
+		byte<-RAM[[offs]];
+	}
+}
+
+
+
+
+

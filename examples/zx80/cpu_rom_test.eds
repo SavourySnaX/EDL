@@ -3,9 +3,9 @@
 #
 #
 
-INSTANCE "../chips/zx80_rom.edl" AS ROM;
-INSTANCE "../../../chips/accurate/z80.edl" AS CPU;
-INSTANCE "../chips/2114_8.edl" AS RAM;
+INSTANCE "chips/zx80_rom.edl" AS ROM;
+INSTANCE "../../chips/Accurate/z80.edl" AS CPU;
+INSTANCE "chips/2114_8.edl" AS RAM;
 
 CONNECT RESET1
 {

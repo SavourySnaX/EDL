@@ -1,0 +1,48 @@
+#
+#
+# 4K Cart Atari 2600
+#
+#	Pins reflect pins available on cartridge port from 2600
+#
+#
+# LoadRom function can be used to place contents into ROM
+# GetDebugByte function can be used to safely query ROM without side effects
+#
+
+
+PIN IN			A[13]	ALIAS	CS[1]:addr[12];				# Address Pins - 4K rom uses A[12] for chip select
+PIN BIDIRECTIONAL	D[8];							# Data BUS 
+
+
+DECLARE	ROM[[12]][8];
+
+HANDLER A	ALWAYS
+{
+	IF CS
+	{
+		D<-ROM[[addr]];
+	}
+}
+
+
+
+
+### Emulator access functions (loading rom data and debug)
+
+FUNCTION	full[8]	LoadRom		offs[32],byte[8]
+{
+	full<-1;
+	IF offs<=4095
+	{
+		ROM[[offs&$FFF]]<-byte;
+		full<-0;
+	}
+}
+
+FUNCTION	byte[8]	GetDebugByte	offs[32]
+{
+	byte<-ROM[[offs&$FFF]];
+}
+
+
+

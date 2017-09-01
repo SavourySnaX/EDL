@@ -10,17 +10,19 @@
  */
 
 #include <GLFW/glfw3.h>
-#include <GL/glext.h>
+#include <glext.h>
 
+#if defined(EDL_PLATFORM_OPENAL)
 #include <AL/al.h>
 #include <AL/alc.h>
+#endif
 
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
 
-#include "gui\debugger.h"
+#include "gui/debugger.h"
 
 int DISK_InitialiseMemory();
 void DISK_Reset();
@@ -137,13 +139,13 @@ unsigned char SRam[0x200];
 int playDown=0;
 int recDown=0;
 
-int LoadRom(unsigned char* rom,unsigned int size,const char* fname)
+int LoadRom(unsigned char* rom,size_t size,const char* fname)
 {
-	unsigned int readFileSize=0;
+	size_t readFileSize=0;
 	FILE* inFile = fopen(fname,"rb");
 	if (!inFile || size != (readFileSize = fread(rom,1,size,inFile)))
 	{
-		printf("Failed to open rom : %s - %d/%d",fname,readFileSize,size);
+		printf("Failed to open rom : %s - %zu/%zu",fname,readFileSize,size);
 		return 1;
 	}
 	fclose(inFile);
@@ -630,13 +632,13 @@ void ShowScreen(int windowNum,int w,int h)
 	glTexCoord2f(0.0f, 0.0f);
 	glVertex2f(-1.0f,1.0f);
 
-	glTexCoord2f(0.0f, h);
+	glTexCoord2f(0.0f, h+0.0f);
 	glVertex2f(-1.0f, -1.0f);
 
-	glTexCoord2f(w, h);
+	glTexCoord2f(w+0.0f, h+0.0f);
 	glVertex2f(1.0f, -1.0f);
 
-	glTexCoord2f(w, 0.0f);
+	glTexCoord2f(w+0.0f, 0.0f);
 	glVertex2f(1.0f, 1.0f);
 	glEnd();
 	
@@ -916,7 +918,7 @@ uint16_t DISK_lastPC;
 
 void UpdateDiskInterface()
 {
-	uint8_t tmp,newpa;
+	uint8_t tmp;
 	uint8_t clk,dat,atn;
 
 	clk=VIA1_PinGetPIN_CA2();
@@ -1618,6 +1620,7 @@ uint8_t GetByte6561(int regNo)
 		case 15:
 			return CTRL_16;
 	}
+	return 0xFF;
 }
 uint16_t	channel1Cnt=0;
 uint16_t	channel2Cnt=0;
@@ -1909,10 +1912,10 @@ void Tick6561()
 		channel4Cnt=0;
 	}
 	
-	RecordPin(7 ,channel1Level);
-	RecordPin(8 ,channel2Level);
-	RecordPin(9 ,channel3Level);
-	RecordPin(10,channel4Level);
+	RecordPin(7 ,(uint8_t)channel1Level);
+	RecordPin(8 ,(uint8_t)channel2Level);
+	RecordPin(9 ,(uint8_t)channel3Level);
+	RecordPin(10,(uint8_t)channel4Level);
 
 	_AudioAddData(0,channel1Level*256*(CTRL_15&0x0F));
 	_AudioAddData(1,channel2Level*256*(CTRL_15&0x0F));
@@ -1924,6 +1927,8 @@ void Tick6561()
 }
 
 //////////////////////// NOISES //////////////////////////
+
+#if defined(EDL_PLATFORM_OPENAL)
 
 #define NUMBUFFERS            (2)				/* living dangerously*/
 
@@ -1992,9 +1997,11 @@ int curPlayBuffer=0;
 
 BUFFER_FORMAT audioBuffer[BUFFER_LEN];
 int amountAdded=0;
+#endif
 
 void AudioInitialise()
 {
+#if defined(EDL_PLATFORM_OPENAL)
 	int a=0;
 	for (a=0;a<BUFFER_LEN;a++)
 	{
@@ -2016,12 +2023,15 @@ void AudioInitialise()
 	}
 
 	alSourcePlay(uiSource);
+#endif
 }
 
 
 void AudioKill()
 {
+#if defined(EDL_PLATFORM_OPENAL)
 	ALFWShutdownOpenAL();
+#endif
 }
 
 int16_t currentDAC[4] = {0,0,0,0};
@@ -2037,6 +2047,7 @@ uint32_t tickRate=((22152*4096)/(44100/50));
 /* audio ticked at same clock as everything else... so need a step down */
 void UpdateAudio()
 {
+#if defined(EDL_PLATFORM_OPENAL)
 	tickCnt+=1*4096;
 	
 	if (tickCnt>=tickRate*50)
@@ -2081,6 +2092,7 @@ void UpdateAudio()
 			alSourcePlay(uiSource);
 		}
 	}
+#endif
 }
 
 
@@ -2200,7 +2212,6 @@ void SaveTAP(const char* filename)
 {
 	uint32_t tapeLength;
 	uint32_t length;
-	uint32_t tapePos;
 	uint8_t *tapeBuffer;
 
 	tapeBuffer=malloc(0x14);//qLoad(fileName,&length);
@@ -2550,9 +2561,7 @@ void OutputData(uint8_t* tapeBuffer,uint16_t length)
 int LoadPRG(const char* fileName)
 {
 	uint16_t startAddress;
-	uint32_t tapeLength;
 	uint32_t length;
-	uint32_t tapePos;
 	uint8_t *tapeBuffer;
 
 	tapeBuffer=qLoad(fileName,&length);

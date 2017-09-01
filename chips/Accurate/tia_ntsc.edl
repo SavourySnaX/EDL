@@ -1,0 +1,1274 @@
+#
+#	NTSC TIA 
+#
+
+PIN OUT			SYNC[1];		# Composite Video Sync
+PIN OUT 		_RDY[1];		# To RDY on CPU
+PIN OUT 		O0[1];			# To Clock Input on CPU
+PIN OUT 		LUM1[1];		# Luminance Output 1
+PIN OUT 		BLK[1];			# Vertical Blanking Output
+PIN OUT 		LUM2[1];		# Luminance Output 2
+PIN OUT 		LUM0[1];		# Luminance Output 0
+PIN OUT 		COL[4];			# Colour Output			- Analogue? For now its the colour index
+PIN IN			DEL[1];			# Colour Delay Input
+PIN IN			OSC[1];			# Clock Input
+PIN OUT 		AUD0[4];		# Audio Output			- Analogue 0-15
+PIN OUT			AUD1[4];		# Audio Output			- Analogue 0-15
+PIN IN			DB05[6];		# Processor Data Bus Bits 0-5
+PIN IN			DI[4];			# "Dumped" inputs
+PIN IN			LI[2];			# Latched inputs
+PIN BIDIRECTIONAL	DB67[2];		# Processor Data Bus Bits 6-7
+PIN IN			AB[6];			# Address bus
+PIN IN			O2[1];			# O2 Clock from CPU
+PIN IN			RW[1];			# R/~W
+PIN IN			_CS0[1];		# Chip Selects 0,2,3 low 1 high for chip selected
+PIN IN			CS1[1];
+PIN IN			_CS2[1];
+PIN IN			_CS3[1];
+
+
+###
+
+DECLARE		o0_clk_counter[2];
+DECLARE		O0_actual[1];
+
+DECLARE		Div4[2];			# Clock Divider
+DECLARE		Pl0Div4[2];			# Player0 Clock Divider
+DECLARE		Pl1Div4[2];			# Player0 Clock Divider
+
+DECLARE		HCounter[6]			{%111111};			# Polynomial counter
+DECLARE		CClock[8];
+DECLARE		HReset[1];							# Used to cause next count to be reset
+
+DECLARE		PlayerCounterEnable[1];
+
+DECLARE		Player0Counter[6]		{%111111};
+DECLARE		Player0Reset[1];
+DECLARE		Player0Draw[1];
+DECLARE		Player0Bit[3];
+
+DECLARE		GRP0Delay[6];
+
+DECLARE		GRP0[[3]][1];
+
+DECLARE		Player1Counter[6]		{%111111};
+DECLARE		Player1Reset[1];
+DECLARE		Player1Draw[1];
+DECLARE		Player1Bit[3];
+
+DECLARE		GRP1Delay[6];
+
+DECLARE		GRP1[[3]][1];
+
+DECLARE		VSYNC[1];
+DECLARE		HSYNC[1];
+
+DECLARE		HBLANK[1];
+DECLARE		VBLANK[1];
+
+DECLARE		IP45CTRL[1];
+DECLARE		IP03CTRL[1];
+
+DECLARE		NUSIZ0[5]	ALIAS	NUSIZ0_M[2]:NUSIZ0_P[3];
+DECLARE		NUSIZ1[5]	ALIAS	NUSIZ1_M[2]:NUSIZ1_P[3];
+
+DECLARE		REFP0[3];	# Reflect P0 (3 bit to accomodate simple XOR)
+DECLARE		REFP1[3];	# Reflect P1 (3 bit to accomodate simple XOR)
+
+DECLARE		LUBK[3];			# Current Bkground Luminance
+DECLARE		COBK[4];			# Current Bkground Colour
+
+DECLARE		LUPF[3];			# Current Playfield Luminance
+DECLARE		COPF[4];			# Current Playfield Colour
+
+DECLARE		LUP0[3];			# Current Player 0 Luminance
+DECLARE		COP0[4];			# Current Player 0 Colour
+DECLARE		LUP1[3];			# Current Player 1 Luminance
+DECLARE		COP1[4];			# Current Player 1 Colour
+
+DECLARE		CTRLPF[5]	ALIAS	BALLSIZE[2]:PFP[1]:SCORE[1]:REF[1];
+
+DECLARE		PF[20]		ALIAS	PF0[4]:PF1[8]:PF2[8];# {%10101010101010101010};		# Stored in normalised order for quicker indexing
+
+DECLARE		pfIndex[8];
+DECLARE		pfMayMirror[1];
+DECLARE		pfDelay[4];
+
+DECLARE		HMP0[4]	{%1000};		# stored bit 3 inverted  -  horizontal motion register
+DECLARE		HMP1[4] {%1000};		# stored bit 3 inverted  -  horizontal motion register
+
+
+DECLARE		HMOVE[1];			# Hmove latch, causes additional clocks to player/missile/ball counters -- these should fall during HBLANK, extends HBLANK by 8 colour clocks
+DECLARE		HMP0LATCH[1];
+DECLARE		HMP1LATCH[1];
+DECLARE		HMOVECMP[4];			# Comparator - clears latch when equal to horizontal motion register, and resets respective latch. 
+DECLARE		HMOVECNTEN[1];			# clear when HMOVECMP wraps
+
+
+DECLARE		CXM0P[2];
+DECLARE		CXM1P[2];
+DECLARE		CXP0FB[2];
+DECLARE		CXP1FB[2];
+DECLARE		CXM0FB[2];
+DECLARE		CXM1FB[2];
+DECLARE		CXBLPF[1];
+DECLARE		CXPPMM[2];
+
+
+DECLARE		AUDV[[1]][4];
+DECLARE		AUDF[[1]][5];
+DECLARE		AUDC[[1]][4];
+
+FUNCTION INTERNAL outCounter[6]	UpdatePolyCounter	inCounter[6]
+{
+	DECLARE nextState[6]	ALIAS newBit[1]:oldBits[5];
+
+	inCounter[1..5]->oldBits;
+	~((inCounter[0..0]) ^ (inCounter[1..1]))->newBit;
+
+	outCounter<-nextState;
+}
+
+FUNCTION INTERNAL UpdateO0
+{
+	o0_clk_counter<-o0_clk_counter+1;
+
+	IF o0_clk_counter==3
+	{
+		o0_clk_counter<-0;
+		O0_actual<-~O0_actual;
+		O0<-O0_actual;
+	}
+
+	SYNC<-VSYNC | HSYNC;
+}
+
+FUNCTION INTERNAL	Pl0Mux
+{
+	DECLARE T[1];
+	ROL(GRP0Delay,T,0,1)->GRP0Delay;
+	IF T
+	{
+		LUM0<-LUP0[0..0];
+		LUM1<-LUP0[1..1];
+		LUM2<-LUP0[2..2];
+		COL<-COP0;
+	}
+	IF Player0Draw
+	{
+		IF Player0Bit==%000
+		{
+			Player0Draw<-0;
+		}
+		(GRP0[[REFP0^Player0Bit]])->GRP0Delay[0..0];
+		Player0Bit<-Player0Bit-1;
+	}
+}
+
+FUNCTION INTERNAL	Pl1Mux
+{
+	DECLARE T[1];
+	ROL(GRP1Delay,T,0,1)->GRP1Delay;
+	IF T
+	{
+		LUM0<-LUP1[0..0];
+		LUM1<-LUP1[1..1];
+		LUM2<-LUP1[2..2];
+		COL<-COP1;
+	}
+	IF Player1Draw
+	{
+		IF Player1Bit==%000
+		{
+			Player1Draw<-0;
+		}
+		(GRP1[[REFP1^Player1Bit]])->GRP1Delay[0..0];
+		Player1Bit<-Player1Bit-1;
+	}
+}
+
+FUNCTION INTERNAL	PlayfieldMux
+{
+	#Clock playfield things here
+	DECLARE col[1];
+	DECLARE T[1];
+
+	IF pfMayMirror&REF
+	{
+		AFFECT col AS BIT(0) {ROR(PF,T,0,pfIndex-1) };
+	}
+	IF ~(pfMayMirror&REF)
+	{
+		AFFECT col AS BIT(19) {ROL(PF,T,0,pfIndex-1) };
+	}
+	#ROL(pfDelay,col,col,1)->pfDelay;
+
+	IF col
+	{
+		IF SCORE
+		{
+			IF pfMayMirror
+			{
+				LUM0<-LUP1[0..0];
+				LUM1<-LUP1[1..1];
+				LUM2<-LUP1[2..2];
+				COL<-COP1;
+			}
+			IF ~pfMayMirror
+			{
+				LUM0<-LUP0[0..0];
+				LUM1<-LUP0[1..1];
+				LUM2<-LUP0[2..2];
+				COL<-COP0;
+			}
+		}
+		IF ~SCORE
+		{
+			LUM0<-LUPF[0..0];
+			LUM1<-LUPF[1..1];
+			LUM2<-LUPF[2..2];
+			COL<-COPF;
+		}
+	}
+	IF ~col
+	{
+		LUM0<-LUBK[0..0];
+		LUM1<-LUBK[1..1];
+		LUM2<-LUBK[2..2];
+		COL<-COBK;
+	}
+
+	CALL Pl0Mux();
+	CALL Pl1Mux();
+
+	IF (HBLANK|VBLANK)
+	{
+		LUM0<-0;
+		LUM1<-0;
+		LUM2<-0;
+		COL<-1;
+	}
+}
+
+FUNCTION INTERNAL	tick[1]	UpdateDiv4
+{
+	AFFECT tick AS CARRY(1) { Div4+1 }->Div4;
+}
+
+FUNCTION INTERNAL	ne[1]	NoneEqual	a[4],b[4]
+{
+	DECLARE T[1] {1};
+
+	T<-T & ((a[0..0])^(b[0..0]));			# effectively a ^ b is 1 if bits are different - T will thus be cleared if any bits are equal
+	T<-T & ((a[1..1])^(b[1..1]));			# effectively a ^ b is 1 if bits are different - T will thus be cleared if any bits are equal
+	T<-T & ((a[2..2])^(b[2..2]));			# effectively a ^ b is 1 if bits are different - T will thus be cleared if any bits are equal
+	T<-T & ((a[3..3])^(b[3..3]));			# effectively a ^ b is 1 if bits are different - T will thus be cleared if any bits are equal
+
+	ne<-T;
+}
+
+FUNCTION INTERNAL UpdatePl0Div4
+{
+	DECLARE clk[1];
+
+	AFFECT clk AS CARRY(1) { Pl0Div4+1 }->Pl0Div4;
+	IF clk
+	{
+		CALL UpdatePolyCounter(Player0Counter)->Player0Counter;
+		IF (Player0Counter==%111111) | Player0Reset
+		{
+			Player0Reset<-0;
+			Player0Counter<-0;
+		}
+		EXECUTE Player0Logic Player0Counter;
+	}
+}
+
+FUNCTION INTERNAL UpdatePl1Div4
+{
+	DECLARE clk[1];
+
+	AFFECT clk AS CARRY(1) { Pl1Div4+1 }->Pl1Div4;
+	IF clk
+	{
+		CALL UpdatePolyCounter(Player1Counter)->Player1Counter;
+		IF (Player1Counter==%111111) | Player1Reset
+		{
+			Player1Reset<-0;
+			Player1Counter<-0;
+		}
+		EXECUTE Player1Logic Player1Counter;
+	}
+}
+
+HANDLER	OSC	TRANSITION(0,1)
+{
+	CClock<-CClock+1;
+	IF CALL UpdateDiv4()
+	{
+		CALL UpdatePolyCounter(HCounter)->HCounter;
+	
+		IF (HCounter==%111111) | HReset
+		{
+			pfMayMirror<-0;
+			pfIndex<-0;
+
+			HReset<-0;
+			HCounter<-0;
+			CClock<-0;
+
+			HBLANK<-1;
+
+			_RDY<-1;
+		}
+
+		EXECUTE HClockLogic HCounter;
+
+		IF HMOVECNTEN
+		{
+			#DEBUG_TRACE " ",HMOVECMP,HMP0,HMOVE,HMP0LATCH,HMOVECNTEN,HCounter;
+
+			IF CALL NoneEqual(HMOVECMP,HMP0)
+			{
+				HMP0LATCH<-0;
+			}
+			IF CALL NoneEqual(HMOVECMP,HMP1)
+			{
+				HMP1LATCH<-0;
+			}
+
+			HMOVECMP<-HMOVECMP-1;
+			IF HMOVECMP==%1111
+			{
+				HMOVECNTEN<-0;
+			}
+
+			#DEBUG_TRACE "-",HMOVECMP,HMP0,HMOVE,HMP0LATCH,HMOVECNTEN,HCounter;
+		}
+
+		IF HMP0LATCH
+		{
+			CALL UpdatePl0Div4();
+		}
+		IF HMP1LATCH
+		{
+			CALL UpdatePl1Div4();
+		}
+	}
+
+	IF PlayerCounterEnable 
+	{
+		CALL UpdatePl0Div4();
+		CALL UpdatePl1Div4();
+	}
+			
+	CALL PlayfieldMux();
+	CALL UpdateO0();
+}
+
+HANDLER OSC	TRANSITION(1,0)
+{
+
+	CALL UpdateO0();
+}
+
+HANDLER O2	TRANSITION(0,1)
+{
+	IF ~RW
+	{
+		IF (~_CS0) & (~_CS2) & (~_CS3) & CS1
+		{
+			EXECUTE WriteRegister AB;
+		}
+	}
+	IF RW
+	{
+		IF (~_CS0) & (~_CS2) & (~_CS3) & CS1
+		{
+			DECLARE read[6]	ALIAS	dc[2]:ra[4];
+			read<-AB;
+			EXECUTE ReadRegister ra;
+		}
+	}
+}
+
+DECLARE freqDivider[[1]][6];
+DECLARE poly4[[1]][4]	{%1111,%1111};
+DECLARE poly5[[1]][5]	{%11111,%11111};
+DECLARE poly9[[1]][9]	{%111111111,%111111111};
+DECLARE pureToneCounter[[1]][8];
+DECLARE div3Counter[[1]][2];
+DECLARE pureTone[[1]][1];
+DECLARE outAudBit[[1]][1];
+
+DECLARE curChan[1];
+
+FUNCTION INTERNAL	TickChannel	chan[1]
+{
+	freqDivider[[chan]]<-freqDivider[[chan]]+1;
+	IF freqDivider[[chan]]>AUDF[[chan]]
+	{
+		DECLARE t[4];
+		freqDivider[[chan]]<-0;
+		curChan<-chan;
+		t<-AUDC[[chan]];
+
+		EXECUTE PolyUpdate t;
+
+		IF chan
+		{
+			AUD1<-AUDV[[chan]]*outAudBit[[chan]];
+		}
+		IF ~chan
+		{
+			AUD0<-AUDV[[chan]]*outAudBit[[chan]];
+		}
+	}
+}
+
+FUNCTION INTERNAL	TickAudio
+{
+	# Called twice per scan line
+	CALL TickChannel(0);
+	CALL TickChannel(1);
+}
+
+FUNCTION INTERNAL	o[1]	UpdatePoly4	chan[1]
+{
+	DECLARE i[1];
+	i<-(poly4[[curChan]][0..0]) ^ (poly4[[curChan]][1..1]);
+	ROR(poly4[[curChan]],o,i,1)->poly4[[curChan]];
+}
+
+FUNCTION INTERNAL	o[1]	UpdatePoly5	chan[1]
+{
+	DECLARE i[1];
+	i<-(poly5[[curChan]][0..0]) ^ (poly5[[curChan]][2..2]);
+	ROR(poly5[[curChan]],o,i,1)->poly5[[curChan]];
+}
+
+FUNCTION INTERNAL	o[1]	UpdatePoly9	chan[1]
+{
+	DECLARE i[1];
+	i<-(poly9[[curChan]][0..0]) ^ (poly9[[curChan]][4..4]);
+	ROR(poly9[[curChan]],o,i,1)->poly9[[curChan]];
+}
+
+FUNCTION INTERNAL	o[1]	UpdatePure	chan[1],div[8]
+{
+	pureToneCounter[[curChan]]<-pureToneCounter[[curChan]]+1;
+	o<-0;
+	IF pureToneCounter[[curChan]]>=div
+	{
+		pureToneCounter[[curChan]]<-0;
+		o<-1;
+	}
+}
+
+FUNCTION	TickDiv2	chan[1]
+{
+	pureTone[[chan]]<-pureTone[[chan]]^1;
+	outAudBit[[chan]]<-pureTone[[chan]];
+}
+
+FUNCTION	o[1]	TickDiv3	chan[1]
+{
+	div3Counter[[chan]]<-div3Counter[[chan]]+1;
+	o<-0;
+	IF div3Counter[[chan]]>1
+	{
+		div3Counter[[chan]]<-0;
+		o<-1;
+	}
+}
+
+FUNCTION	TickDiv15	chan[1]
+{
+	IF CALL UpdatePure(chan,15)
+	{
+		pureTone[[chan]]<-pureTone[[chan]]^1;
+		outAudBit[[chan]]<-pureTone[[chan]];
+	}
+}
+
+FUNCTION	TickDiv31	chan[1]
+{
+	IF pureTone[[chan]]
+	{
+		IF CALL UpdatePure(chan,18)
+		{
+			pureTone[[chan]]<-pureTone[[chan]]^1;
+			outAudBit[[chan]]<-pureTone[[chan]];
+		}
+	}
+	IF ~pureTone[[chan]]
+	{
+		IF CALL UpdatePure(chan,13)
+		{
+			pureTone[[chan]]<-pureTone[[chan]]^1;
+			outAudBit[[chan]]<-pureTone[[chan]];
+		}
+	}
+}
+
+
+####### Audio Updates
+
+INSTRUCTION	PolyUpdate	"SET1"		%0000
+{
+	outAudBit[[curChan]]<-1;
+}
+
+INSTRUCTION	PolyUpdate	"4 Bit Poly"	%0001
+{
+	outAudBit[[curChan]]<-CALL UpdatePoly4(curChan);
+}
+
+INSTRUCTION	PolyUpdate	"Div 15 - Pure"	%0010
+{
+	CALL TickDiv15(curChan);
+}
+
+INSTRUCTION	PolyUpdate	"Div 15 - Pure"	%0011
+{
+	CALL TickDiv15(curChan);
+}
+
+INSTRUCTION	PolyUpdate	"Div 2 - Pure" %0100
+{
+	CALL TickDiv2(curChan);
+}
+
+INSTRUCTION	PolyUpdate	"Div 2 - Pure" %0101
+{
+	CALL TickDiv2(curChan);
+}
+
+INSTRUCTION	PolyUpdate	"Div 31 - Pure"	%0110
+{
+	CALL TickDiv31(curChan);
+}
+
+INSTRUCTION	PolyUpdate	"5 Bit Poly"	%0111
+{
+	outAudBit[[curChan]]<-CALL UpdatePoly5(curChan);
+}
+
+INSTRUCTION	PolyUpdate	"9 Bit Poly"	%1000
+{
+	outAudBit[[curChan]]<-CALL UpdatePoly9(curChan);
+}
+
+INSTRUCTION	PolyUpdate	"5 Bit Poly"	%1001
+{
+	outAudBit[[curChan]]<-CALL UpdatePoly5(curChan);
+}
+
+INSTRUCTION	PolyUpdate	"Div 31 - Pure"	%1010
+{
+	CALL TickDiv31(curChan);
+}
+
+INSTRUCTION	PolyUpdate	"Set Last 4 1"	%1011
+{
+	%1111->poly4[[curChan]];
+	%1111->poly5[[curChan]][0..3];
+	%1111->poly9[[curChan]][0..3];
+	outAudBit[[curChan]]<-1;
+}
+
+INSTRUCTION	PolyUpdate	"Div 6 - Pure" %1100
+{
+	IF CALL TickDiv3(curChan)
+	{
+		CALL TickDiv2(curChan);
+	}
+}
+
+INSTRUCTION	PolyUpdate	"Div 6 - Pure" %1101
+{
+	IF CALL TickDiv3(curChan)
+	{
+		CALL TickDiv2(curChan);
+	}
+}
+
+INSTRUCTION	PolyUpdate	"Div 93 - Pure"	%1110
+{
+	IF CALL TickDiv3(curChan)
+	{
+		CALL TickDiv31(curChan);
+	}
+}
+
+INSTRUCTION	PolyUpdate	"5 Bit Poly"	%1111
+{
+	outAudBit[[curChan]]<-CALL UpdatePoly5(curChan);
+}
+
+####### Read Register Handlers
+
+MAPPING TODOR[4]
+{
+	%1110	""	$E;
+	%1111	""	$F;
+}
+
+MAPPING COLIS[4]
+{
+	%0000	"CXM0P"		CXM0P->DB67;
+	%0001	"CXM1P"		CXM1P->DB67;
+	%0010	"CXP0FB"	CXP0FB->DB67;
+	%0011	"CXP1FB"	CXP1FB->DB67;
+	%0100	"CXM0FB"	CXM0FB->DB67;
+	%0101	"CXM1FB"	CXM1FB->DB67;
+	%0110	"CXBLPF"	CXBLPF->DB67;
+	%0111	"CXPPMM"	CXPPMM->DB67;
+}
+
+MAPPING DUMPEDINPORTS[4]
+{
+	%1000	""	DI[0..0];
+	%1001	""	DI[1..1];
+	%1010	""	DI[2..2];
+	%1011	""	DI[3..3];
+}
+
+MAPPING LATCHEDINPORTS[4]
+{
+	%1100	""	LI[0..0];
+	%1101	""	LI[1..1];
+}
+
+INSTRUCTION	ReadRegister	"TODO"		TODOR
+{
+	DEBUG_TRACE "TIA : Unknown Register Read ",TODOR;
+}
+
+INSTRUCTION	ReadRegister	"Collision : %M0"	COLIS
+{
+	COLIS;
+}
+
+INSTRUCTION	ReadRegister	"Dumped Inputs : %M0"		DUMPEDINPORTS
+{
+	IF IP03CTRL
+	{
+		0->DB67[1..1];
+	}
+	IF ~IP03CTRL
+	{
+		DUMPEDINPORTS->DB67[1..1];
+	}
+	#DEBUG_TRACE "Read Dumped ",DB67;
+}
+
+INSTRUCTION	ReadRegister	"Latched Inputs : %M0"		LATCHEDINPORTS
+{
+	LATCHEDINPORTS->DB67[1..1];
+	#DEBUG_TRACE "Read Latch ",DB67;
+}
+
+####### Write Register Handlers
+
+MAPPING TODOW[6]
+{
+#	%000000	""	$0;
+#	%000001	""	$1;
+#	%000010	""	$2;
+#	%000011	""	$3;
+#	%000100	""	$4;
+#	%000101	""	$5;
+#	%000110	""	$6;
+#	%000111	""	$7;
+#	%001000	""	$8;
+#	%001001	""	$9;
+#	%001010	""	$A;
+#	%001011	""	$B;
+#	%001100	""	$C;
+#	%001101	""	$D;
+#	%001110	""	$E;
+#	%001111	""	$F;
+#	%010000	""	$10;
+#	%010001	""	$11;
+	%010010	""	$12;
+	%010011	""	$13;
+	%010100	""	$14;
+#	%010101	""	$15;
+#	%010110	""	$16;
+#	%010111	""	$17;
+#	%011000	""	$18;
+#	%011001	""	$19;
+#	%011010	""	$1A;
+#	%011011	""	$1B;
+#	%011100	""	$1C;
+	%011101	""	$1D;
+	%011110	""	$1E;
+	%011111	""	$1F;
+#	%100000	""	$20;
+#	%100001	""	$21;
+	%100010	""	$22;
+	%100011	""	$23;
+	%100100	""	$24;
+	%100101	""	$25;
+	%100110	""	$26;
+	%100111	""	$27;
+	%101000	""	$28;
+	%101001	""	$29;
+#	%101010	""	$2A;
+#	%101011	""	$2B;
+	%101100	""	$2C;
+}
+
+MAPPING UNCONNECTED[6]
+{
+	%101101	""	$2D;
+	%101110	""	$2E;
+	%101111	""	$2F;
+	%110000	""	$30;
+	%110001	""	$31;
+	%110010	""	$32;
+	%110011	""	$33;
+	%110100	""	$34;
+	%110101	""	$35;
+	%110110	""	$36;
+	%110111	""	$37;
+	%111000	""	$38;
+	%111001	""	$39;
+	%111010	""	$3A;
+	%111011	""	$3B;
+	%111100	""	$3C;
+	%111101	""	$3D;
+	%111110	""	$3E;
+	%111111	""	$3F;
+}
+
+INSTRUCTION	WriteRegister	"TODO"		TODOW
+{
+	DEBUG_TRACE "TIA : Unknown Register Write ",BASE 16,TODOW;
+}
+
+INSTRUCTION	WriteRegister	"UNCONNECTED"	UNCONNECTED
+{
+#	DEBUG_TRACE "TIA : Unconnected Register Write ",BASE 16,UNCONNECTED;
+}
+
+INSTRUCTION	WriteRegister	"VSYNC"		%000000
+{
+	VSYNC<-(DB05[1..1]);
+	#DEBUG_TRACE "TIA : VSYNC - ------S-";
+}
+
+INSTRUCTION	WriteRegister	"VBLANK"	%000001
+{
+	BLK<-(DB05[1..1]);
+	VBLANK<-(DB05[1..1]);
+	IP45CTRL<-(DB67[0..0]);
+	IP03CTRL<-(DB67[1..1]);
+	#DEBUG_TRACE "TIA : VBLANK - xx----V- ",IP03CTRL,IP45CTRL,VBLANK;
+}
+
+INSTRUCTION	WriteRegister	"WSYNC"		%000010
+{
+	_RDY<-0;
+	#DEBUG_TRACE "TIA : WSYNC - ASSERT RDY (strobe)";
+}
+
+INSTRUCTION	WriteRegister	"RSYNC"		%000011
+{
+	HReset<-1;
+	#DEBUG_TRACE "TIA : RSYNC - Reset Timing (strobe)";
+}
+
+INSTRUCTION	WriteRegister	"NUSIZ0"	%000100
+{
+	(DB05[0..2])->NUSIZ0_P;
+	(DB05[4..5])->NUSIZ0_M;
+
+	#DEBUG_TRACE "TIA : NUSIZ0 - --MM-PPP ",NUSIZ0_M,NUSIZ0_P;
+}
+
+INSTRUCTION	WriteRegister	"NUSIZ1"	%000101
+{
+	(DB05[0..2])->NUSIZ1_P;
+	(DB05[4..5])->NUSIZ1_M;
+
+	#DEBUG_TRACE "TIA : NUSIZ1 - --MM-PPP ",NUSIZ1_M,NUSIZ1_P;
+}
+
+INSTRUCTION	WriteRegister	"COLUP0"	%000110
+{
+	DECLARE	colGlue[4]	ALIAS	d67[2]:d54[2];
+	DECLARE	lumGlue[3]	ALIAS	d3[1]:d2[1]:d1[1];
+
+	d67<-DB67;
+	d54<-DB05[4..5];
+	d3<-DB05[3..3];
+	d2<-DB05[2..2];
+	d1<-DB05[1..1];
+
+	COP0<-colGlue;
+	LUP0<-lumGlue;
+
+	#DEBUG_TRACE "TIA : COLUP0 - CCCClll-",COP0,LUP0,DB67,DB05;
+}
+
+INSTRUCTION	WriteRegister	"COLUP1"	%000111
+{
+	DECLARE	colGlue[4]	ALIAS	d67[2]:d54[2];
+	DECLARE	lumGlue[3]	ALIAS	d3[1]:d2[1]:d1[1];
+
+	d67<-DB67;
+	d54<-DB05[4..5];
+	d3<-DB05[3..3];
+	d2<-DB05[2..2];
+	d1<-DB05[1..1];
+
+	COP1<-colGlue;
+	LUP1<-lumGlue;
+
+	#DEBUG_TRACE "TIA : COLUP1 - CCCClll-",COP1,LUP1,DB67,DB05;
+}
+
+INSTRUCTION	WriteRegister	"COLUPF"	%001000
+{
+	DECLARE	colGlue[4]	ALIAS	d67[2]:d54[2];
+	DECLARE	lumGlue[3]	ALIAS	d3[1]:d2[1]:d1[1];
+
+	d67<-DB67;
+	d54<-DB05[4..5];
+	d3<-DB05[3..3];
+	d2<-DB05[2..2];
+	d1<-DB05[1..1];
+
+	COPF<-colGlue;
+	LUPF<-lumGlue;
+
+	#DEBUG_TRACE "TIA : COLUPF - CCCClll-",COPF,LUPF,DB67,DB05;
+}
+
+INSTRUCTION	WriteRegister	"COLUBK"	%001001
+{
+	DECLARE	colGlue[4]	ALIAS	d67[2]:d54[2];
+	DECLARE	lumGlue[3]	ALIAS	d3[1]:d2[1]:d1[1];
+
+	d67<-DB67;
+	d54<-DB05[4..5];
+	d3<-DB05[3..3];
+	d2<-DB05[2..2];
+	d1<-DB05[1..1];
+
+	COBK<-colGlue;
+	LUBK<-lumGlue;
+
+	#DEBUG_TRACE "TIA : COLUBK - CCCClll- ",COBK,LUBK,DB67,DB05;
+}
+
+INSTRUCTION	WriteRegister	"CTRLPF"	%001010
+{
+	REF<-DB05[0..0];
+	SCORE<-DB05[1..1];
+	PFP<-DB05[2..2];
+	BALLSIZE<-DB05[4..5];
+
+	#DEBUG_TRACE "TIA : CTRLPF - --SS-psr ",BALLSIZE,PFP,SCORE,REF;
+}
+	
+INSTRUCTION	WriteRegister	"REFP0"		%001011
+{
+	DB05[3..3]->REFP0[0..0];
+	DB05[3..3]->REFP0[1..1];
+	DB05[3..3]->REFP0[2..2];
+
+	#DEBUG_TRACE "TIA : REFP0 - ----r--- ",REFP0;
+}
+
+INSTRUCTION	WriteRegister	"REFP1"		%001100
+{
+	DB05[3..3]->REFP1[0..0];
+	DB05[3..3]->REFP1[1..1];
+	DB05[3..3]->REFP1[2..2];
+
+	#DEBUG_TRACE "TIA : REFP1 - ----r--- ",REFP1;
+}
+
+INSTRUCTION	WriteRegister	"PF0"	%001101
+{
+	DECLARE dbGlue[4]	ALIAS	d4[1]:d5[1]:d6[1]:d7[1];
+
+	d4<-(DB05[4..4]);
+	d5<-(DB05[5..5]);
+	d6<-(DB67[0..0]);
+	d7<-(DB67[1..1]);
+
+	PF0<-dbGlue;
+
+	#DEBUG_TRACE "TIA : PF0 - xxxx---- ",PF0;
+}
+
+INSTRUCTION	WriteRegister	"PF1"	%001110
+{
+	DECLARE dbGlue[8]	ALIAS	d67[2]:d50[6];
+
+	d67<-DB67;
+	d50<-DB05;
+
+	PF1<-dbGlue;
+
+	#DEBUG_TRACE "TIA : PF1 - xxxxxxxx ",PF1;
+}
+
+INSTRUCTION	WriteRegister	"PF2"	%001111
+{
+	DECLARE dbGlue[8]	ALIAS	d0[1]:d1[1]:d2[1]:d3[1]:d4[1]:d5[1]:d6[1]:d7[1];
+
+	d0<-(DB05[0..0]);
+	d1<-(DB05[1..1]);
+	d2<-(DB05[2..2]);
+	d3<-(DB05[3..3]);
+	d4<-(DB05[4..4]);
+	d5<-(DB05[5..5]);
+	d6<-(DB67[0..0]);
+	d7<-(DB67[1..1]);
+
+	PF2<-dbGlue;
+
+	#DEBUG_TRACE "TIA : PF2 - xxxxxxxx ",PF2;
+}
+
+INSTRUCTION	WriteRegister	"RESP0"	%010000
+{
+	Player0Reset<-1;
+	Pl0Div4<-0;
+
+	#DEBUG_TRACE "TIA : RESP0 (strobe)";
+}
+
+INSTRUCTION	WriteRegister	"RESP1"	%010001
+{
+	Player1Reset<-1;
+	Pl1Div4<-0;
+
+	#DEBUG_TRACE "TIA : RESP1 (strobe)";
+}
+
+INSTRUCTION	WriteRegister	"GRP0"	%011011
+{
+	DECLARE dbGlue[8]	ALIAS	d67[2]:d05[6];
+
+	d67<-DB67;
+	d05<-DB05;
+
+	GRP0[[0]]<-dbGlue[0..0];
+	GRP0[[1]]<-dbGlue[1..1];
+	GRP0[[2]]<-dbGlue[2..2];
+	GRP0[[3]]<-dbGlue[3..3];
+	GRP0[[4]]<-dbGlue[4..4];
+	GRP0[[5]]<-dbGlue[5..5];
+	GRP0[[6]]<-dbGlue[6..6];
+	GRP0[[7]]<-dbGlue[7..7];
+
+	#DEBUG_TRACE "TIA : GRP0 xxxxxxxx",dbGlue;
+}
+
+INSTRUCTION	WriteRegister	"GRP1"	%011100
+{
+	DECLARE dbGlue[8]	ALIAS	d67[2]:d05[6];
+
+	d67<-DB67;
+	d05<-DB05;
+
+	GRP1[[0]]<-dbGlue[0..0];
+	GRP1[[1]]<-dbGlue[1..1];
+	GRP1[[2]]<-dbGlue[2..2];
+	GRP1[[3]]<-dbGlue[3..3];
+	GRP1[[4]]<-dbGlue[4..4];
+	GRP1[[5]]<-dbGlue[5..5];
+	GRP1[[6]]<-dbGlue[6..6];
+	GRP1[[7]]<-dbGlue[7..7];
+
+	#DEBUG_TRACE "TIA : GRP1 xxxxxxxx",dbGlue;
+}
+
+INSTRUCTION	WriteRegister	"HMP0"	%100000
+{
+	DB05[4..4]->HMP0[0..0];
+	DB05[5..5]->HMP0[1..1];
+	DB67[0..0]->HMP0[2..2];
+	~(DB67[1..1])->HMP0[3..3];	# store inverted for simple counter
+
+	#DEBUG_TRACE "TIA : HMP0 xxxx---- ",HMP0;
+}
+
+INSTRUCTION	WriteRegister	"HMP1"	%100001
+{
+	DB05[4..4]->HMP1[0..0];
+	DB05[5..5]->HMP1[1..1];
+	DB67[0..0]->HMP1[2..2];
+	~(DB67[1..1])->HMP1[3..3];	# store inverted for simple counter
+
+	#DEBUG_TRACE "TIA : HMP1 xxxx---- ",HMP1;
+}
+
+INSTRUCTION	WriteRegister	"HMOVE"	%101010
+{
+	HMOVE<-1;	# Latch HMOVE (affects VBLANK END TIMING);
+	HMP0LATCH<-1;	# Latch more movement required for Player0
+	HMP1LATCH<-1;	# Latch more movement required for Player1
+	HMOVECMP<-$F;	# Decrements until wrap then stops
+	HMOVECNTEN<-1;	# Enabled counter
+
+	#DEBUG_TRACE "TIA : HMOVE (strobe)",HCounter;
+}
+
+INSTRUCTION	WriteRegister	"HMCLR"	%101011
+{
+	HMP0<-%1000;
+	HMP1<-%1000;
+
+	#DEBUG_TRACE "TIA : HMCLR (strobe)";
+}
+
+## Audio Block
+
+INSTRUCTION	WriteRegister	"AUDV0"	%011001
+{
+	(DB05[0..3])->AUDV[[0]];
+
+#	DEBUG_TRACE "TIA : AUDV0 : ",AUDV[[0]];
+}
+
+INSTRUCTION	WriteRegister	"AUDV1"	%011010
+{
+	(DB05[0..3])->AUDV[[1]];
+
+#	DEBUG_TRACE "TIA : AUDV1 : ",AUDV[[1]];
+}
+
+INSTRUCTION	WriteRegister	"AUDC0"	%010101
+{
+	(DB05[0..3])->AUDC[[0]];
+
+#	DEBUG_TRACE "TIA : AUDC0 : ",AUDC[[0]];
+}
+
+INSTRUCTION	WriteRegister	"AUDC1"	%010110
+{
+	(DB05[0..3])->AUDC[[1]];
+
+#	DEBUG_TRACE "TIA : AUDC1 : ",AUDC[[1]];
+}
+
+INSTRUCTION	WriteRegister	"AUDF0"	%010111
+{
+	(DB05[0..4])->AUDF[[0]];
+
+#	DEBUG_TRACE "TIA : AUDF0 : ",AUDF[[0]];
+}
+
+INSTRUCTION	WriteRegister	"AUDF1"	%011000
+{
+	(DB05[0..4])->AUDF[[1]];
+
+#	DEBUG_TRACE "TIA : AUDF1 : ",AUDF[[1]];
+}
+
+
+### Playfield
+
+MAPPING PlayfieldZone[6]
+{
+#	%011100	"Bit0"		$1;	
+	%101110	"Bit1"		$2;	
+	%010111 "Bit2"		$3;	
+	%101011 "Bit3"		$4;	
+	%110101 "Bit4"		$5;	
+	%011010 "Bit5"		$6;	
+	%001101 "Bit6"		$7;	
+	%000110 "Bit7"		$8;	
+	%000011 "Bit8"		$9;	
+	%100001 "Bit9"		$A;	
+	%010000 "Bit10"		$B;	
+	%101000 "Bit11"		$C;	
+	%110100 "Bit12"		$D;	
+	%111010 "Bit13"		$E;	
+	%011101 "Bit14"		$F;	
+	%001110 "Bit15"		$10;	
+	%000111 "Bit16"		$11;	
+	%100011 "Bit17"		$12;	
+	%110001 "Bit18"		$13;	
+	%011000 "Bit19"		$14;	
+#	%101100 "Bit0"		$1;	
+	%110110 "Bit1"		$2;	
+	%011011 "Bit2"		$3;	
+	%101101 "Bit3"		$4;	
+	%010110 "Bit4"		$5;	
+	%001011 "Bit5"		$6;	
+	%100101 "Bit6"		$7;	
+	%010010 "Bit7"		$8;	
+	%001001 "Bit8"		$9;	
+	%000100 "Bit9"		$A;	
+	%100010 "Bit10"		$B;	
+	%010001 "Bit11"		$C;	
+	%001000 "Bit12"		$D;	
+	%100100 "Bit13"		$E;	
+	%110010 "Bit14"		$F;	
+	%011001 "Bit15"		$10;	
+	%001100 "Bit16"		$11;	
+	%100110 "Bit17"		$12;	
+	%010011 "Bit18"		$13;	
+	%101001 "Bit19"		$14;	
+}
+
+####### HClock Handlers
+
+INSTRUCTION	HClockLogic	"%M0"	PlayfieldZone
+{
+	pfIndex<-PlayfieldZone;
+
+	IF (PlayfieldZone==$3)&HMOVE		# Extra blanking if HMOVE latched
+	{
+		PlayerCounterEnable<-1;
+		HBLANK<-0;
+	}
+}
+
+INSTRUCTION	HClockLogic	"Center"	%101100
+{
+	pfMayMirror<-1;
+	pfIndex<-$1;
+
+	CALL TickAudio();
+}
+
+INSTRUCTION	HClockLogic	"HSYNC ON"	%111100
+{
+	HSYNC<-1;
+}
+
+INSTRUCTION	HClockLogic	"HSYNC OFF"	%110111
+{
+	HSYNC<-0;
+}
+
+INSTRUCTION	HClockLogic	"RESET HBLK"	%011100
+{
+	pfIndex<-$1;
+	IF ~HMOVE
+	{
+		PlayerCounterEnable<-1;
+		HBLANK<-0;
+	}
+}
+
+INSTRUCTION	HClockLogic	"RESET"		%010100
+{
+	PlayerCounterEnable<-0;
+	pfIndex<-$15;
+	HReset<-1;
+	HMOVE<-0;
+
+	CALL TickAudio();
+}
+
+######### Player0 Handlers
+
+MAPPING Player0StartPoints[6]
+{
+	%111000	""	3;	##	4	12	START DRAWING (NUSIZ=001,011)
+	%101111	""	7;	##	9.3	28	START DRAWING (NUSIZ=011,010,110)
+	%111001	""	15;	##	20	60	START DRAWING (NUSIZ=100,110)
+}
+
+INSTRUCTION	Player0Logic	"START"		Player0StartPoints
+{
+	DECLARE s[1];
+
+	IF Player0StartPoints==3
+	{
+		IF (NUSIZ0_P==%001)|(NUSIZ0_P==%011)
+		{
+			s<-1;
+		}
+	}
+	IF Player0StartPoints==7
+	{
+		IF (NUSIZ0_P==%010)|(NUSIZ0_P==%011)|(NUSIZ0_P==%110)
+		{
+			s<-1;
+		}
+	}
+	IF Player0StartPoints==15
+	{
+		IF (NUSIZ0_P==%100)|(NUSIZ0_P==%110)
+		{
+			s<-1;
+		}
+	}
+
+	IF s
+	{
+		Player0Draw<-1;
+		Player0Bit<-%111;
+	}
+		
+}
+
+INSTRUCTION	Player0Logic	"RESET"		%101101
+{
+	Player0Reset<-1;
+	Player0Draw<-1;
+	Player0Bit<-%111;
+}
+
+######### Player1 Handlers
+
+MAPPING Player1StartPoints[6]
+{
+	%111000	""	3;	##	4	12	START DRAWING (NUSIZ=001,011)
+	%101111	""	7;	##	9.3	28	START DRAWING (NUSIZ=011,010,110)
+	%111001	""	15;	##	20	60	START DRAWING (NUSIZ=100,110)
+}
+
+INSTRUCTION	Player1Logic	"START"		Player1StartPoints
+{
+	DECLARE s[1];
+
+	IF Player1StartPoints==3
+	{
+		IF (NUSIZ1_P==%001)|(NUSIZ1_P==%011)
+		{
+			s<-1;
+		}
+	}
+	IF Player1StartPoints==7
+	{
+		IF (NUSIZ1_P==%010)|(NUSIZ1_P==%011)|(NUSIZ1_P==%110)
+		{
+			s<-1;
+		}
+	}
+	IF Player1StartPoints==15
+	{
+		IF (NUSIZ1_P==%100)|(NUSIZ1_P==%110)
+		{
+			s<-1;
+		}
+	}
+
+	IF s
+	{
+		Player1Draw<-1;
+		Player1Bit<-%111;
+	}
+		
+}
+
+INSTRUCTION	Player1Logic	"RESET"		%101101
+{
+	Player1Reset<-1;
+	Player1Draw<-1;
+	Player1Bit<-%111;
+}
+
+
