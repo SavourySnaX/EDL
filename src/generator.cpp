@@ -18,6 +18,7 @@ const size_t PATH_DEFAULT_LEN=2048;
 static LLVMContext TheContext;
 static std::stack<DIScope*> scopingStack;
 static std::map<Function*,Function*> g_connectFunctions;		// Global for now
+static std::map<std::string, bool> g_impedanceRequired;
 
 extern YYLTYPE CombineTokenLocations(const YYLTYPE &a, const YYLTYPE &b);
 extern void PrintErrorWholeLine(const YYLTYPE &location, const char *errorstring, ...);
@@ -815,7 +816,7 @@ bool CodeGenContext::LookupBitVariable(BitVariable& outVar,const std::string& mo
 			}
 			else if (isRoot)
 			{
-				if (module.c_str() == "")
+				if (module == "")
 				{
 					PrintErrorFromLocation(nameLoc, "undeclared variable %s", name.c_str());
 				}
@@ -1568,6 +1569,17 @@ Instruction* CAssignment::generateAssignmentActual(BitVariable& to,const CIdenti
 void CAssignment::prePass(CodeGenContext& context)
 {
 	rhs.prePass(context);
+
+	if (rhs.IsImpedance())
+	{
+		// We have a variable being assigned a high_impedance, for compatabilty with old (non bus connected modules), we only create impedance if we find at least one assignment
+		assert(lhs.module == "");
+		std::string fullName = context.moduleName + context.symbolPrepend + lhs.name;
+		if (g_impedanceRequired.find(fullName) == g_impedanceRequired.end())
+		{
+			g_impedanceRequired[fullName] = true;
+		}
+	}
 }
 
 Value* CAssignment::codeGen(CodeGenContext& context)
@@ -2158,14 +2170,17 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 					CreateReadAccessor(context,temp,false);
 					break;
 				case TOK_BIDIRECTIONAL:
-
-					// In the future we should try to detect if a pin uses impedance and avoid the additional overhead
-
-					// we also need a new variable to hold the impedance mask
-					temp.impedance=new GlobalVariable(*context.module,Type::getIntNTy(TheContext,size.integer.getLimitedValue()), false, GlobalValue::PrivateLinkage,nullptr,context.symbolPrepend+id.name+".HZ");
-
-					CreateWriteAccessor(context,temp,id.module,id.name,true);
-					CreateReadAccessor(context,temp,true);
+					{
+						// we need a new variable to hold the impedance mask
+						bool needsImpedance = false;
+						if (g_impedanceRequired.find(context.moduleName + context.symbolPrepend + id.name) != g_impedanceRequired.end())
+						{
+							temp.impedance = new GlobalVariable(*context.module, Type::getIntNTy(TheContext, size.integer.getLimitedValue()), false, GlobalValue::PrivateLinkage, nullptr, context.symbolPrepend + id.name + ".HZ");
+							needsImpedance = true;
+						}
+						CreateWriteAccessor(context, temp, id.module, id.name, needsImpedance);
+						CreateReadAccessor(context, temp, needsImpedance);
+					}
 					break;
 				default:
 					assert(0 && "Unhandled pin type");
