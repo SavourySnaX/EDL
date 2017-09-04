@@ -348,9 +348,8 @@ namespace
 
 using namespace std;
 
-CodeGenContext::CodeGenContext(CodeGenContext* parent,const CompilerOptions& options) 
+CodeGenContext::CodeGenContext(GlobalContext& globalContext,CodeGenContext* parent) : gContext(globalContext)
 {
-	opts = options;
 	moduleName="";
 	if (!parent) 
 	{ 
@@ -457,16 +456,16 @@ void CodeGenContext::generateCode(CBlock& root)
 
 	if (isRoot)
 	{
-		optlevel = opts.optimisationLevel;
-		if (opts.symbolModifier)
+		optlevel = gContext.opts.optimisationLevel;
+		if (gContext.opts.symbolModifier)
 		{
-			symbolPrepend=opts.symbolModifier;
+			symbolPrepend=gContext.opts.symbolModifier;
 		}
 
 		// Testing - setup a compile unit for our root module
-		if (opts.generateDebug)
+		if (gContext.opts.generateDebug)
 		{
-			scopingStack.push(CreateNewDbgFile(opts.inputFile, dbgBuilder));
+			scopingStack.push(CreateNewDbgFile(gContext.opts.inputFile, dbgBuilder));
 
 			compileUnit = dbgBuilder->createCompileUnit(/*0x9999*/dwarf::DW_LANG_C99, scopingStack.top()->getFile(), "edlVxx", optlevel > 0, ""/*command line flags*/, 0);
 
@@ -513,7 +512,7 @@ void CodeGenContext::generateCode(CBlock& root)
 	root.codeGen(*this);	/* Generate complete code - starting at no block (global space) */
 
 	// Finalise disassembly arrays
-	if (opts.generateDisassembly)
+	if (gContext.opts.generateDisassembly)
 	{
 		GenerateDisassmTables();
 	}
@@ -525,7 +524,7 @@ void CodeGenContext::generateCode(CBlock& root)
 
 	if (isRoot)
 	{
-		if (opts.generateDebug)
+		if (gContext.opts.generateDebug)
 		{
 			scopingStack.pop();
 			assert(scopingStack.empty() && "Programming error");
@@ -549,13 +548,13 @@ void CodeGenContext::generateCode(CBlock& root)
 
 		pm.add(createVerifierPass());
 		
-		if (opts.optimisationLevel>0)
+		if (gContext.opts.optimisationLevel>0)
 		{
 			// Add an appropriate TargetData instance for this module...
 
 			for (int a=0;a<2;a++)		// We add things twice, as the statereferencesquasher will make more improvements once inlining has happened
 			{
-				if (opts.optimisationLevel>1)
+				if (gContext.opts.optimisationLevel>1)
 				{
 					pm.add(new StateReferenceSquasher(this));		// Custom pass designed to remove redundant loads of the current state (since it can only be modified in one place)
 					pm.add(new InOutReferenceSquasher(this));		// Custom pass designed to remove redundant loads of the current state (since it can only be modified in one place)
@@ -668,7 +667,7 @@ void CodeGenContext::generateCode(CBlock& root)
 				pm.add(createVerifierPass());
 			}
 		}
-		if (opts.outputFile != nullptr)
+		if (gContext.opts.outputFile != nullptr)
 		{
 			std::string error;
 			auto triple = sys::getDefaultTargetTriple();
@@ -683,7 +682,7 @@ void CodeGenContext::generateCode(CBlock& root)
 			auto rm = Optional<Reloc::Model>();
 			auto targetMachine = target->createTargetMachine(triple, "generic", "", opt, rm);
 			std::error_code ec;
-			raw_fd_ostream dest(opts.outputFile, ec,llvm::sys::fs::F_None);
+			raw_fd_ostream dest(gContext.opts.outputFile, ec,llvm::sys::fs::F_None);
 			if (ec)
 			{
 				errorFlagged = true;
@@ -1609,7 +1608,7 @@ Value* CAssignment::codeGen(CodeGenContext& context)
 		}
 
 		Instruction* I = CAssignment::generateImpedanceAssignment(var,var.impedance,context);
-		if (context.opts.generateDebug && scopingStack.size()>2)//tmp hack for missing scopes
+		if (context.gContext.opts.generateDebug && scopingStack.size()>2)//tmp hack for missing scopes
 		{
 			I->setDebugLoc(DebugLoc::get(operatorLoc.first_line, operatorLoc.first_column, scopingStack.top()));
 		}
@@ -1622,7 +1621,7 @@ Value* CAssignment::codeGen(CodeGenContext& context)
 	}
 
 	Instruction* I = CAssignment::generateAssignment(var,lhs,assignWith,context);
-	if (context.opts.generateDebug && scopingStack.size()>2)//tmp hack for missing scopes
+	if (context.gContext.opts.generateDebug && scopingStack.size()>2)//tmp hack for missing scopes
 	{
 		I->setDebugLoc(DebugLoc::get(operatorLoc.first_line, operatorLoc.first_column, scopingStack.top()));
 	}
@@ -2001,7 +2000,7 @@ Value* CStateDefinition::codeGen(CodeGenContext& context)
 	{
 		CStateDeclaration* pState = pStates->getStateDeclaration(id);
 
-	       	if (pState)
+		if (pState)
 		{
 			context.pushBlock(pState->entry);
 			block.codeGen(context);
@@ -2411,7 +2410,7 @@ Value* CHandlerDeclaration::codeGen(CodeGenContext& context)
 	Function* function = Function::Create(ftype, GlobalValue::PrivateLinkage, context.moduleName + context.symbolPrepend+"HANDLER."+id.name, context.module);
 	function->setDoesNotThrow();
 
-	if (context.opts.generateDebug)
+	if (context.gContext.opts.generateDebug)
 	{
 		// Create function type information
 
@@ -2456,7 +2455,7 @@ Value* CHandlerDeclaration::codeGen(CodeGenContext& context)
 	context.parentHandler=nullptr;
 
 	Instruction* I=ReturnInst::Create(TheContext, context.currentBlock());			/* block may well have changed by time we reach here */
-	if (context.opts.generateDebug)
+	if (context.gContext.opts.generateDebug)
 	{
 		I->setDebugLoc(DebugLoc::get(block.blockEndLoc.first_line, block.blockEndLoc.first_column, scopingStack.top()));
 	}
@@ -2465,7 +2464,7 @@ Value* CHandlerDeclaration::codeGen(CodeGenContext& context)
 
 	context.popBlock();
 
-	if (context.opts.generateDebug)
+	if (context.gContext.opts.generateDebug)
 	{
 		scopingStack.pop();
 	}
@@ -2641,7 +2640,7 @@ Value* CExecute::codeGen(CodeGenContext& context)
 
 		temp.blockEndForExecute = BasicBlock::Create(TheContext, "execReturn", context.currentBlock()->getParent(), 0);		// Need to cache this block away somewhere
 	
-		if (context.opts.traceUnimplemented)
+		if (context.gContext.opts.traceUnimplemented)
 		{
 			BasicBlock* tempBlock=BasicBlock::Create(TheContext,"default",context.currentBlock()->getParent(),0);
 
@@ -3191,7 +3190,7 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 	func->setCallingConv(CallingConv::C);
 	func->setDoesNotThrow();
 	
-	if (context.opts.generateDebug)
+	if (context.gContext.opts.generateDebug)
 	{
 		// Create function type information
 
@@ -3222,7 +3221,7 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 	g_connectFunctions[func] = func;
 
 	BasicBlock *bblock = BasicBlock::Create(TheContext, "entry", func, 0);
-	if (context.opts.generateDebug)
+	if (context.gContext.opts.generateDebug)
 	{
 		scopingStack.push(context.dbgBuilder->createLexicalBlock(scopingStack.top(), scopingStack.top()->getFile(), blockStartLoc.first_line, blockStartLoc.first_column));
 	}
@@ -3442,7 +3441,7 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 						fetchDriving = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, fetchDriving, ConstantInt::get(TheContext, APInt(var.size.getLimitedValue(), 0)), "isNotImpedance", bblock);
 
 						Instruction* I = BinaryOperator::Create(Instruction::Or, fetchDriving, busIsDrivingResult[curBus], "isDriving", context.currentBlock());
-						if (context.opts.generateDebug)
+						if (context.gContext.opts.generateDebug)
 						{
 							I->setDebugLoc(DebugLoc::get((*connects[a]).statementLoc.first_line, (*connects[a]).statementLoc.first_column, scopingStack.top()));
 						}
@@ -3483,7 +3482,7 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 					}
 
 					Instruction* I = BinaryOperator::Create(Instruction::And, tmp, busOutResult[curBus], "PullUpCombine", context.currentBlock());
-					if (context.opts.generateDebug)
+					if (context.gContext.opts.generateDebug)
 					{
 						I->setDebugLoc(DebugLoc::get((*connects[a]).statementLoc.first_line, (*connects[a]).statementLoc.first_column, scopingStack.top()));
 					}
@@ -3528,7 +3527,7 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 
 			Instruction* swapAB = SelectInst::Create(swapA, busOutResult[1], busOutResult[0], "SwapAwithB", context.currentBlock());
 			Instruction* swapBA = SelectInst::Create(swapB, busOutResult[0], busOutResult[1], "SwapBwithA", context.currentBlock());
-			if (context.opts.generateDebug)
+			if (context.gContext.opts.generateDebug)
 			{
 				swapAB->setDebugLoc(DebugLoc::get((*connects[a]).statementLoc.first_line, (*connects[a]).statementLoc.first_column, scopingStack.top()));
 				swapBA->setDebugLoc(DebugLoc::get((*connects[a]).statementLoc.first_line, (*connects[a]).statementLoc.first_column, scopingStack.top()));
@@ -3556,7 +3555,7 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 				}
 
 				Instruction* I = CAssignment::generateAssignment(var, *ins[curBus][i], busOutResult[curBus], context);
-				if (context.opts.generateDebug)
+				if (context.gContext.opts.generateDebug)
 				{
 					I->setDebugLoc(DebugLoc::get((*connects[a]).statementLoc.first_line, (*connects[a]).statementLoc.first_column, scopingStack.top()));
 				}
@@ -3595,14 +3594,14 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 	}
 
 	Instruction* I=ReturnInst::Create(TheContext, context.currentBlock());			/* block may well have changed by time we reach here */
-	if (context.opts.generateDebug)
+	if (context.gContext.opts.generateDebug)
 	{
 		I->setDebugLoc(DebugLoc::get(blockEndLoc.first_line, blockEndLoc.first_column, scopingStack.top()));
 	}
 
 	context.popBlock();
 
-	if (context.opts.generateDebug)
+	if (context.gContext.opts.generateDebug)
 	{
 		scopingStack.pop();	//lexical block
 		scopingStack.pop(); //function
@@ -4344,17 +4343,17 @@ void CInstance::prePass(CodeGenContext& context)
 	
 	CodeGenContext* includefile;
 
-	includefile = new CodeGenContext(&context,context.opts);
+	includefile = new CodeGenContext(context.gContext,&context);
 	includefile->moduleName=ident.name+".";
 
-	if (context.opts.generateDebug)
+	if (context.gContext.opts.generateDebug)
 	{
 		scopingStack.push(CreateNewDbgFile(includeName.c_str(), includefile->dbgBuilder));
 	}
 
 	includefile->generateCode(*g_ProgramBlock);
 
-	if (context.opts.generateDebug)
+	if (context.gContext.opts.generateDebug)
 	{
 		scopingStack.pop();
 	}

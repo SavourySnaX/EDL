@@ -97,6 +97,14 @@ public:
 	int generateDebug;
 };
 
+class GlobalContext
+{
+public:
+	GlobalContext(CompilerOptions& options) : opts(options) {  }
+
+	CompilerOptions& opts;
+};
+
 class CodeGenContext 
 {
     std::stack<CodeGenBlock *> blocks;
@@ -107,6 +115,8 @@ class CodeGenContext
     void GenerateDisassmTables();
 
 public:
+	GlobalContext& gContext;
+
     std::string stateLabelStack;
 
     CHandlerDeclaration* parentHandler;
@@ -116,7 +126,7 @@ public:
     Module *module;
     bool isRoot;
     ExecutionEngine		*ee;
-    CodeGenContext(CodeGenContext* parent,const CompilerOptions& options);
+    CodeGenContext(GlobalContext& globalContext,CodeGenContext* parent);
     Function *debugTraceString;
     Function *debugTraceChar;
     Function *debugTraceMissing;
@@ -165,8 +175,6 @@ public:
     std::map<CStatesDeclaration*,StateVariable> m_statesAlt;
     std::map<std::string, CHandlerDeclaration*> m_handlers;
     std::map<std::string, CMappingDeclaration*> m_mappings;
-
-    CompilerOptions opts;
 
     void generateCode(CBlock& root);
    // GenericValue runCode();

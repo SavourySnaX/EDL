@@ -358,7 +358,8 @@ int main(int argc, char **argv)
 		return 1;
 	}
 	
-	CodeGenContext rootContext(nullptr,opts);
+	GlobalContext globalContext(opts);
+	CodeGenContext rootContext(globalContext,nullptr);
 	rootContext.generateCode(*g_ProgramBlock);
 
 	if (rootContext.errorFlagged)

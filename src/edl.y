@@ -139,7 +139,7 @@ stmt : TOK_INSTANCE quoted TOK_AS ident TOK_EOS { $$ = new CInstance(*$2,*$4); }
      | TOK_NEXT state_ident_list TOK_EOS { $$ = new CStateJump(*$2); delete $2; }
      | TOK_PUSH state_ident_list TOK_EOS { $$ = new CStatePush(*$2); delete $2; }
      | TOK_POP ident TOK_EOS { $$ = new CStatePop(*$2); }
-     | TOK_TRACE debuglist TOK_EOS { $$ = new CDebugLine(*$2); delete $2; }
+     | TOK_TRACE debuglist TOK_EOS { $$ = new CDebugLine(*$2,&@1); delete $2; }
      | expr TOK_EOS { $$ = new CExpressionStatement(*$1); }
      ;
 
@@ -192,9 +192,9 @@ state_ident_list : state_ident_list TOK_DOT state_ident { $$->push_back($<state_
 block : TOK_LBRACE stmts TOK_RBRACE {$$ = $2; $$->SetBlockLocation(&@1,&@3); }
       | TOK_LBRACE TOK_RBRACE { $$ = new CBlock(); $$->SetBlockLocation(&@1,&@2); }
 
-trigger: TOK_ALWAYS 							{ $$ = new CTrigger(TOK_ALWAYS); }
-       | TOK_CHANGED							{ $$ = new CTrigger(TOK_CHANGED); }
-       | TOK_TRANSITION TOK_OBR numeric TOK_COMMA numeric TOK_CBR	{ $$ = new CTrigger(TOK_TRANSITION,*$3,*$5); }
+trigger: TOK_ALWAYS 							{ $$ = new CTrigger(TOK_ALWAYS,&@1); }
+       | TOK_CHANGED							{ $$ = new CTrigger(TOK_CHANGED,&@1); }
+       | TOK_TRANSITION TOK_OBR numeric TOK_COMMA numeric TOK_CBR	{ $$ = new CTrigger(TOK_TRANSITION,&@1,*$3,*$5); }
        ;
 
 /*	| connect_list TOK_COMMA TOK_CLOCK_GEN TOK_OBR numeric TOK_CBR	{ $$->push_back(new CClock(numeric)); }*/

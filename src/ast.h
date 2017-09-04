@@ -321,8 +321,9 @@ class CDebugLine : public CStatement
 {
 public:
 	DebugList debug;
-	CDebugLine(DebugList& debug) :
-		debug(debug) { }
+	YYLTYPE debugLocation;
+	CDebugLine(DebugList& debug,YYLTYPE* debugLocation) :
+		debug(debug),debugLocation(*debugLocation) { }
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
 
@@ -509,11 +510,12 @@ public:
 	int type;
 	CInteger& param1;
 	CInteger& param2;
+	YYLTYPE debugLocation;
 	static CInteger zero;
-	CTrigger(int type) :
-		type(type), param1(zero),param2(zero) { }
-	CTrigger(int type, CInteger& param1, CInteger& param2) :
-		type(type), param1(param1), param2(param2) { }
+	CTrigger(int type,YYLTYPE* debugLocation) :
+		type(type), debugLocation(*debugLocation),param1(zero),param2(zero) { }
+	CTrigger(int type,YYLTYPE* debugLocation, CInteger& param1, CInteger& param2) :
+		type(type), debugLocation(*debugLocation), param1(param1), param2(param2) { }
 	virtual llvm::Value* codeGen(CodeGenContext& context,BitVariable& pin,llvm::Value* function);
 };
 
