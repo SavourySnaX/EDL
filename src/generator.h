@@ -14,6 +14,7 @@
 #include <llvm/IR/Verifier.h>
 #include <llvm/IR/IRPrintingPasses.h>
 #include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/DIBuilder.h>
 //#include <llvm/ModuleProvider.h>
 #include <llvm/Support/TargetSelect.h>
 //#include <llvm/ExecutionEngine/GenericValue.h>
@@ -85,7 +86,7 @@ class CompilerOptions
 {
 public:
 
-	CompilerOptions() { symbolModifier = nullptr; inputFile = nullptr; outputFile = nullptr; optimisationLevel = 0; traceUnimplemented = 0; generateDisassembly = 1; }
+	CompilerOptions() { symbolModifier = nullptr; inputFile = nullptr; outputFile = nullptr; optimisationLevel = 0; traceUnimplemented = 0; generateDisassembly = 1; generateDebug = 0; }
 	
 	char *symbolModifier;
 	char *inputFile;
@@ -93,6 +94,7 @@ public:
 	int optimisationLevel;
 	int traceUnimplemented;
 	int generateDisassembly;
+	int generateDebug;
 };
 
 class CodeGenContext 
@@ -109,6 +111,8 @@ public:
 
     CHandlerDeclaration* parentHandler;
 
+	DIBuilder *dbgBuilder;
+	DICompileUnit *compileUnit;
     Module *module;
     bool isRoot;
     ExecutionEngine		*ee;

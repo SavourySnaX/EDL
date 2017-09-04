@@ -19,15 +19,16 @@ int Usage()
 {
 	cerr << "Usage: edl [opts] [inputfile]" << endl;
 	cerr << "Compile edl into llvm source (default reads/writes from/to stdout)" <<endl <<endl;
-	cerr << "-s symbol		prepends symbol to all externally accessable symbols" << endl;
-	cerr << "-o output		emits a native objectfile instead of llvm assembly" << endl;
-	cerr << "-O0			disables optimisations" << endl;
-	cerr << "-O1			enables all but experimental optimisations" << endl;
-	cerr << "-O2			enables O1 plus experimental optimisations" << endl;
-	cerr << "-t                     trace on unimplemented instructions" << endl;
-	cerr << "-n			disables disassembly generation" << endl;
-	cerr << "-v			print version" << endl;
-	cerr << "-h --help		print usage" << endl;
+	cerr << "-s symbol      prepends symbol to all externally accessable symbols" << endl;
+	cerr << "-o output      emits a native objectfile instead of llvm assembly" << endl;
+	cerr << "-g             generate debug information" << endl;
+	cerr << "-O0            disables optimisations" << endl;
+	cerr << "-O1            enables all but experimental optimisations" << endl;
+	cerr << "-O2            enables O1 plus experimental optimisations" << endl;
+	cerr << "-t             trace on unimplemented instructions" << endl;
+	cerr << "-n             disables disassembly generation" << endl;
+	cerr << "-v             print version" << endl;
+	cerr << "-h --help      print usage" << endl;
 
 	return 0;
 }
@@ -296,6 +297,10 @@ int main(int argc, char **argv)
 			{
 				cout << "edl.exe "<<EDL_COMPILER_VERSION<<":"<<EDL_LANGUAGE_VERSION<<endl;
 				return 0;
+			}
+			if (strcmp(argv[a], "-g") == 0)
+			{
+				opts.generateDebug = 1;
 			}
 			if (strcmp(argv[a],"-h")==0 || strcmp(argv[a],"--help")==0)
 			{

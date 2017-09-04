@@ -189,8 +189,8 @@ state_ident_list : state_ident_list TOK_DOT state_ident { $$->push_back($<state_
 		 | state_ident { $$ = new StateIdentList(); $$->push_back($<state_ident>1); }
 		;
 
-block : TOK_LBRACE stmts TOK_RBRACE {$$ = $2; }
-      | TOK_LBRACE TOK_RBRACE { $$ = new CBlock(); }
+block : TOK_LBRACE stmts TOK_RBRACE {$$ = $2; $$->SetBlockLocation(&@1,&@3); }
+      | TOK_LBRACE TOK_RBRACE { $$ = new CBlock(); $$->SetBlockLocation(&@1,&@2); }
 
 trigger: TOK_ALWAYS 							{ $$ = new CTrigger(TOK_ALWAYS); }
        | TOK_CHANGED							{ $$ = new CTrigger(TOK_CHANGED); }

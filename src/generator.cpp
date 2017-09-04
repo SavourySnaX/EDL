@@ -3,7 +3,8 @@
 #include "generator.h"
 #include "parser.hpp"
 
-
+#include <llvm/Support/Path.h>
+#include <llvm/Support/MemoryBuffer.h>
 #include "llvm/Pass.h"
 #include "llvm/IR/Function.h"
 #include "llvm/Support/raw_ostream.h"
@@ -13,6 +14,7 @@
 using namespace llvm;
 
 static LLVMContext TheContext;
+static std::stack<DIScope*> scopingStack;
 static std::map<Function*,Function*> g_connectFunctions;		// Global for now
 
 extern YYLTYPE CombineTokenLocations(const YYLTYPE &a, const YYLTYPE &b);
@@ -20,6 +22,34 @@ extern void PrintErrorWholeLine(const YYLTYPE &location, const char *errorstring
 extern void PrintErrorFromLocation(const YYLTYPE &location, const char *errorstring, ...);
 extern void PrintErrorDuplication(const YYLTYPE &location, const YYLTYPE &originalLocation, const char *errorstring, ...);
 extern void PrintError(const char *errorstring, ...);
+
+DIFile* createNewDbgFile(const char* filepath,DIBuilder* dbgBuilder)
+{
+	SmallString<_MAX_PATH> fullpath(filepath);
+	sys::path::native(fullpath);
+	sys::fs::make_absolute(fullpath);
+	StringRef filename = sys::path::filename(fullpath);
+	sys::path::remove_filename(fullpath);
+	SmallString<32> Checksum;
+	Checksum.clear();
+
+	ErrorOr<std::unique_ptr<MemoryBuffer>> CheckFileOrErr = MemoryBuffer::getFile(filepath);
+	if (std::error_code EC = CheckFileOrErr.getError())
+	{
+		assert(0);
+	}
+	MemoryBuffer &MemBuffer = *CheckFileOrErr.get();
+
+	llvm::MD5 Hash;
+	llvm::MD5::MD5Result Result;
+
+	Hash.update(MemBuffer.getBuffer());
+	Hash.final(Result);
+
+	Hash.stringifyResult(Result, Checksum);
+
+	return dbgBuilder->createFile(filename, fullpath, DIFile::CSK_MD5, Checksum);
+}
 
 Value* UndefinedStateError(StateIdentList &stateIdents,CodeGenContext &context)
 {
@@ -314,10 +344,9 @@ CodeGenContext::CodeGenContext(CodeGenContext* parent)
 	if (!parent) 
 	{ 
 		std::string err;
-//		module = new Module("root",TheContext); 
-
 		std::unique_ptr<Module> Owner = llvm::make_unique<Module>("root", TheContext);
 		module = Owner.get();
+		dbgBuilder = new DIBuilder(*module);
 		ee = EngineBuilder(std::move(Owner)).setErrorStr(&err).setMCJITMemoryManager(llvm::make_unique<SectionMemoryManager>()).create();
 		if (!ee)
 		{
@@ -328,6 +357,8 @@ CodeGenContext::CodeGenContext(CodeGenContext* parent)
 	}
 	else
 	{
+		dbgBuilder = parent->dbgBuilder;
+		compileUnit = parent->compileUnit; // not sure about this yet
 		module=parent->module;
 		ee=parent->ee;
 		debugTraceChar=parent->debugTraceChar;
@@ -422,6 +453,17 @@ void CodeGenContext::generateCode(CBlock& root,CompilerOptions &options)
 			symbolPrepend=opts.symbolModifier;
 		}
 
+		// Testing - setup a compile unit for our root module
+		if (opts.generateDebug)
+		{
+			scopingStack.push(createNewDbgFile(opts.inputFile, dbgBuilder));
+
+			compileUnit = dbgBuilder->createCompileUnit(/*0x9999*/dwarf::DW_LANG_C99, scopingStack.top()->getFile(), "edlVxx", optlevel > 0, ""/*command line flags*/, 0);
+
+			module->addModuleFlag(llvm::Module::Warning, "CodeView", 1);
+			module->addModuleFlag(llvm::Module::Warning, "Debug Info Version", llvm::DEBUG_METADATA_VERSION);
+		}
+
 		PointerType* PointerTy_4 = PointerType::get(IntegerType::get(TheContext, 8), 0);
 
 		std::vector<Type*>FuncTy_8_args;
@@ -469,7 +511,22 @@ void CodeGenContext::generateCode(CBlock& root,CompilerOptions &options)
 
 	if (isRoot)
 	{
+		if (opts.generateDebug)
+		{
+			scopingStack.pop();
+			assert(scopingStack.empty(), "Programming error");
+
+			dbgBuilder->finalize();
+
+			NamedMDNode *IdentMetadata = module->getOrInsertNamedMetadata("llvm.ident");
+			std::string Version = "EDLvxx";
+			LLVMContext &Ctx = module->getContext();
+
+			Metadata *IdentNode[] = { llvm::MDString::get(Ctx, Version) };
+			IdentMetadata->addOperand(llvm::MDNode::get(Ctx, IdentNode));
+		}
 		module->setDataLayout(ee->getDataLayout());
+		module->setTargetTriple(sys::getDefaultTargetTriple()/*"x86_64--windows-msvc"*/);	// required for codeview debug information to be output AT ALL (need to update object file output)
 
 		/* Print the bytecode in a human-readable format 
 		   to see if our program compiled properly
@@ -2315,6 +2372,34 @@ Value* CHandlerDeclaration::codeGen(CodeGenContext& context)
 	FunctionType *ftype = FunctionType::get(Type::getVoidTy(TheContext),argTypes, false);
 	Function* function = Function::Create(ftype, GlobalValue::PrivateLinkage, context.symbolPrepend+"HANDLER."+id.name, context.module);
 	function->setDoesNotThrow();
+
+	if (context.opts.generateDebug)
+	{
+		// Create function type information
+
+		SmallVector<Metadata *, 1> EltTys;
+
+		// Add the result type.
+		EltTys.push_back(nullptr);
+
+		DISubroutineType* dbgFuncTy = context.dbgBuilder->createSubroutineType(context.dbgBuilder->getOrCreateTypeArray(EltTys));
+
+		// Create function definition in debug information
+
+		DIScope *FContext = scopingStack.top()->getFile();	// temporary - should come from the location information
+		unsigned LineNo = handlerLoc.first_line;
+		unsigned ScopeLine = LineNo;
+		DISubprogram *SP = context.dbgBuilder->createFunction(
+			FContext, /*id.name*/context.symbolPrepend + "HANDLER_" + id.name, StringRef(), scopingStack.top()->getFile(), LineNo,
+			dbgFuncTy,
+			false /* internal linkage */, true /* definition */, ScopeLine,
+			DINode::FlagPrototyped, false);
+		function->setSubprogram(SP);
+
+		scopingStack.push(SP);
+	}
+
+
 	BasicBlock *bblock = BasicBlock::Create(TheContext, "entry", function, 0);
 	
 	context.m_handlers[id.name]=this;
@@ -2332,11 +2417,20 @@ Value* CHandlerDeclaration::codeGen(CodeGenContext& context)
 
 	context.parentHandler=nullptr;
 
-	ReturnInst::Create(TheContext, context.currentBlock());			/* block may well have changed by time we reach here */
+	Instruction* I=ReturnInst::Create(TheContext, context.currentBlock());			/* block may well have changed by time we reach here */
+	if (context.opts.generateDebug)
+	{
+		I->setDebugLoc(DebugLoc::get(block.blockEndLoc.first_line, block.blockEndLoc.first_column, scopingStack.top()));
+	}
 
 	context.stateLabelStack=oldStateLabelStack;
 
 	context.popBlock();
+
+	if (context.opts.generateDebug)
+	{
+		scopingStack.pop();
+	}
 
 	return function;
 }
@@ -4152,12 +4246,22 @@ void CInstance::prePass(CodeGenContext& context)
 	
 	CodeGenContext* includefile;
 
-	CompilerOptions dummy;
+	CompilerOptions dummy=context.opts;	//ugh -- FIX ME
 
 	includefile = new CodeGenContext(&context);
 	includefile->moduleName=ident.name+".";
+
+	if (context.opts.generateDebug)
+	{
+		scopingStack.push(createNewDbgFile(includeName.c_str(), includefile->dbgBuilder));
+	}
+
 	includefile->generateCode(*g_ProgramBlock,dummy);
 
+	if (context.opts.generateDebug)
+	{
+		scopingStack.pop();
+	}
 	if (includefile->errorFlagged)
 	{
 		PrintErrorFromLocation(filename.quotedLoc, "Unable to parse module %s", includeName.c_str());
