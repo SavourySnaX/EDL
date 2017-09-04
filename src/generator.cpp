@@ -1947,7 +1947,7 @@ void CVariableDeclaration::CreateWriteAccessor(CodeGenContext& context,BitVariab
 	{
 		function = Function::Create(ftype, GlobalValue::PrivateLinkage, context.moduleName+context.symbolPrepend+"PinSet"+id.name, context.module);
 	}
-	function->onlyReadsMemory(0);	// Mark input read only
+	function->onlyReadsMemory();	// Mark input read only
 	function->setDoesNotThrow();
 	BasicBlock *bblock = BasicBlock::Create(TheContext, "entry", function, 0);
 
@@ -2040,7 +2040,7 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 			return NULL;
 		}
 		// Within a basic block - so must be a stack variable
-		AllocaInst *alloc = new AllocaInst(Type::getIntNTy(TheContext,size.integer.getLimitedValue()), id.name.c_str(), context.currentBlock());
+		AllocaInst *alloc = new AllocaInst(Type::getIntNTy(TheContext,size.integer.getLimitedValue()),0, id.name.c_str(), context.currentBlock());
 		temp.value = alloc;
 	}
 	else
@@ -2829,7 +2829,7 @@ void COperandIdent::DeclareLocal(CodeGenContext& context,unsigned num)
 	temp.impedance=NULL;
 	temp.fromExternal=false;
 
-	AllocaInst *alloc = new AllocaInst(Type::getIntNTy(TheContext,size.integer.getLimitedValue()), ident.name.c_str(), context.currentBlock());
+	AllocaInst *alloc = new AllocaInst(Type::getIntNTy(TheContext,size.integer.getLimitedValue()),0, ident.name.c_str(), context.currentBlock());
 	temp.value = alloc;
 
 	ConstantInt* const_intn_0 = ConstantInt::get(TheContext, temp.cnst);
@@ -3002,7 +3002,7 @@ APInt COperandPartial::GetComputableConstant(CodeGenContext& context,unsigned nu
 			result=result.zext(result.getBitWidth()+temp.getBitWidth());
 			temp=temp.zext(result.getBitWidth());
 			temp=temp.shl(curBitWidth);
-			result=result.Or(temp);
+			result=result | temp;
 		}
 	}
 
@@ -4078,7 +4078,7 @@ Value* CFunctionDecl::codeGen(CodeGenContext& context)
 		returnVal.impedance=NULL;
 		returnVal.fromExternal=false;
 
-		AllocaInst *alloc = new AllocaInst(Type::getIntNTy(TheContext,returns[0]->size.integer.getLimitedValue()), returns[0]->id.name.c_str(), context.currentBlock());
+		AllocaInst *alloc = new AllocaInst(Type::getIntNTy(TheContext,returns[0]->size.integer.getLimitedValue()),0, returns[0]->id.name.c_str(), context.currentBlock());
 		returnVal.value = alloc;
 		context.locals()[returns[0]->id.name] = returnVal;
 	}
