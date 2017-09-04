@@ -23,7 +23,14 @@ extern void PrintErrorFromLocation(const YYLTYPE &location, const char *errorstr
 extern void PrintErrorDuplication(const YYLTYPE &location, const YYLTYPE &originalLocation, const char *errorstring, ...);
 extern void PrintError(const char *errorstring, ...);
 
-DIFile* createNewDbgFile(const char* filepath,DIBuilder* dbgBuilder)
+std::string SanitiseNameForDebug(StringRef inputName)
+{
+	std::string t = inputName;
+	std::replace(t.begin(), t.end(), '.', '_');
+	return t;
+}
+
+DIFile* CreateNewDbgFile(const char* filepath,DIBuilder* dbgBuilder)
 {
 	SmallString<_MAX_PATH> fullpath(filepath);
 	sys::path::native(fullpath);
@@ -36,7 +43,7 @@ DIFile* createNewDbgFile(const char* filepath,DIBuilder* dbgBuilder)
 	ErrorOr<std::unique_ptr<MemoryBuffer>> CheckFileOrErr = MemoryBuffer::getFile(filepath);
 	if (std::error_code EC = CheckFileOrErr.getError())
 	{
-		assert(0);
+		assert(0 && "failed to read file");
 	}
 	MemoryBuffer &MemBuffer = *CheckFileOrErr.get();
 
@@ -456,7 +463,7 @@ void CodeGenContext::generateCode(CBlock& root)
 		// Testing - setup a compile unit for our root module
 		if (opts.generateDebug)
 		{
-			scopingStack.push(createNewDbgFile(opts.inputFile, dbgBuilder));
+			scopingStack.push(CreateNewDbgFile(opts.inputFile, dbgBuilder));
 
 			compileUnit = dbgBuilder->createCompileUnit(/*0x9999*/dwarf::DW_LANG_C99, scopingStack.top()->getFile(), "edlVxx", optlevel > 0, ""/*command line flags*/, 0);
 
@@ -514,7 +521,7 @@ void CodeGenContext::generateCode(CBlock& root)
 		if (opts.generateDebug)
 		{
 			scopingStack.pop();
-			assert(scopingStack.empty(), "Programming error");
+			assert(scopingStack.empty() && "Programming error");
 
 			dbgBuilder->finalize();
 
@@ -2145,7 +2152,7 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 					CreateReadAccessor(context,temp,true);
 					break;
 				default:
-					assert(0,"Unhandled pin type");
+					assert(0 && "Unhandled pin type");
 					break;
 			}
 		}
@@ -2370,7 +2377,7 @@ Value* CHandlerDeclaration::codeGen(CodeGenContext& context)
 	}
 
 	FunctionType *ftype = FunctionType::get(Type::getVoidTy(TheContext),argTypes, false);
-	Function* function = Function::Create(ftype, GlobalValue::PrivateLinkage, context.symbolPrepend+"HANDLER."+id.name, context.module);
+	Function* function = Function::Create(ftype, GlobalValue::PrivateLinkage, context.moduleName + context.symbolPrepend+"HANDLER."+id.name, context.module);
 	function->setDoesNotThrow();
 
 	if (context.opts.generateDebug)
@@ -2390,7 +2397,7 @@ Value* CHandlerDeclaration::codeGen(CodeGenContext& context)
 		unsigned LineNo = handlerLoc.first_line;
 		unsigned ScopeLine = LineNo;
 		DISubprogram *SP = context.dbgBuilder->createFunction(
-			FContext, /*id.name*/context.symbolPrepend + "HANDLER_" + id.name, StringRef(), scopingStack.top()->getFile(), LineNo,
+			FContext, SanitiseNameForDebug(function->getName()), StringRef(), scopingStack.top()->getFile(), LineNo,
 			dbgFuncTy,
 			false /* internal linkage */, true /* definition */, ScopeLine,
 			DINode::FlagPrototyped, false);
@@ -3075,7 +3082,7 @@ APInt COperandPartial::GetComputableConstant(CodeGenContext& context,unsigned nu
 
 	if (operands.size()==0)
 	{
-		assert(0, "Illegal (0) number of operands for computable constant");
+		assert(0 && "Illegal (0) number of operands for computable constant");
 		context.errorFlagged=true;
 		return result;
 	}
@@ -3581,7 +3588,7 @@ Value* CAffect::codeGenCarry(CodeGenContext& context,Value* exprResult,Value* lh
 			break;
 
 		default:
-			assert(0, "Unknown affector");
+			assert(0 && "Unknown affector");
 			break;
 	}
 
@@ -3835,7 +3842,7 @@ Value* CAffect::codeGenFinal(CodeGenContext& context,Value* exprResult)
 
 				if (tmpResult==nullptr)
 				{
-					assert(0, "Failed to compute CARRY/OVERFLOW for expression (possible bug in compiler)");
+					assert(0 && "Failed to compute CARRY/OVERFLOW for expression (possible bug in compiler)");
 				}
 
 				if (type==TOK_CARRY)
@@ -3851,7 +3858,7 @@ Value* CAffect::codeGenFinal(CodeGenContext& context,Value* exprResult)
 			break;
 
 		default:
-			assert(0, "Unknown affector");
+			assert(0 && "Unknown affector");
 			break;
 	}
 
@@ -4103,7 +4110,7 @@ Value* CTrigger::codeGen(CodeGenContext& context,BitVariable& pin,Value* functio
 			return nullptr;
 
 		default:
-			assert(0,"Unhandled trigger type");
+			assert(0 && "Unhandled trigger type");
 			break;
 	}
 
@@ -4251,7 +4258,7 @@ void CInstance::prePass(CodeGenContext& context)
 
 	if (context.opts.generateDebug)
 	{
-		scopingStack.push(createNewDbgFile(includeName.c_str(), includefile->dbgBuilder));
+		scopingStack.push(CreateNewDbgFile(includeName.c_str(), includefile->dbgBuilder));
 	}
 
 	includefile->generateCode(*g_ProgramBlock);
