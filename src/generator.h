@@ -73,6 +73,7 @@ class ExecuteInformation
 public:
     llvm::BasicBlock* blockEndForExecute;
     llvm::SwitchInst* switchForExecute;
+	YYLTYPE executeLoc;
 };
 
 class CodeGenBlock 
@@ -97,6 +98,8 @@ public:
 	int generateDebug;
 };
 
+extern std::stack<DIScope*> scopingStack;
+
 class GlobalContext
 {
 public:
@@ -105,100 +108,129 @@ public:
 	CompilerOptions& opts;
 };
 
-class CodeGenContext 
+class CodeGenContext
 {
-    std::stack<CodeGenBlock *> blocks;
-    std::stack<CStatesDeclaration *> statesStack;
-    std::stack<const CIdentifier *> identifierStack;
-    Function *mainFunction;
 
-    void GenerateDisassmTables();
+	std::stack<CodeGenBlock *> blocks;
+	std::stack<CStatesDeclaration *> statesStack;
+	std::stack<const CIdentifier *> identifierStack;
+	Function *mainFunction;
+
+	void GenerateDisassmTables();
 
 public:
 	GlobalContext& gContext;
 
-    std::string stateLabelStack;
+	std::string stateLabelStack;
 
-    CHandlerDeclaration* parentHandler;
+	CHandlerDeclaration* parentHandler;
 
 	DIBuilder *dbgBuilder;
 	DICompileUnit *compileUnit;
-    Module *module;
-    bool isRoot;
-    ExecutionEngine		*ee;
-    CodeGenContext(GlobalContext& globalContext,CodeGenContext* parent);
-    Function *debugTraceString;
-    Function *debugTraceChar;
-    Function *debugTraceMissing;
-    Function *debugBusTap;
+	Module *module;
+	bool isRoot;
+	ExecutionEngine		*ee;
+	CodeGenContext(GlobalContext& globalContext, CodeGenContext* parent);
+	Function *debugTraceString;
+	Function *debugTraceChar;
+	Function *debugTraceMissing;
+	Function *debugBusTap;
 
-    std::string	symbolPrepend;
-    std::string moduleName;
+	std::string	symbolPrepend;
+	std::string moduleName;
 
-    bool errorFlagged;
+	bool errorFlagged;
 
-    std::map<std::string, std::vector<ExecuteInformation> > executeLocations;
+	std::map<std::string, std::vector<ExecuteInformation> > executeLocations;
 
-    AffectorList	curAffectors;
+	AffectorList	curAffectors;
 
-    struct myAPIntCompare
-    {
-	bool operator()(const APInt& s1,const APInt& s2) const
+	struct myAPIntCompare
 	{
-		APInt f1=s1;
-		APInt f2=s2;
-
-		if (f1.getBitWidth()!=f2.getBitWidth())
+		bool operator()(const APInt& s1, const APInt& s2) const
 		{
-			if (f1.getBitWidth()<f2.getBitWidth())
+			APInt f1 = s1;
+			APInt f2 = s2;
+
+			if (f1.getBitWidth() != f2.getBitWidth())
 			{
-				f1=f1.zext(f2.getBitWidth());
+				if (f1.getBitWidth() < f2.getBitWidth())
+				{
+					f1 = f1.zext(f2.getBitWidth());
+				}
+				else
+				{
+					f2 = f2.zext(f1.getBitWidth());
+				}
+			}
+			return f1.ult(f2);
+		}
+	};
+
+	std::map<std::string, std::map<APInt, std::string, myAPIntCompare> >     disassemblyTable;
+
+	Function* LookupFunctionInExternalModule(const std::string& module, const std::string& name);
+	bool LookupBitVariable(BitVariable& outVar, const std::string& module, const std::string& name, const YYLTYPE &modLoc, const YYLTYPE &nameLoc);
+
+	std::map<std::string, CodeGenContext*> m_includes;
+	std::map<std::string, BitVariable> m_globals;
+	std::map<std::string, StateVariable> m_states;
+	std::map<std::string, Function*> m_externFunctions;
+	std::map<CStatesDeclaration*, StateVariable> m_statesAlt;
+	std::map<std::string, CHandlerDeclaration*> m_handlers;
+	std::map<std::string, CMappingDeclaration*> m_mappings;
+
+	void generateCode(CBlock& root);
+	// GenericValue runCode();
+	std::map<std::string, BitVariable>& locals() { return blocks.top()->locals; }
+	std::map<std::string, BitVariable>& globals() { return m_globals; }
+	std::map<std::string, StateVariable>& states() { return m_states; }
+	std::map<CStatesDeclaration*, StateVariable>& statesAlt() { return m_statesAlt; }
+	BasicBlock *currentBlock() { if (blocks.size() > 0) return blocks.top()->block; else return nullptr; }
+	void setBlock(BasicBlock *block) { blocks.top()->block = block; }
+	void pushBlock(BasicBlock *block, YYLTYPE& blockStartLocation)
+	{
+		std::map<std::string, BitVariable> tLocals;
+		if (blocks.size() > 0)
+			tLocals = blocks.top()->locals;
+		blocks.push(new CodeGenBlock());
+		blocks.top()->block = block;
+		blocks.top()->locals = tLocals;
+		if (gContext.opts.generateDebug)
+		{
+			scopingStack.push(dbgBuilder->createLexicalBlock(scopingStack.top(), scopingStack.top()->getFile(), blockStartLocation.first_line, blockStartLocation.first_column));
+			//printf("PUSH SCOPE :");
+			//scopingStack.top()->dump();
+		}
+	}
+	void popBlock(YYLTYPE& blockEndLocation)
+	{
+		CodeGenBlock *top = blocks.top();
+		if (gContext.opts.generateDebug)
+		{
+			/*if (top->block->getTerminator() != nullptr)
+			{
+				top->block->getTerminator()->setDebugLoc(DebugLoc::get(blockEndLocation.first_line, blockEndLocation.first_column, scopingStack.top()));
 			}
 			else
 			{
-				f2=f2.zext(f1.getBitWidth());
-			}
+				assert(0);
+			}*/
+			//printf("POP SCOPE :");
+			//scopingStack.top()->dump();
+			scopingStack.pop();
 		}
-		return f1.ult(f2);
+		blocks.pop();
+		delete top;
 	}
-    };
+	CStatesDeclaration* currentState() { if (statesStack.empty()) return nullptr; else return statesStack.top(); }
+	void pushState(CStatesDeclaration *state) { statesStack.push(state); }
+	void popState() { statesStack.pop(); }
+	const std::stack<const CIdentifier*>& getIdentStack() { return identifierStack; }
+	const CIdentifier* currentIdent() { if (identifierStack.empty()) return nullptr; else return identifierStack.top(); }
+	void pushIdent(const CIdentifier* id) { identifierStack.push(id); }
+	void popIdent() { identifierStack.pop(); }
 
-    std::map<std::string, std::map<APInt,std::string,myAPIntCompare> >     disassemblyTable;
-
-    Function* LookupFunctionInExternalModule(const std::string& module, const std::string& name);
-    bool LookupBitVariable(BitVariable& outVar,const std::string& module, const std::string& name,const YYLTYPE &modLoc,const YYLTYPE &nameLoc);
-
-    std::map<std::string, CodeGenContext*> m_includes;
-    std::map<std::string, BitVariable> m_globals;
-    std::map<std::string, StateVariable> m_states;
-    std::map<std::string, Function*> m_externFunctions;
-    std::map<CStatesDeclaration*,StateVariable> m_statesAlt;
-    std::map<std::string, CHandlerDeclaration*> m_handlers;
-    std::map<std::string, CMappingDeclaration*> m_mappings;
-
-    void generateCode(CBlock& root);
-   // GenericValue runCode();
-    std::map<std::string, BitVariable>& locals() { return blocks.top()->locals; }
-    std::map<std::string, BitVariable>& globals() { return m_globals; }
-    std::map<std::string, StateVariable>& states() { return m_states; }
-    std::map<CStatesDeclaration*, StateVariable>& statesAlt() { return m_statesAlt; }
-    BasicBlock *currentBlock() { if (blocks.size()>0) return blocks.top()->block; else return nullptr; }
-    void setBlock(BasicBlock *block) { blocks.top()->block = block; }
-    void pushBlock(BasicBlock *block) 
-    { 
-	    std::map<std::string,BitVariable> tLocals; 
-	    if (blocks.size()>0) 
-		    tLocals = blocks.top()->locals; 
-	    blocks.push(new CodeGenBlock()); 
-	    blocks.top()->block = block; 
-	    blocks.top()->locals = tLocals;
-    }
-    void popBlock() { CodeGenBlock *top = blocks.top(); blocks.pop(); delete top; }
-    CStatesDeclaration* currentState() { if (statesStack.empty()) return nullptr; else return statesStack.top(); }
-    void pushState(CStatesDeclaration *state) { statesStack.push(state); }
-    void popState() { statesStack.pop(); }
-    const std::stack<const CIdentifier*>& getIdentStack() { return identifierStack; }
-    const CIdentifier* currentIdent() { if (identifierStack.empty()) return nullptr; else return identifierStack.top(); }
-    void pushIdent(const CIdentifier* id) { identifierStack.push(id); }
-    void popIdent() { identifierStack.pop(); }
+	void StartFunctionDebugInfo(Function* func, YYLTYPE& declLoc);
+	void EndFunctionDebugInfo();
 };

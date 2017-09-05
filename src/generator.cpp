@@ -16,7 +16,7 @@ using namespace llvm;
 const size_t PATH_DEFAULT_LEN=2048;
 
 static LLVMContext TheContext;
-static std::stack<DIScope*> scopingStack;
+std::stack<DIScope*> scopingStack;
 static std::map<Function*,Function*> g_connectFunctions;		// Global for now
 static std::map<std::string, bool> g_impedanceRequired;
 
@@ -390,6 +390,70 @@ bool CompareEquals(APInt a,APInt b)
 	}
 
 	return a==b;
+}
+
+void CodeGenContext::StartFunctionDebugInfo(Function* func, YYLTYPE& declLoc)
+{
+	if (gContext.opts.generateDebug)
+	{
+		Type* retType = func->getReturnType();
+
+		// Create function type information
+
+		SmallVector<Metadata *, 16> EltTys;
+
+		// Add the result type.
+		if (retType->isVoidTy())
+			EltTys.push_back(nullptr);
+		else if (retType->isIntegerTy())
+		{
+			std::string name = "Bit" + to_string(retType->getIntegerBitWidth());
+			EltTys.push_back(dbgBuilder->createBasicType(name, retType->getIntegerBitWidth(), 0));
+		}
+		else
+		{
+			PrintErrorFromLocation(declLoc, "Internal Compiler error, return type is not void or integer");
+			return;
+		}
+		for (const auto& arg : func->getFunctionType()->params())
+		{
+			if (!arg->isIntegerTy())
+			{
+				PrintErrorFromLocation(declLoc, "Internal Compiler error, arg type is not integer");
+				return;
+			}
+			std::string name = "Bit" + to_string(arg->getIntegerBitWidth());
+			EltTys.push_back(dbgBuilder->createBasicType(name, arg->getIntegerBitWidth(), 0));
+		}
+
+		DISubroutineType* dbgFuncTy = dbgBuilder->createSubroutineType(dbgBuilder->getOrCreateTypeArray(EltTys));
+
+		// Create function definition in debug information
+
+		DIScope *FContext = scopingStack.top()->getFile();	// temporary - should come from the location information
+		unsigned LineNo = declLoc.first_line;
+		unsigned ScopeLine = LineNo;
+		DISubprogram *SP = dbgBuilder->createFunction(
+			FContext, SanitiseNameForDebug(func->getName()), StringRef(), scopingStack.top()->getFile(), LineNo,
+			dbgFuncTy,
+			false /* internal linkage */, true /* definition */, ScopeLine,
+			DINode::FlagZero, false);
+		func->setSubprogram(SP);
+
+		//printf("PUSH SCOPE :");
+		//SP->dump();
+		scopingStack.push(SP);
+	}
+}
+
+void CodeGenContext::EndFunctionDebugInfo()
+{
+	if (gContext.opts.generateDebug)
+	{
+		//printf("POP SCOPE :");
+		//scopingStack.top()->dump();
+		scopingStack.pop();
+	}
 }
 
 void CodeGenContext::GenerateDisassmTables()
@@ -874,7 +938,13 @@ Value* CIdentifier::codeGen(CodeGenContext& context)
 			Function* function=context.LookupFunctionInExternalModule(module,context.symbolPrepend+"PinGet"+name);
 
 			std::vector<Value*> args;
-			return CallInst::Create(function,args,"pinValue",context.currentBlock());
+			Instruction* I=CallInst::Create(function,args,"pinValue",context.currentBlock());
+			if (context.gContext.opts.generateDebug)
+			{
+				//printf("Insert Call Debug:"); I->dump();
+				I->setDebugLoc(DebugLoc::get(nameLoc.first_line, nameLoc.first_column, scopingStack.top()));
+			}
+			return I;
 		}
 
 	}
@@ -1101,7 +1171,7 @@ Value* CDebugLine::codeGen(CodeGenContext& context)		// Refactored away onto its
 	
 	BranchInst::Create(trac,context.currentBlock());
 
-	context.pushBlock(trac);
+	context.pushBlock(trac,debugLocation);
 
 	for (unsigned a=0;a<debug.size();a++)
 	{
@@ -1122,7 +1192,7 @@ Value* CDebugLine::codeGen(CodeGenContext& context)		// Refactored away onto its
 	
 	BranchInst::Create(cont,context.currentBlock());
 
-	context.popBlock();
+	context.popBlock(debugLocation);
 
 	context.setBlock(cont);
 
@@ -1550,7 +1620,13 @@ Instruction* CAssignment::generateAssignmentActual(BitVariable& to,const CIdenti
 
 			std::vector<Value*> args;
 			args.push_back(final);
-			return CallInst::Create(function,args,"",context.currentBlock());
+			Instruction* I = CallInst::Create(function,args,"",context.currentBlock());
+			if (context.gContext.opts.generateDebug)
+			{
+				//printf("Insert Call Debug:"); I->dump();
+				I->setDebugLoc(DebugLoc::get(to.refLoc.first_line, to.refLoc.first_column, scopingStack.top()));
+			}
+			return I;
 		}
 
 	}
@@ -1608,8 +1684,10 @@ Value* CAssignment::codeGen(CodeGenContext& context)
 		}
 
 		Instruction* I = CAssignment::generateImpedanceAssignment(var,var.impedance,context);
-		if (context.gContext.opts.generateDebug && scopingStack.size()>2)//tmp hack for missing scopes
+		if (context.gContext.opts.generateDebug)
 		{
+			assert(scopingStack.size() > 0);
+			//printf("Insert Assign Debug:"); I->dump();
 			I->setDebugLoc(DebugLoc::get(operatorLoc.first_line, operatorLoc.first_column, scopingStack.top()));
 		}
 		return I;
@@ -1621,8 +1699,10 @@ Value* CAssignment::codeGen(CodeGenContext& context)
 	}
 
 	Instruction* I = CAssignment::generateAssignment(var,lhs,assignWith,context);
-	if (context.gContext.opts.generateDebug && scopingStack.size()>2)//tmp hack for missing scopes
+	if (context.gContext.opts.generateDebug)
 	{
+		assert(scopingStack.size() > 0);
+		//printf("Insert Assign Debug:"); I->dump();
 		I->setDebugLoc(DebugLoc::get(operatorLoc.first_line, operatorLoc.first_column, scopingStack.top()));
 	}
 	return I;
@@ -2002,10 +2082,10 @@ Value* CStateDefinition::codeGen(CodeGenContext& context)
 
 		if (pState)
 		{
-			context.pushBlock(pState->entry);
+			context.pushBlock(pState->entry,block.blockStartLoc);
 			block.codeGen(context);
 			pState->entry=context.currentBlock();
-			context.popBlock();
+			context.popBlock(block.blockEndLoc);
 			return nullptr;
 		}
 		else
@@ -2040,9 +2120,12 @@ void CVariableDeclaration::CreateWriteAccessor(CodeGenContext& context,BitVariab
 	}
 	function->onlyReadsMemory();	// Mark input read only
 	function->setDoesNotThrow();
+
+	context.StartFunctionDebugInfo(function, declarationLoc);
+
 	BasicBlock *bblock = BasicBlock::Create(TheContext, "entry", function, 0);
 
-	context.pushBlock(bblock);
+	context.pushBlock(bblock,declarationLoc);
 
 	Function::arg_iterator args = function->arg_begin();
 	Value* setVal=&*args;
@@ -2065,7 +2148,9 @@ void CVariableDeclaration::CreateWriteAccessor(CodeGenContext& context,BitVariab
 	var.writeAccessor=&writeAccessor;
 	writeAccessor=ReturnInst::Create(TheContext,bblock);
 
-	context.popBlock();
+	context.popBlock(declarationLoc);
+
+	context.EndFunctionDebugInfo();
 }
 
 void CVariableDeclaration::CreateReadAccessor(CodeGenContext& context,BitVariable& var,bool impedance)
@@ -2084,7 +2169,11 @@ void CVariableDeclaration::CreateReadAccessor(CodeGenContext& context,BitVariabl
 	function->setOnlyReadsMemory();
 	function->setDoesNotThrow();
 
+	context.StartFunctionDebugInfo(function, declarationLoc);
+
 	BasicBlock *bblock = BasicBlock::Create(TheContext, "entry", function, 0);
+	
+	context.pushBlock(bblock,declarationLoc);
 
 	Value* load = new LoadInst(var.value,"",false,bblock);
     if (impedance)
@@ -2096,6 +2185,10 @@ void CVariableDeclaration::CreateReadAccessor(CodeGenContext& context,BitVariabl
 	}
 
 	ReturnInst::Create(TheContext,load,bblock);
+	
+	context.popBlock(declarationLoc);
+
+	context.EndFunctionDebugInfo();
 }
 
 void CVariableDeclaration::prePass(CodeGenContext& context)
@@ -2410,38 +2503,13 @@ Value* CHandlerDeclaration::codeGen(CodeGenContext& context)
 	Function* function = Function::Create(ftype, GlobalValue::PrivateLinkage, context.moduleName + context.symbolPrepend+"HANDLER."+id.name, context.module);
 	function->setDoesNotThrow();
 
-	if (context.gContext.opts.generateDebug)
-	{
-		// Create function type information
-
-		SmallVector<Metadata *, 1> EltTys;
-
-		// Add the result type.
-		EltTys.push_back(nullptr);
-
-		DISubroutineType* dbgFuncTy = context.dbgBuilder->createSubroutineType(context.dbgBuilder->getOrCreateTypeArray(EltTys));
-
-		// Create function definition in debug information
-
-		DIScope *FContext = scopingStack.top()->getFile();	// temporary - should come from the location information
-		unsigned LineNo = handlerLoc.first_line;
-		unsigned ScopeLine = LineNo;
-		DISubprogram *SP = context.dbgBuilder->createFunction(
-			FContext, SanitiseNameForDebug(function->getName()), StringRef(), scopingStack.top()->getFile(), LineNo,
-			dbgFuncTy,
-			false /* internal linkage */, true /* definition */, ScopeLine,
-			DINode::FlagZero, false);
-		function->setSubprogram(SP);
-
-		scopingStack.push(SP);
-	}
-
+	context.StartFunctionDebugInfo(function, handlerLoc);
 
 	BasicBlock *bblock = BasicBlock::Create(TheContext, "entry", function, 0);
 	
 	context.m_handlers[id.name]=this;
 
-	context.pushBlock(bblock);
+	context.pushBlock(bblock,block.blockStartLoc);
 
 	std::string oldStateLabelStack = context.stateLabelStack;
 	context.stateLabelStack+="." + id.name;
@@ -2457,17 +2525,15 @@ Value* CHandlerDeclaration::codeGen(CodeGenContext& context)
 	Instruction* I=ReturnInst::Create(TheContext, context.currentBlock());			/* block may well have changed by time we reach here */
 	if (context.gContext.opts.generateDebug)
 	{
+		//printf("Insert Return Debug:"); I->dump();
 		I->setDebugLoc(DebugLoc::get(block.blockEndLoc.first_line, block.blockEndLoc.first_column, scopingStack.top()));
 	}
 
 	context.stateLabelStack=oldStateLabelStack;
 
-	context.popBlock();
+	context.popBlock(block.blockEndLoc);
 
-	if (context.gContext.opts.generateDebug)
-	{
-		scopingStack.pop();
-	}
+	context.EndFunctionDebugInfo();
 
 	return function;
 }
@@ -2591,9 +2657,12 @@ Value* CInstruction::codeGen(CodeGenContext& context)
 		FunctionType *ftype = FunctionType::get(Type::getVoidTy(TheContext),argTypes, false);
 		Function* function = Function::Create(ftype, GlobalValue::PrivateLinkage, EscapeString(context.symbolPrepend+"OPCODE_"+opcodeString.string.quoted.substr(1,opcodeString.string.quoted.length()-2) + "_" + table.name+opcode.toString(16,false)),context.module);
 		function->setDoesNotThrow();
+
+		context.StartFunctionDebugInfo(function, statementLoc);
+
 		BasicBlock *bblock = BasicBlock::Create(TheContext, "entry", function, 0);
 
-		context.pushBlock(bblock);
+		context.pushBlock(bblock,block.blockStartLoc);
 
 		operands[0]->DeclareLocal(context,a);
 
@@ -2601,7 +2670,9 @@ Value* CInstruction::codeGen(CodeGenContext& context)
 
 		ReturnInst::Create(TheContext, context.currentBlock());			/* block may well have changed by time we reach here */
 
-		context.popBlock();
+		context.popBlock(block.blockEndLoc);
+
+		context.EndFunctionDebugInfo();
 
 		if (context.errorFlagged)
 		{
@@ -2612,11 +2683,21 @@ Value* CInstruction::codeGen(CodeGenContext& context)
 		for (int b=0;b<context.executeLocations[table.name].size();b++)
 		{
 //			std::cout << "Adding execute " << opcode.toString(2,false) << std::endl;
+			Function *parentFunction = context.executeLocations[table.name][b].blockEndForExecute->getParent();
+			scopingStack.push(parentFunction->getSubprogram());
+				
 			BasicBlock* tempBlock = BasicBlock::Create(TheContext,"callOut" + table.name + opcode.toString(16,false),context.executeLocations[table.name][b].blockEndForExecute->getParent(),0);
 			std::vector<Value*> args;
 			CallInst* fcall = CallInst::Create(function,args,"",tempBlock);
+			if (context.gContext.opts.generateDebug)
+			{
+				//printf("Insert Call Debug:"); fcall->dump();
+				fcall->setDebugLoc(DebugLoc::get(context.executeLocations[table.name][b].executeLoc.first_line, context.executeLocations[table.name][b].executeLoc.first_column, scopingStack.top()));
+			}
 			BranchInst::Create(context.executeLocations[table.name][b].blockEndForExecute,tempBlock);
 			context.executeLocations[table.name][b].switchForExecute->addCase(ConstantInt::get(TheContext,opcode),tempBlock);
+
+			scopingStack.pop();
 		}
 
 	}
@@ -2638,6 +2719,7 @@ Value* CExecute::codeGen(CodeGenContext& context)
 
 		ExecuteInformation temp;
 
+		temp.executeLoc = executeLoc;
 		temp.blockEndForExecute = BasicBlock::Create(TheContext, "execReturn", context.currentBlock()->getParent(), 0);		// Need to cache this block away somewhere
 	
 		if (context.gContext.opts.traceUnimplemented)
@@ -2930,12 +3012,12 @@ Value* CIfStatement::codeGen(CodeGenContext& context)
 	Value* result = expr.codeGen(context);
 	BranchInst::Create(then,endif,result,context.currentBlock());
 
-	context.pushBlock(then);
+	context.pushBlock(then,block.blockStartLoc);
 
 	block.codeGen(context);
 	BranchInst::Create(endif,context.currentBlock());
 
-	context.popBlock();
+	context.popBlock(block.blockEndLoc);
 
 	context.setBlock(endif);
 
@@ -3190,43 +3272,18 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 	func->setCallingConv(CallingConv::C);
 	func->setDoesNotThrow();
 	
-	if (context.gContext.opts.generateDebug)
-	{
-		// Create function type information
-
-		SmallVector<Metadata *, 2> EltTys;
-
-		// Add the result type.
-		EltTys.push_back(nullptr);
-		EltTys.push_back(context.dbgBuilder->createBasicType("Bit<1>", 1, 0));
-
-		DISubroutineType* dbgFuncTy = context.dbgBuilder->createSubroutineType(context.dbgBuilder->getOrCreateTypeArray(EltTys));
-
-		// Create function definition in debug information
-
-		DIScope *FContext = scopingStack.top()->getFile();	// temporary - should come from the location information
-		unsigned LineNo = statementLoc.first_line;
-		unsigned ScopeLine = LineNo;
-		DISubprogram *SP = context.dbgBuilder->createFunction(
-			FContext, SanitiseNameForDebug(func->getName()), StringRef(), scopingStack.top()->getFile(), LineNo,
-			dbgFuncTy,
-			false /* internal linkage */, true /* definition */, ScopeLine,
-			DINode::FlagZero, false);
-		func->setSubprogram(SP);
-
-		scopingStack.push(SP);
-	}
+	context.StartFunctionDebugInfo(func, statementLoc);
 	
 	context.m_externFunctions[ident.name] = func;
 	g_connectFunctions[func] = func;
 
 	BasicBlock *bblock = BasicBlock::Create(TheContext, "entry", func, 0);
-	if (context.gContext.opts.generateDebug)
-	{
-		scopingStack.push(context.dbgBuilder->createLexicalBlock(scopingStack.top(), scopingStack.top()->getFile(), blockStartLoc.first_line, blockStartLoc.first_column));
-	}
+//	if (context.gContext.opts.generateDebug)
+//	{
+//		scopingStack.push(context.dbgBuilder->createLexicalBlock(scopingStack.top(), scopingStack.top()->getFile(), blockStartLoc.first_line, blockStartLoc.first_column));
+//	}
 	
-	context.pushBlock(bblock);
+	context.pushBlock(bblock,blockStartLoc);
 
 	Function::arg_iterator args = func->arg_begin();
 	while (args!=func->arg_end())
@@ -3443,6 +3500,7 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 						Instruction* I = BinaryOperator::Create(Instruction::Or, fetchDriving, busIsDrivingResult[curBus], "isDriving", context.currentBlock());
 						if (context.gContext.opts.generateDebug)
 						{
+							//printf("Insert Or Debug:"); I->dump();
 							I->setDebugLoc(DebugLoc::get((*connects[a]).statementLoc.first_line, (*connects[a]).statementLoc.first_column, scopingStack.top()));
 						}
 						busIsDrivingResult[curBus] = I;
@@ -3484,6 +3542,7 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 					Instruction* I = BinaryOperator::Create(Instruction::And, tmp, busOutResult[curBus], "PullUpCombine", context.currentBlock());
 					if (context.gContext.opts.generateDebug)
 					{
+						//printf("Insert And Debug:"); I->dump();
 						I->setDebugLoc(DebugLoc::get((*connects[a]).statementLoc.first_line, (*connects[a]).statementLoc.first_column, scopingStack.top()));
 					}
 					busOutResult[curBus] = I;
@@ -3529,6 +3588,7 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 			Instruction* swapBA = SelectInst::Create(swapB, busOutResult[0], busOutResult[1], "SwapBwithA", context.currentBlock());
 			if (context.gContext.opts.generateDebug)
 			{
+				//printf("Insert Swap Debug:"); swapAB->dump();
 				swapAB->setDebugLoc(DebugLoc::get((*connects[a]).statementLoc.first_line, (*connects[a]).statementLoc.first_column, scopingStack.top()));
 				swapBA->setDebugLoc(DebugLoc::get((*connects[a]).statementLoc.first_line, (*connects[a]).statementLoc.first_column, scopingStack.top()));
 			}
@@ -3557,6 +3617,7 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 				Instruction* I = CAssignment::generateAssignment(var, *ins[curBus][i], busOutResult[curBus], context);
 				if (context.gContext.opts.generateDebug)
 				{
+					//printf("Insert Assign Debug:"); I->dump();
 					I->setDebugLoc(DebugLoc::get((*connects[a]).statementLoc.first_line, (*connects[a]).statementLoc.first_column, scopingStack.top()));
 				}
 
@@ -3596,16 +3657,14 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 	Instruction* I=ReturnInst::Create(TheContext, context.currentBlock());			/* block may well have changed by time we reach here */
 	if (context.gContext.opts.generateDebug)
 	{
+		//printf("Insert Return Debug:"); I->dump();
 		I->setDebugLoc(DebugLoc::get(blockEndLoc.first_line, blockEndLoc.first_column, scopingStack.top()));
 	}
 
-	context.popBlock();
+	context.popBlock(blockEndLoc);
+//	scopingStack.pop();	//lexical block
 
-	if (context.gContext.opts.generateDebug)
-	{
-		scopingStack.pop();	//lexical block
-		scopingStack.pop(); //function
-	}
+	context.EndFunctionDebugInfo();
 
 	return func;
 }
@@ -4113,19 +4172,30 @@ Value* CFuncCall::codeGen(CodeGenContext& context)
 
 		args.push_back(exprResult);
 	}
-	Value* call;
+	Value* callReturn;
 	if (funcType->getReturnType()->isVoidTy())
 	{
-		call = CallInst::Create(func, args, "", context.currentBlock());
+		Instruction* call = CallInst::Create(func, args, "", context.currentBlock());
+		if (context.gContext.opts.generateDebug)
+		{
+			//printf("Insert Call Debug:"); call->dump();
+			call->setDebugLoc(DebugLoc::get(callLoc.first_line, callLoc.first_column, scopingStack.top()));
+		}
 
-		call = ConstantInt::get(TheContext,APInt(1,0));		// Forces void returns to actually return 0
+		callReturn = ConstantInt::get(TheContext,APInt(1,0));		// Forces void returns to actually return 0
 	}
 	else
 	{
-		call = CallInst::Create(func, args, "CallingCFunc"+name.name, context.currentBlock());
+		Instruction* call = CallInst::Create(func, args, "CallingCFunc"+name.name, context.currentBlock());
+		if (context.gContext.opts.generateDebug)
+		{
+			//printf("Insert Call Debug:"); call->dump();
+			call->setDebugLoc(DebugLoc::get(callLoc.first_line, callLoc.first_column, scopingStack.top()));
+		}
+		callReturn = call;
 	}
 
-	return call;
+	return callReturn;
 }
 
 CInteger CVariableDeclaration::notArray(stringZero);
@@ -4137,7 +4207,18 @@ Value* CTrigger::codeGen(CodeGenContext& context,BitVariable& pin,Value* functio
 	{
 		case TOK_ALWAYS:
 			{
+				BasicBlock *oldBlock = (*pin.writeAccessor)->getParent();
+				Function* parentFunction = oldBlock->getParent();
+				scopingStack.push(parentFunction->getSubprogram());
+				
 				CallInst* fcall = CallInst::Create(function,"",*pin.writeAccessor);
+				if (context.gContext.opts.generateDebug)
+				{
+					//printf("Insert Call Debug:"); fcall->dump();
+					fcall->setDebugLoc(DebugLoc::get(debugLocation.first_line, debugLocation.first_column, scopingStack.top()));
+				}
+
+				scopingStack.pop();
 			}
 			return nullptr;
 		case TOK_CHANGED:
@@ -4145,8 +4226,9 @@ Value* CTrigger::codeGen(CodeGenContext& context,BitVariable& pin,Value* functio
 			{
 				BasicBlock *oldBlock = (*pin.writeAccessor)->getParent();
 				Function* parentFunction = oldBlock->getParent();
+				scopingStack.push(parentFunction->getSubprogram());
 
-				context.pushBlock(oldBlock);
+				context.pushBlock(oldBlock,debugLocation);
 				Value* prior = CIdentifier::GetAliasedData(context,pin.priorValue,pin);
 				Value* writeInput = CIdentifier::GetAliasedData(context,pin.writeInput,pin);
 				Value* answer=CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_EQ,prior,writeInput, "", context.currentBlock());
@@ -4155,9 +4237,14 @@ Value* CTrigger::codeGen(CodeGenContext& context,BitVariable& pin,Value* functio
 				BasicBlock *nocall = BasicBlock::Create(TheContext,"nocall",parentFunction);
 
 				BranchInst::Create(nocall,ifcall,answer,context.currentBlock());
-				context.popBlock();
+				context.popBlock(debugLocation);
 				
 				CallInst* fcall = CallInst::Create(function,"",ifcall);
+				if (context.gContext.opts.generateDebug)
+				{
+					//printf("Insert Call Debug:"); fcall->dump();
+					fcall->setDebugLoc(DebugLoc::get(debugLocation.first_line, debugLocation.first_column, scopingStack.top()));
+				}
 				BranchInst::Create(nocall,ifcall);
 
 				// Remove return instruction (since we need to create a new basic block set
@@ -4165,6 +4252,7 @@ Value* CTrigger::codeGen(CodeGenContext& context,BitVariable& pin,Value* functio
 
 				*pin.writeAccessor=ReturnInst::Create(TheContext,nocall);
 
+				scopingStack.pop();
 			}
 			return nullptr;
 		case TOK_TRANSITION:
@@ -4172,8 +4260,9 @@ Value* CTrigger::codeGen(CodeGenContext& context,BitVariable& pin,Value* functio
 			{
 				BasicBlock *oldBlock = (*pin.writeAccessor)->getParent();
 				Function* parentFunction = oldBlock->getParent();
+				scopingStack.push(parentFunction->getSubprogram());
 
-				context.pushBlock(oldBlock);
+				context.pushBlock(oldBlock,debugLocation);
 				Value* prior = CIdentifier::GetAliasedData(context,pin.priorValue,pin);
 				Value* writeInput = CIdentifier::GetAliasedData(context,pin.writeInput,pin);
 
@@ -4186,15 +4275,22 @@ Value* CTrigger::codeGen(CodeGenContext& context,BitVariable& pin,Value* functio
 				BasicBlock *nocall = BasicBlock::Create(TheContext,"nocall",parentFunction);
 
 				BranchInst::Create(ifcall,nocall,answer,context.currentBlock());
-				context.popBlock();
+				context.popBlock(debugLocation);
 				
 				CallInst* fcall = CallInst::Create(function,"",ifcall);
+				if (context.gContext.opts.generateDebug)
+				{
+					//printf("Insert Call Debug:"); fcall->dump();
+					fcall->setDebugLoc(DebugLoc::get(debugLocation.first_line, debugLocation.first_column, scopingStack.top()));
+				}
 				BranchInst::Create(nocall,ifcall);
 
 				// Remove return instruction (since we need to create a new basic block set
 				(*pin.writeAccessor)->removeFromParent();
 
 				*pin.writeAccessor=ReturnInst::Create(TheContext,nocall);
+
+				scopingStack.pop();
 
 			}
 			return nullptr;
@@ -4247,11 +4343,13 @@ Value* CFunctionDecl::codeGen(CodeGenContext& context)
 	}
 	func->setDoesNotThrow();
 	
+	context.StartFunctionDebugInfo(func, functionLoc);
+
 	context.m_externFunctions[name.name] = func;
 
 	BasicBlock *bblock = BasicBlock::Create(TheContext, "entry", func, 0);
 	
-	context.pushBlock(bblock);
+	context.pushBlock(bblock,block.blockStartLoc);
 
 	if (!returns.empty())
 	{
@@ -4311,7 +4409,9 @@ Value* CFunctionDecl::codeGen(CodeGenContext& context)
 		ReturnInst::Create(TheContext,new LoadInst(returnVal.value,"",context.currentBlock()),context.currentBlock());
 	}
 
-	context.popBlock();
+	context.popBlock(block.blockEndLoc);
+
+	context.EndFunctionDebugInfo();
 
 	return func;
 }
