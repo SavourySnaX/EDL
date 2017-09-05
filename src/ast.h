@@ -602,10 +602,11 @@ public:
 	CIdentifier& table;
 	CIdentifier& opcode;
 	static CIdentifier emptyTable;
-	CExecute(CIdentifier& table,CIdentifier& opcode) :
-		table(table),opcode(opcode) { }
-	CExecute(CIdentifier& opcode) :
-		table(emptyTable),opcode(opcode) { }
+	YYLTYPE executeLoc;
+	CExecute(CIdentifier& table,CIdentifier& opcode,YYLTYPE* executeLoc) :
+		table(table),opcode(opcode),executeLoc(*executeLoc) { }
+	CExecute(CIdentifier& opcode, YYLTYPE* executeLoc) :
+		table(emptyTable),opcode(opcode),executeLoc(*executeLoc) { }
 	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 };
@@ -668,9 +669,10 @@ class CFuncCall : public CExpression {
 public:
 	CIdentifier& name;
 	ParamsList& params;
+	YYLTYPE callLoc;
 
-	CFuncCall(CIdentifier& name,ParamsList& params) :
-		name(name), params(params) { }
+	CFuncCall(CIdentifier& name,ParamsList& params,YYLTYPE* callLoc) :
+		name(name), params(params),callLoc(*callLoc) { }
 	
 	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
@@ -683,11 +685,12 @@ public:
 	CIdentifier& name;
 	NamedParamsList params;
 	CBlock& block;
+	YYLTYPE functionLoc;
 
-	CFunctionDecl(bool internal,NamedParamsList& returns,CIdentifier& name,NamedParamsList& params,CBlock &block) :
-		internal(internal), returns(returns), name(name), params(params),block(block) { }
-	CFunctionDecl(bool internal,CIdentifier& name,NamedParamsList& params,CBlock &block) :
-		internal(internal), name(name), params(params),block(block) { }
+	CFunctionDecl(bool internal,NamedParamsList& returns,CIdentifier& name,NamedParamsList& params,CBlock &block,YYLTYPE* functionLoc) :
+		internal(internal), returns(returns), name(name), params(params),block(block),functionLoc(*functionLoc) { }
+	CFunctionDecl(bool internal,CIdentifier& name,NamedParamsList& params,CBlock &block, YYLTYPE* functionLoc) :
+		internal(internal), name(name), params(params),block(block),functionLoc(*functionLoc) { }
 
 	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);

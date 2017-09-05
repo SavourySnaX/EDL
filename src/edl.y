@@ -134,8 +134,8 @@ stmt : TOK_INSTANCE quoted TOK_AS ident TOK_EOS { $$ = new CInstance(*$2,*$4); }
      | mapping_decl
      | ifblock
      | ident TOK_EXCHANGE ident TOK_EOS { $$ = new CExchange(*$1,*$3,&@2); }
-     | TOK_EXECUTE ident ident TOK_EOS { $$ = new CExecute(*$2,*$3); }
-     | TOK_EXECUTE ident TOK_EOS { $$ = new CExecute(*$2); }
+     | TOK_EXECUTE ident ident TOK_EOS { $$ = new CExecute(*$2,*$3,&@1); }
+     | TOK_EXECUTE ident TOK_EOS { $$ = new CExecute(*$2,&@1); }
      | TOK_NEXT state_ident_list TOK_EOS { $$ = new CStateJump(*$2); delete $2; }
      | TOK_PUSH state_ident_list TOK_EOS { $$ = new CStatePush(*$2); delete $2; }
      | TOK_POP ident TOK_EOS { $$ = new CStatePop(*$2); }
@@ -163,10 +163,10 @@ named_params_list : named_params_list TOK_COMMA ident TOK_LSQR numeric TOK_RSQR 
 named_return : ident TOK_LSQR numeric TOK_RSQR { $$ = new NamedParamsList(); $$->push_back(new CParamDecl(*$1,*$3)); }
 	     ;
 
-function_decl : TOK_FUNCTION TOK_INTERNAL named_return ident named_params_list block { $$ = new CFunctionDecl(true,*$3,*$4,*$5,*$6); delete $5; }
-	      | TOK_FUNCTION named_return ident named_params_list block		{ $$ = new CFunctionDecl(false,*$2,*$3,*$4,*$5); delete $4; }
-              | TOK_FUNCTION TOK_INTERNAL ident named_params_list block { $$ = new CFunctionDecl(true,*$3,*$4,*$5); delete $4; }
-	      | TOK_FUNCTION ident named_params_list block		{ $$ = new CFunctionDecl(false,*$2,*$3,*$4); delete $3; }
+function_decl : TOK_FUNCTION TOK_INTERNAL named_return ident named_params_list block { $$ = new CFunctionDecl(true,*$3,*$4,*$5,*$6,&@1); delete $5; }
+	      | TOK_FUNCTION named_return ident named_params_list block		{ $$ = new CFunctionDecl(false,*$2,*$3,*$4,*$5,&@1); delete $4; }
+              | TOK_FUNCTION TOK_INTERNAL ident named_params_list block { $$ = new CFunctionDecl(true,*$3,*$4,*$5,&@1); delete $4; }
+	      | TOK_FUNCTION ident named_params_list block		{ $$ = new CFunctionDecl(false,*$2,*$3,*$4,&@1); delete $3; }
 	      ;
 
 debug : quoted { $$ = new CDebugTraceString(*$1); }
@@ -336,7 +336,7 @@ expr : ident_ref TOK_ASSIGNLEFT expr { $$ = new CAssignment(*$<ident>1,*$3, &@2)
      | TOK_ROR TOK_OBR expr TOK_COMMA ident_ref TOK_COMMA expr TOK_COMMA expr TOK_CBR { $$ = new CRotationOperator(TOK_ROR,*$3,*$5,*$7,*$9); }
      | expr TOK_LSQR numeric TOK_RSQR { $3->Decrement(); $$ = new CCastOperator(*$1,*$3,CombineTokenLocations(@2,@4)); }
      | expr TOK_LSQR numeric TOK_DDOT numeric TOK_RSQR { $$ = new CCastOperator(*$1,*$3,*$5,CombineTokenLocations(@2,@6)); }
-     | TOK_CALL ident_ref TOK_OBR params TOK_CBR { $$ = new CFuncCall(*$2,*$4); }
+     | TOK_CALL ident_ref TOK_OBR params TOK_CBR { $$ = new CFuncCall(*$2,*$4,&@1); }
      | TOK_AFFECT affectors TOK_LBRACE expr TOK_RBRACE { $$ = new CAffector(*$2,*$4,CombineTokenLocations(@3,@5)); }
      | ident_ref { $<ident>$ = $1; }
      | numeric { $$ = $1; }
