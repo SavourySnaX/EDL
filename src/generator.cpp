@@ -15,7 +15,7 @@ using namespace llvm;
 
 const size_t PATH_DEFAULT_LEN=2048;
 
-static LLVMContext TheContext;
+llvm::LLVMContext TheContext;
 std::stack<DIScope*> scopingStack;
 static std::map<Function*,Function*> g_connectFunctions;		// Global for now
 static std::map<std::string, bool> g_impedanceRequired;
@@ -74,50 +74,6 @@ Value* UndefinedStateError(StateIdentList &stateIdents,CodeGenContext &context)
 }
 
 int optlevel=0;
-
-CInteger::CInteger(std::string value )
-{
-	unsigned char radix;
-	const char* data;
-	unsigned numBits;
-	if (value[0]=='%')
-	{
-		numBits = value.length()-1;
-		data = &value.c_str()[1];
-		radix=2;
-	}
-	else
-	{
-		if (value[0]=='$')
-		{
-			numBits = 4*(value.length()-1);
-			data = &value.c_str()[1];
-			radix=16;
-		}
-		else
-		{
-			numBits = 4*(value.length());	/* over allocation for now */
-			data = &value.c_str()[0];
-			radix=10;
-		}
-	}
-
-	integer = llvm::APInt(numBits,data,radix);
-	if (radix==10)
-	{
-		if (integer.getActiveBits())						// this shrinks the value to the correct number of bits - fixes over allocation for decimal numbers
-		{
-			if (integer.getActiveBits()!=numBits)
-			{
-				integer = integer.trunc(integer.getActiveBits());		// only performed on decimal numbers (otherwise we loose important leading zeros)
-			}
-		}
-		else
-		{
-			integer = integer.trunc(1);
-		}
-	}
-}
 
 
 #define DEBUG_STATE_SQUASH	0
@@ -770,45 +726,7 @@ void CodeGenContext::generateCode(CBlock& root)
 	}
 }
 
-/* Executes the AST by running the main function */
-/*GenericValue CodeGenContext::runCode() 
-{
-	GenericValue v;
-
-	return v;
-}*/
-
 /* -- Code Generation -- */
-
-Value* CInteger::codeGen(CodeGenContext& context)
-{
-	return ConstantInt::get(TheContext, integer);
-}
-
-void CString::prePass(CodeGenContext& context)
-{
-}
-
-Value* CString::codeGen(CodeGenContext& context)
-{
-	ArrayType* ArrayTy_0 = ArrayType::get(IntegerType::get(TheContext, 8), quoted.length()-1);
- 
-       	GlobalVariable* gvar_array__str = new GlobalVariable(/*Module=*/*context.module,  /*Type=*/ArrayTy_0,  /*isConstant=*/true,  /*Linkage=*/GlobalValue::PrivateLinkage,  /*Initializer=*/0,  /*Name=*/context.symbolPrepend+".str");
-	gvar_array__str->setAlignment(1);
-  
-	// Constant Definitions
-	Constant* const_array_9 = ConstantDataArray::getString(TheContext, quoted.substr(1,quoted.length()-2), true);
-	std::vector<Constant*> const_ptr_12_indices;
-	ConstantInt* const_int64_13 = ConstantInt::get(TheContext, APInt(64, StringRef("0"), 10));
-	const_ptr_12_indices.push_back(const_int64_13);
-	const_ptr_12_indices.push_back(const_int64_13);
-	Constant* const_ptr_12 = ConstantExpr::getGetElementPtr(nullptr,gvar_array__str, const_ptr_12_indices);
-
-	// Global Variable Definitions
-	gvar_array__str->setInitializer(const_array_9);
-
-	return const_ptr_12;
-}
 
 Value* CIdentifier::trueSize(Value* in,CodeGenContext& context,BitVariable& var)
 {

@@ -29,11 +29,18 @@ FLEX_TARGET(MyLexer src/edl.l
 	${CMAKE_CURRENT_BINARY_DIR}/lexer.cpp)
 ADD_FLEX_BISON_DEPENDENCY(MyLexer MyParser)
 
-# Now build our tools
+set(AST_HEADERS src/ast/integer.h src/ast/string.h)
+set(AST_CPPS src/ast/integer.cpp src/ast/string.cpp)
+set(HEADERS src/ast.h src/generator.h)
+set(GRAMMARS src/edl.l src/edl.y)
+set(CPPS src/main.cpp src/generator.cpp)
+
 add_executable(edl 
-	src/main.cpp src/generator.cpp
-	src/ast.h src/generator.h
-	src/edl.l src/edl.y
+	${CPPS}
+	${HEADERS}
+	${GRAMMARS}
+	${AST_HEADERS}
+	${AST_CPPS}
 	${FLEX_MyLexer_OUTPUTS}
 	${BISON_MyParser_OUTPUTS} 
 	)
@@ -57,7 +64,11 @@ if (WIN32)
 
 endif(WIN32)
 
-source_group(Grammar FILES src/edl.l src/edl.y)
+source_group(Sources FILES ${CPPS})
+source_group(Headers FILES ${HEADERS})
+source_group(Headers\\ast FILES ${AST_HEADERS})
+source_group(Sources\\ast FILES ${AST_CPPS})
+source_group(Grammar FILES ${GRAMMARS})
 source_group(Generated FILES ${FLEX_MyLexer_OUTPUTS} ${BISON_MyParser_OUTPUTS})
 
 # Find the libraries that correspond to the LLVM components

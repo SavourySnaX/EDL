@@ -9,6 +9,8 @@
 #define MAX_SUPPORTED_STACK_DEPTH	(256)
 #define MAX_SUPPORTED_STACK_BITS	(8)
 
+extern llvm::LLVMContext TheContext;
+
 enum ConnectionType
 {
 	None,
@@ -81,20 +83,7 @@ public:
 	virtual bool isStringReturnable() { return false; }
 };
 
-class CInteger : public CExpression {
-public:
-	llvm::APInt	integer;
-	YYLTYPE integerLoc;
-	CInteger(std::string value);
-	CInteger(std::string value, YYLTYPE *_integerLoc) : CInteger(value) { integerLoc = *_integerLoc;}
-
-	void Decrement()
-	{
-		integer--;
-	}
-
-	virtual llvm::Value* codeGen(CodeGenContext& context);
-};
+#include "ast/integer.h"
 
 class CHighImpedance : public CExpression {
 public:
@@ -147,15 +136,7 @@ public:
 	CStateIdent(const std::string& name, YYLTYPE *nameLoc) : name(name),nameLoc(*nameLoc) { }
 };
 
-class CString : public CExpression {
-public:
-	std::string quoted;
-	YYLTYPE quotedLoc;
-	CString(const std::string& quoted) : quoted(quoted) { }
-	CString(const std::string& quoted,YYLTYPE *quotedLoc) : quoted(quoted),quotedLoc(*quotedLoc) { }
-	virtual void prePass(CodeGenContext& context);
-	virtual llvm::Value* codeGen(CodeGenContext& context);
-};
+#include "ast/string.h"
 
 class COperandNumber : public COperand {
 public:
