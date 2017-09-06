@@ -1011,30 +1011,6 @@ std::string stringZero("0");
 
 CInteger CCastOperator::begZero(stringZero);
 
-void CBlock::prePass(CodeGenContext& context)
-{
-	StatementList::const_iterator it;
-	for (it = statements.begin(); it != statements.end(); it++) 
-	{
-		(**it).prePass(context);
-	}
-}
-
-Value* CBlock::codeGen(CodeGenContext& context)
-{
-	StatementList::const_iterator it;
-	Value *last = nullptr;
-	for (it = statements.begin(); it != statements.end(); it++) 
-	{
-		last = (**it).codeGen(context);
-		if (context.errorFlagged)
-		{
-			return nullptr;
-		}
-	}
-	return last;
-}
-
 void CExpressionStatement::prePass(CodeGenContext& context)
 {
 	expression.prePass(context);
