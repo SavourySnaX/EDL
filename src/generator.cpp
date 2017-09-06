@@ -16,9 +16,7 @@ using namespace llvm;
 const size_t PATH_DEFAULT_LEN=2048;
 
 llvm::LLVMContext TheContext;
-std::stack<DIScope*> scopingStack;
 static std::map<Function*,Function*> g_connectFunctions;		// Global for now
-static std::map<std::string, bool> g_impedanceRequired;
 
 extern YYLTYPE CombineTokenLocations(const YYLTYPE &a, const YYLTYPE &b);
 extern void PrintErrorWholeLine(const YYLTYPE &location, const char *errorstring, ...);
@@ -386,19 +384,17 @@ void CodeGenContext::StartFunctionDebugInfo(Function* func, YYLTYPE& declLoc)
 
 		// Create function definition in debug information
 
-		DIScope *FContext = scopingStack.top()->getFile();	// temporary - should come from the location information
+		DIScope *FContext = gContext.scopingStack.top()->getFile();	// temporary - should come from the location information
 		unsigned LineNo = declLoc.first_line;
 		unsigned ScopeLine = LineNo;
 		DISubprogram *SP = dbgBuilder->createFunction(
-			FContext, SanitiseNameForDebug(func->getName()), StringRef(), scopingStack.top()->getFile(), LineNo,
+			FContext, SanitiseNameForDebug(func->getName()), StringRef(), gContext.scopingStack.top()->getFile(), LineNo,
 			dbgFuncTy,
 			false /* internal linkage */, true /* definition */, ScopeLine,
 			DINode::FlagZero, false);
 		func->setSubprogram(SP);
 
-		//printf("PUSH SCOPE :");
-		//SP->dump();
-		scopingStack.push(SP);
+		gContext.scopingStack.push(SP);
 	}
 }
 
@@ -406,9 +402,7 @@ void CodeGenContext::EndFunctionDebugInfo()
 {
 	if (gContext.opts.generateDebug)
 	{
-		//printf("POP SCOPE :");
-		//scopingStack.top()->dump();
-		scopingStack.pop();
+		gContext.scopingStack.pop();
 	}
 }
 
@@ -485,9 +479,9 @@ void CodeGenContext::generateCode(CBlock& root)
 		// Testing - setup a compile unit for our root module
 		if (gContext.opts.generateDebug)
 		{
-			scopingStack.push(CreateNewDbgFile(gContext.opts.inputFile, dbgBuilder));
+			gContext.scopingStack.push(CreateNewDbgFile(gContext.opts.inputFile, dbgBuilder));
 
-			compileUnit = dbgBuilder->createCompileUnit(/*0x9999*/dwarf::DW_LANG_C99, scopingStack.top()->getFile(), "edlVxx", optlevel > 0, ""/*command line flags*/, 0);
+			compileUnit = dbgBuilder->createCompileUnit(/*0x9999*/dwarf::DW_LANG_C99, gContext.scopingStack.top()->getFile(), "edlVxx", optlevel > 0, ""/*command line flags*/, 0);
 
 #if defined(EDL_PLATFORM_MSVC)
 			module->addModuleFlag(llvm::Module::Warning, "CodeView", 1);
@@ -546,8 +540,8 @@ void CodeGenContext::generateCode(CBlock& root)
 	{
 		if (gContext.opts.generateDebug)
 		{
-			scopingStack.pop();
-			assert(scopingStack.empty() && "Programming error");
+			gContext.scopingStack.pop();
+			assert(gContext.scopingStack.empty() && "Programming error");
 
 			dbgBuilder->finalize();
 
@@ -1016,252 +1010,6 @@ Value* CDebugLine::codeGen(CodeGenContext& context)		// Refactored away onto its
 std::string stringZero("0");
 
 CInteger CCastOperator::begZero(stringZero);
-
-Instruction* CAssignment::generateImpedanceAssignment(BitVariable& to,llvm::Value* assignTo,CodeGenContext& context)
-{
-	ConstantInt* impedance = ConstantInt::get(TheContext, ~APInt(to.size.getLimitedValue(), StringRef("0"), 10));
-
-	return new StoreInst(impedance, assignTo, false, context.currentBlock());
-}
-
-Instruction* CAssignment::generateAssignment(BitVariable& to,const CIdentifier& toIdent, Value* from,CodeGenContext& context,bool isVolatile)
-{
-	return generateAssignmentActual(to,toIdent,from,context,true,isVolatile);
-}
-
-
-Instruction* CAssignment::generateAssignmentActual(BitVariable& to,const CIdentifier& toIdent, Value* from,CodeGenContext& context,bool clearImpedance,bool isVolatile)
-{
-	Value* assignTo;
-
-	assignTo = to.value;
-
-	if (toIdent.IsArray())
-	{
-		Value* exprResult=toIdent.GetExpression()->codeGen(context);
-
-		Type* ty = Type::getIntNTy(TheContext,to.arraySize.getLimitedValue());
-		Type* ty64 = Type::getIntNTy(TheContext,64);
-		Instruction::CastOps op = CastInst::getCastOpcode(exprResult,false,ty,false);
-		Instruction* truncExt0 = CastInst::Create(op,exprResult,ty,"cast",context.currentBlock());		// Cast index to 64 bit type
-		Instruction::CastOps op1 = CastInst::getCastOpcode(exprResult,false,ty64,false);
-		Instruction* truncExt = CastInst::Create(op1,truncExt0,ty64,"cast",context.currentBlock());		// Cast index to 64 bit type
-//		const Type* ty = Type::getIntNTy(TheContext,to.arraySize.getLimitedValue());
-//		Instruction::CastOps op = CastInst::getCastOpcode(exprResult,false,ty,false);
-//		Instruction* truncExt = CastInst::Create(op,exprResult,ty,"cast",context.currentBlock());		// Cast index to 64 bit type
-
-		std::vector<Value*> indices;
-		ConstantInt* index0 = ConstantInt::get(TheContext, APInt(to.size.getLimitedValue(), StringRef("0"), 10));
-		indices.push_back(index0);
-		indices.push_back(truncExt);
-		Instruction* elementPtr = GetElementPtrInst::Create(nullptr,to.value,indices,"array index",context.currentBlock());
-
-		assignTo = elementPtr;//new LoadInst(elementPtr, "", false, context.currentBlock());
-	}
-
-	if (!assignTo->getType()->isPointerTy())
-	{
-		PrintErrorFromLocation(to.refLoc, "You cannot assign a value to a non variable (or input parameter to function)");
-		context.errorFlagged=true;
-		return nullptr;
-	}
-
-	// Handle variable promotion
-	Type* ty = Type::getIntNTy(TheContext,to.size.getLimitedValue());
-	Instruction::CastOps op = CastInst::getCastOpcode(from,false,ty,false);
-
-	Instruction* truncExt = CastInst::Create(op,from,ty,"cast",context.currentBlock());
-
-	// Handle masking and constants and shift
-	ConstantInt* const_intShift = ConstantInt::get(TheContext, to.shft);
-	BinaryOperator* shiftInst = BinaryOperator::Create(Instruction::Shl,truncExt,const_intShift, "Shifting", context.currentBlock());
-	ConstantInt* const_intMask = ConstantInt::get(TheContext, to.mask);	
-	BinaryOperator* andInst = BinaryOperator::Create(Instruction::And, shiftInst, const_intMask , "Masking", context.currentBlock());
-
-	// cnst initialiser only used when we are updating the primary register
-	BinaryOperator* final;
-
-	if (to.aliased == false)
-	{
-		ConstantInt* const_intCnst = ConstantInt::get(TheContext, to.cnst);
-		BinaryOperator* orInst = BinaryOperator::Create(Instruction::Or, andInst, const_intCnst, "Constants", context.currentBlock());
-		final=orInst;
-	}
-	else
-	{
-		Value* dest=to.value;
-		if (toIdent.IsArray())
-		{
-			Value* exprResult=toIdent.GetExpression()->codeGen(context);
-
-			Type* ty = Type::getIntNTy(TheContext,to.arraySize.getLimitedValue());
-			Type* ty64 = Type::getIntNTy(TheContext,64);
-			Instruction::CastOps op = CastInst::getCastOpcode(exprResult,false,ty,false);
-			Instruction* truncExt0 = CastInst::Create(op,exprResult,ty,"cast",context.currentBlock());		// Cast index to 64 bit type
-			Instruction::CastOps op1 = CastInst::getCastOpcode(exprResult,false,ty64,false);
-			Instruction* truncExt = CastInst::Create(op1,truncExt0,ty64,"cast",context.currentBlock());		// Cast index to 64 bit type
-	//		const Type* ty = Type::getIntNTy(TheContext,to.arraySize.getLimitedValue()/* 64*/);
-	//		Instruction::CastOps op = CastInst::getCastOpcode(exprResult,false,ty,false);
-	//		Instruction* truncExt = CastInst::Create(op,exprResult,ty,"cast",context.currentBlock());		// Cast index to 64 bit type
-
-			std::vector<Value*> indices;
-			ConstantInt* index0 = ConstantInt::get(TheContext, APInt(to.size.getLimitedValue(), StringRef("0"), 10));
-			indices.push_back(index0);
-			indices.push_back(truncExt);
-			Instruction* elementPtr = GetElementPtrInst::Create(nullptr,to.value,indices,"array index",context.currentBlock());
-
-			dest = elementPtr;
-		}
-		// Now if the assignment is assigning to an aliased register part, we need to have loaded the original register, masked off the inverse of the section mask, and or'd in the result before we store
-		LoadInst* loadInst=new LoadInst(dest, "", false, context.currentBlock());
-		ConstantInt* const_intInvMask = ConstantInt::get(TheContext, ~to.mask);
-		BinaryOperator* primaryAndInst = BinaryOperator::Create(Instruction::And, loadInst, const_intInvMask , "InvMasking", context.currentBlock());
-		final = BinaryOperator::Create(Instruction::Or,primaryAndInst,andInst,"Combining",context.currentBlock());
-	}
-	
-	if (to.fromExternal)
-	{
-		if (to.pinType!=TOK_IN && to.pinType!=TOK_BIDIRECTIONAL)
-		{
-			PrintErrorFromLocation(to.refLoc,"Pin marked as not writable");
-			context.errorFlagged=true;
-			return nullptr;
-		}
-		else
-		{
-			// At this point, we need to get PinSet method and call it.
-			Function* function = context.LookupFunctionInExternalModule(toIdent.module,context.symbolPrepend+"PinSet"+toIdent.name);
-
-			std::vector<Value*> args;
-			args.push_back(final);
-			Instruction* I = CallInst::Create(function,args,"",context.currentBlock());
-			if (context.gContext.opts.generateDebug)
-			{
-				//printf("Insert Call Debug:"); I->dump();
-				I->setDebugLoc(DebugLoc::get(to.refLoc.first_line, to.refLoc.first_column, scopingStack.top()));
-			}
-			return I;
-		}
-
-	}
-	else
-	{
-		if (to.impedance && clearImpedance)	// clear impedance
-		{
-			ConstantInt* impedance = ConstantInt::get(TheContext, APInt(to.size.getLimitedValue(), StringRef("0"), 10));
-			new StoreInst(impedance, to.impedance, false, context.currentBlock());
-		}
-		return new StoreInst(final, assignTo, isVolatile, context.currentBlock());
-	}
-}
-
-void CAssignment::prePass(CodeGenContext& context)
-{
-	rhs.prePass(context);
-
-	if (rhs.IsImpedance())
-	{
-		// We have a variable being assigned a high_impedance, for compatabilty with old (non bus connected modules), we only create impedance if we find at least one assignment
-		assert(lhs.module == "");
-		std::string fullName = context.moduleName + context.symbolPrepend + lhs.name;
-		if (g_impedanceRequired.find(fullName) == g_impedanceRequired.end())
-		{
-			g_impedanceRequired[fullName] = true;
-		}
-	}
-}
-
-Value* CAssignment::codeGen(CodeGenContext& context)
-{
-	BitVariable var;
-	Value* assignWith;
-	if (!context.LookupBitVariable(var,lhs.module,lhs.name,lhs.modLoc,lhs.nameLoc))
-	{
-		return nullptr;
-	}
-
-	if (var.mappingRef)
-	{
-		PrintErrorFromLocation(var.refLoc, "Cannot assign to a mapping reference");
-		context.errorFlagged=true;
-		return nullptr;
-	}
-
-	if (rhs.IsImpedance())
-	{
-		// special case, impedance uses hidden bit variable (which is only accessed during bus muxing)	- Going to need a few fixups to support this
-		if (var.pinType!=TOK_BIDIRECTIONAL)
-		{
-			PrintErrorFromLocation(var.refLoc,"HIGH_IMPEDANCE only makes sense for BIDIRECTIONAL pins");
-			context.errorFlagged=true;
-			return nullptr;
-		}
-
-		Instruction* I = CAssignment::generateImpedanceAssignment(var,var.impedance,context);
-		if (context.gContext.opts.generateDebug)
-		{
-			assert(scopingStack.size() > 0);
-			//printf("Insert Assign Debug:"); I->dump();
-			I->setDebugLoc(DebugLoc::get(operatorLoc.first_line, operatorLoc.first_column, scopingStack.top()));
-		}
-		return I;
-	}
-	assignWith = rhs.codeGen(context);
-	if (assignWith == nullptr)
-	{
-		return nullptr;
-	}
-
-	Instruction* I = CAssignment::generateAssignment(var,lhs,assignWith,context);
-	if (context.gContext.opts.generateDebug)
-	{
-		assert(scopingStack.size() > 0);
-		//printf("Insert Assign Debug:"); I->dump();
-		I->setDebugLoc(DebugLoc::get(operatorLoc.first_line, operatorLoc.first_column, scopingStack.top()));
-	}
-	return I;
-}
-
-Value* CAssignment::codeGen(CodeGenContext& context,CCastOperator* cast)
-{
-	BitVariable var;
-	Value* assignWith;
-	if (!context.LookupBitVariable(var,lhs.module,lhs.name,lhs.modLoc,lhs.nameLoc))
-	{
-		return nullptr;
-	}
-
-	if (var.mappingRef)
-	{
-		PrintErrorFromLocation(var.refLoc, "Cannot assign to a mapping reference");
-		context.errorFlagged=true;
-		return nullptr;
-	}
-
-	var.aliased=true;		// We pretend we are assigning to an alias, even if we are not, this forces the compiler to generate the correct code
-
-	APInt mask(var.size.getLimitedValue(),"0",10);
-	APInt start=cast->beg.integer;
-	APInt loop=cast->beg.integer.zextOrTrunc(var.size.getLimitedValue());
-	APInt endloop = cast->end.integer.zextOrTrunc(var.size.getLimitedValue());
-	start=start.zextOrTrunc(var.size.getLimitedValue());
-
-	while (1==1)
-	{
-		mask.setBit(loop.getLimitedValue());
-		if (loop.uge(endloop))
-			break;
-		loop++;
-	}
-
-
-	var.shft=start;
-	var.mask=mask;
-
-	assignWith = rhs.codeGen(context);
-
-	return CAssignment::generateAssignment(var,lhs,assignWith,context);
-}
 
 void CBlock::prePass(CodeGenContext& context)
 {
@@ -1779,7 +1527,7 @@ Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 					{
 						// we need a new variable to hold the impedance mask
 						bool needsImpedance = false;
-						if (g_impedanceRequired.find(context.moduleName + context.symbolPrepend + id.name) != g_impedanceRequired.end())
+						if (context.gContext.impedanceRequired.find(context.moduleName + context.symbolPrepend + id.name) != context.gContext.impedanceRequired.end())
 						{
 							temp.impedance = new GlobalVariable(*context.module, Type::getIntNTy(TheContext, size.integer.getLimitedValue()), false, GlobalValue::PrivateLinkage, nullptr, context.symbolPrepend + id.name + ".HZ");
 							needsImpedance = true;
@@ -2039,8 +1787,7 @@ Value* CHandlerDeclaration::codeGen(CodeGenContext& context)
 	Instruction* I=ReturnInst::Create(TheContext, context.currentBlock());			/* block may well have changed by time we reach here */
 	if (context.gContext.opts.generateDebug)
 	{
-		//printf("Insert Return Debug:"); I->dump();
-		I->setDebugLoc(DebugLoc::get(block.blockEndLoc.first_line, block.blockEndLoc.first_column, scopingStack.top()));
+		I->setDebugLoc(DebugLoc::get(block.blockEndLoc.first_line, block.blockEndLoc.first_column, context.gContext.scopingStack.top()));
 	}
 
 	context.stateLabelStack=oldStateLabelStack;
@@ -2198,20 +1945,19 @@ Value* CInstruction::codeGen(CodeGenContext& context)
 		{
 //			std::cout << "Adding execute " << opcode.toString(2,false) << std::endl;
 			Function *parentFunction = context.executeLocations[table.name][b].blockEndForExecute->getParent();
-			scopingStack.push(parentFunction->getSubprogram());
+			context.gContext.scopingStack.push(parentFunction->getSubprogram());
 				
 			BasicBlock* tempBlock = BasicBlock::Create(TheContext,"callOut" + table.name + opcode.toString(16,false),context.executeLocations[table.name][b].blockEndForExecute->getParent(),0);
 			std::vector<Value*> args;
 			CallInst* fcall = CallInst::Create(function,args,"",tempBlock);
 			if (context.gContext.opts.generateDebug)
 			{
-				//printf("Insert Call Debug:"); fcall->dump();
-				fcall->setDebugLoc(DebugLoc::get(context.executeLocations[table.name][b].executeLoc.first_line, context.executeLocations[table.name][b].executeLoc.first_column, scopingStack.top()));
+				fcall->setDebugLoc(DebugLoc::get(context.executeLocations[table.name][b].executeLoc.first_line, context.executeLocations[table.name][b].executeLoc.first_column, context.gContext.scopingStack.top()));
 			}
 			BranchInst::Create(context.executeLocations[table.name][b].blockEndForExecute,tempBlock);
 			context.executeLocations[table.name][b].switchForExecute->addCase(ConstantInt::get(TheContext,opcode),tempBlock);
 
-			scopingStack.pop();
+			context.gContext.scopingStack.pop();
 		}
 
 	}
@@ -2582,10 +2328,6 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 	g_connectFunctions[func] = func;
 
 	BasicBlock *bblock = BasicBlock::Create(TheContext, "entry", func, 0);
-//	if (context.gContext.opts.generateDebug)
-//	{
-//		scopingStack.push(context.dbgBuilder->createLexicalBlock(scopingStack.top(), scopingStack.top()->getFile(), blockStartLoc.first_line, blockStartLoc.first_column));
-//	}
 	
 	context.pushBlock(bblock,blockStartLoc);
 
@@ -2804,8 +2546,7 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 						Instruction* I = BinaryOperator::Create(Instruction::Or, fetchDriving, busIsDrivingResult[curBus], "isDriving", context.currentBlock());
 						if (context.gContext.opts.generateDebug)
 						{
-							//printf("Insert Or Debug:"); I->dump();
-							I->setDebugLoc(DebugLoc::get((*connects[a]).statementLoc.first_line, (*connects[a]).statementLoc.first_column, scopingStack.top()));
+							I->setDebugLoc(DebugLoc::get((*connects[a]).statementLoc.first_line, (*connects[a]).statementLoc.first_column, context.gContext.scopingStack.top()));
 						}
 						busIsDrivingResult[curBus] = I;
 					}
@@ -2846,8 +2587,7 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 					Instruction* I = BinaryOperator::Create(Instruction::And, tmp, busOutResult[curBus], "PullUpCombine", context.currentBlock());
 					if (context.gContext.opts.generateDebug)
 					{
-						//printf("Insert And Debug:"); I->dump();
-						I->setDebugLoc(DebugLoc::get((*connects[a]).statementLoc.first_line, (*connects[a]).statementLoc.first_column, scopingStack.top()));
+						I->setDebugLoc(DebugLoc::get((*connects[a]).statementLoc.first_line, (*connects[a]).statementLoc.first_column, context.gContext.scopingStack.top()));
 					}
 					busOutResult[curBus] = I;
 				}
@@ -2892,9 +2632,8 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 			Instruction* swapBA = SelectInst::Create(swapB, busOutResult[0], busOutResult[1], "SwapBwithA", context.currentBlock());
 			if (context.gContext.opts.generateDebug)
 			{
-				//printf("Insert Swap Debug:"); swapAB->dump();
-				swapAB->setDebugLoc(DebugLoc::get((*connects[a]).statementLoc.first_line, (*connects[a]).statementLoc.first_column, scopingStack.top()));
-				swapBA->setDebugLoc(DebugLoc::get((*connects[a]).statementLoc.first_line, (*connects[a]).statementLoc.first_column, scopingStack.top()));
+				swapAB->setDebugLoc(DebugLoc::get((*connects[a]).statementLoc.first_line, (*connects[a]).statementLoc.first_column, context.gContext.scopingStack.top()));
+				swapBA->setDebugLoc(DebugLoc::get((*connects[a]).statementLoc.first_line, (*connects[a]).statementLoc.first_column, context.gContext.scopingStack.top()));
 			}
 
 			busOutResult[0] = swapAB;
@@ -2921,8 +2660,7 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 				Instruction* I = CAssignment::generateAssignment(var, *ins[curBus][i], busOutResult[curBus], context);
 				if (context.gContext.opts.generateDebug)
 				{
-					//printf("Insert Assign Debug:"); I->dump();
-					I->setDebugLoc(DebugLoc::get((*connects[a]).statementLoc.first_line, (*connects[a]).statementLoc.first_column, scopingStack.top()));
+					I->setDebugLoc(DebugLoc::get((*connects[a]).statementLoc.first_line, (*connects[a]).statementLoc.first_column, context.gContext.scopingStack.top()));
 				}
 
 				if (curBus==0 && i == 0 && connects[a]->hasTap && optlevel < 3)		// only tap the first bus for now
@@ -2961,12 +2699,10 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 	Instruction* I=ReturnInst::Create(TheContext, context.currentBlock());			/* block may well have changed by time we reach here */
 	if (context.gContext.opts.generateDebug)
 	{
-		//printf("Insert Return Debug:"); I->dump();
-		I->setDebugLoc(DebugLoc::get(blockEndLoc.first_line, blockEndLoc.first_column, scopingStack.top()));
+		I->setDebugLoc(DebugLoc::get(blockEndLoc.first_line, blockEndLoc.first_column, context.gContext.scopingStack.top()));
 	}
 
 	context.popBlock(blockEndLoc);
-//	scopingStack.pop();	//lexical block
 
 	context.EndFunctionDebugInfo();
 
@@ -3482,8 +3218,7 @@ Value* CFuncCall::codeGen(CodeGenContext& context)
 		Instruction* call = CallInst::Create(func, args, "", context.currentBlock());
 		if (context.gContext.opts.generateDebug)
 		{
-			//printf("Insert Call Debug:"); call->dump();
-			call->setDebugLoc(DebugLoc::get(callLoc.first_line, callLoc.first_column, scopingStack.top()));
+			call->setDebugLoc(DebugLoc::get(callLoc.first_line, callLoc.first_column, context.gContext.scopingStack.top()));
 		}
 
 		callReturn = ConstantInt::get(TheContext,APInt(1,0));		// Forces void returns to actually return 0
@@ -3493,8 +3228,7 @@ Value* CFuncCall::codeGen(CodeGenContext& context)
 		Instruction* call = CallInst::Create(func, args, "CallingCFunc"+name.name, context.currentBlock());
 		if (context.gContext.opts.generateDebug)
 		{
-			//printf("Insert Call Debug:"); call->dump();
-			call->setDebugLoc(DebugLoc::get(callLoc.first_line, callLoc.first_column, scopingStack.top()));
+			call->setDebugLoc(DebugLoc::get(callLoc.first_line, callLoc.first_column, context.gContext.scopingStack.top()));
 		}
 		callReturn = call;
 	}
@@ -3513,16 +3247,15 @@ Value* CTrigger::codeGen(CodeGenContext& context,BitVariable& pin,Value* functio
 			{
 				BasicBlock *oldBlock = (*pin.writeAccessor)->getParent();
 				Function* parentFunction = oldBlock->getParent();
-				scopingStack.push(parentFunction->getSubprogram());
+				context.gContext.scopingStack.push(parentFunction->getSubprogram());
 				
 				CallInst* fcall = CallInst::Create(function,"",*pin.writeAccessor);
 				if (context.gContext.opts.generateDebug)
 				{
-					//printf("Insert Call Debug:"); fcall->dump();
-					fcall->setDebugLoc(DebugLoc::get(debugLocation.first_line, debugLocation.first_column, scopingStack.top()));
+					fcall->setDebugLoc(DebugLoc::get(debugLocation.first_line, debugLocation.first_column, context.gContext.scopingStack.top()));
 				}
 
-				scopingStack.pop();
+				context.gContext.scopingStack.pop();
 			}
 			return nullptr;
 		case TOK_CHANGED:
@@ -3530,7 +3263,7 @@ Value* CTrigger::codeGen(CodeGenContext& context,BitVariable& pin,Value* functio
 			{
 				BasicBlock *oldBlock = (*pin.writeAccessor)->getParent();
 				Function* parentFunction = oldBlock->getParent();
-				scopingStack.push(parentFunction->getSubprogram());
+				context.gContext.scopingStack.push(parentFunction->getSubprogram());
 
 				context.pushBlock(oldBlock,debugLocation);
 				Value* prior = CIdentifier::GetAliasedData(context,pin.priorValue,pin);
@@ -3546,8 +3279,7 @@ Value* CTrigger::codeGen(CodeGenContext& context,BitVariable& pin,Value* functio
 				CallInst* fcall = CallInst::Create(function,"",ifcall);
 				if (context.gContext.opts.generateDebug)
 				{
-					//printf("Insert Call Debug:"); fcall->dump();
-					fcall->setDebugLoc(DebugLoc::get(debugLocation.first_line, debugLocation.first_column, scopingStack.top()));
+					fcall->setDebugLoc(DebugLoc::get(debugLocation.first_line, debugLocation.first_column, context.gContext.scopingStack.top()));
 				}
 				BranchInst::Create(nocall,ifcall);
 
@@ -3556,7 +3288,7 @@ Value* CTrigger::codeGen(CodeGenContext& context,BitVariable& pin,Value* functio
 
 				*pin.writeAccessor=ReturnInst::Create(TheContext,nocall);
 
-				scopingStack.pop();
+				context.gContext.scopingStack.pop();
 			}
 			return nullptr;
 		case TOK_TRANSITION:
@@ -3564,7 +3296,7 @@ Value* CTrigger::codeGen(CodeGenContext& context,BitVariable& pin,Value* functio
 			{
 				BasicBlock *oldBlock = (*pin.writeAccessor)->getParent();
 				Function* parentFunction = oldBlock->getParent();
-				scopingStack.push(parentFunction->getSubprogram());
+				context.gContext.scopingStack.push(parentFunction->getSubprogram());
 
 				context.pushBlock(oldBlock,debugLocation);
 				Value* prior = CIdentifier::GetAliasedData(context,pin.priorValue,pin);
@@ -3584,8 +3316,7 @@ Value* CTrigger::codeGen(CodeGenContext& context,BitVariable& pin,Value* functio
 				CallInst* fcall = CallInst::Create(function,"",ifcall);
 				if (context.gContext.opts.generateDebug)
 				{
-					//printf("Insert Call Debug:"); fcall->dump();
-					fcall->setDebugLoc(DebugLoc::get(debugLocation.first_line, debugLocation.first_column, scopingStack.top()));
+					fcall->setDebugLoc(DebugLoc::get(debugLocation.first_line, debugLocation.first_column, context.gContext.scopingStack.top()));
 				}
 				BranchInst::Create(nocall,ifcall);
 
@@ -3594,7 +3325,7 @@ Value* CTrigger::codeGen(CodeGenContext& context,BitVariable& pin,Value* functio
 
 				*pin.writeAccessor=ReturnInst::Create(TheContext,nocall);
 
-				scopingStack.pop();
+				context.gContext.scopingStack.pop();
 
 			}
 			return nullptr;
@@ -3752,14 +3483,14 @@ void CInstance::prePass(CodeGenContext& context)
 
 	if (context.gContext.opts.generateDebug)
 	{
-		scopingStack.push(CreateNewDbgFile(includeName.c_str(), includefile->dbgBuilder));
+		context.gContext.scopingStack.push(CreateNewDbgFile(includeName.c_str(), includefile->dbgBuilder));
 	}
 
 	includefile->generateCode(*g_ProgramBlock);
 
 	if (context.gContext.opts.generateDebug)
 	{
-		scopingStack.pop();
+		context.gContext.scopingStack.pop();
 	}
 	if (includefile->errorFlagged)
 	{

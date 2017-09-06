@@ -73,7 +73,7 @@ llvm::Value* CIdentifier::codeGen(CodeGenContext& context)
 			llvm::Instruction* I=llvm::CallInst::Create(pinGetFunction,args,"GetPinValue",context.currentBlock());
 			if (context.gContext.opts.generateDebug)
 			{
-				I->setDebugLoc(llvm::DebugLoc::get(nameLoc.first_line, nameLoc.first_column, scopingStack.top()));
+				I->setDebugLoc(llvm::DebugLoc::get(nameLoc.first_line, nameLoc.first_column, context.gContext.scopingStack.top()));
 			}
 			return I;
 		}

@@ -78,14 +78,14 @@ public:
 	int generateDebug;
 };
 
-extern std::stack<DIScope*> scopingStack;
-
 class GlobalContext
 {
 public:
 	GlobalContext(CompilerOptions& options) : opts(options) {  }
 
-	CompilerOptions& opts;
+	CompilerOptions&			opts;
+	std::map<std::string, bool> impedanceRequired;
+	std::stack<DIScope*>		scopingStack;
 };
 
 class CodeGenContext
@@ -178,9 +178,7 @@ public:
 		blocks.top()->locals = tLocals;
 		if (gContext.opts.generateDebug)
 		{
-			scopingStack.push(dbgBuilder->createLexicalBlock(scopingStack.top(), scopingStack.top()->getFile(), blockStartLocation.first_line, blockStartLocation.first_column));
-			//printf("PUSH SCOPE :");
-			//scopingStack.top()->dump();
+			gContext.scopingStack.push(dbgBuilder->createLexicalBlock(gContext.scopingStack.top(), gContext.scopingStack.top()->getFile(), blockStartLocation.first_line, blockStartLocation.first_column));
 		}
 	}
 	void popBlock(YYLTYPE& blockEndLocation)
@@ -188,17 +186,7 @@ public:
 		CodeGenBlock *top = blocks.top();
 		if (gContext.opts.generateDebug)
 		{
-			/*if (top->block->getTerminator() != nullptr)
-			{
-				top->block->getTerminator()->setDebugLoc(DebugLoc::get(blockEndLocation.first_line, blockEndLocation.first_column, scopingStack.top()));
-			}
-			else
-			{
-				assert(0);
-			}*/
-			//printf("POP SCOPE :");
-			//scopingStack.top()->dump();
-			scopingStack.pop();
+			gContext.scopingStack.pop();
 		}
 		blocks.pop();
 		delete top;
