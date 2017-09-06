@@ -29,8 +29,12 @@ FLEX_TARGET(MyLexer src/edl.l
 	${CMAKE_CURRENT_BINARY_DIR}/lexer.cpp)
 ADD_FLEX_BISON_DEPENDENCY(MyLexer MyParser)
 
-set(AST_HEADERS src/ast/integer.h src/ast/string.h src/ast/identifier.h src/ast/opIdent.h src/ast/opMapping.h src/ast/opPartial.h)
-set(AST_CPPS src/ast/integer.cpp src/ast/string.cpp src/ast/identifier.cpp src/ast/opIdent.cpp src/ast/opMapping.cpp src/ast/opPartial.cpp)
+set(AST_OPERATORS_HEADERS src/ast/opBinary.h src/ast/opCast.h src/ast/opRotation.h)
+set(AST_OPERANDS_HEADERS src/ast/opIdent.h src/ast/opMapping.h src/ast/opPartial.h)
+set(AST_HEADERS src/ast/integer.h src/ast/string.h src/ast/identifier.h)
+set(AST_OPERATORS_CPPS src/ast/opBinary.cpp src/ast/opCast.cpp src/ast/opRotation.cpp)
+set(AST_OPERANDS_CPPS src/ast/opIdent.cpp src/ast/opMapping.cpp src/ast/opPartial.cpp)
+set(AST_CPPS src/ast/integer.cpp src/ast/string.cpp src/ast/identifier.cpp)
 set(HEADERS src/ast.h src/generator.h src/bitvariable.h)
 set(GRAMMARS src/edl.l src/edl.y)
 set(CPPS src/main.cpp src/generator.cpp src/bitvariable.cpp)
@@ -40,7 +44,11 @@ add_executable(edl
 	${HEADERS}
 	${GRAMMARS}
 	${AST_HEADERS}
+	${AST_OPERATORS_HEADERS}
+	${AST_OPERANDS_HEADERS}
 	${AST_CPPS}
+	${AST_OPERATORS_CPPS}
+	${AST_OPERANDS_CPPS}
 	${FLEX_MyLexer_OUTPUTS}
 	${BISON_MyParser_OUTPUTS} 
 	)
@@ -68,6 +76,10 @@ source_group(Sources FILES ${CPPS})
 source_group(Headers FILES ${HEADERS})
 source_group(Headers\\ast FILES ${AST_HEADERS})
 source_group(Sources\\ast FILES ${AST_CPPS})
+source_group(Headers\\ast\\operands FILES ${AST_OPERANDS_HEADERS})
+source_group(Sources\\ast\\operands FILES ${AST_OPERANDS_CPPS})
+source_group(Headers\\ast\\operators FILES ${AST_OPERATORS_HEADERS})
+source_group(Sources\\ast\\operators FILES ${AST_OPERATORS_CPPS})
 source_group(Grammar FILES ${GRAMMARS})
 source_group(Generated FILES ${FLEX_MyLexer_OUTPUTS} ${BISON_MyParser_OUTPUTS})
 

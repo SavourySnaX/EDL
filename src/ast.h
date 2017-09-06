@@ -63,11 +63,11 @@ public:
 
 class CExpression : public CNode {
 public:
-	virtual bool IsAssignmentExpression() { return false; }
-	virtual bool IsLeaf() { return true; }
-	virtual bool IsIdentifierExpression() { return false; }
-	virtual bool IsCarryExpression() { return false; }
-	virtual bool IsImpedance() { return false; }
+	virtual bool IsAssignmentExpression() const { return false; }
+	virtual bool IsLeaf() const { return true; }
+	virtual bool IsIdentifierExpression() const { return false; }
+	virtual bool IsCarryExpression() const { return false; }
+	virtual bool IsImpedance() const { return false; }
 };
 
 class CStatement : public CNode {
@@ -90,7 +90,7 @@ public:
 
 	CHighImpedance(){};
 	
-	virtual bool IsImpedance() { return true; }
+	virtual bool IsImpedance() const { return true; }
 
 	virtual llvm::Value* codeGen(CodeGenContext& context) { return nullptr; } 
 };
@@ -139,54 +139,9 @@ public:
 #include "ast/opIdent.h"
 #include "ast/opMapping.h"
 #include "ast/opPartial.h"
-
-class CBinaryOperator : public CExpression {
-public:
-	int op;
-	CExpression& lhs;
-	CExpression& rhs;
-	YYLTYPE operatorLoc;
-	CBinaryOperator(CExpression& lhs, int op, CExpression& rhs, YYLTYPE *operatorLoc) :
-		lhs(lhs), rhs(rhs), op(op), operatorLoc(*operatorLoc) { }
-
-	virtual void prePass(CodeGenContext& context);
-	virtual llvm::Value* codeGen(CodeGenContext& context);
-	llvm::Value* codeGen(CodeGenContext& context,llvm::Value* left,llvm::Value* right);
-
-	virtual bool IsCarryExpression();
-	
-	virtual bool IsLeaf() { return false; }
-};
-
-class CCastOperator : public CExpression {
-public:
-	CExpression& lhs;
-	CInteger& beg;
-	CInteger& end;
-	static CInteger begZero;
-	YYLTYPE operatorLoc;
-	CCastOperator(CExpression& lhs, CInteger& end, YYLTYPE operatorLoc) :
-		lhs(lhs), beg(begZero),end(end),operatorLoc(operatorLoc) { }
-	CCastOperator(CExpression& lhs, CInteger& beg, CInteger& end,YYLTYPE operatorLoc) :
-		lhs(lhs), beg(beg), end(end),operatorLoc(operatorLoc) { }
-	virtual void prePass(CodeGenContext& context);
-	virtual llvm::Value* codeGen(CodeGenContext& context);
-	
-	virtual bool IsLeaf() { if (lhs.IsLeaf()) return true; return false; }
-};
-
-class CRotationOperator : public CExpression {
-public:
-	CExpression& value;
-	CIdentifier& bitsOut;
-	CExpression& bitsIn;
-	CExpression& rotAmount;
-	int direction;
-	CRotationOperator(int direction,CExpression& value, CIdentifier& bitsOut, CExpression& bitsIn,CExpression& rotAmount) :
-		direction(direction), value(value), bitsOut(bitsOut), bitsIn(bitsIn), rotAmount(rotAmount) { }
-	virtual void prePass(CodeGenContext& context);
-	virtual llvm::Value* codeGen(CodeGenContext& context);
-};
+#include "ast/opBinary.h"
+#include "ast/opCast.h"
+#include "ast/opRotation.h"
 
 class CMapping : public CExpression {
 public:
@@ -197,7 +152,7 @@ public:
 	CMapping(CInteger& selector,CString& label,CExpression& expr) :
 		expr(expr), selector(selector), label(label) { }
 	
-	virtual bool IsLeaf() { return false; }
+	virtual bool IsLeaf() const { return false; }
 };
 
 class CAssignment : public CExpression {
@@ -212,8 +167,8 @@ public:
 	virtual llvm::Value* codeGen(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context,CCastOperator* cast);
 
-	virtual bool IsLeaf() { return false; }
-	virtual bool IsAssignmentExpression() { return true; }
+	virtual bool IsLeaf() const { return false; }
+	virtual bool IsAssignmentExpression() const { return true; }
 
 	static llvm::Instruction* generateAssignment(BitVariable& to,const CIdentifier& identTo,llvm::Value* from,CodeGenContext& context,bool isVolatile=false);
 	static llvm::Instruction* generateAssignmentActual(BitVariable& to,const CIdentifier& identTo,llvm::Value* from,CodeGenContext& context,bool clearImpedance,bool isVolatile=false);
