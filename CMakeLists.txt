@@ -29,11 +29,11 @@ FLEX_TARGET(MyLexer src/edl.l
 	${CMAKE_CURRENT_BINARY_DIR}/lexer.cpp)
 ADD_FLEX_BISON_DEPENDENCY(MyLexer MyParser)
 
-set(AST_HEADERS src/ast/integer.h src/ast/string.h)
-set(AST_CPPS src/ast/integer.cpp src/ast/string.cpp)
-set(HEADERS src/ast.h src/generator.h)
+set(AST_HEADERS src/ast/integer.h src/ast/string.h src/ast/identifier.h src/ast/opIdent.h src/ast/opMapping.h src/ast/opPartial.h)
+set(AST_CPPS src/ast/integer.cpp src/ast/string.cpp src/ast/identifier.cpp src/ast/opIdent.cpp src/ast/opMapping.cpp src/ast/opPartial.cpp)
+set(HEADERS src/ast.h src/generator.h src/bitvariable.h)
 set(GRAMMARS src/edl.l src/edl.y)
-set(CPPS src/main.cpp src/generator.cpp)
+set(CPPS src/main.cpp src/generator.cpp src/bitvariable.cpp)
 
 add_executable(edl 
 	${CPPS}

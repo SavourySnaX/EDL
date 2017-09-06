@@ -3,9 +3,9 @@
 
 #include "generator.h"	// Todo refactor away
 
-#include <llvm/IR/GlobalVariable.h>
-#include <llvm/IR/Constants.h>
 #include <llvm/ADT/StringRef.h>
+#include <llvm/IR/Constants.h>
+#include <llvm/IR/GlobalVariable.h>
 
 void CString::prePass(CodeGenContext& context)
 {

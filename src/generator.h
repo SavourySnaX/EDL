@@ -36,27 +36,7 @@ class CAffect;
 
 typedef std::vector<CAffect*> AffectorList;
 
-class BitVariable
-{
-public:
-	YYLTYPE refLoc;
-	Value* value;
-	APInt	arraySize;
-	APInt	size;
-	APInt	trueSize;
-	APInt	mask;
-	APInt	cnst;
-	APInt	shft;
-	bool	aliased;
-	bool	mappingRef;
-	CExpression* mapping;
-	bool	fromExternal;
-	int	pinType;
-	Instruction**	writeAccessor;
-	Value*		writeInput;
-	Value*		priorValue;
-	Value*		impedance;
-};
+#include "bitvariable.h"
 
 class StateVariable
 {

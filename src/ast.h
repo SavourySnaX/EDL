@@ -76,11 +76,11 @@ class CStatement : public CNode {
 class COperand : public CNode {
 public:
 	virtual void DeclareLocal(CodeGenContext& context,unsigned num)=0;
-	virtual llvm::APInt GetComputableConstant(CodeGenContext& context,unsigned num)=0;
-	virtual unsigned GetNumComputableConstants(CodeGenContext& context)=0;
-	virtual const CString* GetString(CodeGenContext& context,unsigned num,unsigned slot)=0;
+	virtual llvm::APInt GetComputableConstant(CodeGenContext& context,unsigned num) const=0;
+	virtual unsigned GetNumComputableConstants(CodeGenContext& context) const=0;
+	virtual const CString* GetString(CodeGenContext& context,unsigned num,unsigned slot) const=0;
 
-	virtual bool isStringReturnable() { return false; }
+	virtual bool isStringReturnable() const { return false; }
 };
 
 #include "ast/integer.h"
@@ -102,21 +102,7 @@ public:
 	virtual bool IsArray() const { return false;}
 };
 
-class CIdentifier : public CBaseIdentifier {
-public:
-	std::string module;
-	std::string name;
-	YYLTYPE nameLoc;
-	YYLTYPE modLoc;
-	CIdentifier(const std::string& name) : name(name) { }
-	CIdentifier(const std::string& name, YYLTYPE *nameLoc) : name(name),nameLoc(*nameLoc) { }
-	CIdentifier(const std::string& module, const std::string& name, YYLTYPE *modLoc, YYLTYPE *nameLoc) : module(module+"."),name(name),nameLoc(*nameLoc),modLoc(*modLoc) { }
-	static llvm::Value* trueSize(llvm::Value*,CodeGenContext& context,BitVariable& var);
-	static llvm::Value* GetAliasedData(CodeGenContext& context,llvm::Value* in,BitVariable& var);
-	virtual llvm::Value* codeGen(CodeGenContext& context);
-	virtual bool IsIdentifierExpression() { return true; }
-	virtual CExpression *GetExpression() const { return nullptr; }
-};
+#include "ast/identifier.h"
 
 class CIdentifierArray : public CIdentifier
 {
@@ -145,56 +131,14 @@ public:
 		integer(integer) { }
 	
 	virtual void DeclareLocal(CodeGenContext& context,unsigned num) {}
-	virtual llvm::APInt GetComputableConstant(CodeGenContext& context,unsigned num) { return integer.integer; }
-	virtual unsigned GetNumComputableConstants(CodeGenContext& context) { return 1; }
-	virtual const CString* GetString(CodeGenContext& context,unsigned num,unsigned slot) { return nullptr; };
+	virtual llvm::APInt GetComputableConstant(CodeGenContext& context,unsigned num) const { return integer.integer; }
+	virtual unsigned GetNumComputableConstants(CodeGenContext& context) const { return 1; }
+	virtual const CString* GetString(CodeGenContext& context,unsigned num,unsigned slot) const { return nullptr; };
 };
 
-class COperandIdent : public COperand {
-public:
-	CIdentifier& ident;
-	CInteger& size;
-	COperandIdent(CIdentifier& ident,CInteger& size) :
-		ident(ident), size(size) { }
-	
-	virtual void DeclareLocal(CodeGenContext& context,unsigned num);
-	virtual llvm::APInt GetComputableConstant(CodeGenContext& context,unsigned num) { return llvm::APInt((unsigned int)size.integer.getLimitedValue(),(uint64_t)num,false); }
-	virtual unsigned GetNumComputableConstants(CodeGenContext& context) { return 1<<size.integer.getLimitedValue(); }
-	virtual const CString* GetString(CodeGenContext& context,unsigned num,unsigned slot) { return nullptr; };
-};
-
-class COperandMapping : public COperand {
-public:
-	CIdentifier& ident;
-	COperandMapping(CIdentifier& ident) :
-		ident(ident) { }
-
-	virtual void DeclareLocal(CodeGenContext& context,unsigned num);
-	virtual llvm::APInt GetComputableConstant(CodeGenContext& context,unsigned num);
-	virtual unsigned GetNumComputableConstants(CodeGenContext& context);
-	
-	BitVariable GetBitVariable(CodeGenContext& context,unsigned num);
-	virtual const CString* GetString(CodeGenContext& context,unsigned num,unsigned slot);
-
-	virtual bool isStringReturnable() { return true; }
-};
-
-class COperandPartial : public COperand {
-public:
-	OperandList operands;
-
-	COperandPartial() {}
-
-	void Add(COperand *operand) { operands.push_back(operand); }
-
-	virtual void DeclareLocal(CodeGenContext& context,unsigned num);
-
-	virtual llvm::APInt GetComputableConstant(CodeGenContext& context,unsigned num);
-	virtual unsigned GetNumComputableConstants(CodeGenContext& context);
-	virtual const CString* GetString(CodeGenContext& context,unsigned num,unsigned slot);
-	
-	virtual bool isStringReturnable();
-};
+#include "ast/opIdent.h"
+#include "ast/opMapping.h"
+#include "ast/opPartial.h"
 
 class CBinaryOperator : public CExpression {
 public:
