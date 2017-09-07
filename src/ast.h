@@ -54,14 +54,17 @@ typedef std::vector<CExpression*> ParamsList;
 typedef std::vector<CParamDecl*> NamedParamsList;
 typedef std::vector<CConnect*> ConnectList;
 
-class CNode {
+class CNode 
+{
 public:
 	virtual ~CNode() {}
+
 	virtual void prePass(CodeGenContext& context) { }
 	virtual llvm::Value* codeGen(CodeGenContext& context) { return nullptr; }
 };
 
-class CExpression : public CNode {
+class CExpression : public CNode 
+{
 public:
 	virtual bool IsAssignmentExpression() const { return false; }
 	virtual bool IsLeaf() const { return true; }
@@ -70,10 +73,12 @@ public:
 	virtual bool IsImpedance() const { return false; }
 };
 
-class CStatement : public CNode {
+class CStatement : public CNode 
+{
 };
 
-class COperand : public CNode {
+class COperand : public CNode 
+{
 public:
 	virtual void DeclareLocal(CodeGenContext& context,unsigned num)=0;
 	virtual llvm::APInt GetComputableConstant(CodeGenContext& context,unsigned num) const=0;
@@ -85,7 +90,8 @@ public:
 
 #include "ast/integer.h"
 
-class CHighImpedance : public CExpression {
+class CHighImpedance : public CExpression 
+{
 public:
 
 	CHighImpedance(){};
@@ -108,9 +114,11 @@ class CIdentifierArray : public CIdentifier
 {
 public:
 	CExpression& arrayIndex;
+
 	CIdentifierArray(CExpression& expr,const std::string& name): CIdentifier(name),arrayIndex(expr) {};
 	CIdentifierArray(CExpression& expr,const std::string& name, YYLTYPE *nameLoc): CIdentifier(name,nameLoc),arrayIndex(expr) {};
 	CIdentifierArray(CExpression& expr,const std::string& module, const std::string& name,YYLTYPE *modLoc, YYLTYPE *nameLoc): CIdentifier(module,name,modLoc,nameLoc),arrayIndex(expr) {};
+
 	virtual CExpression *GetExpression() const { return &arrayIndex; }
 	virtual bool IsArray() const { return true; }
 };
@@ -119,6 +127,7 @@ class CStateIdent : public CExpression {
 public:
 	std::string name;
 	YYLTYPE nameLoc;
+
 	CStateIdent(const std::string& name, YYLTYPE *nameLoc) : name(name),nameLoc(*nameLoc) { }
 };
 
@@ -127,8 +136,8 @@ public:
 class COperandNumber : public COperand {
 public:
 	CInteger& integer;
-	COperandNumber(CInteger& integer) :
-		integer(integer) { }
+
+	COperandNumber(CInteger& integer) : integer(integer) { }
 	
 	virtual void DeclareLocal(CodeGenContext& context,unsigned num) {}
 	virtual llvm::APInt GetComputableConstant(CodeGenContext& context,unsigned num) const { return integer.integer; }
@@ -143,14 +152,14 @@ public:
 #include "ast/opCast.h"
 #include "ast/opRotation.h"
 
-class CMapping : public CExpression {
+class CMapping : public CExpression 
+{
 public:
 	CExpression&	expr;
 	CInteger&	selector;
 	CString&	label;
 
-	CMapping(CInteger& selector,CString& label,CExpression& expr) :
-		expr(expr), selector(selector), label(label) { }
+	CMapping(CInteger& selector,CString& label,CExpression& expr) : expr(expr), selector(selector), label(label) { }
 	
 	virtual bool IsLeaf() const { return false; }
 };
@@ -159,46 +168,18 @@ public:
 #include "ast/block.h"
 #include "ast/debugHelpers.h"
 
-class CExpressionStatement : public CStatement {
+class CExpressionStatement : public CStatement 
+{
 public:
 	CExpression& expression;
-	CExpressionStatement(CExpression& expression) : 
-		expression(expression) { }
-	virtual void prePass(CodeGenContext& context);
-	virtual llvm::Value* codeGen(CodeGenContext& context);
+
+	CExpressionStatement(CExpression& expression) : expression(expression) { }
+
+	virtual void prePass(CodeGenContext& context) { expression.prePass(context); }
+	virtual llvm::Value* codeGen(CodeGenContext& context) { return expression.codeGen(context); }
 };
 
-class CVariableDeclaration : public CStatement {
-private:
-	llvm::Instruction* writeAccessor;
-public:
-	static CInteger notArray;
-	bool internal;
-	CIdentifier& id;
-	CInteger& arraySize;
-	CInteger& size;
-	AliasList aliases;
-	int pinType;
-	ExternParamsList initialiserList;
-	YYLTYPE declarationLoc;
-
-	CVariableDeclaration(CInteger& arraySize,bool internal,CIdentifier& id, CInteger& size, YYLTYPE declarationLoc) :
-		internal(internal), id(id), arraySize(arraySize),size(size),pinType(0),declarationLoc(declarationLoc) { }
-	CVariableDeclaration(CInteger& arraySize,bool internal,CIdentifier& id, CInteger& size,AliasList& aliases, YYLTYPE declarationLoc) :
-		internal(internal), id(id), arraySize(arraySize),size(size),aliases(aliases),pinType(0),declarationLoc(declarationLoc) { }
-	CVariableDeclaration(CIdentifier& id, CInteger& size,int pinType, YYLTYPE declarationLoc) :
-		id(id), arraySize(notArray),size(size),pinType(pinType),declarationLoc(declarationLoc) { }
-	CVariableDeclaration(CIdentifier& id, CInteger& size,AliasList& aliases,int pinType, YYLTYPE declarationLoc) :
-		id(id), arraySize(notArray),size(size),aliases(aliases),pinType(pinType),declarationLoc(declarationLoc) { }
-
-	void AddInitialisers(ExternParamsList &initialisers) {initialiserList=initialisers;}
-
-	virtual void prePass(CodeGenContext& context);
-	virtual llvm::Value* codeGen(CodeGenContext& context);
-
-	void CreateWriteAccessor(CodeGenContext& context,BitVariable& var,const std::string& moduleName, const std::string& name,bool impedance);
-	void CreateReadAccessor(CodeGenContext& context,BitVariable& var,bool impedance);
-};
+#include "ast/variableDecl.h"
 
 class CAliasDeclaration : public CStatement {
 public:

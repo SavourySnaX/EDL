@@ -33,9 +33,11 @@ ADD_FLEX_BISON_DEPENDENCY(MyLexer MyParser)
 
 set(AST_OPERATORS_HEADERS src/ast/opBinary.h src/ast/opCast.h src/ast/opRotation.h src/ast/opAssignment.h)
 set(AST_OPERANDS_HEADERS src/ast/opIdent.h src/ast/opMapping.h src/ast/opPartial.h)
+set(AST_STATEMENT_HEADERS src/ast/variableDecl.h)
 set(AST_HEADERS src/ast/integer.h src/ast/string.h src/ast/identifier.h src/ast/block.h src/ast/debugHelpers.h)
 set(AST_OPERATORS_CPPS src/ast/opBinary.cpp src/ast/opCast.cpp src/ast/opRotation.cpp src/ast/opAssignment.cpp)
 set(AST_OPERANDS_CPPS src/ast/opIdent.cpp src/ast/opMapping.cpp src/ast/opPartial.cpp)
+set(AST_STATEMENT_CPPS src/ast/variableDecl.cpp)
 set(AST_CPPS src/ast/integer.cpp src/ast/string.cpp src/ast/identifier.cpp src/ast/block.cpp src/ast/debugHelpers.cpp)
 set(HEADERS src/ast.h src/generator.h src/bitvariable.h)
 set(GRAMMARS src/edl.l src/edl.y)
@@ -43,14 +45,16 @@ set(CPPS src/main.cpp src/generator.cpp src/bitvariable.cpp)
 
 add_executable(edl 
 	${CPPS}
-	${HEADERS}
-	${GRAMMARS}
-	${AST_HEADERS}
-	${AST_OPERATORS_HEADERS}
-	${AST_OPERANDS_HEADERS}
 	${AST_CPPS}
 	${AST_OPERATORS_CPPS}
 	${AST_OPERANDS_CPPS}
+	${AST_STATEMENT_CPPS}
+	${GRAMMARS}
+	${HEADERS}
+	${AST_HEADERS}
+	${AST_OPERATORS_HEADERS}
+	${AST_OPERANDS_HEADERS}
+	${AST_STATEMENT_HEADERS}
 	${FLEX_MyLexer_OUTPUTS}
 	${BISON_MyParser_OUTPUTS} 
 	)
@@ -82,6 +86,8 @@ source_group(Headers\\ast\\operands FILES ${AST_OPERANDS_HEADERS})
 source_group(Sources\\ast\\operands FILES ${AST_OPERANDS_CPPS})
 source_group(Headers\\ast\\operators FILES ${AST_OPERATORS_HEADERS})
 source_group(Sources\\ast\\operators FILES ${AST_OPERATORS_CPPS})
+source_group(Headers\\ast\\statements FILES ${AST_STATEMENT_HEADERS})
+source_group(Sources\\ast\\statements FILES ${AST_STATEMENT_CPPS})
 source_group(Grammar FILES ${GRAMMARS})
 source_group(Generated FILES ${FLEX_MyLexer_OUTPUTS} ${BISON_MyParser_OUTPUTS})
 
