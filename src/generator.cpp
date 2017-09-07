@@ -795,280 +795,6 @@ std::string stringZero("0");
 
 CInteger CCastOperator::begZero(stringZero);
 
-Value* CStateDeclaration::codeGen(CodeGenContext& context,Function* parent)
-{
-	// We need to create a bunch of labels - one for each case.. we will need a finaliser for the blocks when we pop out of our current block.
-	entry = BasicBlock::Create(TheContext,id.name+"entry",parent);
-	exit = BasicBlock::Create(TheContext,id.name+"exit",parent);
-
-	return nullptr;
-}
-
-void CStatesDeclaration::prePass(CodeGenContext& context)
-{
-	int a;
-
-	for (a=0;a<states.size();a++)
-	{
-		children.push_back(nullptr);
-	}
-
-	context.pushState(this);
-
-	block.prePass(context);
-
-	context.popState();
-
-	if (context.currentIdent()!=nullptr)
-	{
-		int stateIndex = context.currentState()->getStateDeclarationIndex(*context.currentIdent());
-
-		if (stateIndex!=-1)
-		{
-			context.currentState()->children[stateIndex]=this;
-		}
-	}
-}
-
-int GetNumStates(CStatesDeclaration* state)
-{
-	int a;
-	int totalStates=0;
-
-	if (state==nullptr)
-		return 1;
-
-	for (a=0;a<state->states.size();a++)
-	{
-		CStatesDeclaration* downState=state->children[a];
-
-		if (downState==nullptr)
-		{
-			totalStates++;
-		}
-		else
-		{
-			totalStates+=GetNumStates(downState);
-		}
-	}
-
-	return totalStates;
-}
-		
-int ComputeBaseIdx(CStatesDeclaration* cur,CStatesDeclaration* find)
-{
-	int a;
-	int totalStates=0;
-	static bool found = false;
-
-	if (cur==nullptr)
-	{
-		return 0;
-	}
-
-	found=false;
-
-	for (a=0;a<cur->states.size();a++)
-	{
-		CStatesDeclaration* downState=cur->children[a];
-
-		if (downState == find)
-		{
-			found=true;
-			return totalStates;
-		}
-
-		if (downState==nullptr)
-		{
-			totalStates++;
-		}
-		else
-		{
-			totalStates+=ComputeBaseIdx(downState,find);
-			if (found)
-			{
-				return totalStates;
-			}
-		}
-	}
-
-	return totalStates;
-}
-
-Value* CStatesDeclaration::codeGen(CodeGenContext& context)
-{
-	bool TopMostState=false;
-
-	if (context.currentState()==nullptr)
-	{
-		if (context.parentHandler==nullptr)
-		{
-			PrintErrorFromLocation(statementLoc,"It is illegal to declare STATES outside of a handler");
-			context.errorFlagged=true;
-			return nullptr;
-		}
-
-		TopMostState=true;
-	}
-	else
-	{
-	}
-
-	int totalStates;
-	std::string numStates;
-	APInt overSized;
-	unsigned bitsNeeded;
-	int baseStateIdx;
-	
-	Value *curState;
-	Value *nxtState;
-	std::string stateLabel = "STATE" + context.stateLabelStack;
-
-	Value* int32_5=nullptr;
-	if (TopMostState)
-	{
-		totalStates = GetNumStates(this);
-		Twine numStatesTwine(totalStates);
-		numStates = numStatesTwine.str();
-		overSized=APInt(4*numStates.length(),numStates,10);
-		bitsNeeded = overSized.getActiveBits();
-		baseStateIdx=0;
-
-		std::string curStateLbl = "CUR" + context.stateLabelStack;
-		std::string nxtStateLbl = "NEXT" + context.stateLabelStack;
-		std::string idxStateLbl = "IDX" + context.stateLabelStack;
-		std::string stkStateLbl = "STACK" + context.stateLabelStack;
-
-		GlobalVariable* gcurState = new GlobalVariable(*context.module,Type::getIntNTy(TheContext,bitsNeeded), false, GlobalValue::PrivateLinkage,nullptr,context.symbolPrepend+curStateLbl);
-		GlobalVariable* gnxtState = new GlobalVariable(*context.module,Type::getIntNTy(TheContext,bitsNeeded), false, GlobalValue::PrivateLinkage,nullptr,context.symbolPrepend+nxtStateLbl);
-
-		curState = gcurState;
-		nxtState = gnxtState;
-
-		ArrayType* ArrayTy_0 = ArrayType::get(IntegerType::get(TheContext, bitsNeeded), MAX_SUPPORTED_STACK_DEPTH);
-		GlobalVariable* stkState = new GlobalVariable(*context.module, ArrayTy_0, false,  GlobalValue::PrivateLinkage, nullptr, context.symbolPrepend+stkStateLbl);
-		GlobalVariable *stkStateIdx = new GlobalVariable(*context.module,Type::getIntNTy(TheContext,MAX_SUPPORTED_STACK_BITS), false, GlobalValue::PrivateLinkage,nullptr,context.symbolPrepend+idxStateLbl);
-
-		StateVariable newStateVar;
-		newStateVar.currentState = curState;
-		newStateVar.nextState = nxtState;
-		newStateVar.stateStackNext = stkState;
-		newStateVar.stateStackIndex = stkStateIdx;
-		newStateVar.decl = this;
-
-		context.states()[stateLabel]=newStateVar;
-		context.statesAlt()[this]=newStateVar;
-
-		// Constant Definitions
-		ConstantInt* const_int32_n = ConstantInt::get(TheContext, APInt(bitsNeeded, 0, false));
-		ConstantInt* const_int4_n = ConstantInt::get(TheContext, APInt(MAX_SUPPORTED_STACK_BITS, 0, false));
-		ConstantAggregateZero* const_array_n = ConstantAggregateZero::get(ArrayTy_0);
-
-		// Global Variable Definitions
-		gcurState->setInitializer(const_int32_n);
-		gnxtState->setInitializer(const_int32_n);
-		stkStateIdx->setInitializer(const_int4_n);
-		stkState->setInitializer(const_array_n);
-	}
-	else
-	{
-		StateVariable topState = context.states()[stateLabel];
-
-		curState=topState.currentState;
-		nxtState=topState.nextState;
-
-		totalStates = GetNumStates(topState.decl);
-		Twine numStatesTwine(totalStates);
-		numStates = numStatesTwine.str();
-		overSized=APInt(4*numStates.length(),numStates,10);
-		bitsNeeded = overSized.getActiveBits();
-
-		baseStateIdx=ComputeBaseIdx(topState.decl,this);
-
-		int32_5 = topState.decl->optocurState;
-	}
-	BasicBlock* bb = context.currentBlock();		// cache old basic block
-
-	std::map<std::string,BitVariable> tmp = context.locals();
-
-	// Setup exit from switch statement
-	exitState = BasicBlock::Create(TheContext,"switchTerm",bb->getParent());
-	context.setBlock(exitState);
-
-	// Step 1, load next state into current state
-	if (TopMostState)
-	{
-		LoadInst* getNextState = new LoadInst(nxtState,"",false,bb);
-		StoreInst* storeState = new StoreInst(getNextState,curState,false,bb);
-	}
-
-	// Step 2, generate switch statement
-	if (TopMostState)
-	{
-		optocurState = new LoadInst(curState, "", false, bb);
-		int32_5 = optocurState;
-	}
-	SwitchInst* void_6 = SwitchInst::Create(int32_5, exitState,totalStates, bb);
-
-
-	// Step 3, build labels and initialiser for next state on entry
-	bool lastStateAutoIncrement=true;
-	int startOfAutoIncrementIdx=baseStateIdx;
-	int startIdx=baseStateIdx;
-	for (int a=0;a<states.size();a++)
-	{
-		// Build Labels
-		int total = GetNumStates(children[a]);
-
-		states[a]->codeGen(context,bb->getParent());
-		for (int b=0;b<total;b++)
-		{
-			//
-			ConstantInt* tt = ConstantInt::get(TheContext,APInt(bitsNeeded,startIdx+b,false));
-			void_6->addCase(tt,states[a]->entry);
-		}
-		if (!lastStateAutoIncrement)
-		{
-			startOfAutoIncrementIdx=startIdx;
-		}
-		startIdx+=total;
-
-		// Compute next state and store for future
-		if (states[a]->autoIncrement)
-		{
-			if (children[a]==nullptr)
-			{
-				ConstantInt* nextState = ConstantInt::get(TheContext,APInt(bitsNeeded, a==states.size()-1 ? baseStateIdx : startIdx,false));
-				StoreInst* newState = new StoreInst(nextState,nxtState,false,states[a]->entry);
-			}
-		}
-		else
-		{
-			if (children[a]==nullptr)
-			{
-				ConstantInt* nextState = ConstantInt::get(TheContext,APInt(bitsNeeded, startOfAutoIncrementIdx,false));
-				StoreInst* newState = new StoreInst(nextState,nxtState,false,states[a]->entry);
-			}
-		}
-
-		lastStateAutoIncrement=states[a]->autoIncrement;
-	}
-
-	// Step 4, run code blocks to generate states
-	context.pushState(this);
-	block.codeGen(context);
-	context.popState();
-
-	// Finally we need to terminate the final blocks
-	for (int a=0;a<states.size();a++)
-	{
-		BranchInst::Create(states[a]->exit,states[a]->entry);
-		BranchInst::Create(exitState,states[a]->exit);			// this terminates the final blocks from our states
-	}
-	
-	return nullptr;
-}
-
 void CStateDefinition::prePass(CodeGenContext& context)
 {
 	CStatesDeclaration* pStates = context.currentState();
@@ -1394,72 +1120,6 @@ Value* CExecute::codeGen(CodeGenContext& context)
 	return nullptr;
 }
 
-int ComputeBaseIdx(CStatesDeclaration* cur,StateIdentList& list, int index,int &total)
-{
-	int a;
-	int totalStates=0;
-	static bool found = false;
-
-	total=0;
-	if (list.size()==1)
-		return 0;
-
-	for (a=0;a<cur->states.size();a++)
-	{
-		if (index && (cur->states[a]->id.name == list[index]->name))
-		{
-			CStatesDeclaration* downState=cur->children[a];
-				
-			if (index==list.size()-1)
-			{
-				found=true;
-				if (downState==nullptr)
-				{
-					total=1;
-				}
-				else
-				{
-					total=ComputeBaseIdx(downState,list,0,total);
-				}
-				return totalStates;
-			}
-
-			if (downState==nullptr)
-			{
-				totalStates++;
-			}
-			else
-			{
-				int numStates=ComputeBaseIdx(downState,list,index+1,total);
-				totalStates+=numStates;
-				if (found)
-				{
-					return totalStates;
-				}
-			}
-		}
-		else
-		{
-			CStatesDeclaration* downState=cur->children[a];
-
-			if (downState==nullptr)
-			{
-				totalStates++;
-			}
-			else
-			{
-				totalStates+=ComputeBaseIdx(downState,list,0,total);
-			}
-
-		}
-	}
-
-	if (!index)
-	{
-		return totalStates;
-	}
-	return -1;
-}
 
 
 void CStateTest::prePass(CodeGenContext& context)
@@ -1480,10 +1140,10 @@ Value* CStateTest::codeGen(CodeGenContext& context)
 
 	StateVariable topState = context.states()[stateLabel];
 
-	int totalStates=GetNumStates(topState.decl);
+	int totalStates=topState.decl->GetNumStates(topState.decl);
 	int totalInBlock;
 
-	int jumpIndex=ComputeBaseIdx(topState.decl,stateIdents,1,totalInBlock);
+	int jumpIndex=topState.decl->ComputeBaseIdx(topState.decl,stateIdents,1,totalInBlock);
 	
 	if (jumpIndex==-1)
 	{
@@ -1527,10 +1187,10 @@ Value* CStateJump::codeGen(CodeGenContext& context)
 
 	StateVariable topState = context.states()[stateLabel];
 
-	int totalStates=GetNumStates(topState.decl);
+	int totalStates=topState.decl->GetNumStates(topState.decl);
 	int totalInBlock;
 
-	int jumpIndex=ComputeBaseIdx(topState.decl,stateIdents,1,totalInBlock);
+	int jumpIndex=topState.decl->ComputeBaseIdx(topState.decl,stateIdents,1,totalInBlock);
 	
 	if (jumpIndex==-1)
 	{
@@ -1564,10 +1224,10 @@ Value* CStatePush::codeGen(CodeGenContext& context)
 
 	StateVariable topState = context.states()[stateLabel];
 
-	int totalStates=GetNumStates(topState.decl);
+	int totalStates=topState.decl->GetNumStates(topState.decl);
 	int totalInBlock;
 
-	int jumpIndex=ComputeBaseIdx(topState.decl,stateIdents,1,totalInBlock);
+	int jumpIndex=topState.decl->ComputeBaseIdx(topState.decl,stateIdents,1,totalInBlock);
 	
 	if (jumpIndex==-1)
 	{
@@ -1616,7 +1276,7 @@ Value* CStatePop::codeGen(CodeGenContext& context)
 
 	StateVariable topState = context.states()[stateLabel];
 
-	int totalStates=GetNumStates(topState.decl);
+	int totalStates=topState.decl->GetNumStates(topState.decl);
 	int totalInBlock;
 
 	Twine numStatesTwine(totalStates);

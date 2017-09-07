@@ -108,22 +108,11 @@ void CVariableDeclaration::prePass(CodeGenContext& context)
 
 llvm::Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 {
-	BitVariable temp;
+	BitVariable temp(size.integer, 0);
 
 	temp.arraySize = arraySize.integer;
-	temp.size = size.integer;
-	temp.trueSize = size.integer;
-	temp.cnst = llvm::APInt(size.integer.getLimitedValue(), 0);
 	temp.mask = ~temp.cnst;
-	temp.shft = llvm::APInt(size.integer.getLimitedValue(), 0);
-	temp.aliased = false;
-	temp.mappingRef = false;
 	temp.pinType = pinType;
-	temp.writeAccessor = nullptr;
-	temp.writeInput = nullptr;
-	temp.priorValue = nullptr;
-	temp.impedance = nullptr;
-	temp.fromExternal = false;
 
 	if (context.currentBlock())
 	{

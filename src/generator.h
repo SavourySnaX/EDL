@@ -191,7 +191,16 @@ public:
 		blocks.pop();
 		delete top;
 	}
-	CStatesDeclaration* currentState() { if (statesStack.empty()) return nullptr; else return statesStack.top(); }
+	bool isStateEmpty()
+	{
+		return statesStack.empty();
+	}
+	CStatesDeclaration* currentState()
+	{
+		if (statesStack.empty()) 
+			return nullptr; 
+		return statesStack.top();
+	}
 	void pushState(CStatesDeclaration *state) { statesStack.push(state); }
 	void popState() { statesStack.pop(); }
 	const std::stack<const CIdentifier*>& getIdentStack() { return identifierStack; }

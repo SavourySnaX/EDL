@@ -181,47 +181,19 @@ public:
 
 #include "ast/variableDecl.h"
 
-class CAliasDeclaration : public CStatement {
+class CAliasDeclaration : public CStatement 
+{
 public:
 	CIdentifier& idOrEmpty;
 	CInteger& sizeOrValue;
 	static CIdentifier empty;
-	CAliasDeclaration(CIdentifier& id, CInteger& size) :
-		idOrEmpty(id), sizeOrValue(size) { }
-	CAliasDeclaration(CInteger& value) :
-		idOrEmpty(empty), sizeOrValue(value) { }
+
+	CAliasDeclaration(CIdentifier& id, CInteger& size) : idOrEmpty(id), sizeOrValue(size) { }
+	CAliasDeclaration(CInteger& value) : idOrEmpty(empty), sizeOrValue(value) { }
 };
 
-class CStateDeclaration : public CStatement {
-public:
-	CIdentifier& id;
-	bool autoIncrement;
-	llvm::BasicBlock* entry;
-	llvm::BasicBlock* exit;
-	CStatesDeclaration* child;
-	CStateDeclaration(CIdentifier& id) :
-		id(id),autoIncrement(false),entry(nullptr),exit(nullptr),child(nullptr) { }
-	virtual llvm::Value* codeGen(CodeGenContext& context,llvm::Function* parent);
-};
-
-class CStatesDeclaration : public CStatement {
-public:
-	StateList states;
-	std::string label;
-	StatesList children;
-	llvm::BasicBlock* exitState;
-	llvm::Value* optocurState;
-	CBlock& block;
-	YYLTYPE statementLoc;
-	CStatesDeclaration(StateList& states,CBlock& block,YYLTYPE *statementLoc) :
-		states(states),block(block),statementLoc(*statementLoc) { }
-
-	CStateDeclaration* getStateDeclaration(const CIdentifier& id) { for (int a=0;a<states.size();a++) { if (states[a]->id.name == id.name) return states[a]; } return nullptr; }
-	int getStateDeclarationIndex(const CIdentifier& id) { for (int a=0;a<states.size();a++) { if (states[a]->id.name == id.name) return a; } return -1; }
-
-	virtual void prePass(CodeGenContext& context);
-	virtual llvm::Value* codeGen(CodeGenContext& context);
-};
+#include "ast/stateDecl.h"
+#include "ast/statesDecl.h"
 
 class CStateTest : public CExpression {
 public:
