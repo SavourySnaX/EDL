@@ -13,7 +13,7 @@ unsigned int numBreakpoints=0;
 
 int isBreakpoint(unsigned int address)
 {
-	int a;
+	unsigned int a;
 	for (a=0;a<numBreakpoints;a++)
 	{
 		if (address==breakpoints[a])
@@ -172,9 +172,9 @@ void DrawRegister(unsigned char* buffer,unsigned int width)
 
 	for (b=0;b<16;b++)
 	{
-		int a;
+		unsigned int a;
 		const char* retVal = decodeDisasm(address,&numBytes);
-		int opcodeLength=numBytes+1;
+		unsigned int opcodeLength=numBytes+1;
 		unsigned char colR=255,colG=255,colB=255;
 
 		for (a=0;a<numBreakpoints;a++)
