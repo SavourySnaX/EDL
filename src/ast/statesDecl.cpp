@@ -12,72 +12,32 @@
 
 extern void PrintErrorFromLocation(const YYLTYPE &location, const char *errorstring, ...);		// Todo refactor away
 
-int CStatesDeclaration::GetNumStates(CStatesDeclaration* state) const
+int CStatesDeclaration::GetNumStates() const
 {
-	int a;
 	int totalStates = 0;
 
-	if (state == nullptr)
-		return 1;
-
-	for (a = 0; a < state->states.size(); a++)
+	for (const auto& state : states)
 	{
-		CStatesDeclaration* downState = state->children[a];
-
-		if (downState == nullptr)
-		{
-			totalStates++;
-		}
-		else
-		{
-			totalStates += GetNumStates(downState);
-		}
+		totalStates += state->GetNumStates();
 	}
 
 	return totalStates;
 }
 
-int CStatesDeclaration::ComputeBaseIdx(CStatesDeclaration* cur, CStatesDeclaration* find) const
+bool CStatesDeclaration::FindBaseIdx(CStatesDeclaration* find,int& idx) const
 {
-	int a;
-	int totalStates = 0;
-	static bool found = false;
-
-	if (cur == nullptr)
+	for (const auto& state : states)
 	{
-		return 0;
-	}
-
-	found = false;
-
-	for (a = 0; a < cur->states.size(); a++)
-	{
-		CStatesDeclaration* downState = cur->children[a];
-
-		if (downState == find)
+		if (state->FindBaseIdx(find, idx))
 		{
-			found = true;
-			return totalStates;
-		}
-
-		if (downState == nullptr)
-		{
-			totalStates++;
-		}
-		else
-		{
-			totalStates += ComputeBaseIdx(downState, find);
-			if (found)
-			{
-				return totalStates;
-			}
+			return true;
 		}
 	}
 
-	return totalStates;
+	return false;
 }
 
-int CStatesDeclaration::ComputeBaseIdx(CStatesDeclaration* cur, StateIdentList& list, int index, int &total) const
+int CStatesDeclaration::ComputeBaseIdx(StateIdentList& list, int index, int &total) const
 {
 	int a;
 	int totalStates = 0;
@@ -87,11 +47,11 @@ int CStatesDeclaration::ComputeBaseIdx(CStatesDeclaration* cur, StateIdentList& 
 	if (list.size() == 1)
 		return 0;
 
-	for (a = 0; a < cur->states.size(); a++)
+	for (a = 0; a < states.size(); a++)
 	{
-		if (index && (cur->states[a]->id.name == list[index]->name))
+		if (index && (states[a]->id.name == list[index]->name))
 		{
-			CStatesDeclaration* downState = cur->children[a];
+			CStatesDeclaration* downState = states[a]->child;
 
 			if (index == list.size() - 1)
 			{
@@ -102,7 +62,7 @@ int CStatesDeclaration::ComputeBaseIdx(CStatesDeclaration* cur, StateIdentList& 
 				}
 				else
 				{
-					total = ComputeBaseIdx(downState, list, 0, total);
+					total = downState->ComputeBaseIdx(list, 0, total);
 				}
 				return totalStates;
 			}
@@ -113,7 +73,7 @@ int CStatesDeclaration::ComputeBaseIdx(CStatesDeclaration* cur, StateIdentList& 
 			}
 			else
 			{
-				int numStates = ComputeBaseIdx(downState, list, index + 1, total);
+				int numStates = downState->ComputeBaseIdx(list, index + 1, total);
 				totalStates += numStates;
 				if (found)
 				{
@@ -123,7 +83,7 @@ int CStatesDeclaration::ComputeBaseIdx(CStatesDeclaration* cur, StateIdentList& 
 		}
 		else
 		{
-			CStatesDeclaration* downState = cur->children[a];
+			CStatesDeclaration* downState = states[a]->child;
 
 			if (downState == nullptr)
 			{
@@ -131,7 +91,7 @@ int CStatesDeclaration::ComputeBaseIdx(CStatesDeclaration* cur, StateIdentList& 
 			}
 			else
 			{
-				totalStates += ComputeBaseIdx(downState, list, 0, total);
+				totalStates += downState->ComputeBaseIdx(list, 0, total);
 			}
 
 		}
@@ -148,11 +108,6 @@ void CStatesDeclaration::prePass(CodeGenContext& context)
 {
 	int a;
 
-	for (a = 0; a < states.size(); a++)
-	{
-		children.push_back(nullptr);
-	}
-
 	context.pushState(this);
 
 	block.prePass(context);
@@ -165,7 +120,7 @@ void CStatesDeclaration::prePass(CodeGenContext& context)
 
 		if (stateIndex != -1)
 		{
-			context.currentState()->children[stateIndex] = this;
+			context.currentState()->states[stateIndex]->child = this;
 		}
 	}
 }
@@ -190,7 +145,7 @@ llvm::Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 	std::string numStates;
 	llvm::APInt overSized;
 	unsigned bitsNeeded;
-	int baseStateIdx;
+	int baseStateIdx=0;
 
 	llvm::Value *curState;
 	llvm::Value *nxtState;
@@ -199,12 +154,11 @@ llvm::Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 	llvm::Value* int32_5 = nullptr;
 	if (TopMostState)
 	{
-		totalStates = GetNumStates(this);
+		totalStates = GetNumStates();
 		llvm::Twine numStatesTwine(totalStates);
 		numStates = numStatesTwine.str();
 		overSized = llvm::APInt(4 * numStates.length(), numStates, 10);
 		bitsNeeded = overSized.getActiveBits();
-		baseStateIdx = 0;
 
 		std::string curStateLbl = "CUR" + context.stateLabelStack;
 		std::string nxtStateLbl = "NEXT" + context.stateLabelStack;
@@ -249,13 +203,16 @@ llvm::Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 		curState = topState.currentState;
 		nxtState = topState.nextState;
 
-		totalStates = GetNumStates(topState.decl);
+		totalStates = topState.decl->GetNumStates();
 		llvm::Twine numStatesTwine(totalStates);
 		numStates = numStatesTwine.str();
 		overSized = llvm::APInt(4 * numStates.length(), numStates, 10);
 		bitsNeeded = overSized.getActiveBits();
 
-		baseStateIdx = ComputeBaseIdx(topState.decl, this);
+		if (!topState.decl->FindBaseIdx(this, baseStateIdx))
+		{
+			assert(0 && "internal error, this should not occur - - might need to be an error -- undefined state");
+		}
 
 		int32_5 = topState.decl->optocurState;
 	}
@@ -290,7 +247,7 @@ llvm::Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 	for (int a = 0; a < states.size(); a++)
 	{
 		// Build Labels
-		int total = GetNumStates(children[a]);
+		int total = states[a]->GetNumStates();
 
 		states[a]->codeGen(context, bb->getParent());
 		for (int b = 0; b < total; b++)
@@ -308,7 +265,7 @@ llvm::Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 		// Compute next state and store for future
 		if (states[a]->autoIncrement)
 		{
-			if (children[a] == nullptr)
+			if (states[a]->child == nullptr)
 			{
 				llvm::ConstantInt* nextState = llvm::ConstantInt::get(TheContext, llvm::APInt(bitsNeeded, a == states.size() - 1 ? baseStateIdx : startIdx, false));
 				llvm::StoreInst* newState = new llvm::StoreInst(nextState, nxtState, false, states[a]->entry);
@@ -316,7 +273,7 @@ llvm::Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 		}
 		else
 		{
-			if (children[a] == nullptr)
+			if (states[a]->child == nullptr)
 			{
 				llvm::ConstantInt* nextState = llvm::ConstantInt::get(TheContext, llvm::APInt(bitsNeeded, startOfAutoIncrementIdx, false));
 				llvm::StoreInst* newState = new llvm::StoreInst(nextState, nxtState, false, states[a]->entry);

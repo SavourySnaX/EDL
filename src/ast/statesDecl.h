@@ -4,7 +4,6 @@ class CStatesDeclaration : public CStatement
 {
 private:
 	StateList states;
-	StatesList children;
 public:
 	std::string label;
 	llvm::BasicBlock* exitState;
@@ -14,9 +13,9 @@ public:
 
 	CStatesDeclaration(StateList& states, CBlock& block, YYLTYPE *statementLoc) : states(states), block(block), statementLoc(*statementLoc) { }
 
-	int GetNumStates(CStatesDeclaration* state) const;
-	int ComputeBaseIdx(CStatesDeclaration* cur, CStatesDeclaration* find) const;
-	int ComputeBaseIdx(CStatesDeclaration* cur, StateIdentList& list, int index, int &total) const;
+	int GetNumStates() const;
+	bool FindBaseIdx(CStatesDeclaration* find,int& idx) const;
+	int ComputeBaseIdx(StateIdentList& list, int index, int &total) const;
 	CStateDeclaration* getStateDeclaration(const CIdentifier& id) const
 	{
 		for (const auto& state : states)

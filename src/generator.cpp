@@ -1140,10 +1140,10 @@ Value* CStateTest::codeGen(CodeGenContext& context)
 
 	StateVariable topState = context.states()[stateLabel];
 
-	int totalStates=topState.decl->GetNumStates(topState.decl);
+	int totalStates=topState.decl->GetNumStates();
 	int totalInBlock;
 
-	int jumpIndex=topState.decl->ComputeBaseIdx(topState.decl,stateIdents,1,totalInBlock);
+	int jumpIndex=topState.decl->ComputeBaseIdx(stateIdents,1,totalInBlock);
 	
 	if (jumpIndex==-1)
 	{
@@ -1187,10 +1187,10 @@ Value* CStateJump::codeGen(CodeGenContext& context)
 
 	StateVariable topState = context.states()[stateLabel];
 
-	int totalStates=topState.decl->GetNumStates(topState.decl);
+	int totalStates=topState.decl->GetNumStates();
 	int totalInBlock;
 
-	int jumpIndex=topState.decl->ComputeBaseIdx(topState.decl,stateIdents,1,totalInBlock);
+	int jumpIndex=topState.decl->ComputeBaseIdx(stateIdents,1,totalInBlock);
 	
 	if (jumpIndex==-1)
 	{
@@ -1224,10 +1224,10 @@ Value* CStatePush::codeGen(CodeGenContext& context)
 
 	StateVariable topState = context.states()[stateLabel];
 
-	int totalStates=topState.decl->GetNumStates(topState.decl);
+	int totalStates=topState.decl->GetNumStates();
 	int totalInBlock;
 
-	int jumpIndex=topState.decl->ComputeBaseIdx(topState.decl,stateIdents,1,totalInBlock);
+	int jumpIndex=topState.decl->ComputeBaseIdx(stateIdents,1,totalInBlock);
 	
 	if (jumpIndex==-1)
 	{
@@ -1276,7 +1276,7 @@ Value* CStatePop::codeGen(CodeGenContext& context)
 
 	StateVariable topState = context.states()[stateLabel];
 
-	int totalStates=topState.decl->GetNumStates(topState.decl);
+	int totalStates=topState.decl->GetNumStates();
 	int totalInBlock;
 
 	Twine numStatesTwine(totalStates);
