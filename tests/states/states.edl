@@ -76,4 +76,8 @@ HANDLER test ALWAYS
    DEBUG_TRACE "bingo";
    }
 
+IF test.a.ad@
+{
+	DEBUG_TRACE "bango";
+}
 }

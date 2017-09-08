@@ -4,6 +4,7 @@ class CStatesDeclaration : public CStatement
 {
 private:
 	StateList states;
+	int ComputeBaseIdx(StateIdentList& list, int index, int &total) const;
 public:
 	std::string label;
 	llvm::BasicBlock* exitState;
@@ -15,7 +16,8 @@ public:
 
 	int GetNumStates() const;
 	bool FindBaseIdx(CStatesDeclaration* find,int& idx) const;
-	int ComputeBaseIdx(StateIdentList& list, int index, int &total) const;
+	int ComputeBaseIdx(StateIdentList& list) const { int dontCare = 0; return ComputeBaseIdx(list, 1, dontCare); }
+	int ComputeBaseIdx(StateIdentList& list, int &total) const { return ComputeBaseIdx(list, 1, total); }
 	CStateDeclaration* getStateDeclaration(const CIdentifier& id) const
 	{
 		for (const auto& state : states)

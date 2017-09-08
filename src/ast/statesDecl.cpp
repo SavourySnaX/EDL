@@ -49,21 +49,14 @@ int CStatesDeclaration::ComputeBaseIdx(StateIdentList& list, int index, int &tot
 
 	for (a = 0; a < states.size(); a++)
 	{
-		if (index && (states[a]->id.name == list[index]->name))
+		if (states[a]->id.name == list[index]->name)
 		{
 			CStatesDeclaration* downState = states[a]->child;
 
 			if (index == list.size() - 1)
 			{
 				found = true;
-				if (downState == nullptr)
-				{
-					total = 1;
-				}
-				else
-				{
-					total = downState->ComputeBaseIdx(list, 0, total);
-				}
+				total = states[a]->GetNumStates();
 				return totalStates;
 			}
 
@@ -83,23 +76,9 @@ int CStatesDeclaration::ComputeBaseIdx(StateIdentList& list, int index, int &tot
 		}
 		else
 		{
-			CStatesDeclaration* downState = states[a]->child;
-
-			if (downState == nullptr)
-			{
-				totalStates++;
-			}
-			else
-			{
-				totalStates += downState->ComputeBaseIdx(list, 0, total);
-			}
-
+			// Skip the remaining states in this substate
+			totalStates += states[a]->GetNumStates();
 		}
-	}
-
-	if (!index)
-	{
-		return totalStates;
 	}
 	return -1;
 }

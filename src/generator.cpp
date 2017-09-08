@@ -1143,7 +1143,7 @@ Value* CStateTest::codeGen(CodeGenContext& context)
 	int totalStates=topState.decl->GetNumStates();
 	int totalInBlock;
 
-	int jumpIndex=topState.decl->ComputeBaseIdx(stateIdents,1,totalInBlock);
+	int jumpIndex=topState.decl->ComputeBaseIdx(stateIdents,totalInBlock);
 	
 	if (jumpIndex==-1)
 	{
@@ -1188,9 +1188,8 @@ Value* CStateJump::codeGen(CodeGenContext& context)
 	StateVariable topState = context.states()[stateLabel];
 
 	int totalStates=topState.decl->GetNumStates();
-	int totalInBlock;
 
-	int jumpIndex=topState.decl->ComputeBaseIdx(stateIdents,1,totalInBlock);
+	int jumpIndex=topState.decl->ComputeBaseIdx(stateIdents);
 	
 	if (jumpIndex==-1)
 	{
@@ -1225,9 +1224,8 @@ Value* CStatePush::codeGen(CodeGenContext& context)
 	StateVariable topState = context.states()[stateLabel];
 
 	int totalStates=topState.decl->GetNumStates();
-	int totalInBlock;
 
-	int jumpIndex=topState.decl->ComputeBaseIdx(stateIdents,1,totalInBlock);
+	int jumpIndex=topState.decl->ComputeBaseIdx(stateIdents);
 	
 	if (jumpIndex==-1)
 	{
@@ -1311,17 +1309,19 @@ Value* CIfStatement::codeGen(CodeGenContext& context)
 	BasicBlock *endif = BasicBlock::Create(TheContext,"endif",context.currentBlock()->getParent());
 
 	Value* result = expr.codeGen(context);
-	BranchInst::Create(then,endif,result,context.currentBlock());
+	if (result != nullptr)
+	{
+		BranchInst::Create(then, endif, result, context.currentBlock());
 
-	context.pushBlock(then,block.blockStartLoc);
+		context.pushBlock(then, block.blockStartLoc);
 
-	block.codeGen(context);
-	BranchInst::Create(endif,context.currentBlock());
+		block.codeGen(context);
+		BranchInst::Create(endif, context.currentBlock());
 
-	context.popBlock(block.blockEndLoc);
+		context.popBlock(block.blockEndLoc);
 
-	context.setBlock(endif);
-
+		context.setBlock(endif);
+	}
 	return nullptr;
 }
 
