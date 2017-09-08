@@ -194,47 +194,10 @@ public:
 
 #include "ast/stateDecl.h"
 #include "ast/statesDecl.h"
-
-class CStateTest : public CExpression {
-public:
-	StateIdentList stateIdents;
-	CStateTest(StateIdentList& stateIdents) :
-		stateIdents(stateIdents) { }
-
-	virtual void prePass(CodeGenContext& context);
-	virtual llvm::Value* codeGen(CodeGenContext& context);
-};
-
-class CStateJump : public CStatement {
-public:
-	StateIdentList stateIdents;
-	CStateJump(StateIdentList& stateIdents) :
-		stateIdents(stateIdents) { }
-
-	virtual void prePass(CodeGenContext& context);
-	virtual llvm::Value* codeGen(CodeGenContext& context);
-};
-
-class CStatePush : public CStatement {
-public:
-	StateIdentList stateIdents;
-	CStatePush(StateIdentList& stateIdents) :
-		stateIdents(stateIdents) { }
-
-	virtual void prePass(CodeGenContext& context);
-	virtual llvm::Value* codeGen(CodeGenContext& context);
-};
-
-class CStatePop : public CStatement {
-public:
-	CIdentifier& ident;
-	CStatePop(CIdentifier& ident) :
-		ident(ident) { }
-
-	virtual void prePass(CodeGenContext& context);
-	virtual llvm::Value* codeGen(CodeGenContext& context);
-};
-
+#include "ast/stateTest.h"
+#include "ast/stateJump.h"
+#include "ast/statePush.h"
+#include "ast/statePop.h"
 
 class CIfStatement : public CStatement
 {
