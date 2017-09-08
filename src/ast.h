@@ -198,34 +198,9 @@ public:
 #include "ast/stateJump.h"
 #include "ast/statePush.h"
 #include "ast/statePop.h"
-
-class CIfStatement : public CStatement
-{
-public:
-	CExpression& expr;
-	CBlock& block;
-	CIfStatement(CExpression& expr, CBlock& block) :
-		expr(expr),block(block) { }
-	virtual void prePass(CodeGenContext& context);
-	virtual llvm::Value* codeGen(CodeGenContext& context);
-};
-
+#include "ast/ifStatement.h"
 #include "ast/stateDefinition.h"
-
-class CTrigger : public CExpression {
-public:
-	int type;
-	CInteger& param1;
-	CInteger& param2;
-	YYLTYPE debugLocation;
-	static CInteger zero;
-	CTrigger(int type,YYLTYPE* debugLocation) :
-		type(type), debugLocation(*debugLocation),param1(zero),param2(zero) { }
-	CTrigger(int type,YYLTYPE* debugLocation, CInteger& param1, CInteger& param2) :
-		type(type), debugLocation(*debugLocation), param1(param1), param2(param2) { }
-	virtual llvm::Value* codeGen(CodeGenContext& context,BitVariable& pin,llvm::Value* function);
-};
-
+#include "ast/trigger.h"
 
 class CHandlerDeclaration : public CStatement {
 public:

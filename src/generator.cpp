@@ -791,9 +791,7 @@ Function* CodeGenContext::LookupFunctionInExternalModule(const std::string& modu
 
 CIdentifier CAliasDeclaration::empty("");
 
-std::string stringZero("0");
-
-CInteger CCastOperator::begZero(stringZero);
+CInteger CCastOperator::begZero("0");
 
 
 void CHandlerDeclaration::prePass(CodeGenContext& context)
@@ -1070,33 +1068,6 @@ Value* CExecute::codeGen(CodeGenContext& context)
 		context.setBlock(temp.blockEndForExecute);
 
 		context.executeLocations[table.name].push_back(temp);
-	}
-	return nullptr;
-}
-
-void CIfStatement::prePass(CodeGenContext& context)
-{
-	block.prePass(context);
-}
-
-Value* CIfStatement::codeGen(CodeGenContext& context)
-{
-	BasicBlock *then = BasicBlock::Create(TheContext,"then",context.currentBlock()->getParent());
-	BasicBlock *endif = BasicBlock::Create(TheContext,"endif",context.currentBlock()->getParent());
-
-	Value* result = expr.codeGen(context);
-	if (result != nullptr)
-	{
-		BranchInst::Create(then, endif, result, context.currentBlock());
-
-		context.pushBlock(then, block.blockStartLoc);
-
-		block.codeGen(context);
-		BranchInst::Create(endif, context.currentBlock());
-
-		context.popBlock(block.blockEndLoc);
-
-		context.setBlock(endif);
 	}
 	return nullptr;
 }
@@ -1526,7 +1497,7 @@ Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 	return func;
 }
 
-CInteger CAffect::emptyParam(stringZero);
+CInteger CAffect::emptyParam("0");
 
 Value* CAffect::codeGenCarry(CodeGenContext& context,Value* exprResult,Value* lhs,Value* rhs,int optype)
 {
@@ -2051,108 +2022,6 @@ Value* CFuncCall::codeGen(CodeGenContext& context)
 	}
 
 	return callReturn;
-}
-
-CInteger CVariableDeclaration::notArray(stringZero);
-CInteger CTrigger::zero(stringZero);
-
-Value* CTrigger::codeGen(CodeGenContext& context,BitVariable& pin,Value* function)
-{
-	switch (type)
-	{
-		case TOK_ALWAYS:
-			{
-				BasicBlock *oldBlock = (*pin.writeAccessor)->getParent();
-				Function* parentFunction = oldBlock->getParent();
-				context.gContext.scopingStack.push(parentFunction->getSubprogram());
-				
-				CallInst* fcall = CallInst::Create(function,"",*pin.writeAccessor);
-				if (context.gContext.opts.generateDebug)
-				{
-					fcall->setDebugLoc(DebugLoc::get(debugLocation.first_line, debugLocation.first_column, context.gContext.scopingStack.top()));
-				}
-
-				context.gContext.scopingStack.pop();
-			}
-			return nullptr;
-		case TOK_CHANGED:
-			// Compare input value to old value, if different then call function 
-			{
-				BasicBlock *oldBlock = (*pin.writeAccessor)->getParent();
-				Function* parentFunction = oldBlock->getParent();
-				context.gContext.scopingStack.push(parentFunction->getSubprogram());
-
-				context.pushBlock(oldBlock,debugLocation);
-				Value* prior = CIdentifier::GetAliasedData(context,pin.priorValue,pin);
-				Value* writeInput = CIdentifier::GetAliasedData(context,pin.writeInput,pin);
-				Value* answer=CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_EQ,prior,writeInput, "", context.currentBlock());
-				
-				BasicBlock *ifcall = BasicBlock::Create(TheContext,"ifcall",parentFunction);
-				BasicBlock *nocall = BasicBlock::Create(TheContext,"nocall",parentFunction);
-
-				BranchInst::Create(nocall,ifcall,answer,context.currentBlock());
-				context.popBlock(debugLocation);
-				
-				CallInst* fcall = CallInst::Create(function,"",ifcall);
-				if (context.gContext.opts.generateDebug)
-				{
-					fcall->setDebugLoc(DebugLoc::get(debugLocation.first_line, debugLocation.first_column, context.gContext.scopingStack.top()));
-				}
-				BranchInst::Create(nocall,ifcall);
-
-				// Remove return instruction (since we need to create a new basic block set
-				(*pin.writeAccessor)->removeFromParent();
-
-				*pin.writeAccessor=ReturnInst::Create(TheContext,nocall);
-
-				context.gContext.scopingStack.pop();
-			}
-			return nullptr;
-		case TOK_TRANSITION:
-			// Compare input value to param2 and old value to param1 , if same call function 
-			{
-				BasicBlock *oldBlock = (*pin.writeAccessor)->getParent();
-				Function* parentFunction = oldBlock->getParent();
-				context.gContext.scopingStack.push(parentFunction->getSubprogram());
-
-				context.pushBlock(oldBlock,debugLocation);
-				Value* prior = CIdentifier::GetAliasedData(context,pin.priorValue,pin);
-				Value* writeInput = CIdentifier::GetAliasedData(context,pin.writeInput,pin);
-
-				Value* checkParam2=CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_EQ,ConstantInt::get(TheContext,param2.integer.zextOrTrunc(pin.trueSize.getLimitedValue())),writeInput, "", context.currentBlock());
-				Value* checkParam1=CmpInst::Create(Instruction::ICmp,ICmpInst::ICMP_EQ,ConstantInt::get(TheContext,param1.integer.zextOrTrunc(pin.trueSize.getLimitedValue())),prior, "", context.currentBlock());
-		
-				Value *answer=BinaryOperator::Create(Instruction::And,checkParam1,checkParam2,"",context.currentBlock());
-				
-				BasicBlock *ifcall = BasicBlock::Create(TheContext,"ifcall",parentFunction);
-				BasicBlock *nocall = BasicBlock::Create(TheContext,"nocall",parentFunction);
-
-				BranchInst::Create(ifcall,nocall,answer,context.currentBlock());
-				context.popBlock(debugLocation);
-				
-				CallInst* fcall = CallInst::Create(function,"",ifcall);
-				if (context.gContext.opts.generateDebug)
-				{
-					fcall->setDebugLoc(DebugLoc::get(debugLocation.first_line, debugLocation.first_column, context.gContext.scopingStack.top()));
-				}
-				BranchInst::Create(nocall,ifcall);
-
-				// Remove return instruction (since we need to create a new basic block set
-				(*pin.writeAccessor)->removeFromParent();
-
-				*pin.writeAccessor=ReturnInst::Create(TheContext,nocall);
-
-				context.gContext.scopingStack.pop();
-
-			}
-			return nullptr;
-
-		default:
-			assert(0 && "Unhandled trigger type");
-			break;
-	}
-
-	return nullptr;
 }
 
 void CFunctionDecl::prePass(CodeGenContext& context)

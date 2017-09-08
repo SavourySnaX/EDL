@@ -14,6 +14,8 @@
 extern void PrintErrorFromLocation(const YYLTYPE &location, const char *errorstring, ...);		// Todo refactor away
 extern void PrintErrorWholeLine(const YYLTYPE &location, const char *errorstring, ...);			// Todo refactor away
 
+CInteger CVariableDeclaration::notArray("0");
+
 void CVariableDeclaration::CreateWriteAccessor(CodeGenContext& context, BitVariable& var, const std::string& moduleName, const std::string& name, bool impedance)
 {
 	std::vector<llvm::Type*> argTypes;
