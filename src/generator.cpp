@@ -1142,10 +1142,9 @@ Value* CStateTest::codeGen(CodeGenContext& context)
 
 	int totalStates=topState.decl->GetNumStates();
 	int totalInBlock;
+	int jumpIndex;
 
-	int jumpIndex=topState.decl->ComputeBaseIdx(stateIdents,totalInBlock);
-	
-	if (jumpIndex==-1)
+	if (!topState.decl->FindStateIdxAndLength(stateIdents, jumpIndex, totalInBlock))
 	{
 		return UndefinedStateError(stateIdents, context);
 	}
@@ -1188,10 +1187,8 @@ Value* CStateJump::codeGen(CodeGenContext& context)
 	StateVariable topState = context.states()[stateLabel];
 
 	int totalStates=topState.decl->GetNumStates();
-
-	int jumpIndex=topState.decl->ComputeBaseIdx(stateIdents);
-	
-	if (jumpIndex==-1)
+	int jumpIndex;
+	if (!topState.decl->FindStateIdx(stateIdents, jumpIndex))
 	{
 		return UndefinedStateError(stateIdents,context);
 	}
@@ -1224,10 +1221,8 @@ Value* CStatePush::codeGen(CodeGenContext& context)
 	StateVariable topState = context.states()[stateLabel];
 
 	int totalStates=topState.decl->GetNumStates();
-
-	int jumpIndex=topState.decl->ComputeBaseIdx(stateIdents);
-	
-	if (jumpIndex==-1)
+	int jumpIndex;
+	if (!topState.decl->FindStateIdx(stateIdents, jumpIndex))
 	{
 		return UndefinedStateError(stateIdents,context);
 	}

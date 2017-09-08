@@ -4,7 +4,7 @@ class CStatesDeclaration : public CStatement
 {
 private:
 	StateList states;
-	int ComputeBaseIdx(StateIdentList& list, int index, int &total) const;
+	bool FindStateIdxAndLength(StateIdentList& list, int listOffs, int& idx, int &total) const;
 public:
 	std::string label;
 	llvm::BasicBlock* exitState;
@@ -15,9 +15,29 @@ public:
 	CStatesDeclaration(StateList& states, CBlock& block, YYLTYPE *statementLoc) : states(states), block(block), statementLoc(*statementLoc) { }
 
 	int GetNumStates() const;
-	bool FindBaseIdx(CStatesDeclaration* find,int& idx) const;
-	int ComputeBaseIdx(StateIdentList& list) const { int dontCare = 0; return ComputeBaseIdx(list, 1, dontCare); }
-	int ComputeBaseIdx(StateIdentList& list, int &total) const { return ComputeBaseIdx(list, 1, total); }
+	bool FindStateIdx(CStatesDeclaration* find,int& idx) const;
+	bool FindStateIdx(StateIdentList& list, int& idx) const 
+	{
+		int dontCare = 0; 
+		idx = 0;
+		if (list.size() == 1)
+		{
+			return true;
+		}
+
+		return FindStateIdxAndLength(list, 1, idx, dontCare); 
+	}
+	bool FindStateIdxAndLength(StateIdentList& list, int& idx, int &length) const 
+	{
+		idx = 0;
+		length = 0;
+		if (list.size() == 1)
+		{
+			return true;
+		}
+		return FindStateIdxAndLength(list, 1, idx, length); 
+	}
+
 	CStateDeclaration* getStateDeclaration(const CIdentifier& id) const
 	{
 		for (const auto& state : states)

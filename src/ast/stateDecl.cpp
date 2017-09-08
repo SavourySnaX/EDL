@@ -14,7 +14,7 @@ int CStateDeclaration::GetNumStates() const
 	return child->GetNumStates();
 }
 
-bool CStateDeclaration::FindBaseIdx(CStatesDeclaration* find, int& idx) const
+bool CStateDeclaration::FindStateIdx(CStatesDeclaration* find, int& idx) const
 {
 	if (child == find)
 		return true;
@@ -23,9 +23,8 @@ bool CStateDeclaration::FindBaseIdx(CStatesDeclaration* find, int& idx) const
 		idx += 1;
 		return false;
 	}
-	return child->FindBaseIdx(find,idx);
+	return child->FindStateIdx(find,idx);
 }
-
 
 llvm::Value* CStateDeclaration::codeGen(CodeGenContext& context, llvm::Function* parent)
 {

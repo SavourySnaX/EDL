@@ -24,11 +24,11 @@ int CStatesDeclaration::GetNumStates() const
 	return totalStates;
 }
 
-bool CStatesDeclaration::FindBaseIdx(CStatesDeclaration* find,int& idx) const
+bool CStatesDeclaration::FindStateIdx(CStatesDeclaration* find,int& idx) const
 {
 	for (const auto& state : states)
 	{
-		if (state->FindBaseIdx(find, idx))
+		if (state->FindStateIdx(find, idx))
 		{
 			return true;
 		}
@@ -37,50 +37,37 @@ bool CStatesDeclaration::FindBaseIdx(CStatesDeclaration* find,int& idx) const
 	return false;
 }
 
-int CStatesDeclaration::ComputeBaseIdx(StateIdentList& list, int index, int &total) const
+bool CStatesDeclaration::FindStateIdxAndLength(StateIdentList& list, int listOffs,int &idx, int &total) const
 {
-	int a;
-	int totalStates = 0;
-	static bool found = false;
-
-	total = 0;
-	if (list.size() == 1)
-		return 0;
-
-	for (a = 0; a < states.size(); a++)
+	for (const auto& state : states)
 	{
-		if (states[a]->id.name == list[index]->name)
+		if (state->id.name == list[listOffs]->name)
 		{
-			CStatesDeclaration* downState = states[a]->child;
-
-			if (index == list.size() - 1)
+			if (listOffs == list.size() - 1)
 			{
-				found = true;
-				total = states[a]->GetNumStates();
-				return totalStates;
+				total = state->GetNumStates();
+				return true;
 			}
 
-			if (downState == nullptr)
+			if (state->hasSubStates())
 			{
-				totalStates++;
+				if (state->getSubStates()->FindStateIdxAndLength(list, listOffs + 1, idx, total))
+				{
+					return true;
+				}
 			}
 			else
 			{
-				int numStates = downState->ComputeBaseIdx(list, index + 1, total);
-				totalStates += numStates;
-				if (found)
-				{
-					return totalStates;
-				}
+				idx++;
 			}
 		}
 		else
 		{
 			// Skip the remaining states in this substate
-			totalStates += states[a]->GetNumStates();
+			idx += state->GetNumStates();
 		}
 	}
-	return -1;
+	return false;
 }
 
 void CStatesDeclaration::prePass(CodeGenContext& context)
@@ -99,7 +86,7 @@ void CStatesDeclaration::prePass(CodeGenContext& context)
 
 		if (stateIndex != -1)
 		{
-			context.currentState()->states[stateIndex]->child = this;
+			context.currentState()->states[stateIndex]->AssignSubStates(this);
 		}
 	}
 }
@@ -130,7 +117,7 @@ llvm::Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 	llvm::Value *nxtState;
 	std::string stateLabel = "STATE" + context.stateLabelStack;
 
-	llvm::Value* int32_5 = nullptr;
+	llvm::Value* switchValue = nullptr;
 	if (TopMostState)
 	{
 		totalStates = GetNumStates();
@@ -188,12 +175,12 @@ llvm::Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 		overSized = llvm::APInt(4 * numStates.length(), numStates, 10);
 		bitsNeeded = overSized.getActiveBits();
 
-		if (!topState.decl->FindBaseIdx(this, baseStateIdx))
+		if (!topState.decl->FindStateIdx(this, baseStateIdx))
 		{
 			assert(0 && "internal error, this should not occur - - might need to be an error -- undefined state");
 		}
 
-		int32_5 = topState.decl->optocurState;
+		switchValue = topState.decl->optocurState;
 	}
 	llvm::BasicBlock* bb = context.currentBlock();		// cache old basic block
 
@@ -208,16 +195,12 @@ llvm::Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 	{
 		llvm::LoadInst* getNextState = new llvm::LoadInst(nxtState, "", false, bb);
 		llvm::StoreInst* storeState = new llvm::StoreInst(getNextState, curState, false, bb);
-	}
 
-	// Step 2, generate switch statement
-	if (TopMostState)
-	{
 		optocurState = new llvm::LoadInst(curState, "", false, bb);
-		int32_5 = optocurState;
+		switchValue = optocurState;
 	}
-	llvm::SwitchInst* void_6 = llvm::SwitchInst::Create(int32_5, exitState, totalStates, bb);
-
+	// Step 2, generate switch statement
+	llvm::SwitchInst* void_6 = llvm::SwitchInst::Create(switchValue, exitState, totalStates, bb);
 
 	// Step 3, build labels and initialiser for next state on entry
 	bool lastStateAutoIncrement = true;
@@ -242,21 +225,18 @@ llvm::Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 		startIdx += total;
 
 		// Compute next state and store for future
-		if (states[a]->autoIncrement)
+		if (!states[a]->hasSubStates())
 		{
-			if (states[a]->child == nullptr)
+			llvm::ConstantInt* nextState;
+			if (states[a]->autoIncrement)
 			{
-				llvm::ConstantInt* nextState = llvm::ConstantInt::get(TheContext, llvm::APInt(bitsNeeded, a == states.size() - 1 ? baseStateIdx : startIdx, false));
-				llvm::StoreInst* newState = new llvm::StoreInst(nextState, nxtState, false, states[a]->entry);
+				nextState = llvm::ConstantInt::get(TheContext, llvm::APInt(bitsNeeded, a == states.size() - 1 ? baseStateIdx : startIdx, false));
 			}
-		}
-		else
-		{
-			if (states[a]->child == nullptr)
+			else
 			{
-				llvm::ConstantInt* nextState = llvm::ConstantInt::get(TheContext, llvm::APInt(bitsNeeded, startOfAutoIncrementIdx, false));
-				llvm::StoreInst* newState = new llvm::StoreInst(nextState, nxtState, false, states[a]->entry);
+				nextState = llvm::ConstantInt::get(TheContext, llvm::APInt(bitsNeeded, startOfAutoIncrementIdx, false));
 			}
+			llvm::StoreInst* newState = new llvm::StoreInst(nextState, nxtState, false, states[a]->entry);
 		}
 
 		lastStateAutoIncrement = states[a]->autoIncrement;
@@ -268,10 +248,10 @@ llvm::Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 	context.popState();
 
 	// Finally we need to terminate the final blocks
-	for (int a = 0; a < states.size(); a++)
+	for (const auto& state : states)
 	{
-		llvm::BranchInst::Create(states[a]->exit, states[a]->entry);
-		llvm::BranchInst::Create(exitState, states[a]->exit);			// this terminates the final blocks from our states
+		llvm::BranchInst::Create(state->exit, state->entry);
+		llvm::BranchInst::Create(exitState, state->exit);			// this terminates the final blocks from our states
 	}
 
 	return nullptr;
