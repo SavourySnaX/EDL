@@ -795,52 +795,6 @@ std::string stringZero("0");
 
 CInteger CCastOperator::begZero(stringZero);
 
-void CStateDefinition::prePass(CodeGenContext& context)
-{
-	CStatesDeclaration* pStates = context.currentState();
-	if (pStates)
-	{
-		CStateDeclaration* pState = pStates->getStateDeclaration(id);
-
-		if (pState)
-		{
-			context.pushIdent(&id);
-			block.prePass(context);
-			context.popIdent();
-		}
-	}
-}
-
-Value* CStateDefinition::codeGen(CodeGenContext& context)
-{
-	CStatesDeclaration* pStates = context.currentState();
-	if (pStates)
-	{
-		CStateDeclaration* pState = pStates->getStateDeclaration(id);
-
-		if (pState)
-		{
-			context.pushBlock(pState->entry,block.blockStartLoc);
-			block.codeGen(context);
-			pState->entry=context.currentBlock();
-			context.popBlock(block.blockEndLoc);
-			return nullptr;
-		}
-		else
-		{
-			PrintErrorFromLocation(id.nameLoc, "Attempt to define unknown state");
-			context.errorFlagged=true;
-			return nullptr;
-		}
-	}
-	else
-	{
-		PrintErrorFromLocation(id.nameLoc, "Attempt to define state entry when no states on stack");
-		context.errorFlagged=true;
-		return nullptr;
-	}
-}
-
 
 void CHandlerDeclaration::prePass(CodeGenContext& context)
 {
