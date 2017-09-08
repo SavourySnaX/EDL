@@ -201,21 +201,7 @@ public:
 #include "ast/ifStatement.h"
 #include "ast/stateDefinition.h"
 #include "ast/trigger.h"
-
-class CHandlerDeclaration : public CStatement {
-public:
-	const CIdentifier& id;
-	CTrigger& trigger;
-	CBlock& block;
-	llvm::GlobalVariable* depthTree;
-	llvm::GlobalVariable* depthTreeIdx;
-	CStatesDeclaration* child;
-	YYLTYPE handlerLoc;
-	CHandlerDeclaration(const CIdentifier& id, CTrigger& trigger,CBlock& block, YYLTYPE *handlerLoc) :
-		id(id), trigger(trigger),block(block),handlerLoc(*handlerLoc) { }
-	virtual void prePass(CodeGenContext& context);
-	virtual llvm::Value* codeGen(CodeGenContext& context);
-};
+#include "ast/handlerDecl.h"
 
 class CConnect{
 public:
@@ -232,20 +218,7 @@ public:
 		connects(connects), tapName(*new CString("")),decodeWidth(*new CInteger(std::string("0"))),hasTap(false), conType(conType), statementLoc(*statementLoc) { }
 };
 
-class CConnectDeclaration : public CStatement {
-public:
-	ConnectList connects;
-	const CIdentifier& ident;
-	YYLTYPE statementLoc;
-	YYLTYPE blockStartLoc;
-	YYLTYPE blockEndLoc;
-
-	CConnectDeclaration(const CIdentifier& ident, ConnectList& connects, YYLTYPE *statementLoc, YYLTYPE *blockStartLoc, YYLTYPE *blockEndLoc) :
-		connects(connects), ident(ident),statementLoc(*statementLoc),blockStartLoc(*blockStartLoc),blockEndLoc(*blockEndLoc) { }
-	
-	virtual void prePass(CodeGenContext& context);
-	virtual llvm::Value* codeGen(CodeGenContext& context);
-};
+#include "ast/connectDecl.h"
 
 class CMappingDeclaration : public CStatement {
 public:

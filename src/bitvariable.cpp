@@ -5,7 +5,7 @@ BitVariable::BitVariable(llvm::APInt& initialSize,unsigned initialConst)
 	size = initialSize;
 	trueSize = initialSize;
 	cnst = llvm::APInt(initialSize.getLimitedValue(),initialConst);
-	mask = llvm::APInt(initialSize.getLimitedValue(),0);
+	mask = ~cnst;// llvm::APInt(initialSize.getLimitedValue(), 0);
 	shft = llvm::APInt(initialSize.getLimitedValue(),0);
 
 	value = nullptr;

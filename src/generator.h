@@ -86,6 +86,7 @@ public:
 	CompilerOptions&			opts;
 	std::map<std::string, bool> impedanceRequired;
 	std::stack<DIScope*>		scopingStack;
+	std::map<Function*,Function*> connectFunctions;	
 };
 
 class CodeGenContext

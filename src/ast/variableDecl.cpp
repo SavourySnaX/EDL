@@ -113,7 +113,6 @@ llvm::Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 	BitVariable temp(size.integer, 0);
 
 	temp.arraySize = arraySize.integer;
-	temp.mask = ~temp.cnst;
 	temp.pinType = pinType;
 
 	if (context.currentBlock())
