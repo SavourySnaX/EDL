@@ -10,6 +10,7 @@ find_package(BISON REQUIRED)
 # below are used by samples (samples won't be generated if the dependencies are missing)
 find_package(glfw3 3.2 CONFIG)
 find_package(OpenGL)
+find_package(OpenAL)
 
 enable_testing()
 
