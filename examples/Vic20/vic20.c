@@ -582,7 +582,7 @@ int g_traceStep=0;
 #define TIMING_WIDTH	640
 #define TIMING_HEIGHT	280
 
-#define HEIGHT	(312-28)
+#define HEIGHT	(312-27)
 #define	WIDTH	(284-(5*8))
 
 #define MAX_WINDOWS		(8)
