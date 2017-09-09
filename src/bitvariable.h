@@ -11,7 +11,7 @@ class BitVariable
 {
 public:
 	BitVariable() { }
-	BitVariable(llvm::APInt& initialSize,unsigned initialConst);
+	BitVariable(const llvm::APInt& initialSize,unsigned initialConst);
 
 	YYLTYPE				refLoc;
 	llvm::APInt			arraySize;

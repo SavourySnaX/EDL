@@ -1,6 +1,6 @@
 #include "bitvariable.h"
 
-BitVariable::BitVariable(llvm::APInt& initialSize,unsigned initialConst)
+BitVariable::BitVariable(const llvm::APInt& initialSize,unsigned initialConst)
 {
 	size = initialSize;
 	trueSize = initialSize;
