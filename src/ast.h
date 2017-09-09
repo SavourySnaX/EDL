@@ -219,38 +219,8 @@ public:
 };
 
 #include "ast/connectDecl.h"
-
-class CMappingDeclaration : public CStatement {
-public:
-	MappingList mappings;
-	const CIdentifier& ident;
-	CInteger& size;
-
-	CMappingDeclaration(const CIdentifier& ident, CInteger& size, MappingList& mappings) :
-		mappings(mappings), ident(ident), size(size) { }
-	
-	virtual void prePass(CodeGenContext& context);
-	virtual llvm::Value* codeGen(CodeGenContext& context);
-};
-
-class CInstruction : public CStatement {
-public:
-	CIdentifier& table;
-	CString& mnemonic;
-	OperandList operands;
-	CBlock& block;
-	static CIdentifier emptyTable;
-	YYLTYPE statementLoc;
-
-	CInstruction(CIdentifier& table,CString& mnemonic,OperandList& operands, CBlock& block, YYLTYPE *statementLoc) :
-		table(table),mnemonic(mnemonic),operands(operands), block(block), statementLoc(*statementLoc) { }
-	CInstruction(CString& mnemonic,OperandList& operands, CBlock& block, YYLTYPE *statementLoc) :
-		table(emptyTable),mnemonic(mnemonic),operands(operands), block(block), statementLoc(*statementLoc) { }
-	virtual void prePass(CodeGenContext& context);
-	virtual llvm::Value* codeGen(CodeGenContext& context);
-
-	CString& processMnemonic(CodeGenContext& context,CString& in,llvm::APInt& opcode,unsigned num);
-};
+#include "ast/mappingDecl.h"
+#include "ast/instruction.h"
 
 class CExecute : public CStatement {
 public:
