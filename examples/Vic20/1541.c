@@ -91,13 +91,13 @@ int DISK_InitialiseMemory()
 	memcpy(DiskRomHi,combinedRom+0x2000,0x2000);
 #endif
 #if USE_DRW_IMAGE
-	if (LoadRom(DiskData,252004,"disks/vicdemos3b.drw"))
-		return 1;
+	LoadD64("disks/vicdemos3b.d64");
+//	if (LoadRom(DiskData,174848,"disks/vicdemos3b.d64"))
+//		return 1;
 #else
 	if (LoadRom(DiskData,333744,"disks/party.g64"))
 		return 1;
 #endif
-
 	if (curTrack<0)
 	{
 		MoveHead(1);			// Initialise DISK
@@ -727,3 +727,257 @@ uint16_t DISK_Tick(uint8_t* clkP,uint8_t* atnP,uint8_t* datP)
 	return lastPC;
 }
 
+///// D64 Loader
+
+unsigned int GCR(unsigned int input)
+{
+	switch (input)
+	{
+		case 0:
+			return 0x0A;
+		case 1:
+			return 0x0B;
+		case 2:
+			return 0x12;
+		case 3:
+			return 0x13;
+		case 4:
+			return 0x0E;
+		case 5:
+			return 0x0F;
+		case 6:
+			return 0x16;
+		case 7:
+			return 0x17;
+		case 8:
+			return 0x09;
+		case 9:
+			return 0x19;
+		case 10:
+			return 0x1A;
+		case 11:
+			return 0x1B;
+		case 12:
+			return 0x0D;
+		case 13:
+			return 0x1D;
+		case 14:
+			return 0x1E;
+		case 15:
+			return 0x15;
+
+		default:
+			printf("BARF - Invalid GCR code : %d\n",input);
+			exit(-1);
+	}
+}
+
+unsigned int diskBuilderPos=0;
+
+void GCRWrite(unsigned char* data,int length)
+{
+	int a;
+	unsigned int nibble;
+	unsigned int gcrTemp;
+	unsigned char toGCR[4];
+	unsigned char GCRed[5];
+
+	if ((length&3)!=0)
+	{
+		printf("BARF\n");
+		exit(-1);
+	}
+
+	for (a=0;a<length>>2;a++)
+	{
+		toGCR[0]=data[(a<<2)+0];
+		toGCR[1]=data[(a<<2)+1];
+		toGCR[2]=data[(a<<2)+2];
+		toGCR[3]=data[(a<<2)+3];
+
+		// GCR it
+		nibble=(toGCR[0]&0xF0)>>4;
+		gcrTemp=GCR(nibble);
+		nibble=(toGCR[0]&0x0F);
+		gcrTemp<<=5;
+		gcrTemp|=GCR(nibble);			// 10 bits in GCR
+
+		GCRed[0]=gcrTemp>>2;
+		gcrTemp&=0x3;
+		gcrTemp<<=5;				// 2 bits in GCR
+
+		nibble=(toGCR[1]&0xF0)>>4;
+		gcrTemp|=GCR(nibble);
+		nibble=(toGCR[1]&0x0F);
+		gcrTemp<<=5;
+		gcrTemp|=GCR(nibble);			// 12 bits in GCR
+
+		GCRed[1]=gcrTemp>>4;
+		gcrTemp&=0x0F;
+		gcrTemp<<=5;				// 4 bits in GCR
+
+		nibble=(toGCR[2]&0xF0)>>4;
+		gcrTemp|=GCR(nibble);
+		nibble=(toGCR[2]&0x0F);
+		gcrTemp<<=5;
+		gcrTemp|=GCR(nibble);			// 14 bits in GCR
+
+		GCRed[2]=gcrTemp>>6;
+		gcrTemp&=0x3F;
+		gcrTemp<<=5;				// 6 bits in GCR
+		
+		nibble=(toGCR[3]&0xF0)>>4;
+		gcrTemp|=GCR(nibble);
+		nibble=(toGCR[3]&0x0F);
+		gcrTemp<<=5;
+		gcrTemp|=GCR(nibble);			// 16 bits in GCR
+		
+		GCRed[3]=gcrTemp>>8;
+		gcrTemp&=0xFF;				// 8 bits in GCR
+
+		GCRed[4]=gcrTemp;			// 0 bits in GCR
+
+		// write 5 gcr bytes
+		DiskData[diskBuilderPos++]=GCRed[0];
+		DiskData[diskBuilderPos++]=GCRed[1];
+		DiskData[diskBuilderPos++]=GCRed[2];
+		DiskData[diskBuilderPos++]=GCRed[3];
+		DiskData[diskBuilderPos++]=GCRed[4];
+	}
+}
+
+int LoadD64(const char* filename)
+{
+	int a;
+	int dataOffset=0;
+	int trackLengthBytes;
+	int trackNo;
+	int sectorCnt;
+	int sectorNo;
+
+	int length;
+	FILE *input = fopen(filename,"rb");
+
+	diskBuilderPos=0;
+
+	fseek(input,0,SEEK_END);
+	length = ftell(input);
+
+	fseek(input,0,SEEK_SET);
+
+	// just deal with 35 track files for now
+	if (length!=174848 && length!=175531)
+	{
+		printf("Not 35 track file\n");
+		return 0;
+	}
+	if (length==175531)
+	{
+		printf("Warning error codes not presently supported - copy protection on disk may fail\n");
+	}
+
+	// For each of the 35 tracks :
+	
+	for (trackNo=1;trackNo<36;trackNo++)
+	{
+		sectorCnt=17;
+		trackLengthBytes=6250;
+		if (trackNo<31)
+		{
+			sectorCnt=18;
+			trackLengthBytes=6666;
+		}
+		if (trackNo<25)
+		{
+			sectorCnt=19;
+			trackLengthBytes=7142;
+		}
+		if (trackNo<18)
+		{
+			sectorCnt=21;
+			trackLengthBytes=7692;
+		}
+
+//		printf("Track %d : Sector Cnt %d\n",trackNo,sectorCnt);
+//		printf("Theoretical Required Track Length = %d\n",sectorCnt*(353+9));
+//		printf("Track Length = %d\n",trackLengthBytes);
+		printf("Track %d Start = %08X\n",trackNo,dataOffset);
+		dataOffset+=trackLengthBytes;
+		for (sectorNo=0;sectorNo<sectorCnt;sectorNo++)
+		{
+			unsigned char byte;
+			unsigned char header[8];
+			unsigned char data[260];
+
+			// Sync Header
+			byte=0xFF;
+			for (a=0;a<5;a++)
+			{
+				DiskData[diskBuilderPos++]=byte;
+			}
+
+			header[0]=0x08;
+			header[2]=sectorNo;
+			header[3]=trackNo;
+			header[4]=0x6C;//0x42;//'B';
+			header[5]=0x68;//0x42;//'B';
+			header[1]=header[2]^header[3]^header[4]^header[5];
+			header[6]=0x0F;
+			header[7]=0x0F;
+
+			// Header Info
+			GCRWrite(header,8);
+
+			// Header Gap
+			byte=0x55;
+			for (a=0;a<8;a++)
+			{
+				DiskData[diskBuilderPos++]=byte;
+			}
+			
+			// Data Header
+			byte=0xFF;
+			for (a=0;a<5;a++)
+			{
+				DiskData[diskBuilderPos++]=byte;
+			}
+
+			data[0]=0x07;
+			fread(&data[1],256,1,input);
+			data[257]=data[1];
+			for (a=2;a<257;a++)
+			{
+				data[257]^=data[a];
+			}
+			data[258]=0x0F;
+			data[259]=0x0F;
+			
+			GCRWrite(data,260);
+
+			// InterSector Gap
+			byte=0x55;
+			for (a=0;a<9;a++)
+			{
+				DiskData[diskBuilderPos++]=byte;
+			}
+
+			trackLengthBytes-=353+9;
+			
+			if (sectorNo == sectorCnt-1)
+			{
+				// Disk Remainder
+//				printf("Dumping remaining bytes %d\n",trackLengthBytes);
+				byte=0xFF;
+				for (a=0;a<trackLengthBytes;a++)
+				{
+					DiskData[diskBuilderPos++]=byte;
+				}
+
+			}
+		}
+	}
+
+	fclose(input);
+
+	return 1;
+}

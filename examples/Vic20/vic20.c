@@ -155,11 +155,11 @@ int LoadRom(unsigned char* rom,size_t size,const char* fname)
 
 int InitialiseMemory()
 {
-	if (LoadRom(CRom,0x1000,"roms/901460-03.ud7"))
+	if (LoadRom(CRom,0x1000,"roms/characters.901460-03.bin"))
 		return 1;
-	if (LoadRom(BRom,0x2000,"roms/901486-01.ue11"))
+	if (LoadRom(BRom,0x2000,"roms/basic.901486-01.bin"))
 		return 1;
-	if (LoadRom(KRom,0x2000,"roms/901486-07.ue12"))
+	if (LoadRom(KRom,0x2000,"roms/kernal.901486-07.bin"))
 		return 1;
 
 #if 1
