@@ -10,6 +10,8 @@
 
 extern void PrintErrorFromLocation(const YYLTYPE &location, const char *errorstring, ...);		// Todo refactor away
 
+CInteger CCastOperator::begZero("0");
+
 void CCastOperator::prePass(CodeGenContext& context)
 {
 	lhs.prePass(context);

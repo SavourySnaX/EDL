@@ -221,105 +221,12 @@ public:
 #include "ast/connectDecl.h"
 #include "ast/mappingDecl.h"
 #include "ast/instruction.h"
-
-class CExecute : public CStatement {
-public:
-	CIdentifier& table;
-	CIdentifier& opcode;
-	static CIdentifier emptyTable;
-	YYLTYPE executeLoc;
-	CExecute(CIdentifier& table,CIdentifier& opcode,YYLTYPE* executeLoc) :
-		table(table),opcode(opcode),executeLoc(*executeLoc) { }
-	CExecute(CIdentifier& opcode, YYLTYPE* executeLoc) :
-		table(emptyTable),opcode(opcode),executeLoc(*executeLoc) { }
-	virtual void prePass(CodeGenContext& context);
-	virtual llvm::Value* codeGen(CodeGenContext& context);
-};
-
-class CAffect : public CExpression {
-public:
-	const CIdentifier& ident;
-	int type;
-	int opType;
-	CInteger& param;
-	CExpression& ov1;
-	CExpression& ov2;
-	llvm::Value* tmpResult;
-	llvm::Value* ov1Val;
-	llvm::Value* ov2Val;
-	static CInteger emptyParam;
-
-	CAffect(CIdentifier& ident,int type) :
-		ident(ident),type(type),param(emptyParam),ov1(ident),ov2(ident) { }
-	CAffect(CIdentifier& ident,int type,CInteger& param) :
-		ident(ident),type(type),param(param),ov1(ident),ov2(ident) { }
-	CAffect(CIdentifier& ident,int type,CExpression& ov1,CExpression& ov2,CInteger& param) :
-		ident(ident),type(type),opType(type),param(param),ov1(ov1),ov2(ov2) { }
-
-	llvm::Value* codeGenCarry(CodeGenContext& context,llvm::Value* exprResult,llvm::Value* lhs,llvm::Value* rhs,int type);
-	llvm::Value* codeGenFinal(CodeGenContext& context,llvm::Value* exprResult);
-};
-
-class CAffector : public CExpression {
-public:
-	AffectorList affectors;
-	CExpression& expr;
-	YYLTYPE exprLoc;
-	
-	CAffector(AffectorList& affectors,CExpression& expr, YYLTYPE exprLoc) :
-		affectors(affectors),expr(expr),exprLoc(exprLoc) { }
-
-	virtual void prePass(CodeGenContext& context);
-
-	virtual llvm::Value* codeGen(CodeGenContext& context);
-};
-
-class CExternDecl : public CStatement {
-public:
-	ExternParamsList returns;
-	CIdentifier& name;
-	ExternParamsList params;
-	YYLTYPE declarationLoc;
-
-	CExternDecl(ExternParamsList& returns,CIdentifier& name,ExternParamsList& params,YYLTYPE declarationLoc) :
-		returns(returns), name(name), params(params), declarationLoc(declarationLoc) { }
-	CExternDecl(CIdentifier& name,ExternParamsList& params,YYLTYPE declarationLoc) :
-		name(name), params(params),declarationLoc(declarationLoc) { }
-
-	virtual void prePass(CodeGenContext& context);
-	virtual llvm::Value* codeGen(CodeGenContext& context);
-};
-
-class CFuncCall : public CExpression {
-public:
-	CIdentifier& name;
-	ParamsList& params;
-	YYLTYPE callLoc;
-
-	CFuncCall(CIdentifier& name,ParamsList& params,YYLTYPE* callLoc) :
-		name(name), params(params),callLoc(*callLoc) { }
-	
-	virtual void prePass(CodeGenContext& context);
-	virtual llvm::Value* codeGen(CodeGenContext& context);
-};
-
-class CFunctionDecl : public CStatement {
-public:
-	bool internal;
-	NamedParamsList returns;
-	CIdentifier& name;
-	NamedParamsList params;
-	CBlock& block;
-	YYLTYPE functionLoc;
-
-	CFunctionDecl(bool internal,NamedParamsList& returns,CIdentifier& name,NamedParamsList& params,CBlock &block,YYLTYPE* functionLoc) :
-		internal(internal), returns(returns), name(name), params(params),block(block),functionLoc(*functionLoc) { }
-	CFunctionDecl(bool internal,CIdentifier& name,NamedParamsList& params,CBlock &block, YYLTYPE* functionLoc) :
-		internal(internal), name(name), params(params),block(block),functionLoc(*functionLoc) { }
-
-	virtual void prePass(CodeGenContext& context);
-	virtual llvm::Value* codeGen(CodeGenContext& context);
-};
+#include "ast/execute.h"
+#include "ast/affect.h"
+#include "ast/affector.h"
+#include "ast/extern.h"
+#include "ast/funcDecl.h"
+#include "ast/funcCall.h"
 
 class CParamDecl : public CStatement {
 public:
