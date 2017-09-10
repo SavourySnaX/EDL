@@ -24,7 +24,7 @@
 
 #include "gui/debugger.h"
 
-#define DEBUG_WINDOWS	1
+#define DEBUG_WINDOWS	0
 #define JIFFY	0 
 
 int DISK_InitialiseMemory();
