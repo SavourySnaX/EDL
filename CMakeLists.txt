@@ -35,13 +35,13 @@ set(AST_OPERATORS_HEADERS src/ast/opBinary.h src/ast/opCast.h src/ast/opRotation
 set(AST_OPERANDS_HEADERS src/ast/opIdent.h src/ast/opMapping.h src/ast/opPartial.h)
 set(AST_STATEMENT_STATE_HEADERS src/ast/stateDecl.h src/ast/statesDecl.h src/ast/stateTest.h src/ast/statePush.h src/ast/statePop.h src/ast/stateJump.h src/ast/stateDefinition.h)
 set(AST_STATEMENT_HEADERS src/ast/variableDecl.h src/ast/ifStatement.h src/ast/trigger.h src/ast/handlerDecl.h src/ast/connectDecl.h src/ast/mappingDecl.h src/ast/instruction.h
-						  src/ast/execute.h src/ast/affect.h src/ast/affector.h src/ast/extern.h src/ast/funcDecl.h src/ast/funcCall.h)
+						  src/ast/execute.h src/ast/affect.h src/ast/affector.h src/ast/extern.h src/ast/funcDecl.h src/ast/funcCall.h src/ast/instance.h src/ast/exchange.h)
 set(AST_HEADERS src/ast/integer.h src/ast/string.h src/ast/identifier.h src/ast/block.h src/ast/debugHelpers.h)
 set(AST_OPERATORS_CPPS src/ast/opBinary.cpp src/ast/opCast.cpp src/ast/opRotation.cpp src/ast/opAssignment.cpp)
 set(AST_OPERANDS_CPPS src/ast/opIdent.cpp src/ast/opMapping.cpp src/ast/opPartial.cpp)
 set(AST_STATEMENT_STATE_CPPS src/ast/stateDecl.cpp src/ast/statesDecl.cpp src/ast/stateTest.cpp src/ast/statePush.cpp src/ast/statePop.cpp src/ast/stateJump.cpp src/ast/stateDefinition.cpp)
 set(AST_STATEMENT_CPPS src/ast/variableDecl.cpp src/ast/ifStatement.cpp src/ast/trigger.cpp src/ast/handlerDecl.cpp src/ast/connectDecl.cpp src/ast/mappingDecl.cpp src/ast/instruction.cpp
-                       src/ast/execute.cpp src/ast/affect.cpp src/ast/affector.cpp src/ast/extern.cpp src/ast/funcDecl.cpp src/ast/funcCall.cpp)
+                       src/ast/execute.cpp src/ast/affect.cpp src/ast/affector.cpp src/ast/extern.cpp src/ast/funcDecl.cpp src/ast/funcCall.cpp src/ast/instance.cpp src/ast/exchange.cpp)
 set(AST_CPPS src/ast/integer.cpp src/ast/string.cpp src/ast/identifier.cpp src/ast/block.cpp src/ast/debugHelpers.cpp)
 set(HEADERS src/ast.h src/generator.h src/bitvariable.h)
 set(GRAMMARS src/edl.l src/edl.y)

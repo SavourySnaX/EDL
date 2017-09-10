@@ -236,27 +236,5 @@ public:
 		id(id), size(size) { }
 };
 
-class CInstance : public CStatement {
-public:
-	CString&	filename;
-	CIdentifier&	ident;
-
-	CInstance(CString& filename,CIdentifier& ident) :
-		filename(filename), ident(ident) { }
-
-	virtual void prePass(CodeGenContext& context);
-	virtual llvm::Value* codeGen(CodeGenContext& context);
-};
-
-class CExchange : public CStatement {
-public:
-	CIdentifier&	lhs;
-	CIdentifier&	rhs;
-	YYLTYPE operatorLoc;
-
-	CExchange(CIdentifier& lhs,CIdentifier& rhs,YYLTYPE *operatorLoc) :
-		lhs(lhs), rhs(rhs),operatorLoc(*operatorLoc) { }
-
-	virtual llvm::Value* codeGen(CodeGenContext& context);
-};
-
+#include "ast/instance.h"
+#include "ast/exchange.h"
