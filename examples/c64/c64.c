@@ -24,7 +24,7 @@
 
 #include "gui/debugger.h"
 
-#define DEBUG_WINDOWS	0
+#define DEBUG_WINDOWS	1
 #define JIFFY	0 
 
 int DISK_InitialiseMemory();
@@ -138,15 +138,15 @@ int LoadRom(unsigned char* rom,size_t size,const char* fname)
 
 int InitialiseMemory()
 {
-	if (LoadRom(CRom,0x1000,"roms/chargen"))
+	if (LoadRom(CRom,0x1000,"roms/characters.901225-01.bin"))
 		return 1;
-	if (LoadRom(BRom,0x2000,"roms/basic"))
+	if (LoadRom(BRom,0x2000,"roms/basic.901226-01.bin"))
 		return 1;
 #if JIFFY
 	if (LoadRom(KRom,0x2000,"roms/JiffyDOS_C64.bin"))
 		return 1;
 #else
-	if (LoadRom(KRom,0x2000,"roms/kernal"))
+	if (LoadRom(KRom,0x2000,"roms/kernal.901227-03.bin"))
 		return 1;
 #endif
 

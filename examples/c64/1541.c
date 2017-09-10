@@ -81,10 +81,10 @@ int LoadD64(const char* filename);
 
 int DISK_InitialiseMemory()
 {
-#if 0
-	if (LoadRom(DiskRomLo,0x2000,"roms/1540-c000.325302-01.bin"))
+#if 1
+	if (LoadRom(DiskRomLo,0x2000,"roms/1541-c000.325302-01.bin"))
 		return 1;
-	if (LoadRom(DiskRomHi,0x2000,"roms/1540-e000.325303-01.bin"))
+	if (LoadRom(DiskRomHi,0x2000,"roms/1541-e000.901229-03.bin"))
 		return 1;
 #else
 #if JIFFY
