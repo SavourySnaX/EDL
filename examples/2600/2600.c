@@ -7,8 +7,8 @@
 #include "glext.h"
 
 #if defined(EDL_PLATFORM_OPENAL)
-#include <al.h>
-#include <alc.h>
+#include <AL/al.h>
+#include <AL/alc.h>
 #endif
 
 #include <stdlib.h>
