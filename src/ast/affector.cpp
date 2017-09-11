@@ -55,7 +55,7 @@ llvm::Value* CAffector::codeGen(CodeGenContext& context)
 
 	if (containsCarryOverflow)
 	{
-		if (expr.IsLeaf() /*|| (!expr.IsCarryExpression())*/)
+		if (expr.IsLeaf())
 		{
 			PrintErrorFromLocation(exprLoc, "OVERFLOW/CARRY is not supported for non carry/overflow expressions");
 			context.errorFlagged = true;
@@ -68,9 +68,9 @@ llvm::Value* CAffector::codeGen(CodeGenContext& context)
 	if (exprResult)
 	{
 		// Final result is in exprResult (+affectors for carry/overflow).. do final operations
-		for (int a = 0; a < affectors.size(); a++)
+		for (const auto& affector : affectors)
 		{
-			affectors[a]->codeGenFinal(context, exprResult);
+			affector->codeGenFinal(context, exprResult);
 		}
 	}
 	context.curAffectors.clear();

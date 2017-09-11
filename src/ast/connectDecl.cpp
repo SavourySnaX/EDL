@@ -382,7 +382,7 @@ llvm::Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 					llvm::Instruction::CastOps op = llvm::CastInst::getCastOpcode(busOutResult[curBus], false, ty, false);
 
 					llvm::Instruction* truncExt = llvm::CastInst::Create(op, busOutResult[curBus], ty, "cast", context.currentBlock());
-					args.push_back(ConstantInt::get(TheContext, llvm::APInt(8, var.trueSize.getLimitedValue(), false)));
+					args.push_back(llvm::ConstantInt::get(TheContext, llvm::APInt(8, var.trueSize.getLimitedValue(), false)));
 					args.push_back(truncExt);
 					args.push_back(nameRef);
 					args.push_back(truncExtDW);

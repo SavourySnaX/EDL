@@ -95,10 +95,7 @@ llvm::Instruction* CAssignment::generateAssignmentActual(BitVariable& to, const 
 			llvm::Instruction::CastOps op = llvm::CastInst::getCastOpcode(exprResult, false, ty, false);
 			llvm::Instruction* truncExt0 = llvm::CastInst::Create(op, exprResult, ty, "cast", context.currentBlock());		// Cast index to 64 bit type
 			llvm::Instruction::CastOps op1 = llvm::CastInst::getCastOpcode(exprResult, false, ty64, false);
-			Instruction* truncExt = llvm::CastInst::Create(op1, truncExt0, ty64, "cast", context.currentBlock());		// Cast index to 64 bit type
-	//		const Type* ty = Type::getIntNTy(TheContext,to.arraySize.getLimitedValue()/* 64*/);
-	//		Instruction::CastOps op = CastInst::getCastOpcode(exprResult,false,ty,false);
-	//		Instruction* truncExt = CastInst::Create(op,exprResult,ty,"cast",context.currentBlock());		// Cast index to 64 bit type
+			llvm::Instruction* truncExt = llvm::CastInst::Create(op1, truncExt0, ty64, "cast", context.currentBlock());		// Cast index to 64 bit type
 
 			std::vector<llvm::Value*> indices;
 			llvm::ConstantInt* index0 = llvm::ConstantInt::get(TheContext, llvm::APInt(to.size.getLimitedValue(), llvm::StringRef("0"), 10));

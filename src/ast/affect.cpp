@@ -116,16 +116,11 @@ llvm::Value* CAffect::codeGenFinal(CodeGenContext& context, llvm::Value* exprRes
 	switch (type)
 	{
 	case TOK_FORCESET:
+		answer = llvm::ConstantInt::get(TheContext, ~llvm::APInt(resultType->getBitWidth(), 0, false));
+		break;
 	case TOK_FORCERESET:
-	{
-		llvm::APInt bits(resultType->getBitWidth(), 0, false);
-		if (type == TOK_FORCESET)
-		{
-			bits = ~bits;
-		}
-		answer = llvm::ConstantInt::get(TheContext, bits);
-	}
-	break;
+		answer = llvm::ConstantInt::get(TheContext, llvm::APInt(resultType->getBitWidth(), 0, false));
+		break;
 	case TOK_ZERO:
 		answer = llvm::CmpInst::Create(llvm::Instruction::ICmp, llvm::ICmpInst::ICMP_EQ, exprResult, llvm::ConstantInt::get(TheContext, llvm::APInt(resultType->getBitWidth(), 0, false)), "", context.currentBlock());
 		break;
@@ -264,54 +259,33 @@ llvm::Value* CAffect::codeGenFinal(CodeGenContext& context, llvm::Value* exprRes
 		llvm::Instruction::CastOps rhsOp = llvm::CastInst::getCastOpcode(rhs, false, resultType, false);
 		rhs = llvm::CastInst::Create(rhsOp, rhs, resultType, "cast", context.currentBlock());
 
+		// ~Result
+		llvm::Value* invResult = llvm::BinaryOperator::Create(llvm::Instruction::Xor, exprResult, llvm::ConstantInt::get(TheContext, ~llvm::APInt(resultType->getBitWidth(), 0, false)), "", context.currentBlock());
+		// ~lh
+		llvm::Value* invlh = llvm::BinaryOperator::Create(llvm::Instruction::Xor, lhs, llvm::ConstantInt::get(TheContext, ~llvm::APInt(resultType->getBitWidth(), 0, false)), "", context.currentBlock());
+		// ~rh
+		llvm::Value* invrh = llvm::BinaryOperator::Create(llvm::Instruction::Xor, rhs, llvm::ConstantInt::get(TheContext, ~llvm::APInt(resultType->getBitWidth(), 0, false)), "", context.currentBlock());
+
+		llvm::Value* expr1;
+		llvm::Value* expr2;
+
 		if (opType == TOK_ADD || opType == TOK_DADD)
 		{
 			//((rh & lh & (~Result)) | ((~rh) & (~lh) & Result))
-
-			// ~Result
-			llvm::Value* cmpResult = llvm::BinaryOperator::Create(llvm::Instruction::Xor, exprResult, llvm::ConstantInt::get(TheContext, ~llvm::APInt(resultType->getBitWidth(), 0, false)), "", context.currentBlock());
-			// ~lh
-			llvm::Value* cmplh = llvm::BinaryOperator::Create(llvm::Instruction::Xor, lhs, llvm::ConstantInt::get(TheContext, ~llvm::APInt(resultType->getBitWidth(), 0, false)), "", context.currentBlock());
-			// ~rh
-			llvm::Value* cmprh = llvm::BinaryOperator::Create(llvm::Instruction::Xor, rhs, llvm::ConstantInt::get(TheContext, ~llvm::APInt(resultType->getBitWidth(), 0, false)), "", context.currentBlock());
-
-			// lh&rh
-			llvm::Value* expr1 = llvm::BinaryOperator::Create(llvm::Instruction::And, rhs, lhs, "", context.currentBlock());
-			// ~rh&~lh
-			llvm::Value* expr2 = llvm::BinaryOperator::Create(llvm::Instruction::And, cmprh, cmplh, "", context.currentBlock());
-
-			// rh & lh & ~Result
-			llvm::Value* expr3 = llvm::BinaryOperator::Create(llvm::Instruction::And, expr1, cmpResult, "", context.currentBlock());
-			// ~rh & ~lh & Result
-			llvm::Value* expr4 = llvm::BinaryOperator::Create(llvm::Instruction::And, expr2, exprResult, "", context.currentBlock());
-
-			// rh & lh & ~Result | ~rh & ~lh & Result
-			answer = llvm::BinaryOperator::Create(llvm::Instruction::Or, expr3, expr4, "", context.currentBlock());
+			expr1 = llvm::BinaryOperator::Create(llvm::Instruction::And, rhs, lhs, "", context.currentBlock());
+			expr2 = llvm::BinaryOperator::Create(llvm::Instruction::And, invrh, invlh, "", context.currentBlock());
 		}
 		else
 		{
 			//(((~rh) & lh & (~Result)) | (rh & (~lh) & Result))
+			expr1 = llvm::BinaryOperator::Create(llvm::Instruction::And, invrh, lhs, "", context.currentBlock());
+			expr2 = llvm::BinaryOperator::Create(llvm::Instruction::And, rhs, invlh, "", context.currentBlock());
 
-			// ~Result
-			llvm::Value* cmpResult = llvm::BinaryOperator::Create(llvm::Instruction::Xor, exprResult, llvm::ConstantInt::get(TheContext, ~llvm::APInt(resultType->getBitWidth(), 0, false)), "", context.currentBlock());
-			// ~lh
-			llvm::Value* cmplh = llvm::BinaryOperator::Create(llvm::Instruction::Xor, lhs, llvm::ConstantInt::get(TheContext, ~llvm::APInt(resultType->getBitWidth(), 0, false)), "", context.currentBlock());
-			// ~rh
-			llvm::Value* cmprh = llvm::BinaryOperator::Create(llvm::Instruction::Xor, rhs, llvm::ConstantInt::get(TheContext, ~llvm::APInt(resultType->getBitWidth(), 0, false)), "", context.currentBlock());
-
-			// ~rh&lh
-			llvm::Value* expr1 = llvm::BinaryOperator::Create(llvm::Instruction::And, cmprh, lhs, "", context.currentBlock());
-			// rh&~lh
-			llvm::Value* expr2 = llvm::BinaryOperator::Create(llvm::Instruction::And, rhs, cmplh, "", context.currentBlock());
-
-			// ~rh & lh & ~Result
-			llvm::Value* expr3 = llvm::BinaryOperator::Create(llvm::Instruction::And, expr1, cmpResult, "", context.currentBlock());
-			// rh & ~lh & Result
-			llvm::Value* expr4 = llvm::BinaryOperator::Create(llvm::Instruction::And, expr2, exprResult, "", context.currentBlock());
-
-			// ~rh & lh & ~Result | rh & ~lh & Result
-			answer = llvm::BinaryOperator::Create(llvm::Instruction::Or, expr3, expr4, "", context.currentBlock());
 		}
+		llvm::Value* expr3 = llvm::BinaryOperator::Create(llvm::Instruction::And, expr1, invResult, "", context.currentBlock());
+		llvm::Value* expr4 = llvm::BinaryOperator::Create(llvm::Instruction::And, expr2, exprResult, "", context.currentBlock());
+
+		answer = llvm::BinaryOperator::Create(llvm::Instruction::Or, expr3, expr4, "", context.currentBlock());
 		if (type == TOK_OVERFLOW)
 		{
 			answer = llvm::BinaryOperator::Create(llvm::Instruction::And, answer, bitC, "", context.currentBlock());

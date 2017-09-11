@@ -69,7 +69,7 @@ llvm::Value* CIdentifier::codeGen(CodeGenContext& context)
 			
 			llvm::Function* pinGetFunction=context.LookupFunctionInExternalModule(module,context.symbolPrepend+"PinGet"+name);
 
-			std::vector<Value*> args;
+			std::vector<llvm::Value*> args;
 			llvm::Instruction* I=llvm::CallInst::Create(pinGetFunction,args,"GetPinValue",context.currentBlock());
 			if (context.gContext.opts.generateDebug)
 			{

@@ -345,11 +345,11 @@ int main(int argc, char **argv)
 		return 2;
 	}
 	
-	InitializeAllTargetInfos();
-	InitializeAllTargets();
-	InitializeAllTargetMCs();
-	InitializeAllAsmParsers();
-	InitializeAllAsmPrinters();
+	llvm::InitializeAllTargetInfos();
+	llvm::InitializeAllTargets();
+	llvm::InitializeAllTargetMCs();
+	llvm::InitializeAllAsmParsers();
+	llvm::InitializeAllAsmPrinters();
 
 	int lexerError=yyparse();
 	if (lexerError || g_ProgramBlock==0)

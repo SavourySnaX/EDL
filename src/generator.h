@@ -23,8 +23,6 @@
 #include <llvm/ExecutionEngine/MCJIT.h>
 #include <llvm/Support/raw_ostream.h>
 
-using namespace llvm;
-
 class CBlock;
 class CStatesDeclaration;
 class CHandlerDeclaration;
@@ -41,10 +39,10 @@ typedef std::vector<CAffect*> AffectorList;
 class StateVariable
 {
 public:
-	Value* currentState;
-	Value* nextState;
-	Value* stateStackNext;
-	Value* stateStackIndex;
+	llvm::Value* currentState;
+	llvm::Value* nextState;
+	llvm::Value* stateStackNext;
+	llvm::Value* stateStackIndex;
 	CStatesDeclaration* decl;
 };
 
@@ -59,7 +57,7 @@ public:
 class CodeGenBlock 
 {
 public:
-    BasicBlock *block;
+    llvm::BasicBlock *block;
     std::map<std::string, BitVariable> locals;
 };
 
@@ -85,17 +83,16 @@ public:
 
 	CompilerOptions&			opts;
 	std::map<std::string, bool> impedanceRequired;
-	std::stack<DIScope*>		scopingStack;
-	std::map<Function*,Function*> connectFunctions;	
+	std::stack<llvm::DIScope*>		scopingStack;
+	std::map<llvm::Function*,llvm::Function*> connectFunctions;	
 };
 
 class CodeGenContext
 {
-
 	std::stack<CodeGenBlock *> blocks;
 	std::stack<CStatesDeclaration *> statesStack;
 	std::stack<const CIdentifier *> identifierStack;
-	Function *mainFunction;
+	llvm::Function *mainFunction;
 
 	void GenerateDisassmTables();
 
@@ -106,16 +103,16 @@ public:
 
 	CHandlerDeclaration* parentHandler;
 
-	DIBuilder *dbgBuilder;
-	DICompileUnit *compileUnit;
-	Module *module;
+	llvm::DIBuilder *dbgBuilder;
+	llvm::DICompileUnit *compileUnit;
+	llvm::Module *module;
 	bool isRoot;
-	ExecutionEngine		*ee;
+	llvm::ExecutionEngine		*ee;
 	CodeGenContext(GlobalContext& globalContext, CodeGenContext* parent);
-	Function *debugTraceString;
-	Function *debugTraceChar;
-	Function *debugTraceMissing;
-	Function *debugBusTap;
+	llvm::Function *debugTraceString;
+	llvm::Function *debugTraceChar;
+	llvm::Function *debugTraceMissing;
+	llvm::Function *debugBusTap;
 
 	std::string	symbolPrepend;
 	std::string moduleName;
@@ -128,10 +125,10 @@ public:
 
 	struct myAPIntCompare
 	{
-		bool operator()(const APInt& s1, const APInt& s2) const
+		bool operator()(const llvm::APInt& s1, const llvm::APInt& s2) const
 		{
-			APInt f1 = s1;
-			APInt f2 = s2;
+			llvm::APInt f1 = s1;
+			llvm::APInt f2 = s2;
 
 			if (f1.getBitWidth() != f2.getBitWidth())
 			{
@@ -148,15 +145,15 @@ public:
 		}
 	};
 
-	std::map<std::string, std::map<APInt, std::string, myAPIntCompare> >     disassemblyTable;
+	std::map<std::string, std::map<llvm::APInt, std::string, myAPIntCompare> >     disassemblyTable;
 
-	Function* LookupFunctionInExternalModule(const std::string& module, const std::string& name);
+	llvm::Function* LookupFunctionInExternalModule(const std::string& module, const std::string& name);
 	bool LookupBitVariable(BitVariable& outVar, const std::string& module, const std::string& name, const YYLTYPE &modLoc, const YYLTYPE &nameLoc);
 
 	std::map<std::string, CodeGenContext*> m_includes;
 	std::map<std::string, BitVariable> m_globals;
 	std::map<std::string, StateVariable> m_states;
-	std::map<std::string, Function*> m_externFunctions;
+	std::map<std::string, llvm::Function*> m_externFunctions;
 	std::map<CStatesDeclaration*, StateVariable> m_statesAlt;
 	std::map<std::string, CHandlerDeclaration*> m_handlers;
 	std::map<std::string, CMappingDeclaration*> m_mappings;
@@ -167,9 +164,9 @@ public:
 	std::map<std::string, BitVariable>& globals() { return m_globals; }
 	std::map<std::string, StateVariable>& states() { return m_states; }
 	std::map<CStatesDeclaration*, StateVariable>& statesAlt() { return m_statesAlt; }
-	BasicBlock *currentBlock() { if (blocks.size() > 0) return blocks.top()->block; else return nullptr; }
-	void setBlock(BasicBlock *block) { blocks.top()->block = block; }
-	void pushBlock(BasicBlock *block, YYLTYPE& blockStartLocation)
+	llvm::BasicBlock *currentBlock() { if (blocks.size() > 0) return blocks.top()->block; else return nullptr; }
+	void setBlock(llvm::BasicBlock *block) { blocks.top()->block = block; }
+	void pushBlock(llvm::BasicBlock *block, YYLTYPE& blockStartLocation)
 	{
 		std::map<std::string, BitVariable> tLocals;
 		if (blocks.size() > 0)
@@ -209,6 +206,6 @@ public:
 	void pushIdent(const CIdentifier* id) { identifierStack.push(id); }
 	void popIdent() { identifierStack.pop(); }
 
-	void StartFunctionDebugInfo(Function* func, YYLTYPE& declLoc);
+	void StartFunctionDebugInfo(llvm::Function* func, YYLTYPE& declLoc);
 	void EndFunctionDebugInfo();
 };

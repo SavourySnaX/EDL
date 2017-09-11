@@ -14,10 +14,9 @@ CIdentifier CInstruction::emptyTable("");
 
 std::string CInstruction::EscapeString(const std::string &in) const
 {
-	const char okChars[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_";
-
 	std::string ret=in;
-	std::replace_if(ret.begin(), ret.end(), [okChars,in](const char& c) -> bool {return strchr(okChars, c) == nullptr; }, '_');
+	std::replace_if(ret.begin(), ret.end(), [in](const char& c) -> bool 
+		{const char okChars[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_"; return strchr(okChars, c) == nullptr; }, '_');
 
 	return ret;
 }
