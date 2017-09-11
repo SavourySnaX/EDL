@@ -231,18 +231,18 @@ void DrawTimingA(unsigned char* buffer,unsigned int width)
 	uint64_t pulsestart;
 	uint32_t* argb=(uint32_t*)buffer;
 /*
-	pulsepos=(bufferPosition-(512*2-1))<<16;
-	if ((pulsepos>>16)<0)
+	pulsepos=(bufferPosition-(512*2-1))<<8;
+	if ((pulsepos>>8)<0)
 	{
-		pulsepos+=MAX_CAPTURE<<16;
+		pulsepos+=MAX_CAPTURE<<8;
 	}
 	pulsestart=pulsepos;
 */
-	pulsepos=bufferPosition<<16;
+	pulsepos=bufferPosition<<8;
 	pulsepos+=timeOffset;
-	if ((pulsepos>>16)>MAX_CAPTURE)
+	if ((pulsepos>>8)>MAX_CAPTURE)
 	{
-		pulsepos-=MAX_CAPTURE<<16;
+		pulsepos-=MAX_CAPTURE<<8;
 	}
 	pulsestart=pulsepos;
 	// Clear graph space
@@ -259,14 +259,14 @@ void DrawTimingA(unsigned char* buffer,unsigned int width)
 	for (a=3;a<MAX_PINS;a++)
 	{
 		pulsepos=pulsestart;
-		uint32_t lastLevel=50+(255-(lohi[a][pulsepos>>16]));
+		uint32_t lastLevel=50+(255-(lohi[a][pulsepos>>8]));
 		for (b=0;b<512*2;b++)
 		{
 			int c;
 			int low;
 			int high;
 
-			level = 50+(255-(lohi[a][pulsepos>>16]));
+			level = 50+(255-(lohi[a][pulsepos>>8]));
 			low=lastLevel;
 			high=level;
 			if (low>high)
@@ -280,7 +280,7 @@ void DrawTimingA(unsigned char* buffer,unsigned int width)
 			}
 
 			pulsepos+=timeStretch;
-			if ((pulsepos>>16)>=MAX_CAPTURE)
+			if ((pulsepos>>8)>=MAX_CAPTURE)
 			{
 				pulsepos=0;
 			}
@@ -308,11 +308,11 @@ void DrawTiming(unsigned char* buffer,unsigned int width)
 //	PrintAt(buffer,width,255,255,255,0,27,"SID 2");
 //	PrintAt(buffer,width,255,255,255,0,30,"SID 3");
 
-	pulsepos=bufferPosition<<16;
+	pulsepos=bufferPosition<<8;
 	pulsepos+=timeOffset;
-	if ((pulsepos>>16)>MAX_CAPTURE)
+	if ((pulsepos>>8)>MAX_CAPTURE)
 	{
-		pulsepos-=MAX_CAPTURE<<16;
+		pulsepos-=MAX_CAPTURE<<8;
 	}
 	prevpulsepos=pulsepos;
 
@@ -322,7 +322,7 @@ void DrawTiming(unsigned char* buffer,unsigned int width)
 	{
 		for (b=0;b<512*2;b++)
 		{
-			if (lohi[a][pulsepos>>16])
+			if (lohi[a][pulsepos>>8])
 			{
 				buffer[(80+b+(a*8*3+5)*width)*4+0]=0xFF;
 				buffer[(80+b+(a*8*3+5)*width)*4+1]=0xFF;
@@ -341,7 +341,7 @@ void DrawTiming(unsigned char* buffer,unsigned int width)
 				buffer[(80+b+(a*8*3+8*2+1)*width)*4+2]=0xFF;
 			}
 
-			if (b!=0 && lohi[a][prevpulsepos>>16]!=lohi[a][pulsepos>>16])
+			if (b!=0 && lohi[a][prevpulsepos>>8]!=lohi[a][pulsepos>>8])
 			{
 				int c;
 				for (c=6;c<8*2+1;c++)
@@ -363,7 +363,7 @@ void DrawTiming(unsigned char* buffer,unsigned int width)
 			}
 			prevpulsepos=pulsepos;
 			pulsepos+=timeStretch;
-			if ((pulsepos>>16)>=MAX_CAPTURE)
+			if ((pulsepos>>8)>=MAX_CAPTURE)
 			{
 				pulsepos=0;
 			}
@@ -390,19 +390,19 @@ void UpdateTimingWindow(GLFWwindow* window)
 
 	if (KeyDownWindow(GLFW_KEY_LEFT,window))
 	{
-		timeOffset-=8<<16;
+		timeOffset-=8<<8;
 	}
 	if (KeyDownWindow(GLFW_KEY_RIGHT,window))
 	{
-		timeOffset+=8<<16;
+		timeOffset+=8<<8;
 	}
 	if (KeyDownWindow(',',window))
 	{
-		timeOffset-=909<<16;
+		timeOffset-=909<<8;
 	}
 	if (KeyDownWindow('.',window))
 	{
-		timeOffset+=909<<16;
+		timeOffset+=909<<8;
 	}
 
 }

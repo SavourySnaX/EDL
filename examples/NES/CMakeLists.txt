@@ -13,6 +13,10 @@ if (${glfw3_FOUND} AND ${OPENGL_FOUND})
 	cmake_minimum_required(VERSION 3.4.3)
 	project(NES)
 
+	if (${OPENAL_FOUND})
+		include_directories(${OPENAL_INCLUDE_DIR})
+		add_definitions(-DEDL_PLATFORM_OPENAL)
+	endif()
 	include_directories(${OPENGL_INCLUDE_DIR})
 	include_directories(${CMAKE_SOURCE_DIR}/include/)
 
@@ -27,6 +31,9 @@ if (${glfw3_FOUND} AND ${OPENGL_FOUND})
 		${CMAKE_CURRENT_BINARY_DIR}/rp2c02.obj
 		)
 
+	if (${OPENAL_FOUND})
+		target_link_libraries(NES ${OPENAL_LIBRARY})
+	endif()
 	target_link_libraries(NES ${OPENGL_gl_LIBRARY})
 	target_link_libraries(NES glfw)
 

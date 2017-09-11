@@ -21,7 +21,7 @@
 
 #define WRITE_AUDIO		0
 #define IS_COMPAT		0
-#define APU			1
+#define APU				1
 
 #define ENABLE_TV		0
 #define ENABLE_LOGIC_ANALYSER	0
