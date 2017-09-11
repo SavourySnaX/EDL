@@ -669,7 +669,7 @@ void UpdateHardware()
 	TIA_PinSetLI(joyFire);			// Joystick (Fire | Fire) 0 pressed 1 released
 }
 		
-int stopTheClock=1;
+int stopTheClock=0;
 
 void DoCPU()
 {
