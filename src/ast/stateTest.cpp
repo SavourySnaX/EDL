@@ -49,11 +49,11 @@ llvm::Value* CStateTest::codeGen(CodeGenContext& context)
 
 	if (totalInBlock>1)
 	{
-		llvm::CmpInst* cmp = llvm::CmpInst::Create(llvm::Instruction::ICmp,llvm::ICmpInst::ICMP_UGE,load, llvm::ConstantInt::get(TheContext, llvm::APInt(bitsNeeded,jumpIndex)), "", context.currentBlock());
-		llvm::CmpInst* cmp2 = llvm::CmpInst::Create(llvm::Instruction::ICmp,llvm::ICmpInst::ICMP_ULT,load, llvm::ConstantInt::get(TheContext, llvm::APInt(bitsNeeded,jumpIndex+totalInBlock)), "", context.currentBlock());
+		llvm::CmpInst* cmp = llvm::CmpInst::Create(llvm::Instruction::ICmp,llvm::ICmpInst::ICMP_UGE,load, context.getConstantInt(llvm::APInt(bitsNeeded,jumpIndex)), "", context.currentBlock());
+		llvm::CmpInst* cmp2 = llvm::CmpInst::Create(llvm::Instruction::ICmp,llvm::ICmpInst::ICMP_ULT,load, context.getConstantInt(llvm::APInt(bitsNeeded,jumpIndex+totalInBlock)), "", context.currentBlock());
 		return llvm::BinaryOperator::Create(llvm::Instruction::And,cmp,cmp2,"Combining",context.currentBlock());
 	}
 		
 	// Load value from state variable, test against being equal to found index, jump on result
-	return llvm::CmpInst::Create(llvm::Instruction::ICmp,llvm::ICmpInst::ICMP_EQ,load, llvm::ConstantInt::get(TheContext, llvm::APInt(bitsNeeded,jumpIndex)), "", context.currentBlock());
+	return llvm::CmpInst::Create(llvm::Instruction::ICmp,llvm::ICmpInst::ICMP_EQ,load, context.getConstantInt(llvm::APInt(bitsNeeded,jumpIndex)), "", context.currentBlock());
 }

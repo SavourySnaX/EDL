@@ -41,8 +41,8 @@ llvm::Value* CTrigger::GenerateChanged(CodeGenContext& context, BitVariable& pin
 	llvm::Value* writeInput = CIdentifier::GetAliasedData(context, pin.writeInput, pin);
 	llvm::Value* answer = llvm::CmpInst::Create(llvm::Instruction::ICmp, llvm::ICmpInst::ICMP_EQ, prior, writeInput, "", context.currentBlock());
 
-	llvm::BasicBlock *ifcall = llvm::BasicBlock::Create(TheContext, "ifcall", parentFunction);
-	llvm::BasicBlock *nocall = llvm::BasicBlock::Create(TheContext, "nocall", parentFunction);
+	llvm::BasicBlock *ifcall = context.makeBasicBlock("ifcall", parentFunction);
+	llvm::BasicBlock *nocall = context.makeBasicBlock("nocall", parentFunction);
 
 	llvm::BranchInst::Create(nocall, ifcall, answer, context.currentBlock());
 	context.popBlock(debugLocation);
@@ -57,7 +57,7 @@ llvm::Value* CTrigger::GenerateChanged(CodeGenContext& context, BitVariable& pin
 	// Remove return instruction (since we need to create a new basic block set
 	(*pin.writeAccessor)->removeFromParent();
 
-	*pin.writeAccessor = llvm::ReturnInst::Create(TheContext, nocall);
+	*pin.writeAccessor = context.makeReturn(nocall);
 
 	context.gContext.scopingStack.pop();
 
@@ -75,13 +75,13 @@ llvm::Value* CTrigger::GenerateTransition(CodeGenContext& context, BitVariable& 
 	llvm::Value* prior = CIdentifier::GetAliasedData(context, pin.priorValue, pin);
 	llvm::Value* writeInput = CIdentifier::GetAliasedData(context, pin.writeInput, pin);
 
-	llvm::Value* checkParam2 = llvm::CmpInst::Create(llvm::Instruction::ICmp, llvm::ICmpInst::ICMP_EQ, llvm::ConstantInt::get(TheContext, param2.integer.zextOrTrunc(pin.trueSize.getLimitedValue())), writeInput, "", context.currentBlock());
-	llvm::Value* checkParam1 = llvm::CmpInst::Create(llvm::Instruction::ICmp, llvm::ICmpInst::ICMP_EQ, llvm::ConstantInt::get(TheContext, param1.integer.zextOrTrunc(pin.trueSize.getLimitedValue())), prior, "", context.currentBlock());
+	llvm::Value* checkParam2 = llvm::CmpInst::Create(llvm::Instruction::ICmp, llvm::ICmpInst::ICMP_EQ, context.getConstantInt(param2.getAPInt().zextOrTrunc(pin.trueSize.getLimitedValue())), writeInput, "", context.currentBlock());
+	llvm::Value* checkParam1 = llvm::CmpInst::Create(llvm::Instruction::ICmp, llvm::ICmpInst::ICMP_EQ, context.getConstantInt(param1.getAPInt().zextOrTrunc(pin.trueSize.getLimitedValue())), prior, "", context.currentBlock());
 
 	llvm::Value *answer = llvm::BinaryOperator::Create(llvm::Instruction::And, checkParam1, checkParam2, "", context.currentBlock());
 
-	llvm::BasicBlock *ifcall = llvm::BasicBlock::Create(TheContext, "ifcall", parentFunction);
-	llvm::BasicBlock *nocall = llvm::BasicBlock::Create(TheContext, "nocall", parentFunction);
+	llvm::BasicBlock *ifcall = context.makeBasicBlock("ifcall", parentFunction);
+	llvm::BasicBlock *nocall = context.makeBasicBlock("nocall", parentFunction);
 
 	llvm::BranchInst::Create(ifcall, nocall, answer, context.currentBlock());
 	context.popBlock(debugLocation);
@@ -96,7 +96,7 @@ llvm::Value* CTrigger::GenerateTransition(CodeGenContext& context, BitVariable& 
 	// Remove return instruction (since we need to create a new basic block set
 	(*pin.writeAccessor)->removeFromParent();
 
-	*pin.writeAccessor = llvm::ReturnInst::Create(TheContext, nocall);
+	*pin.writeAccessor = context.makeReturn(nocall);
 
 	context.gContext.scopingStack.pop();
 

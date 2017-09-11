@@ -22,19 +22,17 @@ llvm::Value* CFunctionDecl::codeGen(CodeGenContext& context)
 
 	for (a = 0; a < params.size(); a++)
 	{
-		unsigned size = params[a]->size.integer.getLimitedValue();
-		FuncTy_8_args.push_back(llvm::IntegerType::get(TheContext, size));
+		FuncTy_8_args.push_back(context.getIntType(params[a]->size));
 	}
 	llvm::FunctionType* FuncTy_8;
 
 	if (returns.empty())
 	{
-		FuncTy_8 = llvm::FunctionType::get(llvm::Type::getVoidTy(TheContext), FuncTy_8_args, false);
+		FuncTy_8 = llvm::FunctionType::get(context.getVoidType(), FuncTy_8_args, false);
 	}
 	else
 	{
-		unsigned size = returns[0]->size.integer.getLimitedValue();
-		FuncTy_8 = llvm::FunctionType::get(llvm::IntegerType::get(TheContext, size), FuncTy_8_args, false);
+		FuncTy_8 = llvm::FunctionType::get(context.getIntType(returns[0]->size), FuncTy_8_args, false);
 	}
 
 	llvm::Function* func = nullptr;
@@ -53,14 +51,14 @@ llvm::Value* CFunctionDecl::codeGen(CodeGenContext& context)
 
 	context.m_externFunctions[name.name] = func;
 
-	llvm::BasicBlock *bblock = llvm::BasicBlock::Create(TheContext, "entry", func, 0);
+	llvm::BasicBlock *bblock = context.makeBasicBlock("entry", func);
 
 	context.pushBlock(bblock, block.blockStartLoc);
 
 	if (!returns.empty())
 	{
-		returnVal = BitVariable(returns[0]->size.integer, 0);
-		llvm::AllocaInst *alloc = new llvm::AllocaInst(llvm::Type::getIntNTy(TheContext, returns[0]->size.integer.getLimitedValue()), 0, returns[0]->id.name.c_str(), context.currentBlock());
+		returnVal = BitVariable(returns[0]->size.getAPInt(), 0);
+		llvm::AllocaInst *alloc = new llvm::AllocaInst(context.getIntType(returns[0]->size), 0, returns[0]->id.name.c_str(), context.currentBlock());
 		returnVal.value = alloc;
 		context.locals()[returns[0]->id.name] = returnVal;
 	}
@@ -69,7 +67,7 @@ llvm::Value* CFunctionDecl::codeGen(CodeGenContext& context)
 	a = 0;
 	while (args != func->arg_end())
 	{
-		BitVariable temp(params[a]->size.integer,0);
+		BitVariable temp(params[a]->size.getAPInt(),0);
 
 		temp.value = &*args;
 		temp.value->setName(params[a]->id.name);
@@ -82,11 +80,11 @@ llvm::Value* CFunctionDecl::codeGen(CodeGenContext& context)
 
 	if (returns.empty())
 	{
-		llvm::ReturnInst::Create(TheContext, context.currentBlock());			/* block may well have changed by time we reach here */
+		context.makeReturn(context.currentBlock());
 	}
 	else
 	{
-		llvm::ReturnInst::Create(TheContext, new llvm::LoadInst(returnVal.value, "", context.currentBlock()), context.currentBlock());
+		context.makeReturnValue(new llvm::LoadInst(returnVal.value, "", context.currentBlock()), context.currentBlock());
 	}
 
 	context.popBlock(block.blockEndLoc);

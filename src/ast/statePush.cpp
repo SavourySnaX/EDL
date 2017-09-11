@@ -45,7 +45,7 @@ llvm::Value* CStatePush::codeGen(CodeGenContext& context)
 
 	llvm::Value* index = new llvm::LoadInst(topState.stateStackIndex, "stackIndex", false, context.currentBlock());
 	std::vector<llvm::Value*> indices;
-	llvm::ConstantInt* const_intn = llvm::ConstantInt::get(TheContext, llvm::APInt(bitsNeeded, llvm::StringRef("0"), 10));
+	llvm::ConstantInt* const_intn = context.getConstantZero(bitsNeeded);
 	indices.push_back(const_intn);
 	indices.push_back(index);
 	llvm::Value* ref = llvm::GetElementPtrInst::Create(nullptr, topState.stateStackNext, indices, "stackPos", context.currentBlock());
@@ -54,9 +54,9 @@ llvm::Value* CStatePush::codeGen(CodeGenContext& context)
 
 	new llvm::StoreInst(curNext, ref, false, context.currentBlock());			// Save current next point to stack
 
-	llvm::Value* inc = llvm::BinaryOperator::Create(llvm::Instruction::Add, index, llvm::ConstantInt::get(TheContext, llvm::APInt(MAX_SUPPORTED_STACK_BITS, 1)), "incrementIndex", context.currentBlock());
+	llvm::Value* inc = llvm::BinaryOperator::Create(llvm::Instruction::Add, index, context.getConstantInt(llvm::APInt(MAX_SUPPORTED_STACK_BITS, 1)), "incrementIndex", context.currentBlock());
 	new llvm::StoreInst(inc, topState.stateStackIndex, false, context.currentBlock());	// Save updated index
 
 	// Set next state
-	return new llvm::StoreInst(llvm::ConstantInt::get(TheContext, llvm::APInt(bitsNeeded, jumpIndex)), topState.nextState, false, context.currentBlock());
+	return new llvm::StoreInst(context.getConstantInt(llvm::APInt(bitsNeeded, jumpIndex)), topState.nextState, false, context.currentBlock());
 }

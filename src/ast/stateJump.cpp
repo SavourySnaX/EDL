@@ -42,5 +42,5 @@ llvm::Value* CStateJump::codeGen(CodeGenContext& context)
 	llvm::APInt overSized(4 * numStates.length(), numStates, 10);
 	unsigned bitsNeeded = overSized.getActiveBits();
 
-	return new llvm::StoreInst(llvm::ConstantInt::get(TheContext, llvm::APInt(bitsNeeded, jumpIndex)), topState.nextState, false, context.currentBlock());
+	return new llvm::StoreInst(context.getConstantInt(llvm::APInt(bitsNeeded, jumpIndex)), topState.nextState, false, context.currentBlock());
 }

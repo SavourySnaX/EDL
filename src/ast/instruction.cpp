@@ -111,13 +111,13 @@ llvm::Value* CInstruction::codeGen(CodeGenContext& context)
 
 		context.disassemblyTable[table.name][opcode] = disassembled.quoted;
 
-		llvm::FunctionType *ftype = llvm::FunctionType::get(llvm::Type::getVoidTy(TheContext), argTypes, false);
+		llvm::FunctionType *ftype = llvm::FunctionType::get(context.getVoidType(), argTypes, false);
 		llvm::Function* function = llvm::Function::Create(ftype, llvm::GlobalValue::PrivateLinkage, EscapeString(context.symbolPrepend + "OPCODE_" + opcodeString.string.quoted.substr(1, opcodeString.string.quoted.length() - 2) + "_" + table.name + opcode.toString(16, false)), context.module);
 		function->setDoesNotThrow();
 
 		context.StartFunctionDebugInfo(function, statementLoc);
 
-		llvm::BasicBlock *bblock = llvm::BasicBlock::Create(TheContext, "entry", function, 0);
+		llvm::BasicBlock *bblock = context.makeBasicBlock("entry", function);
 
 		context.pushBlock(bblock, block.blockStartLoc);
 
@@ -125,7 +125,7 @@ llvm::Value* CInstruction::codeGen(CodeGenContext& context)
 
 		block.codeGen(context);
 
-		llvm::ReturnInst::Create(TheContext, context.currentBlock());			/* block may well have changed by time we reach here */
+		context.makeReturn(context.currentBlock());
 
 		context.popBlock(block.blockEndLoc);
 
@@ -142,7 +142,7 @@ llvm::Value* CInstruction::codeGen(CodeGenContext& context)
 			llvm::Function *parentFunction = context.executeLocations[table.name][b].blockEndForExecute->getParent();
 			context.gContext.scopingStack.push(parentFunction->getSubprogram());
 
-			llvm::BasicBlock* tempBlock = llvm::BasicBlock::Create(TheContext, "callOut" + table.name + opcode.toString(16, false), context.executeLocations[table.name][b].blockEndForExecute->getParent(), 0);
+			llvm::BasicBlock* tempBlock = context.makeBasicBlock("callOut" + table.name + opcode.toString(16, false), context.executeLocations[table.name][b].blockEndForExecute->getParent());
 			std::vector<llvm::Value*> args;
 			llvm::CallInst* fcall = llvm::CallInst::Create(function, args, "", tempBlock);
 			if (context.gContext.opts.generateDebug)
@@ -150,7 +150,7 @@ llvm::Value* CInstruction::codeGen(CodeGenContext& context)
 				fcall->setDebugLoc(llvm::DebugLoc::get(context.executeLocations[table.name][b].executeLoc.first_line, context.executeLocations[table.name][b].executeLoc.first_column, context.gContext.scopingStack.top()));
 			}
 			llvm::BranchInst::Create(context.executeLocations[table.name][b].blockEndForExecute, tempBlock);
-			context.executeLocations[table.name][b].switchForExecute->addCase(llvm::ConstantInt::get(TheContext, opcode), tempBlock);
+			context.executeLocations[table.name][b].switchForExecute->addCase(context.getConstantInt(opcode), tempBlock);
 
 			context.gContext.scopingStack.pop();
 		}

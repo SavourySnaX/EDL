@@ -25,30 +25,30 @@ llvm::Value* CExternDecl::codeGen(CodeGenContext& context)
 	std::vector<llvm::Type*> FuncTy_8_args;
 	for (int a = 0; a < params.size(); a++)
 	{
-		unsigned size = params[a]->integer.getLimitedValue();
+		unsigned size = params[a]->getAPInt().getLimitedValue();
 		if (size != 8 && size != 16 && size != 32)
 		{
-			PrintErrorFromLocation(params[a]->integerLoc, "External C functions must use C size parameters (8,16 or 32 bits)");
+			PrintErrorFromLocation(params[a]->getSourceLocation(), "External C functions must use C size parameters (8,16 or 32 bits)");
 			context.errorFlagged = true;
 			return nullptr;
 		}
-		FuncTy_8_args.push_back(llvm::IntegerType::get(TheContext, size));
+		FuncTy_8_args.push_back(context.getIntType(size));
 	}
 	llvm::FunctionType* FuncTy_8;
 	if (returns.empty())
 	{
-		FuncTy_8 = llvm::FunctionType::get(llvm::Type::getVoidTy(TheContext), FuncTy_8_args, false);
+		FuncTy_8 = llvm::FunctionType::get(context.getVoidType(), FuncTy_8_args, false);
 	}
 	else
 	{
-		unsigned size = returns[0]->integer.getLimitedValue();
+		unsigned size = returns[0]->getAPInt().getLimitedValue();
 		if (size != 8 && size != 16 && size != 32)
 		{
-			PrintErrorFromLocation(returns[0]->integerLoc, "External C functions must use C size parameters (8,16 or 32 bits)");
+			PrintErrorFromLocation(returns[0]->getSourceLocation(), "External C functions must use C size parameters (8,16 or 32 bits)");
 			context.errorFlagged = true;
 			return nullptr;
 		}
-		FuncTy_8 = llvm::FunctionType::get(llvm::IntegerType::get(TheContext, size), FuncTy_8_args, false);
+		FuncTy_8 = llvm::FunctionType::get(context.getIntType(size), FuncTy_8_args, false);
 	}
 
 	llvm::Function* func = llvm::Function::Create(FuncTy_8, llvm::GlobalValue::ExternalLinkage, context.symbolPrepend + name.name, context.module);

@@ -23,16 +23,16 @@ llvm::Value* CExecute::codeGen(CodeGenContext& context)
 		ExecuteInformation temp;
 
 		temp.executeLoc = executeLoc;
-		temp.blockEndForExecute = llvm::BasicBlock::Create(TheContext, "execReturn", context.currentBlock()->getParent(), 0);		// Need to cache this block away somewhere
+		temp.blockEndForExecute = context.makeBasicBlock("execReturn", context.currentBlock()->getParent());
 
 		if (context.gContext.opts.traceUnimplemented)
 		{
-			llvm::BasicBlock* tempBlock = llvm::BasicBlock::Create(TheContext, "default", context.currentBlock()->getParent(), 0);
+			llvm::BasicBlock* tempBlock = context.makeBasicBlock("default", context.currentBlock()->getParent());
 
 			std::vector<llvm::Value*> args;
 
 			// Handle variable promotion
-			llvm::Type* ty = llvm::Type::getIntNTy(TheContext, 32);
+			llvm::Type* ty = context.getIntType(32);
 			llvm::Instruction::CastOps op = llvm::CastInst::getCastOpcode(load, false, ty, false);
 
 			llvm::Instruction* truncExt = llvm::CastInst::Create(op, load, ty, "cast", tempBlock);

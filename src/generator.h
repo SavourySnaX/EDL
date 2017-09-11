@@ -1,3 +1,5 @@
+#pragma once
+
 #include <stack>
 #include <typeinfo>
 #include <llvm/IR/Module.h>
@@ -22,6 +24,8 @@
 #include <llvm/ExecutionEngine/SectionMemoryManager.h>
 #include <llvm/ExecutionEngine/MCJIT.h>
 #include <llvm/Support/raw_ostream.h>
+
+#include "ast/integer.h"
 
 class CBlock;
 class CStatesDeclaration;
@@ -78,13 +82,24 @@ public:
 
 class GlobalContext
 {
+private:
+	llvm::LLVMContext							llvmContext;
 public:
-	GlobalContext(CompilerOptions& options) : opts(options) {  }
+	GlobalContext(CompilerOptions& options) : opts(options) 
+	{  
+		llvm::InitializeAllTargetInfos();
+		llvm::InitializeAllTargets();
+		llvm::InitializeAllTargetMCs();
+		llvm::InitializeAllAsmParsers();
+		llvm::InitializeAllAsmPrinters();
+	}
 
-	CompilerOptions&			opts;
-	std::map<std::string, bool> impedanceRequired;
-	std::stack<llvm::DIScope*>		scopingStack;
-	std::map<llvm::Function*,llvm::Function*> connectFunctions;	
+	CompilerOptions&							opts;
+	std::map<std::string, bool>					impedanceRequired;
+	std::stack<llvm::DIScope*>					scopingStack;
+	std::map<llvm::Function*,llvm::Function*>	connectFunctions;	
+
+	llvm::LLVMContext& getLLVMContext() { return llvmContext; }
 };
 
 class CodeGenContext
@@ -208,4 +223,21 @@ public:
 
 	void StartFunctionDebugInfo(llvm::Function* func, YYLTYPE& declLoc);
 	void EndFunctionDebugInfo();
+
+	// Type Wrappers
+	llvm::Type* getVoidType() const { return llvm::Type::getVoidTy(gContext.getLLVMContext()); }
+	llvm::Type* getIntType(unsigned size) const { return llvm::IntegerType::get(gContext.getLLVMContext(), size); }
+	llvm::Type* getIntType(const CInteger& size) const { return llvm::IntegerType::get(gContext.getLLVMContext(), size.getAPInt().getLimitedValue()); }
+	llvm::Type* getIntType(const llvm::APInt& size) const { return llvm::IntegerType::get(gContext.getLLVMContext(), size.getLimitedValue()); }
+
+	// Constant Wrappers
+	llvm::ConstantInt*	getConstantInt(const llvm::APInt& value) { return llvm::ConstantInt::get(gContext.getLLVMContext(), value); }
+	llvm::ConstantInt*	getConstantZero(unsigned numBits) { return llvm::ConstantInt::get(gContext.getLLVMContext(), llvm::APInt(numBits,llvm::StringRef("0"),10)); }
+	llvm::ConstantInt*	getConstantOnes(unsigned numBits) { return llvm::ConstantInt::get(gContext.getLLVMContext(), ~llvm::APInt(numBits,llvm::StringRef("0"),10)); }
+	llvm::Constant*		getString(const std::string& withQuotes) { return llvm::ConstantDataArray::getString(gContext.getLLVMContext(), withQuotes.substr(1, withQuotes.length() - 2), true); }
+
+	// Function Wrappers
+	llvm::BasicBlock* makeBasicBlock(const llvm::Twine&name, llvm::Function* parent = nullptr, llvm::BasicBlock* insertBefore = nullptr) { return llvm::BasicBlock::Create(gContext.getLLVMContext(), name, parent, insertBefore); }
+	llvm::ReturnInst* makeReturn(llvm::BasicBlock* insertAtEnd) { return llvm::ReturnInst::Create(gContext.getLLVMContext(), insertAtEnd); }
+	llvm::ReturnInst* makeReturnValue(llvm::Value* value, llvm::BasicBlock* insertAtEnd) { return llvm::ReturnInst::Create(gContext.getLLVMContext(), value, insertAtEnd); }
 };

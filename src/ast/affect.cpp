@@ -23,9 +23,9 @@ llvm::Value* CAffect::codeGenCarry(CodeGenContext& context, llvm::Value* exprRes
 	case TOK_CARRY:
 	case TOK_NOCARRY:
 	{
-		if (param.integer.getLimitedValue() >= resultType->getBitWidth())
+		if (param.getAPInt().getLimitedValue() >= resultType->getBitWidth())
 		{
-			PrintErrorFromLocation(param.integerLoc, "Bit to carry is outside of range for result");
+			PrintErrorFromLocation(param.getSourceLocation(), "Bit to carry is outside of range for result");
 			context.errorFlagged = true;
 			return nullptr;
 		}
@@ -43,7 +43,7 @@ llvm::Value* CAffect::codeGenCarry(CodeGenContext& context, llvm::Value* exprRes
 			//((lh & rh) | ((~Result) & rh) | (lh & (~Result)))
 
 			// ~Result
-			llvm::Value* cmpResult = llvm::BinaryOperator::Create(llvm::Instruction::Xor, exprResult, llvm::ConstantInt::get(TheContext, ~llvm::APInt(resultType->getBitWidth(), 0, false)), "", context.currentBlock());
+			llvm::Value* cmpResult = llvm::BinaryOperator::Create(llvm::Instruction::Xor, exprResult, context.getConstantOnes(resultType->getBitWidth()), "", context.currentBlock());
 
 			// lh&rh
 			llvm::Value* expr1 = llvm::BinaryOperator::Create(llvm::Instruction::And, rhs, lhs, "", context.currentBlock());
@@ -62,7 +62,7 @@ llvm::Value* CAffect::codeGenCarry(CodeGenContext& context, llvm::Value* exprRes
 			//((~lh&Result) | (~lh&rh) | (rh&Result)
 
 			// ~lh
-			llvm::Value* cmpLhs = llvm::BinaryOperator::Create(llvm::Instruction::Xor, lhs, llvm::ConstantInt::get(TheContext, ~llvm::APInt(resultType->getBitWidth(), 0, false)), "", context.currentBlock());
+			llvm::Value* cmpLhs = llvm::BinaryOperator::Create(llvm::Instruction::Xor, lhs, context.getConstantOnes(resultType->getBitWidth()), "", context.currentBlock());
 
 			// ~lh&Result
 			llvm::Value* expr1 = llvm::BinaryOperator::Create(llvm::Instruction::And, cmpLhs, exprResult, "", context.currentBlock());
@@ -116,16 +116,16 @@ llvm::Value* CAffect::codeGenFinal(CodeGenContext& context, llvm::Value* exprRes
 	switch (type)
 	{
 	case TOK_FORCESET:
-		answer = llvm::ConstantInt::get(TheContext, ~llvm::APInt(resultType->getBitWidth(), 0, false));
+		answer = context.getConstantOnes(resultType->getBitWidth());
 		break;
 	case TOK_FORCERESET:
-		answer = llvm::ConstantInt::get(TheContext, llvm::APInt(resultType->getBitWidth(), 0, false));
+		answer = context.getConstantZero(resultType->getBitWidth());
 		break;
 	case TOK_ZERO:
-		answer = llvm::CmpInst::Create(llvm::Instruction::ICmp, llvm::ICmpInst::ICMP_EQ, exprResult, llvm::ConstantInt::get(TheContext, llvm::APInt(resultType->getBitWidth(), 0, false)), "", context.currentBlock());
+		answer = llvm::CmpInst::Create(llvm::Instruction::ICmp, llvm::ICmpInst::ICMP_EQ, exprResult, context.getConstantZero(resultType->getBitWidth()), "", context.currentBlock());
 		break;
 	case TOK_NONZERO:
-		answer = llvm::CmpInst::Create(llvm::Instruction::ICmp, llvm::ICmpInst::ICMP_NE, exprResult, llvm::ConstantInt::get(TheContext, llvm::APInt(resultType->getBitWidth(), 0, false)), "", context.currentBlock());
+		answer = llvm::CmpInst::Create(llvm::Instruction::ICmp, llvm::ICmpInst::ICMP_NE, exprResult, context.getConstantZero(resultType->getBitWidth()), "", context.currentBlock());
 		break;
 	case TOK_SIGN:
 	case TOK_NOSIGN:
@@ -134,13 +134,13 @@ llvm::Value* CAffect::codeGenFinal(CodeGenContext& context, llvm::Value* exprRes
 		signBit.setBit(resultType->getBitWidth() - 1);
 		if (type == TOK_SIGN)
 		{
-			answer = llvm::BinaryOperator::Create(llvm::Instruction::And, exprResult, llvm::ConstantInt::get(TheContext, signBit), "", context.currentBlock());
+			answer = llvm::BinaryOperator::Create(llvm::Instruction::And, exprResult, context.getConstantInt(signBit), "", context.currentBlock());
 		}
 		else
 		{
-			answer = llvm::BinaryOperator::Create(llvm::Instruction::Xor, exprResult, llvm::ConstantInt::get(TheContext, signBit), "", context.currentBlock());
+			answer = llvm::BinaryOperator::Create(llvm::Instruction::Xor, exprResult, context.getConstantInt(signBit), "", context.currentBlock());
 		}
-		answer = llvm::BinaryOperator::Create(llvm::Instruction::LShr, answer, llvm::ConstantInt::get(TheContext, llvm::APInt(resultType->getBitWidth(), (uint64_t)(resultType->getBitWidth() - 1), false)), "", context.currentBlock());
+		answer = llvm::BinaryOperator::Create(llvm::Instruction::LShr, answer, context.getConstantInt(llvm::APInt(resultType->getBitWidth(), (uint64_t)(resultType->getBitWidth() - 1), false)), "", context.currentBlock());
 	}
 	break;
 	case TOK_PARITYODD:
@@ -155,7 +155,7 @@ llvm::Value* CAffect::codeGenFinal(CodeGenContext& context, llvm::Value* exprRes
 			if (resultType->getBitWidth() <= computeClosestPower2Size.getLimitedValue())
 			{
 				// Output a casting operator to up the size of type
-				llvm::Type* ty = llvm::Type::getIntNTy(TheContext, computeClosestPower2Size.getLimitedValue());
+				llvm::Type* ty = context.getIntType(computeClosestPower2Size.getLimitedValue());
 				llvm::Instruction::CastOps op = llvm::CastInst::getCastOpcode(exprResult, false, ty, false);
 				answer = llvm::CastInst::Create(op, exprResult, ty, "", context.currentBlock());
 				break;
@@ -172,23 +172,23 @@ llvm::Value* CAffect::codeGenFinal(CodeGenContext& context, llvm::Value* exprRes
 		computeClosestPower2Size = computeClosestPower2Size.lshr(1);
 		for (int a = 0; a < count; a++)
 		{
-			llvm::Value *shifted = llvm::BinaryOperator::Create(llvm::Instruction::LShr, answer, llvm::ConstantInt::get(TheContext, computeClosestPower2Size), "", context.currentBlock());
+			llvm::Value *shifted = llvm::BinaryOperator::Create(llvm::Instruction::LShr, answer, context.getConstantInt(computeClosestPower2Size), "", context.currentBlock());
 			answer = llvm::BinaryOperator::Create(llvm::Instruction::Xor, shifted, answer, "", context.currentBlock());
 			computeClosestPower2Size = computeClosestPower2Size.lshr(1);
 		}
 
 		// final part, mask to nibble size and use this to lookup into magic constant 0x6996 (which is simply a table look up for the parities of a nibble)
-		answer = llvm::BinaryOperator::Create(llvm::Instruction::And, answer, llvm::ConstantInt::get(TheContext, llvm::APInt(computeClosestPower2Size.getBitWidth(), 0xF, false)), "", context.currentBlock());
-		llvm::Type* ty = llvm::Type::getIntNTy(TheContext, 16);
+		answer = llvm::BinaryOperator::Create(llvm::Instruction::And, answer, context.getConstantInt(llvm::APInt(computeClosestPower2Size.getBitWidth(), 0xF, false)), "", context.currentBlock());
+		llvm::Type* ty = context.getIntType(16);
 		llvm::Instruction::CastOps op = llvm::CastInst::getCastOpcode(answer, false, ty, false);
 		answer = llvm::CastInst::Create(op, answer, ty, "", context.currentBlock());
 		if (type == TOK_PARITYEVEN)
 		{
-			answer = llvm::BinaryOperator::Create(llvm::Instruction::LShr, llvm::ConstantInt::get(TheContext, ~llvm::APInt(16, 0x6996, false)), answer, "", context.currentBlock());
+			answer = llvm::BinaryOperator::Create(llvm::Instruction::LShr, context.getConstantInt(~llvm::APInt(16, 0x6996, false)), answer, "", context.currentBlock());
 		}
 		else
 		{
-			answer = llvm::BinaryOperator::Create(llvm::Instruction::LShr, llvm::ConstantInt::get(TheContext, llvm::APInt(16, 0x6996, false)), answer, "", context.currentBlock());
+			answer = llvm::BinaryOperator::Create(llvm::Instruction::LShr, context.getConstantInt(llvm::APInt(16, 0x6996, false)), answer, "", context.currentBlock());
 		}
 	}
 	break;
@@ -196,31 +196,31 @@ llvm::Value* CAffect::codeGenFinal(CodeGenContext& context, llvm::Value* exprRes
 	case TOK_INVBIT:
 	{
 		llvm::APInt bit(resultType->getBitWidth(), 0, false);
-		llvm::APInt shift = param.integer.zextOrTrunc(resultType->getBitWidth());
-		bit.setBit(param.integer.getLimitedValue());
+		llvm::APInt shift = param.getAPInt().zextOrTrunc(resultType->getBitWidth());
+		bit.setBit(param.getAPInt().getLimitedValue());
 		if (type == TOK_BIT)
 		{
-			answer = llvm::BinaryOperator::Create(llvm::Instruction::And, exprResult, llvm::ConstantInt::get(TheContext, bit), "", context.currentBlock());
+			answer = llvm::BinaryOperator::Create(llvm::Instruction::And, exprResult, context.getConstantInt(bit), "", context.currentBlock());
 		}
 		else
 		{
-			answer = llvm::BinaryOperator::Create(llvm::Instruction::Xor, exprResult, llvm::ConstantInt::get(TheContext, bit), "", context.currentBlock());
+			answer = llvm::BinaryOperator::Create(llvm::Instruction::Xor, exprResult, context.getConstantInt(bit), "", context.currentBlock());
 		}
-		answer = llvm::BinaryOperator::Create(llvm::Instruction::LShr, answer, llvm::ConstantInt::get(TheContext, shift), "", context.currentBlock());
+		answer = llvm::BinaryOperator::Create(llvm::Instruction::LShr, answer, context.getConstantInt(shift), "", context.currentBlock());
 	}
 	break;
 	case TOK_OVERFLOW:
 	case TOK_NOOVERFLOW:
 	{
 		llvm::APInt bit(resultType->getBitWidth(), 0, false);
-		llvm::APInt shift = param.integer.zextOrTrunc(resultType->getBitWidth());
-		bit.setBit(param.integer.getLimitedValue());
-		llvm::ConstantInt* bitC = llvm::ConstantInt::get(TheContext, bit);
-		llvm::ConstantInt* shiftC = llvm::ConstantInt::get(TheContext, shift);
+		llvm::APInt shift = param.getAPInt().zextOrTrunc(resultType->getBitWidth());
+		bit.setBit(param.getAPInt().getLimitedValue());
+		llvm::ConstantInt* bitC = context.getConstantInt(bit);
+		llvm::ConstantInt* shiftC = context.getConstantInt(shift);
 
-		if (param.integer.getLimitedValue() >= resultType->getBitWidth())
+		if (param.getAPInt().getLimitedValue() >= resultType->getBitWidth())
 		{
-			PrintErrorFromLocation(param.integerLoc, "Bit for overflow detection is outside of range for result");
+			PrintErrorFromLocation(param.getSourceLocation(), "Bit for overflow detection is outside of range for result");
 			context.errorFlagged = true;
 			return nullptr;
 		}
@@ -240,16 +240,16 @@ llvm::Value* CAffect::codeGenFinal(CodeGenContext& context, llvm::Value* exprRes
 		llvm::IntegerType* lhsType = llvm::cast<llvm::IntegerType>(lhs->getType());
 		llvm::IntegerType* rhsType = llvm::cast<llvm::IntegerType>(rhs->getType());
 
-		if (param.integer.getLimitedValue() >= lhsType->getBitWidth())
+		if (param.getAPInt().getLimitedValue() >= lhsType->getBitWidth())
 		{
-			PrintErrorFromLocation(param.integerLoc, "Bit for overflow detection is outside of range of lhs");
+			PrintErrorFromLocation(param.getSourceLocation(), "Bit for overflow detection is outside of range of lhs");
 			std::cerr << "Bit for overflow detection is outside of range for source1" << std::endl;
 			context.errorFlagged = true;
 			return nullptr;
 		}
-		if (param.integer.getLimitedValue() >= rhsType->getBitWidth())
+		if (param.getAPInt().getLimitedValue() >= rhsType->getBitWidth())
 		{
-			PrintErrorFromLocation(param.integerLoc, "Bit for overflow detection is outside of range of rhs");
+			PrintErrorFromLocation(param.getSourceLocation(), "Bit for overflow detection is outside of range of rhs");
 			context.errorFlagged = true;
 			return nullptr;
 		}
@@ -260,11 +260,11 @@ llvm::Value* CAffect::codeGenFinal(CodeGenContext& context, llvm::Value* exprRes
 		rhs = llvm::CastInst::Create(rhsOp, rhs, resultType, "cast", context.currentBlock());
 
 		// ~Result
-		llvm::Value* invResult = llvm::BinaryOperator::Create(llvm::Instruction::Xor, exprResult, llvm::ConstantInt::get(TheContext, ~llvm::APInt(resultType->getBitWidth(), 0, false)), "", context.currentBlock());
+		llvm::Value* invResult = llvm::BinaryOperator::Create(llvm::Instruction::Xor, exprResult, context.getConstantOnes(resultType->getBitWidth()), "", context.currentBlock());
 		// ~lh
-		llvm::Value* invlh = llvm::BinaryOperator::Create(llvm::Instruction::Xor, lhs, llvm::ConstantInt::get(TheContext, ~llvm::APInt(resultType->getBitWidth(), 0, false)), "", context.currentBlock());
+		llvm::Value* invlh = llvm::BinaryOperator::Create(llvm::Instruction::Xor, lhs, context.getConstantOnes(resultType->getBitWidth()), "", context.currentBlock());
 		// ~rh
-		llvm::Value* invrh = llvm::BinaryOperator::Create(llvm::Instruction::Xor, rhs, llvm::ConstantInt::get(TheContext, ~llvm::APInt(resultType->getBitWidth(), 0, false)), "", context.currentBlock());
+		llvm::Value* invrh = llvm::BinaryOperator::Create(llvm::Instruction::Xor, rhs, context.getConstantOnes(resultType->getBitWidth()), "", context.currentBlock());
 
 		llvm::Value* expr1;
 		llvm::Value* expr2;
@@ -301,10 +301,10 @@ llvm::Value* CAffect::codeGenFinal(CodeGenContext& context, llvm::Value* exprRes
 	case TOK_NOCARRY:
 	{
 		llvm::APInt bit(resultType->getBitWidth(), 0, false);
-		llvm::APInt shift = param.integer.zextOrTrunc(resultType->getBitWidth());
-		bit.setBit(param.integer.getLimitedValue());
-		llvm::ConstantInt* bitC = llvm::ConstantInt::get(TheContext, bit);
-		llvm::ConstantInt* shiftC = llvm::ConstantInt::get(TheContext, shift);
+		llvm::APInt shift = param.getAPInt().zextOrTrunc(resultType->getBitWidth());
+		bit.setBit(param.getAPInt().getLimitedValue());
+		llvm::ConstantInt* bitC = context.getConstantInt(bit);
+		llvm::ConstantInt* shiftC = context.getConstantInt(shift);
 
 		if (tmpResult == nullptr)
 		{

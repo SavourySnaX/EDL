@@ -14,8 +14,8 @@ void CIfStatement::prePass(CodeGenContext& context)
 
 llvm::Value* CIfStatement::codeGen(CodeGenContext& context)
 {
-	llvm::BasicBlock *then = llvm::BasicBlock::Create(TheContext, "then", context.currentBlock()->getParent());
-	llvm::BasicBlock *endif = llvm::BasicBlock::Create(TheContext, "endif", context.currentBlock()->getParent());
+	llvm::BasicBlock *then = context.makeBasicBlock("then", context.currentBlock()->getParent());
+	llvm::BasicBlock *endif = context.makeBasicBlock("endif", context.currentBlock()->getParent());
 
 	llvm::Value* result = expr.codeGen(context);
 	if (result != nullptr)

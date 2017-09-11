@@ -7,7 +7,6 @@
 #include "yyltype.h"
 #include "generator.h"
 #include "ast.h"
-using namespace std;
 
 extern int yyparse();
 extern CBlock* g_ProgramBlock;
@@ -17,18 +16,18 @@ extern CBlock* g_ProgramBlock;
 
 int Usage()
 {
-	cerr << "Usage: edl [opts] inputfile" << endl;
-	cerr << "Compile edl into llvm source (to stdout) / native object (-o outputobject)" <<endl <<endl;
-	cerr << "-s symbol      prepends symbol to all externally accessable symbols" << endl;
-	cerr << "-o output      emits a native objectfile instead of llvm assembly" << endl;
-	cerr << "-g             generate debug information" << endl;
-	cerr << "-O0            disables optimisations" << endl;
-	cerr << "-O1            enables all but experimental optimisations" << endl;
-	cerr << "-O2            enables O1 plus experimental optimisations" << endl;
-	cerr << "-t             trace on unimplemented instructions" << endl;
-	cerr << "-n             disables disassembly generation" << endl;
-	cerr << "-v             print version" << endl;
-	cerr << "-h --help      print usage" << endl;
+	std::cerr << "Usage: edl [opts] inputfile" << std::endl;
+	std::cerr << "Compile edl into llvm source (to stdout) / native object (-o outputobject)" <<std::endl <<std::endl;
+	std::cerr << "-s symbol      prepends symbol to all externally accessable symbols" << std::endl;
+	std::cerr << "-o output      emits a native objectfile instead of llvm assembly" << std::endl;
+	std::cerr << "-g             generate debug information" << std::endl;
+	std::cerr << "-O0            disables optimisations" << std::endl;
+	std::cerr << "-O1            enables all but experimental optimisations" << std::endl;
+	std::cerr << "-O2            enables O1 plus experimental optimisations" << std::endl;
+	std::cerr << "-t             trace on unimplemented instructions" << std::endl;
+	std::cerr << "-n             disables disassembly generation" << std::endl;
+	std::cerr << "-v             print version" << std::endl;
+	std::cerr << "-h --help      print usage" << std::endl;
 
 	return 0;
 }
@@ -298,7 +297,7 @@ int main(int argc, char **argv)
 			}
 			if (strcmp(argv[a],"-v")==0)
 			{
-				cout << "edl.exe "<<EDL_COMPILER_VERSION<<":"<<EDL_LANGUAGE_VERSION<<endl;
+				std::cout << "edl.exe " << EDL_COMPILER_VERSION << ":" << EDL_LANGUAGE_VERSION << std::endl;
 				return 0;
 			}
 			if (strcmp(argv[a], "-g") == 0)
@@ -341,20 +340,14 @@ int main(int argc, char **argv)
 
 	if (resetFileInput(opts.inputFile) != 0)
 	{
-		cerr << "Unable to open " << opts.inputFile << " for reading." << endl;
+		std::cerr << "Unable to open " << opts.inputFile << " for reading." << std::endl;
 		return 2;
 	}
 	
-	llvm::InitializeAllTargetInfos();
-	llvm::InitializeAllTargets();
-	llvm::InitializeAllTargetMCs();
-	llvm::InitializeAllAsmParsers();
-	llvm::InitializeAllAsmPrinters();
-
 	int lexerError=yyparse();
 	if (lexerError || g_ProgramBlock==0)
 	{
-		cerr << "Error : Unable to parse input" << endl;
+		std::cerr << "Error : Unable to parse input" << std::endl;
 		return 1;
 	}
 	

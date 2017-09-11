@@ -131,15 +131,15 @@ llvm::Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 		std::string idxStateLbl = "IDX" + context.stateLabelStack;
 		std::string stkStateLbl = "STACK" + context.stateLabelStack;
 
-		llvm::GlobalVariable* gcurState = new llvm::GlobalVariable(*context.module, llvm::Type::getIntNTy(TheContext, bitsNeeded), false, llvm::GlobalValue::PrivateLinkage, nullptr, context.symbolPrepend + curStateLbl);
-		llvm::GlobalVariable* gnxtState = new llvm::GlobalVariable(*context.module, llvm::Type::getIntNTy(TheContext, bitsNeeded), false, llvm::GlobalValue::PrivateLinkage, nullptr, context.symbolPrepend + nxtStateLbl);
+		llvm::GlobalVariable* gcurState = new llvm::GlobalVariable(*context.module, context.getIntType(bitsNeeded), false, llvm::GlobalValue::PrivateLinkage, nullptr, context.symbolPrepend + curStateLbl);
+		llvm::GlobalVariable* gnxtState = new llvm::GlobalVariable(*context.module, context.getIntType(bitsNeeded), false, llvm::GlobalValue::PrivateLinkage, nullptr, context.symbolPrepend + nxtStateLbl);
 
 		curState = gcurState;
 		nxtState = gnxtState;
 
-		llvm::ArrayType* ArrayTy_0 = llvm::ArrayType::get(llvm::IntegerType::get(TheContext, bitsNeeded), MAX_SUPPORTED_STACK_DEPTH);
+		llvm::ArrayType* ArrayTy_0 = llvm::ArrayType::get(context.getIntType(bitsNeeded), MAX_SUPPORTED_STACK_DEPTH);
 		llvm::GlobalVariable* stkState = new llvm::GlobalVariable(*context.module, ArrayTy_0, false, llvm::GlobalValue::PrivateLinkage, nullptr, context.symbolPrepend + stkStateLbl);
-		llvm::GlobalVariable *stkStateIdx = new llvm::GlobalVariable(*context.module, llvm::Type::getIntNTy(TheContext, MAX_SUPPORTED_STACK_BITS), false, llvm::GlobalValue::PrivateLinkage, nullptr, context.symbolPrepend + idxStateLbl);
+		llvm::GlobalVariable *stkStateIdx = new llvm::GlobalVariable(*context.module, context.getIntType(MAX_SUPPORTED_STACK_BITS), false, llvm::GlobalValue::PrivateLinkage, nullptr, context.symbolPrepend + idxStateLbl);
 
 		StateVariable newStateVar;
 		newStateVar.currentState = curState;
@@ -152,8 +152,8 @@ llvm::Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 		context.statesAlt()[this] = newStateVar;
 
 		// Constant Definitions
-		llvm::ConstantInt* const_int32_n = llvm::ConstantInt::get(TheContext, llvm::APInt(bitsNeeded, 0, false));
-		llvm::ConstantInt* const_int4_n = llvm::ConstantInt::get(TheContext, llvm::APInt(MAX_SUPPORTED_STACK_BITS, 0, false));
+		llvm::ConstantInt* const_int32_n = context.getConstantZero(bitsNeeded);
+		llvm::ConstantInt* const_int4_n = context.getConstantInt(llvm::APInt(MAX_SUPPORTED_STACK_BITS, 0, false));
 		llvm::ConstantAggregateZero* const_array_n = llvm::ConstantAggregateZero::get(ArrayTy_0);
 
 		// Global Variable Definitions
@@ -187,7 +187,7 @@ llvm::Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 	std::map<std::string, BitVariable> tmp = context.locals();
 
 	// Setup exit from switch statement
-	exitState = llvm::BasicBlock::Create(TheContext, "switchTerm", bb->getParent());
+	exitState = context.makeBasicBlock("switchTerm", bb->getParent());
 	context.setBlock(exitState);
 
 	// Step 1, load next state into current state
@@ -215,7 +215,7 @@ llvm::Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 		for (int b = 0; b < total; b++)
 		{
 			//
-			llvm::ConstantInt* tt = llvm::ConstantInt::get(TheContext, llvm::APInt(bitsNeeded, startIdx + b, false));
+			llvm::ConstantInt* tt = context.getConstantInt(llvm::APInt(bitsNeeded, startIdx + b, false));
 			void_6->addCase(tt, states[a]->entry);
 		}
 		if (!lastStateAutoIncrement)
@@ -230,11 +230,11 @@ llvm::Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 			llvm::ConstantInt* nextState;
 			if (states[a]->autoIncrement)
 			{
-				nextState = llvm::ConstantInt::get(TheContext, llvm::APInt(bitsNeeded, a == states.size() - 1 ? baseStateIdx : startIdx, false));
+				nextState = context.getConstantInt(llvm::APInt(bitsNeeded, a == states.size() - 1 ? baseStateIdx : startIdx, false));
 			}
 			else
 			{
-				nextState = llvm::ConstantInt::get(TheContext, llvm::APInt(bitsNeeded, startOfAutoIncrementIdx, false));
+				nextState = context.getConstantInt(llvm::APInt(bitsNeeded, startOfAutoIncrementIdx, false));
 			}
 			llvm::StoreInst* newState = new llvm::StoreInst(nextState, nxtState, false, states[a]->entry);
 		}

@@ -36,13 +36,13 @@ llvm::Value* CHandlerDeclaration::codeGen(CodeGenContext& context)
 		return nullptr;
 	}
 
-	llvm::FunctionType *ftype = llvm::FunctionType::get(llvm::Type::getVoidTy(TheContext), argTypes, false);
+	llvm::FunctionType *ftype = llvm::FunctionType::get(context.getVoidType(), argTypes, false);
 	llvm::Function* function = llvm::Function::Create(ftype, llvm::GlobalValue::PrivateLinkage, context.moduleName + context.symbolPrepend + "HANDLER." + id.name, context.module);
 	function->setDoesNotThrow();
 
 	context.StartFunctionDebugInfo(function, handlerLoc);
 
-	llvm::BasicBlock *bblock = llvm::BasicBlock::Create(TheContext, "entry", function, 0);
+	llvm::BasicBlock *bblock = context.makeBasicBlock("entry", function);
 
 	context.m_handlers[id.name] = this;
 
@@ -59,7 +59,7 @@ llvm::Value* CHandlerDeclaration::codeGen(CodeGenContext& context)
 
 	context.parentHandler = nullptr;
 
-	llvm::Instruction* I = llvm::ReturnInst::Create(TheContext, context.currentBlock());			/* block may well have changed by time we reach here */
+	llvm::Instruction* I = context.makeReturn(context.currentBlock());
 	if (context.gContext.opts.generateDebug)
 	{
 		I->setDebugLoc(llvm::DebugLoc::get(block.blockEndLoc.first_line, block.blockEndLoc.first_column, context.gContext.scopingStack.top()));

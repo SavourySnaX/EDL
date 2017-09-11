@@ -15,7 +15,7 @@ extern void PrintErrorFromLocation(const YYLTYPE &location, const char *errorstr
 
 llvm::Instruction* CAssignment::generateImpedanceAssignment(BitVariable& to, llvm::Value* assignTo, CodeGenContext& context)
 {
-	llvm::ConstantInt* impedance = llvm::ConstantInt::get(TheContext, ~llvm::APInt(to.size.getLimitedValue(), llvm::StringRef("0"), 10));
+	llvm::ConstantInt* impedance = context.getConstantOnes(to.size.getLimitedValue());
 
 	return new llvm::StoreInst(impedance, assignTo, false, context.currentBlock());
 }
@@ -36,8 +36,8 @@ llvm::Instruction* CAssignment::generateAssignmentActual(BitVariable& to, const 
 	{
 		llvm::Value* exprResult = toIdent.GetExpression()->codeGen(context);
 
-		llvm::Type* ty = llvm::Type::getIntNTy(TheContext, to.arraySize.getLimitedValue());
-		llvm::Type* ty64 = llvm::Type::getIntNTy(TheContext, 64);
+		llvm::Type* ty = context.getIntType(to.arraySize.getLimitedValue());
+		llvm::Type* ty64 = context.getIntType(64);
 		llvm::Instruction::CastOps op = llvm::CastInst::getCastOpcode(exprResult, false, ty, false);
 		llvm::Instruction* truncExt0 = llvm::CastInst::Create(op, exprResult, ty, "cast", context.currentBlock());		// Cast index to 64 bit type
 		llvm::Instruction::CastOps op1 = llvm::CastInst::getCastOpcode(exprResult, false, ty64, false);
@@ -47,7 +47,7 @@ llvm::Instruction* CAssignment::generateAssignmentActual(BitVariable& to, const 
 //		Instruction* truncExt = CastInst::Create(op,exprResult,ty,"cast",context.currentBlock());		// Cast index to 64 bit type
 
 		std::vector<llvm::Value*> indices;
-		llvm::ConstantInt* index0 = llvm::ConstantInt::get(TheContext, llvm::APInt(to.size.getLimitedValue(), llvm::StringRef("0"), 10));
+		llvm::ConstantInt* index0 = context.getConstantZero(to.size.getLimitedValue());
 		indices.push_back(index0);
 		indices.push_back(truncExt);
 		llvm::Instruction* elementPtr = llvm::GetElementPtrInst::Create(nullptr, to.value, indices, "array index", context.currentBlock());
@@ -63,15 +63,15 @@ llvm::Instruction* CAssignment::generateAssignmentActual(BitVariable& to, const 
 	}
 
 	// Handle variable promotion
-	llvm::Type* ty = llvm::Type::getIntNTy(TheContext, to.size.getLimitedValue());
+	llvm::Type* ty = context.getIntType(to.size);
 	llvm::Instruction::CastOps op = llvm::CastInst::getCastOpcode(from, false, ty, false);
 
 	llvm::Instruction* truncExt = llvm::CastInst::Create(op, from, ty, "cast", context.currentBlock());
 
 	// Handle masking and constants and shift
-	llvm::ConstantInt* const_intShift = llvm::ConstantInt::get(TheContext, to.shft);
+	llvm::ConstantInt* const_intShift = context.getConstantInt(to.shft);
 	llvm::BinaryOperator* shiftInst = llvm::BinaryOperator::Create(llvm::Instruction::Shl, truncExt, const_intShift, "Shifting", context.currentBlock());
-	llvm::ConstantInt* const_intMask = llvm::ConstantInt::get(TheContext, to.mask);
+	llvm::ConstantInt* const_intMask = context.getConstantInt(to.mask);
 	llvm::BinaryOperator* andInst = llvm::BinaryOperator::Create(llvm::Instruction::And, shiftInst, const_intMask, "Masking", context.currentBlock());
 
 	// cnst initialiser only used when we are updating the primary register
@@ -79,7 +79,7 @@ llvm::Instruction* CAssignment::generateAssignmentActual(BitVariable& to, const 
 
 	if (to.aliased == false)
 	{
-		llvm::ConstantInt* const_intCnst = llvm::ConstantInt::get(TheContext, to.cnst);
+		llvm::ConstantInt* const_intCnst = context.getConstantInt(to.cnst);
 		llvm::BinaryOperator* orInst = llvm::BinaryOperator::Create(llvm::Instruction::Or, andInst, const_intCnst, "Constants", context.currentBlock());
 		final = orInst;
 	}
@@ -90,15 +90,15 @@ llvm::Instruction* CAssignment::generateAssignmentActual(BitVariable& to, const 
 		{
 			llvm::Value* exprResult = toIdent.GetExpression()->codeGen(context);
 
-			llvm::Type* ty = llvm::Type::getIntNTy(TheContext, to.arraySize.getLimitedValue());
-			llvm::Type* ty64 = llvm::Type::getIntNTy(TheContext, 64);
+			llvm::Type* ty = context.getIntType(to.arraySize);
+			llvm::Type* ty64 = context.getIntType(64);
 			llvm::Instruction::CastOps op = llvm::CastInst::getCastOpcode(exprResult, false, ty, false);
 			llvm::Instruction* truncExt0 = llvm::CastInst::Create(op, exprResult, ty, "cast", context.currentBlock());		// Cast index to 64 bit type
 			llvm::Instruction::CastOps op1 = llvm::CastInst::getCastOpcode(exprResult, false, ty64, false);
 			llvm::Instruction* truncExt = llvm::CastInst::Create(op1, truncExt0, ty64, "cast", context.currentBlock());		// Cast index to 64 bit type
 
 			std::vector<llvm::Value*> indices;
-			llvm::ConstantInt* index0 = llvm::ConstantInt::get(TheContext, llvm::APInt(to.size.getLimitedValue(), llvm::StringRef("0"), 10));
+			llvm::ConstantInt* index0 = context.getConstantZero(to.size.getLimitedValue());
 			indices.push_back(index0);
 			indices.push_back(truncExt);
 			llvm::Instruction* elementPtr = llvm::GetElementPtrInst::Create(nullptr, to.value, indices, "array index", context.currentBlock());
@@ -107,7 +107,7 @@ llvm::Instruction* CAssignment::generateAssignmentActual(BitVariable& to, const 
 		}
 		// Now if the assignment is assigning to an aliased register part, we need to have loaded the original register, masked off the inverse of the section mask, and or'd in the result before we store
 		llvm::LoadInst* loadInst = new llvm::LoadInst(dest, "", false, context.currentBlock());
-		llvm::ConstantInt* const_intInvMask = llvm::ConstantInt::get(TheContext, ~to.mask);
+		llvm::ConstantInt* const_intInvMask = context.getConstantInt(~to.mask);
 		llvm::BinaryOperator* primaryAndInst = llvm::BinaryOperator::Create(llvm::Instruction::And, loadInst, const_intInvMask, "InvMasking", context.currentBlock());
 		final = llvm::BinaryOperator::Create(llvm::Instruction::Or, primaryAndInst, andInst, "Combining", context.currentBlock());
 	}
@@ -140,7 +140,7 @@ llvm::Instruction* CAssignment::generateAssignmentActual(BitVariable& to, const 
 	{
 		if (to.impedance && clearImpedance)	// clear impedance
 		{
-			llvm::ConstantInt* impedance = llvm::ConstantInt::get(TheContext, llvm::APInt(to.size.getLimitedValue(), llvm::StringRef("0"), 10));
+			llvm::ConstantInt* impedance = context.getConstantZero(to.size.getLimitedValue());
 			new llvm::StoreInst(impedance, to.impedance, false, context.currentBlock());
 		}
 		return new llvm::StoreInst(final, assignTo, isVolatile, context.currentBlock());
@@ -231,9 +231,9 @@ llvm::Value* CAssignment::codeGen(CodeGenContext& context, CCastOperator* cast)
 	var.aliased = true;		// We pretend we are assigning to an alias, even if we are not, this forces the compiler to generate the correct code
 
 	llvm::APInt mask(var.size.getLimitedValue(), "0", 10);
-	llvm::APInt start = cast->beg.integer.zextOrTrunc(var.size.getLimitedValue());
-	llvm::APInt loop = cast->beg.integer.zextOrTrunc(var.size.getLimitedValue());
-	llvm::APInt endloop = cast->end.integer.zextOrTrunc(var.size.getLimitedValue());
+	llvm::APInt start = cast->beg.getAPInt().zextOrTrunc(var.size.getLimitedValue());
+	llvm::APInt loop = cast->beg.getAPInt().zextOrTrunc(var.size.getLimitedValue());
+	llvm::APInt endloop = cast->end.getAPInt().zextOrTrunc(var.size.getLimitedValue());
 
 	while (1 == 1)
 	{

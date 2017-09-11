@@ -1,5 +1,7 @@
 #include "yyltype.h"
-#include "ast.h"
+#include "integer.h"
+
+#include "generator.h"	// Todo refactor away
 
 #include <llvm/IR/Constants.h>
 
@@ -49,6 +51,6 @@ CInteger::CInteger(std::string value)
 
 llvm::Value* CInteger::codeGen(CodeGenContext& context)
 {
-	return llvm::ConstantInt::get(TheContext, integer);
+	return context.getConstantInt(integer);
 }
 

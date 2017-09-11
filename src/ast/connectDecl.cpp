@@ -25,9 +25,9 @@ llvm::Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 	llvm::Function* func = nullptr;
 
 	// 1 argument at present, same as the ident - contains a single bit
-	FuncTy_8_args.push_back(llvm::IntegerType::get(TheContext, 1));
+	FuncTy_8_args.push_back(context.getIntType(1));
 
-	FuncTy_8 = llvm::FunctionType::get(llvm::Type::getVoidTy(TheContext), FuncTy_8_args, false);
+	FuncTy_8 = llvm::FunctionType::get(context.getVoidType(), FuncTy_8_args, false);
 
 	func = llvm::Function::Create(FuncTy_8, llvm::GlobalValue::ExternalLinkage, context.moduleName + context.symbolPrepend + ident.name, context.module);
 	func->setCallingConv(llvm::CallingConv::C);
@@ -38,7 +38,7 @@ llvm::Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 	context.m_externFunctions[ident.name] = func;
 	context.gContext.connectFunctions[func] = func;
 
-	llvm::BasicBlock *bblock = llvm::BasicBlock::Create(TheContext, "entry", func, 0);
+	llvm::BasicBlock *bblock = context.makeBasicBlock("entry", func);
 
 	context.pushBlock(bblock, blockStartLoc);
 
@@ -211,7 +211,7 @@ llvm::Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 		for (curBus = 0; curBus < busCount; curBus++)
 		{
 			busOutResult[curBus] = nullptr;
-			busIsDrivingResult[curBus] = llvm::ConstantInt::get(TheContext, llvm::APInt(1, 0));	// 0 for not driving bus
+			busIsDrivingResult[curBus] = context.getConstantZero(1);	// 0 for not driving bus
 
 			for (size_t o = 0; o < outs[curBus].size(); o++)
 			{
@@ -220,7 +220,7 @@ llvm::Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 
 				if (!outs[curBus][o]->IsIdentifierExpression())
 				{
-					busIsDrivingResult[curBus] = llvm::ConstantInt::get(TheContext, llvm::APInt(1, 1));	// complex expression, always a bus driver
+					busIsDrivingResult[curBus] = context.getConstantOnes(1);	// complex expression, always a bus driver
 				}
 				else
 				{
@@ -233,12 +233,12 @@ llvm::Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 
 					if (var.impedance == nullptr)
 					{
-						busIsDrivingResult[curBus] = llvm::ConstantInt::get(TheContext, llvm::APInt(1, 1));	// complex expression, always a bus driver
+						busIsDrivingResult[curBus] = context.getConstantOnes(1);	// complex expression, always a bus driver
 					}
 					else
 					{
 						llvm::Value* fetchDriving = new llvm::LoadInst(var.impedance, "fetchImpedanceForIsolation", false, bblock);
-						fetchDriving = llvm::CmpInst::Create(llvm::Instruction::ICmp, llvm::ICmpInst::ICMP_EQ, fetchDriving, llvm::ConstantInt::get(TheContext, llvm::APInt(var.size.getLimitedValue(), 0)), "isNotImpedance", bblock);
+						fetchDriving = llvm::CmpInst::Create(llvm::Instruction::ICmp, llvm::ICmpInst::ICMP_EQ, fetchDriving, context.getConstantZero(var.size.getLimitedValue()), "isNotImpedance", bblock);
 
 						llvm::Instruction* I = llvm::BinaryOperator::Create(llvm::Instruction::Or, fetchDriving, busIsDrivingResult[curBus], "isDriving", context.currentBlock());
 						if (context.gContext.opts.generateDebug)
@@ -371,29 +371,29 @@ llvm::Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 
 					// Handle decode width promotion
 					llvm::Value* DW = connects[a]->decodeWidth.codeGen(context);
-					llvm::Type* tyDW = llvm::Type::getIntNTy(TheContext, 32);
+					llvm::Type* tyDW = context.getIntType(32);
 					llvm::Instruction::CastOps opDW = llvm::CastInst::getCastOpcode(DW, false, tyDW, false);
 
 					llvm::Instruction* truncExtDW = llvm::CastInst::Create(opDW, DW, tyDW, "cast", context.currentBlock());
 
 
 					// Handle variable promotion
-					llvm::Type* ty = llvm::Type::getIntNTy(TheContext, 32);
+					llvm::Type* ty = context.getIntType(32);
 					llvm::Instruction::CastOps op = llvm::CastInst::getCastOpcode(busOutResult[curBus], false, ty, false);
 
 					llvm::Instruction* truncExt = llvm::CastInst::Create(op, busOutResult[curBus], ty, "cast", context.currentBlock());
-					args.push_back(llvm::ConstantInt::get(TheContext, llvm::APInt(8, var.trueSize.getLimitedValue(), false)));
+					args.push_back(context.getConstantInt(llvm::APInt(8, var.trueSize.getLimitedValue(), false)));
 					args.push_back(truncExt);
 					args.push_back(nameRef);
 					args.push_back(truncExtDW);
-					args.push_back(llvm::ConstantInt::get(TheContext, llvm::APInt(8, a == lastTap ? 1 : 0, false)));
+					args.push_back(context.getConstantInt(llvm::APInt(8, a == lastTap ? 1 : 0, false)));
 					llvm::CallInst *call = llvm::CallInst::Create(context.debugBusTap, args, "", context.currentBlock());
 				}
 			}
 		}
 	}
 
-	llvm::Instruction* I = llvm::ReturnInst::Create(TheContext, context.currentBlock());			/* block may well have changed by time we reach here */
+	llvm::Instruction* I = context.makeReturn(context.currentBlock());
 	if (context.gContext.opts.generateDebug)
 	{
 		I->setDebugLoc(llvm::DebugLoc::get(blockEndLoc.first_line, blockEndLoc.first_column, context.gContext.scopingStack.top()));

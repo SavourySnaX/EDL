@@ -19,8 +19,8 @@ CInteger CVariableDeclaration::notArray("0");
 void CVariableDeclaration::CreateWriteAccessor(CodeGenContext& context, BitVariable& var, const std::string& moduleName, const std::string& name, bool impedance)
 {
 	std::vector<llvm::Type*> argTypes;
-	argTypes.push_back(llvm::IntegerType::get(TheContext, var.size.getLimitedValue()));
-	llvm::FunctionType *ftype = llvm::FunctionType::get(llvm::Type::getVoidTy(TheContext), argTypes, false);
+	argTypes.push_back(context.getIntType(var.size));
+	llvm::FunctionType *ftype = llvm::FunctionType::get(context.getVoidType(), argTypes, false);
 	llvm::Function* function;
 	if (context.isRoot)
 	{
@@ -35,7 +35,7 @@ void CVariableDeclaration::CreateWriteAccessor(CodeGenContext& context, BitVaria
 
 	context.StartFunctionDebugInfo(function, declarationLoc);
 
-	llvm::BasicBlock *bblock = llvm::BasicBlock::Create(TheContext, "entry", function, 0);
+	llvm::BasicBlock *bblock = context.makeBasicBlock("entry", function);
 
 	context.pushBlock(bblock, declarationLoc);
 
@@ -48,7 +48,7 @@ void CVariableDeclaration::CreateWriteAccessor(CodeGenContext& context, BitVaria
 	if (impedance)
 	{
 		llvm::LoadInst* loadImp = new llvm::LoadInst(var.impedance, "", false, bblock);
-		llvm::CmpInst* check = llvm::CmpInst::Create(llvm::Instruction::ICmp, llvm::ICmpInst::ICMP_NE, loadImp, llvm::ConstantInt::get(TheContext, llvm::APInt(var.size.getLimitedValue(), 0)), "impedance", bblock);
+		llvm::CmpInst* check = llvm::CmpInst::Create(llvm::Instruction::ICmp, llvm::ICmpInst::ICMP_NE, loadImp, context.getConstantZero(var.size.getLimitedValue()), "impedance", bblock);
 
 		setVal = llvm::SelectInst::Create(check, setVal, load, "impOrReal", bblock);
 	}
@@ -58,7 +58,7 @@ void CVariableDeclaration::CreateWriteAccessor(CodeGenContext& context, BitVaria
 	var.priorValue = load;
 	var.writeInput = setVal;
 	var.writeAccessor = &writeAccessor;
-	writeAccessor = llvm::ReturnInst::Create(TheContext, bblock);
+	writeAccessor = context.makeReturn(bblock);
 
 	context.popBlock(declarationLoc);
 
@@ -68,7 +68,7 @@ void CVariableDeclaration::CreateWriteAccessor(CodeGenContext& context, BitVaria
 void CVariableDeclaration::CreateReadAccessor(CodeGenContext& context, BitVariable& var, bool impedance)
 {
 	std::vector<llvm::Type*> argTypes;
-	llvm::FunctionType *ftype = llvm::FunctionType::get(llvm::IntegerType::get(TheContext, var.size.getLimitedValue()), argTypes, false);
+	llvm::FunctionType *ftype = llvm::FunctionType::get(context.getIntType(var.size), argTypes, false);
 	llvm::Function* function;
 	if (context.isRoot)
 	{
@@ -83,7 +83,7 @@ void CVariableDeclaration::CreateReadAccessor(CodeGenContext& context, BitVariab
 
 	context.StartFunctionDebugInfo(function, declarationLoc);
 
-	llvm::BasicBlock *bblock = llvm::BasicBlock::Create(TheContext, "entry", function, 0);
+	llvm::BasicBlock *bblock = context.makeBasicBlock("entry", function);
 
 	context.pushBlock(bblock, declarationLoc);
 
@@ -91,12 +91,12 @@ void CVariableDeclaration::CreateReadAccessor(CodeGenContext& context, BitVariab
 	if (impedance)
 	{
 		llvm::LoadInst* loadImp = new llvm::LoadInst(var.impedance, "", false, bblock);
-		llvm::CmpInst* check = llvm::CmpInst::Create(llvm::Instruction::ICmp, llvm::ICmpInst::ICMP_EQ, loadImp, llvm::ConstantInt::get(TheContext, llvm::APInt(var.size.getLimitedValue(), 0)), "impedance", bblock);
+		llvm::CmpInst* check = llvm::CmpInst::Create(llvm::Instruction::ICmp, llvm::ICmpInst::ICMP_EQ, loadImp, context.getConstantZero(var.size.getLimitedValue()), "impedance", bblock);
 
 		load = llvm::SelectInst::Create(check, load, loadImp, "impOrReal", bblock);
 	}
 
-	llvm::ReturnInst::Create(TheContext, load, bblock);
+	context.makeReturnValue(load, bblock);
 
 	context.popBlock(declarationLoc);
 
@@ -110,9 +110,9 @@ void CVariableDeclaration::prePass(CodeGenContext& context)
 
 llvm::Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 {
-	BitVariable temp(size.integer, 0);
+	BitVariable temp(size.getAPInt(), 0);
 
-	temp.arraySize = arraySize.integer;
+	temp.arraySize = arraySize.getAPInt();
 	temp.pinType = pinType;
 
 	if (context.currentBlock())
@@ -124,7 +124,7 @@ llvm::Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 			return nullptr;
 		}
 		// Within a basic block - so must be a stack variable
-		llvm::AllocaInst *alloc = new llvm::AllocaInst(llvm::Type::getIntNTy(TheContext, size.integer.getLimitedValue()), 0, id.name.c_str(), context.currentBlock());
+		llvm::AllocaInst *alloc = new llvm::AllocaInst(context.getIntType(size), 0, id.name.c_str(), context.currentBlock());
 		temp.value = alloc;
 	}
 	else
@@ -133,15 +133,15 @@ llvm::Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 		// Rules for globals have changed. If we are definining a PIN then the variable should be private to this module, and accessors should be created instead. 
 		if (pinType == 0)
 		{
-			llvm::Type* type = llvm::Type::getIntNTy(TheContext, size.integer.getLimitedValue());
-			if (arraySize.integer.getLimitedValue())
+			llvm::Type* type = context.getIntType(size);
+			if (arraySize.getAPInt().getLimitedValue())
 			{
-				llvm::APInt power2(arraySize.integer.getLimitedValue() + 1, 1);
-				power2 <<= arraySize.integer.getLimitedValue();
-				type = llvm::ArrayType::get(llvm::Type::getIntNTy(TheContext, size.integer.getLimitedValue()), power2.getLimitedValue());
+				llvm::APInt power2(arraySize.getAPInt().getLimitedValue() + 1, 1);
+				power2 <<= arraySize.getAPInt().getLimitedValue();
+				type = llvm::ArrayType::get(context.getIntType(size), power2.getLimitedValue());
 			}
 
-			if (internal /*|| !context.isRoot*/)
+			if (internal)
 			{
 				temp.value = new llvm::GlobalVariable(*context.module, type, false, llvm::GlobalValue::PrivateLinkage, nullptr, context.symbolPrepend + id.name);
 			}
@@ -152,7 +152,7 @@ llvm::Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 		}
 		else
 		{
-			temp.value = new llvm::GlobalVariable(*context.module, llvm::Type::getIntNTy(TheContext, size.integer.getLimitedValue()), false, llvm::GlobalValue::PrivateLinkage, nullptr, context.symbolPrepend + id.name);
+			temp.value = new llvm::GlobalVariable(*context.module, context.getIntType(size), false, llvm::GlobalValue::PrivateLinkage, nullptr, context.symbolPrepend + id.name);
 			switch (pinType)
 			{
 			case TOK_IN:
@@ -167,7 +167,7 @@ llvm::Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 				bool needsImpedance = false;
 				if (context.gContext.impedanceRequired.find(context.moduleName + context.symbolPrepend + id.name) != context.gContext.impedanceRequired.end())
 				{
-					temp.impedance = new llvm::GlobalVariable(*context.module, llvm::Type::getIntNTy(TheContext, size.integer.getLimitedValue()), false, llvm::GlobalValue::PrivateLinkage, nullptr, context.symbolPrepend + id.name + ".HZ");
+					temp.impedance = new llvm::GlobalVariable(*context.module, context.getIntType(size), false, llvm::GlobalValue::PrivateLinkage, nullptr, context.symbolPrepend + id.name + ".HZ");
 					needsImpedance = true;
 				}
 				CreateWriteAccessor(context, temp, id.module, id.name, needsImpedance);
@@ -182,25 +182,25 @@ llvm::Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 
 	}
 
-	llvm::APInt bitPos = size.integer - 1;
+	llvm::APInt bitPos = size.getAPInt() - 1;
 	for (int a = 0; a < aliases.size(); a++)
 	{
 		if (aliases[a]->idOrEmpty.name.size() < 1)
 		{
 			// For constants we need to update the mask and cnst values (we also need to set the initialiser properly - that will come later)
 
-			llvm::APInt newMask = ~llvm::APInt(aliases[a]->sizeOrValue.integer.getBitWidth(), 0);
-			llvm::APInt newCnst = aliases[a]->sizeOrValue.integer;
+			llvm::APInt newMask = ~llvm::APInt(aliases[a]->sizeOrValue.getAPInt().getBitWidth(), 0);
+			llvm::APInt newCnst = aliases[a]->sizeOrValue.getAPInt();
 
-			bitPos -= llvm::APInt(bitPos.getBitWidth(), aliases[a]->sizeOrValue.integer.getBitWidth() - 1);
+			bitPos -= llvm::APInt(bitPos.getBitWidth(), aliases[a]->sizeOrValue.getAPInt().getBitWidth() - 1);
 
-			if (newMask.getBitWidth() != size.integer.getLimitedValue())
+			if (newMask.getBitWidth() != size.getAPInt().getLimitedValue())
 			{
-				newMask = newMask.zext(size.integer.getLimitedValue());
+				newMask = newMask.zext(size.getAPInt().getLimitedValue());
 			}
-			if (newCnst.getBitWidth() != size.integer.getLimitedValue())
+			if (newCnst.getBitWidth() != size.getAPInt().getLimitedValue())
 			{
-				newCnst = newCnst.zext(size.integer.getLimitedValue());
+				newCnst = newCnst.zext(size.getAPInt().getLimitedValue());
 			}
 			newCnst <<= bitPos.getLimitedValue();
 			newMask <<= bitPos.getLimitedValue();
@@ -215,12 +215,12 @@ llvm::Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 			// e.g. BOB[4] ALIAS CAT[2]:%01
 			// would create CAT with a shift of 2 a mask of %1100 (cnst will always be 0 for these)
 
-			bitPos -= llvm::APInt(bitPos.getBitWidth(), aliases[a]->sizeOrValue.integer.getLimitedValue() - 1);
+			bitPos -= llvm::APInt(bitPos.getBitWidth(), aliases[a]->sizeOrValue.getAPInt().getLimitedValue() - 1);
 
 			BitVariable alias;
 			alias.arraySize = temp.arraySize;
 			alias.size = temp.size;
-			alias.trueSize = aliases[a]->sizeOrValue.integer;
+			alias.trueSize = aliases[a]->sizeOrValue.getAPInt();
 			alias.value = temp.value;	// the value will always point at the stored local/global
 			alias.cnst = temp.cnst;		// ignored
 			alias.mappingRef = false;
@@ -231,15 +231,15 @@ llvm::Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 			alias.fromExternal = false;
 			alias.impedance = nullptr;
 
-			llvm::APInt newMask = ~llvm::APInt(aliases[a]->sizeOrValue.integer.getLimitedValue(), 0);
-			if (newMask.getBitWidth() != size.integer.getLimitedValue())
+			llvm::APInt newMask = ~llvm::APInt(aliases[a]->sizeOrValue.getAPInt().getLimitedValue(), 0);
+			if (newMask.getBitWidth() != size.getAPInt().getLimitedValue())
 			{
-				newMask = newMask.zext(size.integer.getLimitedValue());
+				newMask = newMask.zext(size.getAPInt().getLimitedValue());
 			}
 			newMask <<= bitPos.getLimitedValue();
 			alias.mask = newMask;		// need to generate correct mask
 
-			alias.shft = llvm::APInt(size.integer.getLimitedValue(), bitPos.getLimitedValue());
+			alias.shft = llvm::APInt(size.getAPInt().getLimitedValue(), bitPos.getLimitedValue());
 			alias.aliased = true;
 
 			if (context.currentBlock())
@@ -255,7 +255,7 @@ llvm::Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 		}
 	}
 
-	llvm::ConstantInt* const_intn_0 = llvm::ConstantInt::get(TheContext, temp.cnst);
+	llvm::ConstantInt* const_intn_0 = context.getConstantInt(temp.cnst);
 	if (context.currentBlock())
 	{
 		// Initialiser Definitions for local scope (arrays are not supported at present)
@@ -273,14 +273,14 @@ llvm::Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 				return nullptr;
 			}
 
-			llvm::APInt t = initialiserList[0]->integer;
+			llvm::APInt t = initialiserList[0]->getAPInt();
 
-			if (t.getBitWidth() != size.integer.getLimitedValue())
+			if (t.getBitWidth() != size.getAPInt().getLimitedValue())
 			{
-				t = t.zext(size.integer.getLimitedValue());
+				t = t.zext(size.getAPInt().getLimitedValue());
 			}
 
-			llvm::ConstantInt* constInit = llvm::ConstantInt::get(TheContext, t);
+			llvm::ConstantInt* constInit = context.getConstantInt(t);
 
 			llvm::StoreInst* stor = new llvm::StoreInst(constInit, temp.value, false, context.currentBlock());
 		}
@@ -291,12 +291,12 @@ llvm::Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 		// Initialiser Definitions for global scope
 		if (temp.arraySize.getLimitedValue())
 		{
-			llvm::APInt power2(arraySize.integer.getLimitedValue() + 1, 1);
-			power2 <<= arraySize.integer.getLimitedValue();
+			llvm::APInt power2(arraySize.getAPInt().getLimitedValue() + 1, 1);
+			power2 <<= arraySize.getAPInt().getLimitedValue();
 
 			if (initialiserList.empty())
 			{
-				llvm::ConstantAggregateZero* const_array_7 = llvm::ConstantAggregateZero::get(llvm::ArrayType::get(llvm::Type::getIntNTy(TheContext, size.integer.getLimitedValue()), power2.getLimitedValue()));
+				llvm::ConstantAggregateZero* const_array_7 = llvm::ConstantAggregateZero::get(llvm::ArrayType::get(context.getIntType(size), power2.getLimitedValue()));
 				llvm::cast<llvm::GlobalVariable>(temp.value)->setInitializer(const_array_7);
 			}
 			else
@@ -310,21 +310,21 @@ llvm::Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 
 				int a;
 				std::vector<llvm::Constant*> const_array_9_elems;
-				llvm::ArrayType* arrayTy = llvm::ArrayType::get(llvm::Type::getIntNTy(TheContext, size.integer.getLimitedValue()), power2.getLimitedValue());
-				llvm::ConstantInt* const0 = llvm::ConstantInt::get(TheContext, llvm::APInt(size.integer.getLimitedValue(), 0));
+				llvm::ArrayType* arrayTy = llvm::ArrayType::get(context.getIntType(size), power2.getLimitedValue());
+				llvm::ConstantInt* const0 = context.getConstantZero(size.getAPInt().getLimitedValue());
 
 				for (a = 0; a < power2.getLimitedValue(); a++)
 				{
 					if (a < initialiserList.size())
 					{
-						llvm::APInt t = initialiserList[a]->integer;
+						llvm::APInt t = initialiserList[a]->getAPInt();
 
-						if (t.getBitWidth() != size.integer.getLimitedValue())
+						if (t.getBitWidth() != size.getAPInt().getLimitedValue())
 						{
-							t = t.zext(size.integer.getLimitedValue());
+							t = t.zext(size.getAPInt().getLimitedValue());
 						}
 
-						const_array_9_elems.push_back(llvm::ConstantInt::get(TheContext, t));
+						const_array_9_elems.push_back(context.getConstantInt(t));
 					}
 					else
 					{
@@ -355,14 +355,14 @@ llvm::Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 					return nullptr;
 				}
 
-				llvm::APInt t = initialiserList[0]->integer;
+				llvm::APInt t = initialiserList[0]->getAPInt();
 
-				if (t.getBitWidth() != size.integer.getLimitedValue())
+				if (t.getBitWidth() != size.getAPInt().getLimitedValue())
 				{
-					t = t.zext(size.integer.getLimitedValue());
+					t = t.zext(size.getAPInt().getLimitedValue());
 				}
 
-				llvm::ConstantInt* constInit = llvm::ConstantInt::get(TheContext, t);
+				llvm::ConstantInt* constInit = context.getConstantInt(t);
 				llvm::cast<llvm::GlobalVariable>(temp.value)->setInitializer(constInit);
 			}
 		}

@@ -9,11 +9,11 @@
 
 void COperandIdent::DeclareLocal(CodeGenContext& context, unsigned num)
 {
-	BitVariable newLocal(size.integer, num);
+	BitVariable newLocal(size.getAPInt(), num);
 
-	newLocal.value = new llvm::AllocaInst(llvm::Type::getIntNTy(TheContext, size.integer.getLimitedValue()), 0, ident.name.c_str(), context.currentBlock());
+	newLocal.value = new llvm::AllocaInst(context.getIntType(size), 0, ident.name.c_str(), context.currentBlock());
 
-	llvm::ConstantInt* initialConstant = llvm::ConstantInt::get(TheContext, newLocal.cnst);
+	llvm::ConstantInt* initialConstant = context.getConstantInt(newLocal.cnst);
 	llvm::StoreInst* stor = new llvm::StoreInst(initialConstant, newLocal.value, false, context.currentBlock());
 
 	context.locals()[ident.name] = newLocal;

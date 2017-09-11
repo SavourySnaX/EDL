@@ -1,6 +1,8 @@
 #include "yyltype.h"
 #include "ast.h"
 
+#include "generator.h"	// Todo refactor away
+
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/Value.h>
 
@@ -28,8 +30,8 @@ bool CStateDeclaration::FindStateIdx(CStatesDeclaration* find, int& idx) const
 
 llvm::Value* CStateDeclaration::codeGen(CodeGenContext& context, llvm::Function* parent)
 {
-	entry = llvm::BasicBlock::Create(TheContext, id.name + "entry", parent);
-	exit = llvm::BasicBlock::Create(TheContext, id.name + "exit", parent);
+	entry = context.makeBasicBlock(id.name + "entry", parent);
+	exit = context.makeBasicBlock(id.name + "exit", parent);
 
 	return nullptr;
 }

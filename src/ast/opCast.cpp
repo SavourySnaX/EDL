@@ -33,9 +33,9 @@ llvm::Value* CCastOperator::codeGen(CodeGenContext& context)
 			const llvm::IntegerType* leftType = llvm::cast<llvm::IntegerType>(left->getType());
 
 			llvm::APInt mask(leftType->getBitWidth(), "0", 10);
-			llvm::APInt start = beg.integer.zextOrTrunc(leftType->getBitWidth());
+			llvm::APInt start = beg.getAPInt().zextOrTrunc(leftType->getBitWidth());
 			llvm::APInt loop = start;
-			llvm::APInt endloop = end.integer.zextOrTrunc(leftType->getBitWidth());
+			llvm::APInt endloop = end.getAPInt().zextOrTrunc(leftType->getBitWidth());
 
 			while (1 == 1)
 			{
@@ -45,8 +45,8 @@ llvm::Value* CCastOperator::codeGen(CodeGenContext& context)
 				loop++;
 			}
 
-			llvm::Value *masked = llvm::BinaryOperator::Create(llvm::Instruction::And, left, llvm::ConstantInt::get(TheContext, mask), "castMask", context.currentBlock());
-			llvm::Value *shifted = llvm::BinaryOperator::Create(llvm::Instruction::LShr, masked, llvm::ConstantInt::get(TheContext, start), "castShift", context.currentBlock());
+			llvm::Value *masked = llvm::BinaryOperator::Create(llvm::Instruction::And, left, context.getConstantInt(mask), "castMask", context.currentBlock());
+			llvm::Value *shifted = llvm::BinaryOperator::Create(llvm::Instruction::LShr, masked, context.getConstantInt(start), "castShift", context.currentBlock());
 
 			// Final step cast it to correct size - not actually required, will be handled by expr lowering/raising anyway
 			return shifted;

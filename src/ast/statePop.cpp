@@ -40,11 +40,11 @@ llvm::Value* CStatePop::codeGen(CodeGenContext& context)
 
 	// We need to pop from our stack and put next back
 	llvm::Value* index = new llvm::LoadInst(topState.stateStackIndex, "stackIndex", false, context.currentBlock());
-	llvm::Value* dec = llvm::BinaryOperator::Create(llvm::Instruction::Sub, index, llvm::ConstantInt::get(TheContext, llvm::APInt(MAX_SUPPORTED_STACK_BITS, 1)), "decrementIndex", context.currentBlock());
+	llvm::Value* dec = llvm::BinaryOperator::Create(llvm::Instruction::Sub, index, context.getConstantInt(llvm::APInt(MAX_SUPPORTED_STACK_BITS, 1)), "decrementIndex", context.currentBlock());
 	new llvm::StoreInst(dec, topState.stateStackIndex, false, context.currentBlock());	// store new stack index
 
 	std::vector<llvm::Value*> indices;
-	llvm::ConstantInt* const_intn = llvm::ConstantInt::get(TheContext, llvm::APInt(bitsNeeded, llvm::StringRef("0"), 10));
+	llvm::ConstantInt* const_intn = context.getConstantZero(bitsNeeded);
 	indices.push_back(const_intn);
 	indices.push_back(dec);
 	llvm::Value* ref = llvm::GetElementPtrInst::Create(nullptr, topState.stateStackNext, indices, "stackPos", context.currentBlock());

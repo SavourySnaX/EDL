@@ -50,7 +50,7 @@ llvm::Value* CRotationOperator::codeGen(CodeGenContext& context)
 		llvm::Instruction::CastOps oprotby = llvm::CastInst::getCastOpcode(rotBy, false, toShiftType, false);
 		llvm::Value *rotByCast = llvm::CastInst::Create(oprotby, rotBy, toShiftType, "cast", context.currentBlock());
 
-		llvm::Value *amountToShift = llvm::BinaryOperator::Create(llvm::Instruction::Sub, llvm::ConstantInt::get(TheContext, llvm::APInt(toShiftType->getBitWidth(), toShiftType->getBitWidth())), rotByCast, "shiftAmount", context.currentBlock());
+		llvm::Value *amountToShift = llvm::BinaryOperator::Create(llvm::Instruction::Sub, context.getConstantInt(llvm::APInt(toShiftType->getBitWidth(), toShiftType->getBitWidth())), rotByCast, "shiftAmount", context.currentBlock());
 
 		llvm::Value *shiftedDown = llvm::BinaryOperator::Create(llvm::Instruction::LShr, toShift, amountToShift, "carryOutShift", context.currentBlock());
 
@@ -71,11 +71,11 @@ llvm::Value* CRotationOperator::codeGen(CodeGenContext& context)
 		llvm::Instruction::CastOps oprotby = llvm::CastInst::getCastOpcode(rotBy, false, toShiftType, false);
 		llvm::Value *rotByCast = llvm::CastInst::Create(oprotby, rotBy, toShiftType, "cast", context.currentBlock());
 
-		llvm::Value *amountToShift = llvm::BinaryOperator::Create(llvm::Instruction::Sub, llvm::ConstantInt::get(TheContext, llvm::APInt(toShiftType->getBitWidth(), toShiftType->getBitWidth())), rotByCast, "shiftAmount", context.currentBlock());
+		llvm::Value *amountToShift = llvm::BinaryOperator::Create(llvm::Instruction::Sub, context.getConstantInt(llvm::APInt(toShiftType->getBitWidth(), toShiftType->getBitWidth())), rotByCast, "shiftAmount", context.currentBlock());
 
 		llvm::APInt downMaskc(toShiftType->getBitWidth(), 0);
 		downMaskc = ~downMaskc;
-		llvm::Value *downMask = llvm::BinaryOperator::Create(llvm::Instruction::LShr, llvm::ConstantInt::get(TheContext, downMaskc), amountToShift, "downmask", context.currentBlock());
+		llvm::Value *downMask = llvm::BinaryOperator::Create(llvm::Instruction::LShr, context.getConstantInt(downMaskc), amountToShift, "downmask", context.currentBlock());
 
 		llvm::Value *maskedDown = llvm::BinaryOperator::Create(llvm::Instruction::And, toShift, downMask, "carryOutMask", context.currentBlock());
 

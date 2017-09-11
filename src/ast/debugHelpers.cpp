@@ -14,7 +14,7 @@ llvm::Value* CDebugTraceString::codeGen(CodeGenContext& context)
 	{
 		std::vector<llvm::Value*> args;
 
-		args.push_back(llvm::ConstantInt::get(TheContext, llvm::APInt(32, string.quoted[a])));
+		args.push_back(context.getConstantInt(llvm::APInt(32, string.quoted[a])));
 		llvm::CallInst *call = llvm::CallInst::Create(context.debugTraceChar, args, "DEBUGTRACE", context.currentBlock());
 	}
 	return nullptr;
@@ -24,7 +24,7 @@ llvm::Value* CDebugTraceInteger::codeGen(CodeGenContext& context)
 {
 	static char tbl[37] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 	llvm::CallInst* fcall = nullptr;
-	unsigned bitWidth = integer.integer.getBitWidth();
+	unsigned bitWidth = integer.getAPInt().getBitWidth();
 	// compute max divisor for associated base and bit width
 	int cnt = 1;
 
@@ -44,16 +44,17 @@ llvm::Value* CDebugTraceInteger::codeGen(CodeGenContext& context)
 		baseDivisor = llvm::APInt(bitWidth, 1);
 	}
 
+	llvm::APInt tempInteger = integer.getAPInt();
 	for (unsigned a = 0; a < cnt; a++)
 	{
 		std::vector<llvm::Value*> args;
 
-		llvm::APInt tmp = integer.integer.udiv(baseDivisor);
+		llvm::APInt tmp = tempInteger.udiv(baseDivisor);
 
-		args.push_back(llvm::ConstantInt::get(TheContext, llvm::APInt(32, tbl[tmp.getLimitedValue()])));
+		args.push_back(context.getConstantInt(llvm::APInt(32, tbl[tmp.getLimitedValue()])));
 		llvm::CallInst *call = llvm::CallInst::Create(context.debugTraceChar, args, "DEBUGTRACE", context.currentBlock());
 
-		integer.integer -= tmp*baseDivisor;
+		tempInteger -= tmp*baseDivisor;
 		if (cnt != 1)
 		{
 			baseDivisor = baseDivisor.udiv(llvm::APInt(bitWidth, currentBase));
@@ -91,17 +92,17 @@ llvm::Value* CDebugTraceIdentifier::generate(CodeGenContext& context, llvm::Valu
 	{
 		std::vector<llvm::Value*> args;
 
-		llvm::ConstantInt* const_intDiv = llvm::ConstantInt::get(TheContext, baseDivisor);
+		llvm::ConstantInt* const_intDiv = context.getConstantInt(baseDivisor);
 		llvm::BinaryOperator* shiftInst = llvm::BinaryOperator::Create(llvm::Instruction::UDiv, loadedValue, const_intDiv, "Dividing", context.currentBlock());
 
-		llvm::Type* ty = llvm::Type::getIntNTy(TheContext, 32);
+		llvm::Type* ty = context.getIntType(32);
 		llvm::Instruction::CastOps op = llvm::CastInst::getCastOpcode(shiftInst, false, ty, false);
 		llvm::Instruction* readyToAdd = llvm::CastInst::Create(op, shiftInst, ty, "cast", context.currentBlock());
 
-		llvm::CmpInst* check = llvm::CmpInst::Create(llvm::Instruction::ICmp, llvm::ICmpInst::ICMP_ULE, readyToAdd, llvm::ConstantInt::get(TheContext, llvm::APInt(32, 9)), "rangeCheck", context.currentBlock());
+		llvm::CmpInst* check = llvm::CmpInst::Create(llvm::Instruction::ICmp, llvm::ICmpInst::ICMP_ULE, readyToAdd, context.getConstantInt(llvm::APInt(32, 9)), "rangeCheck", context.currentBlock());
 
-		llvm::BinaryOperator* lowAdd = llvm::BinaryOperator::Create(llvm::Instruction::Add, readyToAdd, llvm::ConstantInt::get(TheContext, llvm::APInt(32, '0')), "lowAdd", context.currentBlock());
-		llvm::BinaryOperator* hiAdd = llvm::BinaryOperator::Create(llvm::Instruction::Add, readyToAdd, llvm::ConstantInt::get(TheContext, llvm::APInt(32, 'A' - 10)), "hiAdd", context.currentBlock());
+		llvm::BinaryOperator* lowAdd = llvm::BinaryOperator::Create(llvm::Instruction::Add, readyToAdd, context.getConstantInt(llvm::APInt(32, '0')), "lowAdd", context.currentBlock());
+		llvm::BinaryOperator* hiAdd = llvm::BinaryOperator::Create(llvm::Instruction::Add, readyToAdd, context.getConstantInt(llvm::APInt(32, 'A' - 10)), "hiAdd", context.currentBlock());
 
 		llvm::SelectInst *select = llvm::SelectInst::Create(check, lowAdd, hiAdd, "getRightChar", context.currentBlock());
 
@@ -143,7 +144,7 @@ llvm::Value* CDebugTraceIdentifier::codeGen(CodeGenContext& context)
 		llvm::Value* ret = generate(context, loadedValue);
 
 		std::vector<llvm::Value*> args;
-		args.push_back(llvm::ConstantInt::get(TheContext, llvm::APInt(32, ')')));
+		args.push_back(context.getConstantInt(llvm::APInt(32, ')')));
 		llvm::CallInst::Create(context.debugTraceChar, args, "DEBUGTRACE", context.currentBlock());
 
 		return ret;
@@ -173,13 +174,13 @@ llvm::Value* CDebugTraceIdentifier::codeGen(CodeGenContext& context)
 			if (a != power2.getLimitedValue() - 1)
 			{
 				std::vector<llvm::Value*> args;
-				args.push_back(llvm::ConstantInt::get(TheContext, llvm::APInt(32, ',')));
+				args.push_back(context.getConstantInt(llvm::APInt(32, ',')));
 				llvm::CallInst::Create(context.debugTraceChar, args, "DEBUGTRACE", context.currentBlock());
 			}
 		}
 
 		std::vector<llvm::Value*> args;
-		args.push_back(llvm::ConstantInt::get(TheContext, llvm::APInt(32, ')')));
+		args.push_back(context.getConstantInt(llvm::APInt(32, ')')));
 		llvm::CallInst::Create(context.debugTraceChar, args, "DEBUGTRACE", context.currentBlock());
 	}
 
@@ -191,8 +192,8 @@ llvm::Value* CDebugLine::codeGen(CodeGenContext& context)		// Refactored away on
 {
 	int currentBase = 2;
 
-	llvm::BasicBlock *trac = llvm::BasicBlock::Create(TheContext, "debug_trace_helper", context.currentBlock()->getParent());
-	llvm::BasicBlock *cont = llvm::BasicBlock::Create(TheContext, "continue", context.currentBlock()->getParent());
+	llvm::BasicBlock *trac = context.makeBasicBlock("debug_trace_helper", context.currentBlock()->getParent());
+	llvm::BasicBlock *cont = context.makeBasicBlock("continue", context.currentBlock()->getParent());
 
 	llvm::BranchInst::Create(trac, context.currentBlock());
 
@@ -202,7 +203,7 @@ llvm::Value* CDebugLine::codeGen(CodeGenContext& context)		// Refactored away on
 	{
 		if (debug[a]->isModifier())
 		{
-			currentBase = ((CDebugTraceBase*)debug[a])->integer.integer.getLimitedValue();
+			currentBase = ((CDebugTraceBase*)debug[a])->integer.getAPInt().getLimitedValue();
 		}
 		else
 		{
@@ -212,7 +213,7 @@ llvm::Value* CDebugLine::codeGen(CodeGenContext& context)		// Refactored away on
 	}
 
 	std::vector<llvm::Value*> args;
-	args.push_back(llvm::ConstantInt::get(TheContext, llvm::APInt(32, '\n')));
+	args.push_back(context.getConstantInt(llvm::APInt(32, '\n')));
 	llvm::CallInst* fcall = llvm::CallInst::Create(context.debugTraceChar, args, "DEBUGTRACE", context.currentBlock());
 
 	llvm::BranchInst::Create(cont, context.currentBlock());

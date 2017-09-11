@@ -15,7 +15,6 @@
 const size_t PATH_DEFAULT_LEN=2048;
 
 CIdentifier CAliasDeclaration::empty("");
-llvm::LLVMContext TheContext;
 
 extern YYLTYPE CombineTokenLocations(const YYLTYPE &a, const YYLTYPE &b);
 extern void PrintErrorWholeLine(const YYLTYPE &location, const char *errorstring, ...);
@@ -76,7 +75,7 @@ CodeGenContext::CodeGenContext(GlobalContext& globalContext,CodeGenContext* pare
 	if (!parent) 
 	{ 
 		std::string err;
-		std::unique_ptr<llvm::Module> Owner = llvm::make_unique<llvm::Module>("root", TheContext);
+		std::unique_ptr<llvm::Module> Owner = llvm::make_unique<llvm::Module>("root", gContext.getLLVMContext());
 		module = Owner.get();
 		dbgBuilder = new llvm::DIBuilder(*module);
 		ee = llvm::EngineBuilder(std::move(Owner)).setErrorStr(&err).setMCJITMemoryManager(llvm::make_unique<llvm::SectionMemoryManager>()).create();
@@ -184,12 +183,12 @@ void CodeGenContext::GenerateDisassmTables()
 		llvm::APInt tableSize32=tableSize.zextOrTrunc(32);
 		// Create a global variable to indicate the max size of the table
 
-		llvm::GlobalVariable* gvar_int32_DIS_max = new llvm::GlobalVariable(*module, llvm::IntegerType::get(TheContext, 32),true,llvm::GlobalValue::ExternalLinkage,nullptr,symbolPrepend+"DIS_max_"+tableIter->first);
-		llvm::ConstantInt* const_int32_1 = llvm::ConstantInt::get(TheContext, tableSize32+1);
+		llvm::GlobalVariable* gvar_int32_DIS_max = new llvm::GlobalVariable(*module, getIntType(32),true,llvm::GlobalValue::ExternalLinkage,nullptr,symbolPrepend+"DIS_max_"+tableIter->first);
+		llvm::ConstantInt* const_int32_1 = getConstantInt(tableSize32+1);
 		gvar_int32_DIS_max->setInitializer(const_int32_1);
 
 		// Create a global array to hold the table
-		llvm::PointerType* PointerTy_5 = llvm::PointerType::get(llvm::IntegerType::get(TheContext, 8), 0);
+		llvm::PointerType* PointerTy_5 = llvm::PointerType::get(getIntType(8), 0);
        	llvm::ArrayType* ArrayTy_4 = llvm::ArrayType::get(PointerTy_5, tableSize.getLimitedValue()+1);
 		llvm::ConstantPointerNull* const_ptr_13 = llvm::ConstantPointerNull::get(PointerTy_5);	
 		llvm::GlobalVariable* gvar_array_table = new llvm::GlobalVariable(*module,ArrayTy_4,true,llvm::GlobalValue::ExternalLinkage,nullptr, symbolPrepend+"DIS_"+tableIter->first);
@@ -202,13 +201,13 @@ void CodeGenContext::GenerateDisassmTables()
 		{
 			if (CompareEquals(slot->first,trackingSlot))
 			{
-				llvm::ArrayType* ArrayTy_0 = llvm::ArrayType::get(llvm::IntegerType::get(TheContext, 8), slot->second.length()-1);
+				llvm::ArrayType* ArrayTy_0 = llvm::ArrayType::get(getIntType(8), slot->second.length()-1);
 				llvm::GlobalVariable* gvar_array__str = new llvm::GlobalVariable(*module, ArrayTy_0,true,llvm::GlobalValue::PrivateLinkage,0,symbolPrepend+".str"+trackingSlot.toString(16,false));
 				gvar_array__str->setAlignment(1);
   
-				llvm::Constant* const_array_9 = llvm::ConstantDataArray::getString(TheContext, slot->second.substr(1,slot->second.length()-2), true);
+				llvm::Constant* const_array_9 = getString(slot->second);
 				std::vector<llvm::Constant*> const_ptr_12_indices;
-				llvm::ConstantInt* const_int64_13 = llvm::ConstantInt::get(TheContext, llvm::APInt(64, llvm::StringRef("0"), 10));
+				llvm::ConstantInt* const_int64_13 = getConstantZero(64);
 				const_ptr_12_indices.push_back(const_int64_13);
 				const_ptr_12_indices.push_back(const_int64_13);
 				llvm::Constant* const_ptr_12 = llvm::ConstantExpr::getGetElementPtr(nullptr,gvar_array__str, const_ptr_12_indices);
@@ -258,18 +257,18 @@ void CodeGenContext::generateCode(CBlock& root)
 			module->addModuleFlag(llvm::Module::Warning, "Debug Info Version", llvm::DEBUG_METADATA_VERSION);
 		}
 
-		llvm::PointerType* PointerTy_4 = llvm::PointerType::get(llvm::IntegerType::get(TheContext, 8), 0);
+		llvm::PointerType* PointerTy_4 = llvm::PointerType::get(getIntType(8), 0);
 
 		std::vector<llvm::Type*>FuncTy_8_args;
 		FuncTy_8_args.push_back(PointerTy_4);
-		llvm::FunctionType* FuncTy_8 = llvm::FunctionType::get(/*Result=*/llvm::IntegerType::get(TheContext, 32),/*Params=*/FuncTy_8_args,/*isVarArg=*/false);
+		llvm::FunctionType* FuncTy_8 = llvm::FunctionType::get(/*Result=*/getIntType(32),/*Params=*/FuncTy_8_args,/*isVarArg=*/false);
 
 		debugTraceString = llvm::Function::Create(/*Type=*/FuncTy_8,/*Linkage=*/llvm::GlobalValue::ExternalLinkage,/*Name=*/"puts", module); // (external, no body)
 		debugTraceString->setCallingConv(llvm::CallingConv::C);
 
 		std::vector<llvm::Type*>FuncTy_6_args;
-		FuncTy_6_args.push_back(llvm::IntegerType::get(TheContext, 32));
-		llvm::FunctionType* FuncTy_6 = llvm::FunctionType::get(/*Result=*/llvm::IntegerType::get(TheContext, 32),/*Params=*/FuncTy_6_args,/*isVarArg=*/false);
+		FuncTy_6_args.push_back(getIntType(32));
+		llvm::FunctionType* FuncTy_6 = llvm::FunctionType::get(/*Result=*/getIntType(32),/*Params=*/FuncTy_6_args,/*isVarArg=*/false);
 
 		debugTraceChar = llvm::Function::Create(/*Type=*/FuncTy_6,/*Linkage=*/llvm::GlobalValue::ExternalLinkage,/*Name=*/"putchar", module); // (external, no body)
 		debugTraceChar->setCallingConv(llvm::CallingConv::C);
@@ -278,12 +277,12 @@ void CodeGenContext::generateCode(CBlock& root)
 		debugTraceMissing->setCallingConv(llvm::CallingConv::C);
 		
 		std::vector<llvm::Type*>FuncTy_9_args;
-		FuncTy_9_args.push_back(llvm::IntegerType::get(TheContext, 8));	//bitWidth (max 32)
-		FuncTy_9_args.push_back(llvm::IntegerType::get(TheContext, 32));	//value
-		FuncTy_9_args.push_back(llvm::PointerType::get(llvm::IntegerType::get(TheContext, 8), 0));	// char* busname
-		FuncTy_9_args.push_back(llvm::IntegerType::get(TheContext, 32));	//dataDecode Width
-		FuncTy_9_args.push_back(llvm::IntegerType::get(TheContext, 8));	// 0 / 1 - if 1 indicates the last tap in a connection list
-		llvm::FunctionType* FuncTy_9 = llvm::FunctionType::get(/*Result=*/llvm::Type::getVoidTy(TheContext),/*Params=*/FuncTy_9_args, false);
+		FuncTy_9_args.push_back(getIntType(8));								//bitWidth (max 32)
+		FuncTy_9_args.push_back(getIntType(32));							//value
+		FuncTy_9_args.push_back(llvm::PointerType::get(getIntType(8), 0));	// char* busname
+		FuncTy_9_args.push_back(getIntType(32));							//dataDecode Width
+		FuncTy_9_args.push_back(getIntType(8));								// 0 / 1 - if 1 indicates the last tap in a connection list
+		llvm::FunctionType* FuncTy_9 = llvm::FunctionType::get(/*Result=*/getVoidType(),/*Params=*/FuncTy_9_args, false);
 
 		debugBusTap = llvm::Function::Create(FuncTy_9,llvm::GlobalValue::ExternalLinkage,symbolPrepend+"BusTap", module); // (external, no body)
 		debugBusTap->setCallingConv(llvm::CallingConv::C);
@@ -551,7 +550,5 @@ bool CodeGenContext::LookupBitVariable(BitVariable& outVar,const std::string& mo
 
 llvm::Function* CodeGenContext::LookupFunctionInExternalModule(const std::string& moduleName, const std::string& name)
 {
-	llvm::Function* function = m_includes[moduleName]->module->getFunction(moduleName+name);
-
-	return function;
+	return m_includes[moduleName]->module->getFunction(moduleName+name);
 }

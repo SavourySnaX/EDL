@@ -58,7 +58,7 @@ llvm::Value* CFuncCall::codeGen(CodeGenContext& context)
 			call->setDebugLoc(llvm::DebugLoc::get(callLoc.first_line, callLoc.first_column, context.gContext.scopingStack.top()));
 		}
 
-		callReturn = llvm::ConstantInt::get(TheContext, llvm::APInt(1, 0));		// Forces void returns to actually return 0
+		callReturn = context.getConstantZero(1);		// Forces void returns to actually return 0
 	}
 	else
 	{

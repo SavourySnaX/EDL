@@ -180,7 +180,7 @@ llvm::Value* CBinaryOperator::codeGen(CodeGenContext& context,llvm::Value* left,
 		case TOK_HAT:
 			return llvm::BinaryOperator::Create(llvm::Instruction::Xor,left,right,"",context.currentBlock());
 		case TOK_TILDE:
-			return llvm::BinaryOperator::Create(llvm::Instruction::Xor,left,llvm::ConstantInt::get(TheContext,~llvm::APInt(leftType->getBitWidth(),0)),"",context.currentBlock());
+			return llvm::BinaryOperator::Create(llvm::Instruction::Xor,left,context.getConstantOnes(leftType->getBitWidth()),"",context.currentBlock());
 		}
 	}
 

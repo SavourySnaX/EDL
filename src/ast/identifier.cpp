@@ -20,7 +20,7 @@ llvm::Value* CIdentifier::trueSize(llvm::Value* in, CodeGenContext& context, Bit
 		return nullptr;
 	}
 
-	llvm::Type* varType = llvm::Type::getIntNTy(TheContext, var.trueSize.getLimitedValue());
+	llvm::Type* varType = context.getIntType(var.trueSize);
 	llvm::Instruction::CastOps castOperation = llvm::CastInst::getCastOpcode(in, false, varType, false);
 
 	return llvm::CastInst::Create(castOperation, in, varType, "matchInputSize", context.currentBlock());
@@ -31,9 +31,9 @@ llvm::Value* CIdentifier::GetAliasedData(CodeGenContext& context, llvm::Value* i
 	if (var.aliased == true)
 	{
 		// We are loading from a partial value - we need to load, mask off correct result and shift result down to correct range
-		llvm::ConstantInt* constIntMask = llvm::ConstantInt::get(TheContext, var.mask);
+		llvm::ConstantInt* constIntMask = context.getConstantInt(var.mask);
 		llvm::BinaryOperator* andInst = llvm::BinaryOperator::Create(llvm::Instruction::And, in, constIntMask, "Masking", context.currentBlock());
-		llvm::ConstantInt* constIntShift = llvm::ConstantInt::get(TheContext, var.shft);
+		llvm::ConstantInt* constIntShift = context.getConstantInt(var.shft);
 		llvm::BinaryOperator* shiftInst = llvm::BinaryOperator::Create(llvm::Instruction::LShr, andInst, constIntShift, "Shifting", context.currentBlock());
 		return trueSize(shiftInst, context, var);
 	}
@@ -87,15 +87,15 @@ llvm::Value* CIdentifier::codeGen(CodeGenContext& context)
 		{
 			llvm::Value* index=GetExpression()->codeGen(context);
 
-			llvm::Type* typeArraySize = llvm::Type::getIntNTy(TheContext,var.arraySize.getLimitedValue());
-			llvm::Type* type64 = llvm::Type::getIntNTy(TheContext,64);
+			llvm::Type* typeArraySize = context.getIntType(var.arraySize);
+			llvm::Type* type64 = context.getIntType(64);
 			llvm::Instruction::CastOps castOperationArraySize = llvm::CastInst::getCastOpcode(index,false,typeArraySize,false);
 			llvm::Instruction* truncOrExtArraySize = llvm::CastInst::Create(castOperationArraySize,index,typeArraySize,"sizeToArraySize",context.currentBlock());	// Cast index to array size (may truncate)
 			llvm::Instruction::CastOps castOperation64 = llvm::CastInst::getCastOpcode(index,false,type64,false);
 			llvm::Instruction* truncOrExtTo64 = llvm::CastInst::Create(castOperation64,truncOrExtArraySize,type64,"cast",context.currentBlock());		// Cast index to 64 bit type for GEP
 
  			std::vector<llvm::Value*> indices;
- 			llvm::ConstantInt* index0 = llvm::ConstantInt::get(TheContext, llvm::APInt(var.size.getLimitedValue(), llvm::StringRef("0"), 10));
+ 			llvm::ConstantInt* index0 = context.getConstantZero(var.size.getLimitedValue());
 			indices.push_back(index0);
  			indices.push_back(truncOrExtTo64);
 			llvm::Instruction* elementPtr = llvm::GetElementPtrInst::Create(nullptr,var.value,indices,"array index",context.currentBlock());

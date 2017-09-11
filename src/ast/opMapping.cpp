@@ -56,7 +56,7 @@ llvm::APInt COperandMapping::GetComputableConstant(CodeGenContext& context, unsi
 		return error;
 	}
 
-	return context.m_mappings[ident.name]->mappings[num]->selector.integer;
+	return context.m_mappings[ident.name]->mappings[num]->selector.getAPInt();
 }
 
 unsigned COperandMapping::GetNumComputableConstants(CodeGenContext& context) const
