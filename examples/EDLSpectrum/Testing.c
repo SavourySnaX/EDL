@@ -45,7 +45,7 @@ extern uint8_t IM;
 extern uint8_t IFF1;
 extern uint8_t IFF2;
 
-#define TEST TESTULA
+//#define TEST TESTULA
 
 void TEST(uint8_t a);
 void RESET1(uint8_t a);
@@ -748,10 +748,10 @@ int main(int argc,char**argv)
 
 	//if (LoadRom("c:/speccywork/next/zxnext/scr/test.scr", ram, 6912))
 	//if (LoadRom("c:/speccywork/next/zxnext/scr/manicminer.scr", ram, 6912))
-	if (LoadRom("scr/Fairlight.scr", ram, 6912))
+	/*if (LoadRom("scr/Fairlight.scr", ram, 6912))
 	{
 		return 1;
-	}
+	}*/
 
 /*	ram[0] = 0x00;
 	ram[1] = 0x18;
@@ -782,7 +782,7 @@ int main(int argc,char**argv)
 
 	//PC = 0x4000;
 
-	pauseframe = 1;
+	//pauseframe = 1;
 	while (1==1)
 	{
 		b++;
