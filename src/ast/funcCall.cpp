@@ -24,7 +24,7 @@ llvm::Value* CFuncCall::codeGen(CodeGenContext& context)
 	if (context.m_externFunctions.find(name.name) == context.m_externFunctions.end())
 	{
 		PrintErrorFromLocation(name.nameLoc, "Function Declaration Required to use a Function");
-		context.errorFlagged = true;
+		context.FlagError();
 		return nullptr;
 	}
 	llvm::Function* func = context.m_externFunctions[name.name];
@@ -37,7 +37,7 @@ llvm::Value* CFuncCall::codeGen(CodeGenContext& context)
 		if (b == funcType->getNumParams())
 		{
 			PrintErrorWholeLine(name.nameLoc, "Wrong Number Of Arguments To Function");
-			context.errorFlagged = true;
+			context.FlagError();
 			return nullptr;
 		}
 

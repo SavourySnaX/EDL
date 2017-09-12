@@ -54,6 +54,6 @@ llvm::Value* CCastOperator::codeGen(CodeGenContext& context)
 	}
 
 	PrintErrorFromLocation(operatorLoc, "(TODO)Illegal type in cast");
-	context.errorFlagged = true;
+	context.FlagError();
 	return nullptr;
 }

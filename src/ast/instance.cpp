@@ -23,14 +23,14 @@ void CInstance::prePass(CodeGenContext& context)
 	if (resetFileInput(includeName.c_str()) != 0)
 	{
 		PrintErrorFromLocation(filename.quotedLoc, "Unable to instance module %s", includeName.c_str());
-		context.errorFlagged = true;
+		context.FlagError();
 		return;
 	}
 	yyparse();
 	if (g_ProgramBlock == 0)
 	{
 		PrintErrorFromLocation(filename.quotedLoc, "Unable to parse module %s", includeName.c_str());
-		context.errorFlagged = true;
+		context.FlagError();
 		return;
 	}
 
@@ -50,10 +50,10 @@ void CInstance::prePass(CodeGenContext& context)
 	{
 		context.gContext.scopingStack.pop();
 	}
-	if (includefile->errorFlagged)
+	if (includefile->isErrorFlagged())
 	{
 		PrintErrorFromLocation(filename.quotedLoc, "Unable to parse module %s", includeName.c_str());
-		context.errorFlagged = true;
+		context.FlagError();
 		return;
 	}
 	context.m_includes[ident.name + "."] = includefile;

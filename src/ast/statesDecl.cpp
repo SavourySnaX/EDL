@@ -100,7 +100,7 @@ llvm::Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 		if (context.parentHandler == nullptr)
 		{
 			PrintErrorFromLocation(statementLoc, "It is illegal to declare STATES outside of a handler");
-			context.errorFlagged = true;
+			context.FlagError();
 			return nullptr;
 		}
 

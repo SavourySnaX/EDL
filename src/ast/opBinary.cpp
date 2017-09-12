@@ -82,7 +82,7 @@ llvm::Value* CBinaryOperator::codeGen(CodeGenContext& context,llvm::Value* left,
 		{
 		default:
 			assert(0 && "Internal Error - Unimplemented binary operator!");
-			context.errorFlagged=true;
+			context.FlagError();
 			return nullptr;
 		case TOK_ADD:
 		case TOK_DADD:
@@ -144,7 +144,7 @@ llvm::Value* CBinaryOperator::codeGen(CodeGenContext& context,llvm::Value* left,
 					if (hasMixedOperations)
 					{
 						PrintErrorFromLocation(operatorLoc,"OVERFLOW requires all operators to be either +(+) or -(-) only");
-						context.errorFlagged = true;
+						context.FlagError();
 						return nullptr;
 					}
 				}
@@ -185,6 +185,6 @@ llvm::Value* CBinaryOperator::codeGen(CodeGenContext& context,llvm::Value* left,
 	}
 
 	PrintErrorWholeLine(operatorLoc, "Illegal types in expression");
-	context.errorFlagged=true;
+	context.FlagError();
 	return nullptr;
 }

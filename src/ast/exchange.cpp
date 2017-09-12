@@ -37,7 +37,7 @@ llvm::Value* CExchange::codeGen(CodeGenContext& context)
 			if (leftType->getBitWidth() != rightType->getBitWidth())
 			{
 				PrintErrorFromLocation(operatorLoc, "Both operands to exchange must be same size");
-				context.errorFlagged = true;
+				context.FlagError();
 				return nullptr;
 			}
 
@@ -49,6 +49,6 @@ llvm::Value* CExchange::codeGen(CodeGenContext& context)
 	}
 
 	PrintErrorFromLocation(operatorLoc, "Illegal operands to exchange");
-	context.errorFlagged = true;
+	context.FlagError();
 	return nullptr;
 }

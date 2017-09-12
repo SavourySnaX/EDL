@@ -23,7 +23,7 @@ llvm::Value* CHandlerDeclaration::codeGen(CodeGenContext& context)
 	if (context.globals().find(id.name) == context.globals().end())
 	{
 		PrintErrorFromLocation(id.nameLoc, "undeclared pin %s - Handlers MUST be tied to pin definitions", id.name.c_str());
-		context.errorFlagged = true;
+		context.FlagError();
 		return nullptr;
 	}
 
@@ -32,7 +32,7 @@ llvm::Value* CHandlerDeclaration::codeGen(CodeGenContext& context)
 	if (pinVariable.writeAccessor == nullptr)
 	{
 		PrintErrorFromLocation(id.nameLoc, "Handlers must be tied to Input / Bidirectional pins ONLY");
-		context.errorFlagged = true;
+		context.FlagError();
 		return nullptr;
 	}
 

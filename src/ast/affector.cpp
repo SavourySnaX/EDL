@@ -24,7 +24,7 @@ llvm::Value* CAffector::codeGen(CodeGenContext& context)
 	if (context.curAffectors.size())
 	{
 		PrintErrorFromLocation(exprLoc, "(TODO) Cannot currently supply nested affectors");
-		context.errorFlagged = true;
+		context.FlagError();
 		return nullptr;
 	}
 
@@ -58,7 +58,7 @@ llvm::Value* CAffector::codeGen(CodeGenContext& context)
 		if (expr.IsLeaf())
 		{
 			PrintErrorFromLocation(exprLoc, "OVERFLOW/CARRY is not supported for non carry/overflow expressions");
-			context.errorFlagged = true;
+			context.FlagError();
 			return nullptr;
 		}
 	}

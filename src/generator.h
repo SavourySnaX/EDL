@@ -92,6 +92,7 @@ public:
 		llvm::InitializeAllTargetMCs();
 		llvm::InitializeAllAsmParsers();
 		llvm::InitializeAllAsmPrinters();
+		errorFlagged = false;
 	}
 
 	CompilerOptions&							opts;
@@ -101,6 +102,8 @@ public:
 	llvm::ExecutionEngine*						llvmExecutionEngine;
 	llvm::Module*								llvmModule;
 	std::string									symbolPrefix;
+	bool										errorFlagged;
+
 
 	llvm::LLVMContext& getLLVMContext() { return llvmContext; }
 };
@@ -130,8 +133,6 @@ public:
 	llvm::Function *debugBusTap;
 
 	std::string moduleName;
-
-	bool errorFlagged;
 
 	struct myAPIntCompare
 	{
@@ -224,6 +225,8 @@ public:
 
 	// Global state accessors
 	const std::string& getSymbolPrefix() const { return gContext.symbolPrefix; }
+	void FlagError() { gContext.errorFlagged = true; }
+	bool isErrorFlagged() const { return gContext.errorFlagged; }
 
 	// Type Wrappers
 	llvm::Type* getVoidType() const { return llvm::Type::getVoidTy(gContext.getLLVMContext()); }

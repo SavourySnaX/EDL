@@ -98,7 +98,7 @@ llvm::Value* CInstruction::codeGen(CodeGenContext& context)
 	if (numOpcodes == 0)
 	{
 		PrintErrorWholeLine(statementLoc, "Opcode for instruction must be able to generate constants");
-		context.errorFlagged = true;
+		context.FlagError();
 		return nullptr;
 	}
 
@@ -130,7 +130,7 @@ llvm::Value* CInstruction::codeGen(CodeGenContext& context)
 
 		context.EndFunctionDebugInfo();
 
-		if (context.errorFlagged)
+		if (context.isErrorFlagged())
 		{
 			return nullptr;
 		}

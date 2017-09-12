@@ -41,14 +41,14 @@ llvm::Value* CStateDefinition::codeGen(CodeGenContext& context)
 		else
 		{
 			PrintErrorFromLocation(id.nameLoc, "Attempt to define unknown state");
-			context.errorFlagged = true;
+			context.FlagError();
 			return nullptr;
 		}
 	}
 	else
 	{
 		PrintErrorFromLocation(id.nameLoc, "Attempt to define state entry when no states on stack");
-		context.errorFlagged = true;
+		context.FlagError();
 		return nullptr;
 	}
 }

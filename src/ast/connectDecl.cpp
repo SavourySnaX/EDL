@@ -182,21 +182,21 @@ llvm::Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 			if (outCnt[checkBus] == 0 && inCnt[checkBus] == 0 && biCnt[checkBus] == 0)
 			{
 				PrintErrorWholeLine(connects[a]->statementLoc, "No possible routing! - no connections");
-				context.errorFlagged = true;
+				context.FlagError();
 				return nullptr;
 			}
 
 			if (outCnt[checkBus] == 0 && inCnt[checkBus] > 0 && biCnt[checkBus] == 0)
 			{
 				PrintErrorWholeLine(connects[a]->statementLoc, "No possible routing! - all connections are input");
-				context.errorFlagged = true;
+				context.FlagError();
 				return nullptr;
 			}
 
 			if (outCnt[checkBus] > 0 && inCnt[checkBus] == 0 && biCnt[checkBus] == 0)
 			{
 				PrintErrorWholeLine(connects[a]->statementLoc, "No possible routing! - all connections are output");
-				context.errorFlagged = true;
+				context.FlagError();
 				return nullptr;
 			}
 		}
@@ -264,7 +264,7 @@ llvm::Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 						if (!lastType->isIntegerTy() || !tmpType->isIntegerTy())
 						{
 							PrintErrorWholeLine(connects[a]->statementLoc, "(TODO) Expected integer types");
-							context.errorFlagged = true;
+							context.FlagError();
 							return nullptr;
 						}
 						if (lastType->getPrimitiveSizeInBits() < tmpType->getPrimitiveSizeInBits())
@@ -306,7 +306,7 @@ llvm::Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 					if (!lastType->isIntegerTy() || !tmpType->isIntegerTy())
 					{
 						PrintErrorWholeLine(connects[a]->statementLoc, "(TODO) Expected integer types");
-						context.errorFlagged = true;
+						context.FlagError();
 						return nullptr;
 					}
 					if (lastType->getPrimitiveSizeInBits() < tmpType->getPrimitiveSizeInBits())
@@ -337,7 +337,7 @@ llvm::Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 		if (busCount > 2)
 		{
 			PrintErrorWholeLine(connects[a]->statementLoc, "(TODO) Bus arbitration for >2 buses not implemented yet");
-			context.errorFlagged = true;
+			context.FlagError();
 			return nullptr;
 		}
 

@@ -355,7 +355,7 @@ int main(int argc, char **argv)
 	CodeGenContext rootContext(globalContext,nullptr);
 	rootContext.generateCode(*g_ProgramBlock);
 
-	if (rootContext.errorFlagged)
+	if (rootContext.isErrorFlagged())
 	{
 		std::cerr << "Compilation Failed" << std::endl;
 		return 2;

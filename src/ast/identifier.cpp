@@ -16,7 +16,7 @@ llvm::Value* CIdentifier::trueSize(llvm::Value* in, CodeGenContext& context, Bit
 	if (var.mappingRef)
 	{
 		PrintErrorFromLocation(var.refLoc, "(TODO)Cannot perform operation on a mapping reference");
-		context.errorFlagged = true;
+		context.FlagError();
 		return nullptr;
 	}
 
@@ -60,7 +60,7 @@ llvm::Value* CIdentifier::codeGen(CodeGenContext& context)
 		if (var.pinType!=TOK_OUT && var.pinType!=TOK_BIDIRECTIONAL)
 		{
 			PrintErrorFromLocation(var.refLoc,"Pin marked as not readable");
-			context.errorFlagged=true;
+			context.FlagError();
 			return nullptr;
 		}
 		else

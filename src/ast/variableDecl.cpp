@@ -118,7 +118,7 @@ llvm::Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 		if (pinType != 0)
 		{
 			PrintErrorFromLocation(declarationLoc, "Cannot declare pins anywhere but global scope");
-			context.errorFlagged = true;
+			context.FlagError();
 			return nullptr;
 		}
 		// Within a basic block - so must be a stack variable
@@ -128,7 +128,7 @@ llvm::Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 	else
 	{
 		// GLobal variable
-		// Rules for globals have changed. If we are definining a PIN then the variable should be private to this module, and accessors should be created instead. 
+		// Rules for globals have changed. If we are defining a PIN then the variable should be private to this module, and accessors should be created instead. 
 		if (pinType == 0)
 		{
 			llvm::Type* type = context.getIntType(size);
@@ -267,7 +267,7 @@ llvm::Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 			if (initialiserList.size() != 1)
 			{
 				PrintErrorWholeLine(declarationLoc, "Too many initialisers (note array initialisers not currently supported in local scope)");
-				context.errorFlagged = true;
+				context.FlagError();
 				return nullptr;
 			}
 
@@ -302,7 +302,7 @@ llvm::Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 				if (initialiserList.size() > power2.getLimitedValue())
 				{
 					PrintErrorWholeLine(declarationLoc, "Too many initialisers, initialiser list bigger than array storage");
-					context.errorFlagged = true;
+					context.FlagError();
 					return nullptr;
 				}
 
@@ -349,7 +349,7 @@ llvm::Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 				if (initialiserList.size() != 1)
 				{
 					PrintErrorWholeLine(declarationLoc, "Too many initialisers");
-					context.errorFlagged = true;
+					context.FlagError();
 					return nullptr;
 				}
 

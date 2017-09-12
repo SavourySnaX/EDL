@@ -65,7 +65,7 @@ llvm::Value* UndefinedStateError(StateIdentList &stateIdents,CodeGenContext &con
 		combined = CombineTokenLocations(combined, stateIdents[a]->nameLoc);
 	}
 	PrintErrorFromLocation(combined, "Unknown state requested");
-	context.errorFlagged = true;
+	context.FlagError();
 	return nullptr;
 }
 
@@ -229,8 +229,6 @@ void CodeGenContext::GenerateDisassmTables()
 /* Compile the AST into a module */
 void CodeGenContext::generateCode(CBlock& root)
 {
-	errorFlagged = false;
-
 	if (isRoot)
 	{
 		if (gContext.opts.symbolModifier)
@@ -287,7 +285,7 @@ void CodeGenContext::generateCode(CBlock& root)
 		GenerateDisassmTables();
 	}
 	
-	if (errorFlagged)
+	if (isErrorFlagged())
 	{
 		return;
 	}
@@ -444,7 +442,7 @@ void CodeGenContext::generateCode(CBlock& root)
 			auto target = llvm::TargetRegistry::lookupTarget(triple,error);
 			if (!target)
 			{
-				errorFlagged = true;
+				FlagError();
 				std::cerr << error << std::endl;
 				return;
 			}
@@ -455,13 +453,13 @@ void CodeGenContext::generateCode(CBlock& root)
 			llvm::raw_fd_ostream dest(gContext.opts.outputFile, ec,llvm::sys::fs::F_None);
 			if (ec)
 			{
-				errorFlagged = true;
+				FlagError();
 				std::cerr << ec.message() << std::endl;
 				return;
 			}
 			if (targetMachine->addPassesToEmitFile(pm, dest, llvm::TargetMachine::CGFT_ObjectFile))
 			{
-				errorFlagged = true;
+				FlagError();
 				std::cerr << "Cannot emit object file" << std::endl;
 				return;
 			}
@@ -502,14 +500,14 @@ bool CodeGenContext::LookupBitVariable(BitVariable& outVar,const std::string& mo
 					else
 					{
 						PrintErrorFromLocation(CombineTokenLocations(nameLoc, modLoc), "TODO: Globals");
-						errorFlagged = true;
+						FlagError();
 						return false;
 					}
 				}
 				else
 				{
 					PrintErrorFromLocation(CombineTokenLocations(nameLoc,modLoc), "undeclared variable %s%s", module.c_str(), name.c_str());
-					errorFlagged = true;
+					FlagError();
 					return false;
 				}
 			}
@@ -523,7 +521,7 @@ bool CodeGenContext::LookupBitVariable(BitVariable& outVar,const std::string& mo
 				{
 					PrintErrorFromLocation(CombineTokenLocations(nameLoc,modLoc), "undeclared variable %s%s", module.c_str(), name.c_str());
 				}
-				errorFlagged = true;
+				FlagError();
 			}
 			return false;
 		}

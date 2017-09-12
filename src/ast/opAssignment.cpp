@@ -58,7 +58,7 @@ llvm::Instruction* CAssignment::generateAssignmentActual(BitVariable& to, const 
 	if (!assignTo->getType()->isPointerTy())
 	{
 		PrintErrorFromLocation(to.refLoc, "You cannot assign a value to a non variable (or input parameter to function)");
-		context.errorFlagged = true;
+		context.FlagError();
 		return nullptr;
 	}
 
@@ -117,7 +117,7 @@ llvm::Instruction* CAssignment::generateAssignmentActual(BitVariable& to, const 
 		if (to.pinType != TOK_IN && to.pinType != TOK_BIDIRECTIONAL)
 		{
 			PrintErrorFromLocation(to.refLoc, "Pin marked as not writable");
-			context.errorFlagged = true;
+			context.FlagError();
 			return nullptr;
 		}
 		else
@@ -175,7 +175,7 @@ llvm::Value* CAssignment::codeGen(CodeGenContext& context)
 	if (var.mappingRef)
 	{
 		PrintErrorFromLocation(var.refLoc, "Cannot assign to a mapping reference");
-		context.errorFlagged = true;
+		context.FlagError();
 		return nullptr;
 	}
 
@@ -185,7 +185,7 @@ llvm::Value* CAssignment::codeGen(CodeGenContext& context)
 		if (var.pinType != TOK_BIDIRECTIONAL)
 		{
 			PrintErrorFromLocation(var.refLoc, "HIGH_IMPEDANCE only makes sense for BIDIRECTIONAL pins");
-			context.errorFlagged = true;
+			context.FlagError();
 			return nullptr;
 		}
 
@@ -224,7 +224,7 @@ llvm::Value* CAssignment::codeGen(CodeGenContext& context, CCastOperator* cast)
 	if (var.mappingRef)
 	{
 		PrintErrorFromLocation(var.refLoc, "Cannot assign to a mapping reference");
-		context.errorFlagged = true;
+		context.FlagError();
 		return nullptr;
 	}
 

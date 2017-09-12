@@ -18,7 +18,7 @@ BitVariable COperandMapping::GetBitVariable(CodeGenContext& context, unsigned nu
 	if (context.m_mappings.find(ident.name) == context.m_mappings.end())
 	{
 		PrintErrorFromLocation(ident.nameLoc, "Undeclared mapping : %s", ident.name.c_str());
-		context.errorFlagged = true;
+		context.FlagError();
 		return mappingVariable;
 	}
 
@@ -52,7 +52,7 @@ llvm::APInt COperandMapping::GetComputableConstant(CodeGenContext& context, unsi
 	if (context.m_mappings.find(ident.name) == context.m_mappings.end())
 	{
 		PrintErrorFromLocation(ident.nameLoc, "Undeclared mapping : %s", ident.name.c_str());
-		context.errorFlagged = true;
+		context.FlagError();
 		return error;
 	}
 
@@ -64,7 +64,7 @@ unsigned COperandMapping::GetNumComputableConstants(CodeGenContext& context) con
 	if (context.m_mappings.find(ident.name) == context.m_mappings.end())
 	{
 		PrintErrorFromLocation(ident.nameLoc, "Undeclared mapping : %s", ident.name.c_str());
-		context.errorFlagged = true;
+		context.FlagError();
 		return 0;
 	}
 
@@ -76,7 +76,7 @@ const CString* COperandMapping::GetString(CodeGenContext& context, unsigned num,
 	if (context.m_mappings.find(ident.name) == context.m_mappings.end())
 	{
 		PrintErrorFromLocation(ident.nameLoc, "Undeclared mapping : %s", ident.name.c_str());
-		context.errorFlagged = true;
+		context.FlagError();
 		return nullptr;
 	}
 

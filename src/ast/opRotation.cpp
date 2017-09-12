@@ -32,14 +32,14 @@ llvm::Value* CRotationOperator::codeGen(CodeGenContext& context)
 	if ((!toShift->getType()->isIntegerTy()) || (!rotBy->getType()->isIntegerTy()))
 	{
 		PrintErrorWholeLine(var.refLoc, "(TODO)Unsupported operation");
-		context.errorFlagged = true;
+		context.FlagError();
 		return nullptr;
 	}
 
 	if (var.mappingRef)
 	{
 		PrintErrorWholeLine(var.refLoc, "(TODO)Cannot perform operation on a mappingRef");
-		context.errorFlagged = true;
+		context.FlagError();
 		return nullptr;
 	}
 

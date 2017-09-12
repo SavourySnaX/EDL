@@ -26,7 +26,7 @@ llvm::Value* CAffect::codeGenCarry(CodeGenContext& context, llvm::Value* exprRes
 		if (param.getAPInt().getLimitedValue() >= resultType->getBitWidth())
 		{
 			PrintErrorFromLocation(param.getSourceLocation(), "Bit to carry is outside of range for result");
-			context.errorFlagged = true;
+			context.FlagError();
 			return nullptr;
 		}
 
@@ -107,7 +107,7 @@ llvm::Value* CAffect::codeGenFinal(CodeGenContext& context, llvm::Value* exprRes
 	if (var.mappingRef)
 	{
 		PrintErrorFromLocation(var.refLoc, "Cannot perform operation on a mapping reference");
-		context.errorFlagged = true;
+		context.FlagError();
 		return nullptr;
 	}
 
@@ -221,19 +221,19 @@ llvm::Value* CAffect::codeGenFinal(CodeGenContext& context, llvm::Value* exprRes
 		if (param.getAPInt().getLimitedValue() >= resultType->getBitWidth())
 		{
 			PrintErrorFromLocation(param.getSourceLocation(), "Bit for overflow detection is outside of range for result");
-			context.errorFlagged = true;
+			context.FlagError();
 			return nullptr;
 		}
 		llvm::Value* lhs = ov1Val;		// Lhs and Rhs are provided in the overflow affector
 		if (lhs == nullptr)
 		{
-			context.errorFlagged = true;
+			context.FlagError();
 			return nullptr;
 		}
 		llvm::Value* rhs = ov2Val;
 		if (rhs == nullptr)
 		{
-			context.errorFlagged = true;
+			context.FlagError();
 			return nullptr;
 		}
 
@@ -243,14 +243,13 @@ llvm::Value* CAffect::codeGenFinal(CodeGenContext& context, llvm::Value* exprRes
 		if (param.getAPInt().getLimitedValue() >= lhsType->getBitWidth())
 		{
 			PrintErrorFromLocation(param.getSourceLocation(), "Bit for overflow detection is outside of range of lhs");
-			std::cerr << "Bit for overflow detection is outside of range for source1" << std::endl;
-			context.errorFlagged = true;
+			context.FlagError();
 			return nullptr;
 		}
 		if (param.getAPInt().getLimitedValue() >= rhsType->getBitWidth())
 		{
 			PrintErrorFromLocation(param.getSourceLocation(), "Bit for overflow detection is outside of range of rhs");
-			context.errorFlagged = true;
+			context.FlagError();
 			return nullptr;
 		}
 

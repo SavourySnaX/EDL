@@ -19,7 +19,7 @@ llvm::Value* CBlock::codeGen(CodeGenContext& context)
 	for (const auto& statement : statements)
 	{
 		last = statement->codeGen(context);
-		if (context.errorFlagged)
+		if (context.isErrorFlagged())
 		{
 			return nullptr;
 		}

@@ -24,7 +24,7 @@ llvm::Value* CStateJump::codeGen(CodeGenContext& context)
 	if (context.states().find(stateLabel) == context.states().end())
 	{
 		PrintErrorFromLocation(stateIdents[0]->nameLoc, "Unknown handler, can't look up state reference");
-		context.errorFlagged = true;
+		context.FlagError();
 		return nullptr;
 	}
 
