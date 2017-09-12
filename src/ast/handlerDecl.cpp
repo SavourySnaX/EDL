@@ -37,8 +37,7 @@ llvm::Value* CHandlerDeclaration::codeGen(CodeGenContext& context)
 	}
 
 	llvm::FunctionType *ftype = llvm::FunctionType::get(context.getVoidType(), argTypes, false);
-	llvm::Function* function = llvm::Function::Create(ftype, llvm::GlobalValue::PrivateLinkage, context.moduleName + context.symbolPrepend + "HANDLER." + id.name, context.module);
-	function->setDoesNotThrow();
+	llvm::Function* function = context.makeFunction(ftype, llvm::GlobalValue::PrivateLinkage, context.moduleName + context.getSymbolPrefix() + "HANDLER." + id.name);
 
 	context.StartFunctionDebugInfo(function, handlerLoc);
 

@@ -98,6 +98,9 @@ public:
 	std::map<std::string, bool>					impedanceRequired;
 	std::stack<llvm::DIScope*>					scopingStack;
 	std::map<llvm::Function*,llvm::Function*>	connectFunctions;	
+	llvm::ExecutionEngine*						llvmExecutionEngine;
+	llvm::Module*								llvmModule;
+	std::string									symbolPrefix;
 
 	llvm::LLVMContext& getLLVMContext() { return llvmContext; }
 };
@@ -120,23 +123,15 @@ public:
 
 	llvm::DIBuilder *dbgBuilder;
 	llvm::DICompileUnit *compileUnit;
-	llvm::Module *module;
 	bool isRoot;
-	llvm::ExecutionEngine		*ee;
 	CodeGenContext(GlobalContext& globalContext, CodeGenContext* parent);
-	llvm::Function *debugTraceString;
 	llvm::Function *debugTraceChar;
 	llvm::Function *debugTraceMissing;
 	llvm::Function *debugBusTap;
 
-	std::string	symbolPrepend;
 	std::string moduleName;
 
 	bool errorFlagged;
-
-	std::map<std::string, std::vector<ExecuteInformation> > executeLocations;
-
-	AffectorList	curAffectors;
 
 	struct myAPIntCompare
 	{
@@ -160,21 +155,24 @@ public:
 		}
 	};
 
-	std::map<std::string, std::map<llvm::APInt, std::string, myAPIntCompare> >     disassemblyTable;
 
 	llvm::Function* LookupFunctionInExternalModule(const std::string& module, const std::string& name);
 	bool LookupBitVariable(BitVariable& outVar, const std::string& module, const std::string& name, const YYLTYPE &modLoc, const YYLTYPE &nameLoc);
 
+	// Local to current file
 	std::map<std::string, CodeGenContext*> m_includes;
 	std::map<std::string, BitVariable> m_globals;
-	std::map<std::string, StateVariable> m_states;
 	std::map<std::string, llvm::Function*> m_externFunctions;
+	std::map<std::string, StateVariable> m_states;
 	std::map<CStatesDeclaration*, StateVariable> m_statesAlt;
 	std::map<std::string, CHandlerDeclaration*> m_handlers;
 	std::map<std::string, CMappingDeclaration*> m_mappings;
+	std::map<std::string, std::map<llvm::APInt, std::string, myAPIntCompare> >     disassemblyTable;
+	std::map<std::string, std::vector<ExecuteInformation> > executeLocations;
+	AffectorList	curAffectors;
+
 
 	void generateCode(CBlock& root);
-	// GenericValue runCode();
 	std::map<std::string, BitVariable>& locals() { return blocks.top()->locals; }
 	std::map<std::string, BitVariable>& globals() { return m_globals; }
 	std::map<std::string, StateVariable>& states() { return m_states; }
@@ -224,6 +222,9 @@ public:
 	void StartFunctionDebugInfo(llvm::Function* func, YYLTYPE& declLoc);
 	void EndFunctionDebugInfo();
 
+	// Global state accessors
+	const std::string& getSymbolPrefix() const { return gContext.symbolPrefix; }
+
 	// Type Wrappers
 	llvm::Type* getVoidType() const { return llvm::Type::getVoidTy(gContext.getLLVMContext()); }
 	llvm::Type* getIntType(unsigned size) const { return llvm::IntegerType::get(gContext.getLLVMContext(), size); }
@@ -237,7 +238,9 @@ public:
 	llvm::Constant*		getString(const std::string& withQuotes) { return llvm::ConstantDataArray::getString(gContext.getLLVMContext(), withQuotes.substr(1, withQuotes.length() - 2), true); }
 
 	// Function Wrappers
-	llvm::BasicBlock* makeBasicBlock(const llvm::Twine&name, llvm::Function* parent = nullptr, llvm::BasicBlock* insertBefore = nullptr) { return llvm::BasicBlock::Create(gContext.getLLVMContext(), name, parent, insertBefore); }
-	llvm::ReturnInst* makeReturn(llvm::BasicBlock* insertAtEnd) { return llvm::ReturnInst::Create(gContext.getLLVMContext(), insertAtEnd); }
-	llvm::ReturnInst* makeReturnValue(llvm::Value* value, llvm::BasicBlock* insertAtEnd) { return llvm::ReturnInst::Create(gContext.getLLVMContext(), value, insertAtEnd); }
+	llvm::BasicBlock*		makeBasicBlock(const llvm::Twine&name, llvm::Function* parent = nullptr, llvm::BasicBlock* insertBefore = nullptr) { return llvm::BasicBlock::Create(gContext.getLLVMContext(), name, parent, insertBefore); }
+	llvm::ReturnInst*		makeReturn(llvm::BasicBlock* insertAtEnd) { return llvm::ReturnInst::Create(gContext.getLLVMContext(), insertAtEnd); }
+	llvm::ReturnInst*		makeReturnValue(llvm::Value* value, llvm::BasicBlock* insertAtEnd) { return llvm::ReturnInst::Create(gContext.getLLVMContext(), value, insertAtEnd); }
+	llvm::Function*			makeFunction(llvm::FunctionType* fType, llvm::Function::LinkageTypes fLinkType, const llvm::Twine& fName);
+	llvm::GlobalVariable*	makeGlobal(llvm::Type* gType, bool isConstant, llvm::GlobalVariable::LinkageTypes gLinkType, llvm::Constant* gInitialiser, const llvm::Twine& gName);
 };

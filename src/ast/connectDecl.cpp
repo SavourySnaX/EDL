@@ -29,9 +29,7 @@ llvm::Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 
 	FuncTy_8 = llvm::FunctionType::get(context.getVoidType(), FuncTy_8_args, false);
 
-	func = llvm::Function::Create(FuncTy_8, llvm::GlobalValue::ExternalLinkage, context.moduleName + context.symbolPrepend + ident.name, context.module);
-	func->setCallingConv(llvm::CallingConv::C);
-	func->setDoesNotThrow();
+	func = context.makeFunction(FuncTy_8, llvm::GlobalValue::ExternalLinkage, context.moduleName + context.getSymbolPrefix() + ident.name);
 
 	context.StartFunctionDebugInfo(func, statementLoc);
 

@@ -24,14 +24,13 @@ void CVariableDeclaration::CreateWriteAccessor(CodeGenContext& context, BitVaria
 	llvm::Function* function;
 	if (context.isRoot)
 	{
-		function = llvm::Function::Create(ftype, llvm::GlobalValue::ExternalLinkage, context.moduleName + context.symbolPrepend + "PinSet" + id.name, context.module);
+		function = context.makeFunction(ftype, llvm::GlobalValue::ExternalLinkage, context.moduleName + context.getSymbolPrefix() + "PinSet" + id.name);
 	}
 	else
 	{
-		function = llvm::Function::Create(ftype, llvm::GlobalValue::PrivateLinkage, context.moduleName + context.symbolPrepend + "PinSet" + id.name, context.module);
+		function = context.makeFunction(ftype, llvm::GlobalValue::PrivateLinkage, context.moduleName + context.getSymbolPrefix() + "PinSet" + id.name);
 	}
 	function->onlyReadsMemory();	// Mark input read only
-	function->setDoesNotThrow();
 
 	context.StartFunctionDebugInfo(function, declarationLoc);
 
@@ -72,14 +71,13 @@ void CVariableDeclaration::CreateReadAccessor(CodeGenContext& context, BitVariab
 	llvm::Function* function;
 	if (context.isRoot)
 	{
-		function = llvm::Function::Create(ftype, llvm::GlobalValue::ExternalLinkage, context.moduleName + context.symbolPrepend + "PinGet" + id.name, context.module);
+		function = context.makeFunction(ftype, llvm::GlobalValue::ExternalLinkage, context.moduleName + context.getSymbolPrefix() + "PinGet" + id.name);
 	}
 	else
 	{
-		function = llvm::Function::Create(ftype, llvm::GlobalValue::PrivateLinkage, context.moduleName + context.symbolPrepend + "PinGet" + id.name, context.module);
+		function = context.makeFunction(ftype, llvm::GlobalValue::PrivateLinkage, context.moduleName + context.getSymbolPrefix() + "PinGet" + id.name);
 	}
 	function->setOnlyReadsMemory();
-	function->setDoesNotThrow();
 
 	context.StartFunctionDebugInfo(function, declarationLoc);
 
@@ -143,16 +141,16 @@ llvm::Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 
 			if (internal)
 			{
-				temp.value = new llvm::GlobalVariable(*context.module, type, false, llvm::GlobalValue::PrivateLinkage, nullptr, context.symbolPrepend + id.name);
+				temp.value = context.makeGlobal(type, false, llvm::GlobalValue::PrivateLinkage, nullptr, context.getSymbolPrefix() + id.name);
 			}
 			else
 			{
-				temp.value = new llvm::GlobalVariable(*context.module, type, false, llvm::GlobalValue::ExternalLinkage, nullptr, context.symbolPrepend + id.name);
+				temp.value = context.makeGlobal(type, false, llvm::GlobalValue::ExternalLinkage, nullptr, context.getSymbolPrefix() + id.name);
 			}
 		}
 		else
 		{
-			temp.value = new llvm::GlobalVariable(*context.module, context.getIntType(size), false, llvm::GlobalValue::PrivateLinkage, nullptr, context.symbolPrepend + id.name);
+			temp.value = context.makeGlobal(context.getIntType(size), false, llvm::GlobalValue::PrivateLinkage, nullptr, context.getSymbolPrefix() + id.name);
 			switch (pinType)
 			{
 			case TOK_IN:
@@ -165,9 +163,9 @@ llvm::Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 			{
 				// we need a new variable to hold the impedance mask
 				bool needsImpedance = false;
-				if (context.gContext.impedanceRequired.find(context.moduleName + context.symbolPrepend + id.name) != context.gContext.impedanceRequired.end())
+				if (context.gContext.impedanceRequired.find(context.moduleName + context.getSymbolPrefix() + id.name) != context.gContext.impedanceRequired.end())
 				{
-					temp.impedance = new llvm::GlobalVariable(*context.module, context.getIntType(size), false, llvm::GlobalValue::PrivateLinkage, nullptr, context.symbolPrepend + id.name + ".HZ");
+					temp.impedance = context.makeGlobal(context.getIntType(size), false, llvm::GlobalValue::PrivateLinkage, nullptr, context.getSymbolPrefix() + id.name + ".HZ");
 					needsImpedance = true;
 				}
 				CreateWriteAccessor(context, temp, id.module, id.name, needsImpedance);

@@ -131,15 +131,15 @@ llvm::Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 		std::string idxStateLbl = "IDX" + context.stateLabelStack;
 		std::string stkStateLbl = "STACK" + context.stateLabelStack;
 
-		llvm::GlobalVariable* gcurState = new llvm::GlobalVariable(*context.module, context.getIntType(bitsNeeded), false, llvm::GlobalValue::PrivateLinkage, nullptr, context.symbolPrepend + curStateLbl);
-		llvm::GlobalVariable* gnxtState = new llvm::GlobalVariable(*context.module, context.getIntType(bitsNeeded), false, llvm::GlobalValue::PrivateLinkage, nullptr, context.symbolPrepend + nxtStateLbl);
+		llvm::GlobalVariable* gcurState = context.makeGlobal(context.getIntType(bitsNeeded), false, llvm::GlobalValue::PrivateLinkage, nullptr, context.getSymbolPrefix() + curStateLbl);
+		llvm::GlobalVariable* gnxtState = context.makeGlobal(context.getIntType(bitsNeeded), false, llvm::GlobalValue::PrivateLinkage, nullptr, context.getSymbolPrefix() + nxtStateLbl);
 
 		curState = gcurState;
 		nxtState = gnxtState;
 
 		llvm::ArrayType* ArrayTy_0 = llvm::ArrayType::get(context.getIntType(bitsNeeded), MAX_SUPPORTED_STACK_DEPTH);
-		llvm::GlobalVariable* stkState = new llvm::GlobalVariable(*context.module, ArrayTy_0, false, llvm::GlobalValue::PrivateLinkage, nullptr, context.symbolPrepend + stkStateLbl);
-		llvm::GlobalVariable *stkStateIdx = new llvm::GlobalVariable(*context.module, context.getIntType(MAX_SUPPORTED_STACK_BITS), false, llvm::GlobalValue::PrivateLinkage, nullptr, context.symbolPrepend + idxStateLbl);
+		llvm::GlobalVariable* stkState = context.makeGlobal(ArrayTy_0, false, llvm::GlobalValue::PrivateLinkage, nullptr, context.getSymbolPrefix() + stkStateLbl);
+		llvm::GlobalVariable *stkStateIdx = context.makeGlobal(context.getIntType(MAX_SUPPORTED_STACK_BITS), false, llvm::GlobalValue::PrivateLinkage, nullptr, context.getSymbolPrefix() + idxStateLbl);
 
 		StateVariable newStateVar;
 		newStateVar.currentState = curState;

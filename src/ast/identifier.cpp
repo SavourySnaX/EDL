@@ -67,7 +67,7 @@ llvm::Value* CIdentifier::codeGen(CodeGenContext& context)
 		{
 			// At this point, we need to get the PinGet method and call it.
 			
-			llvm::Function* pinGetFunction=context.LookupFunctionInExternalModule(module,context.symbolPrepend+"PinGet"+name);
+			llvm::Function* pinGetFunction=context.LookupFunctionInExternalModule(module,context.getSymbolPrefix()+"PinGet"+name);
 
 			std::vector<llvm::Value*> args;
 			llvm::Instruction* I=llvm::CallInst::Create(pinGetFunction,args,"GetPinValue",context.currentBlock());

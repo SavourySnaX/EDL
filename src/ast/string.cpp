@@ -15,7 +15,7 @@ llvm::Value* CString::codeGen(CodeGenContext& context)
 {
 	// Create a global variable to point to the string data
 	llvm::ArrayType* arrayType = llvm::ArrayType::get(context.getIntType(8), quoted.length() - 1);
-	llvm::GlobalVariable* globalString = new llvm::GlobalVariable(*context.module, arrayType, true, llvm::GlobalValue::PrivateLinkage, 0, context.symbolPrepend + ".str");
+	llvm::GlobalVariable* globalString = context.makeGlobal(arrayType, true, llvm::GlobalValue::PrivateLinkage, 0, context.getSymbolPrefix() + ".str");
 	globalString->setAlignment(1);
 
 	// Initial the global variable with the contents of the string (minus the quotation marks)

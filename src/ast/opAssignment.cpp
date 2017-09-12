@@ -123,7 +123,7 @@ llvm::Instruction* CAssignment::generateAssignmentActual(BitVariable& to, const 
 		else
 		{
 			// At this point, we need to get PinSet method and call it.
-			llvm::Function* function = context.LookupFunctionInExternalModule(toIdent.module, context.symbolPrepend + "PinSet" + toIdent.name);
+			llvm::Function* function = context.LookupFunctionInExternalModule(toIdent.module, context.getSymbolPrefix() + "PinSet" + toIdent.name);
 
 			std::vector<llvm::Value*> args;
 			args.push_back(final);
@@ -155,7 +155,7 @@ void CAssignment::prePass(CodeGenContext& context)
 	{
 		// We have a variable being assigned a high_impedance, for compatabilty with old (non bus connected modules), we only create impedance if we find at least one assignment
 		assert(lhs.module == "");
-		std::string fullName = context.moduleName + context.symbolPrepend + lhs.name;
+		std::string fullName = context.moduleName + context.getSymbolPrefix() + lhs.name;
 		if (context.gContext.impedanceRequired.find(fullName) == context.gContext.impedanceRequired.end())
 		{
 			context.gContext.impedanceRequired[fullName] = true;

@@ -112,8 +112,7 @@ llvm::Value* CInstruction::codeGen(CodeGenContext& context)
 		context.disassemblyTable[table.name][opcode] = disassembled.quoted;
 
 		llvm::FunctionType *ftype = llvm::FunctionType::get(context.getVoidType(), argTypes, false);
-		llvm::Function* function = llvm::Function::Create(ftype, llvm::GlobalValue::PrivateLinkage, EscapeString(context.symbolPrepend + "OPCODE_" + opcodeString.string.quoted.substr(1, opcodeString.string.quoted.length() - 2) + "_" + table.name + opcode.toString(16, false)), context.module);
-		function->setDoesNotThrow();
+		llvm::Function* function = context.makeFunction(ftype, llvm::GlobalValue::PrivateLinkage, EscapeString(context.getSymbolPrefix() + "OPCODE_" + opcodeString.string.quoted.substr(1, opcodeString.string.quoted.length() - 2) + "_" + table.name + opcode.toString(16, false)));
 
 		context.StartFunctionDebugInfo(function, statementLoc);
 

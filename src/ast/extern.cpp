@@ -51,10 +51,7 @@ llvm::Value* CExternDecl::codeGen(CodeGenContext& context)
 		FuncTy_8 = llvm::FunctionType::get(context.getIntType(size), FuncTy_8_args, false);
 	}
 
-	llvm::Function* func = llvm::Function::Create(FuncTy_8, llvm::GlobalValue::ExternalLinkage, context.symbolPrepend + name.name, context.module);
-	func->setCallingConv(llvm::CallingConv::C);
-
-	context.m_externFunctions[name.name] = func;
+	context.m_externFunctions[name.name] = context.makeFunction(FuncTy_8, llvm::GlobalValue::ExternalLinkage, context.getSymbolPrefix()+name.name);
 
 	return nullptr;
 }

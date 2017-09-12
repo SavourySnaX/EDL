@@ -38,14 +38,12 @@ llvm::Value* CFunctionDecl::codeGen(CodeGenContext& context)
 	llvm::Function* func = nullptr;
 	if (internal || !context.isRoot)
 	{
-		func = llvm::Function::Create(FuncTy_8, llvm::GlobalValue::PrivateLinkage, context.symbolPrepend + name.name, context.module);
+		func = context.makeFunction(FuncTy_8, llvm::GlobalValue::PrivateLinkage, context.getSymbolPrefix() + name.name);
 	}
 	else
 	{
-		func = llvm::Function::Create(FuncTy_8, llvm::GlobalValue::ExternalLinkage, context.symbolPrepend + name.name, context.module);
-		func->setCallingConv(llvm::CallingConv::C);
+		func = context.makeFunction(FuncTy_8, llvm::GlobalValue::ExternalLinkage, context.getSymbolPrefix() + name.name);
 	}
-	func->setDoesNotThrow();
 
 	context.StartFunctionDebugInfo(func, functionLoc);
 

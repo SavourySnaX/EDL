@@ -76,10 +76,10 @@ CodeGenContext::CodeGenContext(GlobalContext& globalContext,CodeGenContext* pare
 	{ 
 		std::string err;
 		std::unique_ptr<llvm::Module> Owner = llvm::make_unique<llvm::Module>("root", gContext.getLLVMContext());
-		module = Owner.get();
-		dbgBuilder = new llvm::DIBuilder(*module);
-		ee = llvm::EngineBuilder(std::move(Owner)).setErrorStr(&err).setMCJITMemoryManager(llvm::make_unique<llvm::SectionMemoryManager>()).create();
-		if (!ee)
+		globalContext.llvmModule = Owner.get();
+		dbgBuilder = new llvm::DIBuilder(*globalContext.llvmModule);
+		globalContext.llvmExecutionEngine = llvm::EngineBuilder(std::move(Owner)).setErrorStr(&err).setMCJITMemoryManager(llvm::make_unique<llvm::SectionMemoryManager>()).create();
+		if (globalContext.llvmExecutionEngine == nullptr)
 		{
 			std::cerr << err << std::endl;
 			exit(1);
@@ -90,11 +90,7 @@ CodeGenContext::CodeGenContext(GlobalContext& globalContext,CodeGenContext* pare
 	{
 		dbgBuilder = parent->dbgBuilder;
 		compileUnit = parent->compileUnit; // not sure about this yet
-		module=parent->module;
-		ee=parent->ee;
 		debugTraceChar=parent->debugTraceChar;
-		debugTraceString=parent->debugTraceString;
-		symbolPrepend=parent->symbolPrepend;
 		isRoot=false;
 	}
 }
@@ -183,7 +179,7 @@ void CodeGenContext::GenerateDisassmTables()
 		llvm::APInt tableSize32=tableSize.zextOrTrunc(32);
 		// Create a global variable to indicate the max size of the table
 
-		llvm::GlobalVariable* gvar_int32_DIS_max = new llvm::GlobalVariable(*module, getIntType(32),true,llvm::GlobalValue::ExternalLinkage,nullptr,symbolPrepend+"DIS_max_"+tableIter->first);
+		llvm::GlobalVariable* gvar_int32_DIS_max = makeGlobal(getIntType(32),true,llvm::GlobalValue::ExternalLinkage,nullptr,getSymbolPrefix()+"DIS_max_"+tableIter->first);
 		llvm::ConstantInt* const_int32_1 = getConstantInt(tableSize32+1);
 		gvar_int32_DIS_max->setInitializer(const_int32_1);
 
@@ -191,7 +187,7 @@ void CodeGenContext::GenerateDisassmTables()
 		llvm::PointerType* PointerTy_5 = llvm::PointerType::get(getIntType(8), 0);
        	llvm::ArrayType* ArrayTy_4 = llvm::ArrayType::get(PointerTy_5, tableSize.getLimitedValue()+1);
 		llvm::ConstantPointerNull* const_ptr_13 = llvm::ConstantPointerNull::get(PointerTy_5);	
-		llvm::GlobalVariable* gvar_array_table = new llvm::GlobalVariable(*module,ArrayTy_4,true,llvm::GlobalValue::ExternalLinkage,nullptr, symbolPrepend+"DIS_"+tableIter->first);
+		llvm::GlobalVariable* gvar_array_table = makeGlobal(ArrayTy_4,true,llvm::GlobalValue::ExternalLinkage,nullptr, getSymbolPrefix()+"DIS_"+tableIter->first);
 		std::vector<llvm::Constant*> const_array_9_elems;
 
 		std::map<llvm::APInt,std::string,myAPIntCompare>::iterator slot=tableIter->second.begin();
@@ -202,7 +198,7 @@ void CodeGenContext::GenerateDisassmTables()
 			if (CompareEquals(slot->first,trackingSlot))
 			{
 				llvm::ArrayType* ArrayTy_0 = llvm::ArrayType::get(getIntType(8), slot->second.length()-1);
-				llvm::GlobalVariable* gvar_array__str = new llvm::GlobalVariable(*module, ArrayTy_0,true,llvm::GlobalValue::PrivateLinkage,0,symbolPrepend+".str"+trackingSlot.toString(16,false));
+				llvm::GlobalVariable* gvar_array__str = makeGlobal(ArrayTy_0,true,llvm::GlobalValue::PrivateLinkage,0,getSymbolPrefix()+".str"+trackingSlot.toString(16,false));
 				gvar_array__str->setAlignment(1);
   
 				llvm::Constant* const_array_9 = getString(slot->second);
@@ -239,7 +235,7 @@ void CodeGenContext::generateCode(CBlock& root)
 	{
 		if (gContext.opts.symbolModifier)
 		{
-			symbolPrepend=gContext.opts.symbolModifier;
+			gContext.symbolPrefix=gContext.opts.symbolModifier;
 		}
 
 		// Testing - setup a compile unit for our root module
@@ -250,11 +246,11 @@ void CodeGenContext::generateCode(CBlock& root)
 			compileUnit = dbgBuilder->createCompileUnit(/*0x9999*/llvm::dwarf::DW_LANG_C99, gContext.scopingStack.top()->getFile(), "edlVxx", gContext.opts.optimisationLevel, ""/*command line flags*/, 0);
 
 #if defined(EDL_PLATFORM_MSVC)
-			module->addModuleFlag(llvm::Module::Warning, "CodeView", 1);
+			gContext.llvmModule->addModuleFlag(llvm::Module::Warning, "CodeView", 1);
 #else
-			module->addModuleFlag(llvm::Module::Warning, "Dwarf Version", 2);
+			gContext.llvmModule->addModuleFlag(llvm::Module::Warning, "Dwarf Version", 2);
 #endif
-			module->addModuleFlag(llvm::Module::Warning, "Debug Info Version", llvm::DEBUG_METADATA_VERSION);
+			gContext.llvmModule->addModuleFlag(llvm::Module::Warning, "Debug Info Version", llvm::DEBUG_METADATA_VERSION);
 		}
 
 		llvm::PointerType* PointerTy_4 = llvm::PointerType::get(getIntType(8), 0);
@@ -263,18 +259,13 @@ void CodeGenContext::generateCode(CBlock& root)
 		FuncTy_8_args.push_back(PointerTy_4);
 		llvm::FunctionType* FuncTy_8 = llvm::FunctionType::get(/*Result=*/getIntType(32),/*Params=*/FuncTy_8_args,/*isVarArg=*/false);
 
-		debugTraceString = llvm::Function::Create(/*Type=*/FuncTy_8,/*Linkage=*/llvm::GlobalValue::ExternalLinkage,/*Name=*/"puts", module); // (external, no body)
-		debugTraceString->setCallingConv(llvm::CallingConv::C);
-
 		std::vector<llvm::Type*>FuncTy_6_args;
 		FuncTy_6_args.push_back(getIntType(32));
 		llvm::FunctionType* FuncTy_6 = llvm::FunctionType::get(/*Result=*/getIntType(32),/*Params=*/FuncTy_6_args,/*isVarArg=*/false);
 
-		debugTraceChar = llvm::Function::Create(/*Type=*/FuncTy_6,/*Linkage=*/llvm::GlobalValue::ExternalLinkage,/*Name=*/"putchar", module); // (external, no body)
-		debugTraceChar->setCallingConv(llvm::CallingConv::C);
+		debugTraceChar = makeFunction(FuncTy_6,llvm::GlobalValue::ExternalLinkage,"putchar"); // (external, no body)
 		
-		debugTraceMissing = llvm::Function::Create(FuncTy_6,llvm::GlobalValue::ExternalLinkage,symbolPrepend+"missing", module); // (external, no body)
-		debugTraceMissing->setCallingConv(llvm::CallingConv::C);
+		debugTraceMissing = makeFunction(FuncTy_6,llvm::GlobalValue::ExternalLinkage,getSymbolPrefix()+"missing"); // (external, no body)
 		
 		std::vector<llvm::Type*>FuncTy_9_args;
 		FuncTy_9_args.push_back(getIntType(8));								//bitWidth (max 32)
@@ -284,8 +275,7 @@ void CodeGenContext::generateCode(CBlock& root)
 		FuncTy_9_args.push_back(getIntType(8));								// 0 / 1 - if 1 indicates the last tap in a connection list
 		llvm::FunctionType* FuncTy_9 = llvm::FunctionType::get(/*Result=*/getVoidType(),/*Params=*/FuncTy_9_args, false);
 
-		debugBusTap = llvm::Function::Create(FuncTy_9,llvm::GlobalValue::ExternalLinkage,symbolPrepend+"BusTap", module); // (external, no body)
-		debugBusTap->setCallingConv(llvm::CallingConv::C);
+		debugBusTap = makeFunction(FuncTy_9,llvm::GlobalValue::ExternalLinkage,getSymbolPrefix()+"BusTap"); // (external, no body)
 	}
 
 	root.prePass(*this);	/* Run a pre-pass on the code */
@@ -311,15 +301,15 @@ void CodeGenContext::generateCode(CBlock& root)
 
 			dbgBuilder->finalize();
 
-			llvm::NamedMDNode *IdentMetadata = module->getOrInsertNamedMetadata("llvm.ident");
+			llvm::NamedMDNode *IdentMetadata = gContext.llvmModule->getOrInsertNamedMetadata("llvm.ident");
 			std::string Version = "EDLvxx";
-			llvm::LLVMContext &Ctx = module->getContext();
+			llvm::LLVMContext &Ctx = gContext.llvmModule->getContext();
 
 			llvm::Metadata *IdentNode[] = { llvm::MDString::get(Ctx, Version) };
 			IdentMetadata->addOperand(llvm::MDNode::get(Ctx, IdentNode));
 		}
-		module->setDataLayout(ee->getDataLayout());
-		module->setTargetTriple(llvm::sys::getDefaultTargetTriple()/*"x86_64--windows-msvc"*/);	// required for codeview debug information to be output AT ALL (need to update object file output)
+		gContext.llvmModule->setDataLayout(gContext.llvmExecutionEngine->getDataLayout());
+		gContext.llvmModule->setTargetTriple(llvm::sys::getDefaultTargetTriple()/*"x86_64--windows-msvc"*/);	// required for codeview debug information to be output AT ALL (need to update object file output)
 
 		/* Print the bytecode in a human-readable format 
 		   to see if our program compiled properly
@@ -475,13 +465,13 @@ void CodeGenContext::generateCode(CBlock& root)
 				std::cerr << "Cannot emit object file" << std::endl;
 				return;
 			}
-			pm.run(*module);
+			pm.run(*gContext.llvmModule);
 			dest.flush();
 		}
 		else
 		{
 			pm.add(llvm::createPrintModulePass(llvm::outs()));
-			pm.run(*module);
+			pm.run(*gContext.llvmModule);
 		}
 	}
 }
@@ -550,5 +540,22 @@ bool CodeGenContext::LookupBitVariable(BitVariable& outVar,const std::string& mo
 
 llvm::Function* CodeGenContext::LookupFunctionInExternalModule(const std::string& moduleName, const std::string& name)
 {
-	return m_includes[moduleName]->module->getFunction(moduleName+name);
+	return gContext.llvmModule->getFunction(moduleName+name);
 }
+
+
+//////////////////////////////////////////////////////////////////////////
+
+llvm::Function*	CodeGenContext::makeFunction(llvm::FunctionType* fType, llvm::Function::LinkageTypes fLinkType, const llvm::Twine& fName)
+{
+	llvm::Function* func = llvm::Function::Create(fType, fLinkType, fName, gContext.llvmModule);
+	func->setCallingConv(llvm::CallingConv::C);
+	func->setDoesNotThrow();
+	return func;
+}
+
+llvm::GlobalVariable* CodeGenContext::makeGlobal(llvm::Type* gType, bool isConstant, llvm::GlobalVariable::LinkageTypes gLinkType, llvm::Constant* gInitialiser, const llvm::Twine& gName)
+{
+	return new llvm::GlobalVariable(*gContext.llvmModule, gType, isConstant, gLinkType, gInitialiser, gName);
+}
+
