@@ -385,7 +385,7 @@ llvm::Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 					args.push_back(nameRef);
 					args.push_back(truncExtDW);
 					args.push_back(context.getConstantInt(llvm::APInt(8, a == lastTap ? 1 : 0, false)));
-					llvm::CallInst *call = llvm::CallInst::Create(context.debugBusTap, args, "", context.currentBlock());
+					llvm::CallInst *call = llvm::CallInst::Create(context.gContext.debugBusTap, args, "", context.currentBlock());
 				}
 			}
 		}

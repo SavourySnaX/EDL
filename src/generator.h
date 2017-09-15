@@ -95,13 +95,16 @@ public:
 		errorFlagged = false;
 	}
 
-	CompilerOptions&							opts;
 	std::map<std::string, bool>					impedanceRequired;
 	std::stack<llvm::DIScope*>					scopingStack;
 	std::map<llvm::Function*,llvm::Function*>	connectFunctions;	
+	std::string									symbolPrefix;
+	CompilerOptions&							opts;
 	llvm::ExecutionEngine*						llvmExecutionEngine;
 	llvm::Module*								llvmModule;
-	std::string									symbolPrefix;
+	llvm::Function*								debugTraceChar;
+	llvm::Function*								debugTraceMissing;
+	llvm::Function*								debugBusTap;
 	bool										errorFlagged;
 
 
@@ -128,9 +131,6 @@ public:
 	llvm::DICompileUnit *compileUnit;
 	bool isRoot;
 	CodeGenContext(GlobalContext& globalContext, CodeGenContext* parent);
-	llvm::Function *debugTraceChar;
-	llvm::Function *debugTraceMissing;
-	llvm::Function *debugBusTap;
 
 	std::string moduleName;
 

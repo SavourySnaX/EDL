@@ -38,7 +38,7 @@ llvm::Value* CExecute::codeGen(CodeGenContext& context)
 			llvm::Instruction* truncExt = llvm::CastInst::Create(op, load, ty, "cast", tempBlock);
 
 			args.push_back(truncExt);
-			llvm::CallInst *call = llvm::CallInst::Create(context.debugTraceMissing, args, "DEBUGTRACEMISSING", tempBlock);
+			llvm::CallInst *call = llvm::CallInst::Create(context.gContext.debugTraceMissing, args, "DEBUGTRACEMISSING", tempBlock);
 
 			llvm::BranchInst::Create(temp.blockEndForExecute, tempBlock);
 

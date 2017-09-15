@@ -90,7 +90,6 @@ CodeGenContext::CodeGenContext(GlobalContext& globalContext,CodeGenContext* pare
 	{
 		dbgBuilder = parent->dbgBuilder;
 		compileUnit = parent->compileUnit; // not sure about this yet
-		debugTraceChar=parent->debugTraceChar;
 		isRoot=false;
 	}
 }
@@ -261,9 +260,9 @@ void CodeGenContext::generateCode(CBlock& root)
 		FuncTy_6_args.push_back(getIntType(32));
 		llvm::FunctionType* FuncTy_6 = llvm::FunctionType::get(/*Result=*/getIntType(32),/*Params=*/FuncTy_6_args,/*isVarArg=*/false);
 
-		debugTraceChar = makeFunction(FuncTy_6,llvm::GlobalValue::ExternalLinkage,"putchar"); // (external, no body)
+		gContext.debugTraceChar = makeFunction(FuncTy_6,llvm::GlobalValue::ExternalLinkage,"putchar"); // (external, no body)
 		
-		debugTraceMissing = makeFunction(FuncTy_6,llvm::GlobalValue::ExternalLinkage,getSymbolPrefix()+"missing"); // (external, no body)
+		gContext.debugTraceMissing = makeFunction(FuncTy_6,llvm::GlobalValue::ExternalLinkage,getSymbolPrefix()+"missing"); // (external, no body)
 		
 		std::vector<llvm::Type*>FuncTy_9_args;
 		FuncTy_9_args.push_back(getIntType(8));								//bitWidth (max 32)
@@ -273,7 +272,7 @@ void CodeGenContext::generateCode(CBlock& root)
 		FuncTy_9_args.push_back(getIntType(8));								// 0 / 1 - if 1 indicates the last tap in a connection list
 		llvm::FunctionType* FuncTy_9 = llvm::FunctionType::get(/*Result=*/getVoidType(),/*Params=*/FuncTy_9_args, false);
 
-		debugBusTap = makeFunction(FuncTy_9,llvm::GlobalValue::ExternalLinkage,getSymbolPrefix()+"BusTap"); // (external, no body)
+		gContext.debugBusTap = makeFunction(FuncTy_9,llvm::GlobalValue::ExternalLinkage,getSymbolPrefix()+"BusTap"); // (external, no body)
 	}
 
 	root.prePass(*this);	/* Run a pre-pass on the code */
@@ -556,4 +555,3 @@ llvm::GlobalVariable* CodeGenContext::makeGlobal(llvm::Type* gType, bool isConst
 {
 	return new llvm::GlobalVariable(*gContext.llvmModule, gType, isConstant, gLinkType, gInitialiser, gName);
 }
-

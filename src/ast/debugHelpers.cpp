@@ -15,7 +15,7 @@ llvm::Value* CDebugTraceString::codeGen(CodeGenContext& context)
 		std::vector<llvm::Value*> args;
 
 		args.push_back(context.getConstantInt(llvm::APInt(32, string.quoted[a])));
-		llvm::CallInst *call = llvm::CallInst::Create(context.debugTraceChar, args, "DEBUGTRACE", context.currentBlock());
+		llvm::CallInst *call = llvm::CallInst::Create(context.gContext.debugTraceChar, args, "DEBUGTRACE", context.currentBlock());
 	}
 	return nullptr;
 }
@@ -52,7 +52,7 @@ llvm::Value* CDebugTraceInteger::codeGen(CodeGenContext& context)
 		llvm::APInt tmp = tempInteger.udiv(baseDivisor);
 
 		args.push_back(context.getConstantInt(llvm::APInt(32, tbl[tmp.getLimitedValue()])));
-		llvm::CallInst *call = llvm::CallInst::Create(context.debugTraceChar, args, "DEBUGTRACE", context.currentBlock());
+		llvm::CallInst *call = llvm::CallInst::Create(context.gContext.debugTraceChar, args, "DEBUGTRACE", context.currentBlock());
 
 		tempInteger -= tmp*baseDivisor;
 		if (cnt != 1)
@@ -107,7 +107,7 @@ llvm::Value* CDebugTraceIdentifier::generate(CodeGenContext& context, llvm::Valu
 		llvm::SelectInst *select = llvm::SelectInst::Create(check, lowAdd, hiAdd, "getRightChar", context.currentBlock());
 
 		args.push_back(select);
-		llvm::CallInst *call = llvm::CallInst::Create(context.debugTraceChar, args, "DEBUGTRACE", context.currentBlock());
+		llvm::CallInst *call = llvm::CallInst::Create(context.gContext.debugTraceChar, args, "DEBUGTRACE", context.currentBlock());
 
 		llvm::BinaryOperator* mulUp = llvm::BinaryOperator::Create(llvm::Instruction::Mul, shiftInst, const_intDiv, "mulUp", context.currentBlock());
 		loadedValue = llvm::BinaryOperator::Create(llvm::Instruction::Sub, loadedValue, mulUp, "fixup", context.currentBlock());
@@ -145,7 +145,7 @@ llvm::Value* CDebugTraceIdentifier::codeGen(CodeGenContext& context)
 
 		std::vector<llvm::Value*> args;
 		args.push_back(context.getConstantInt(llvm::APInt(32, ')')));
-		llvm::CallInst::Create(context.debugTraceChar, args, "DEBUGTRACE", context.currentBlock());
+		llvm::CallInst::Create(context.gContext.debugTraceChar, args, "DEBUGTRACE", context.currentBlock());
 
 		return ret;
 	}
@@ -175,13 +175,13 @@ llvm::Value* CDebugTraceIdentifier::codeGen(CodeGenContext& context)
 			{
 				std::vector<llvm::Value*> args;
 				args.push_back(context.getConstantInt(llvm::APInt(32, ',')));
-				llvm::CallInst::Create(context.debugTraceChar, args, "DEBUGTRACE", context.currentBlock());
+				llvm::CallInst::Create(context.gContext.debugTraceChar, args, "DEBUGTRACE", context.currentBlock());
 			}
 		}
 
 		std::vector<llvm::Value*> args;
 		args.push_back(context.getConstantInt(llvm::APInt(32, ')')));
-		llvm::CallInst::Create(context.debugTraceChar, args, "DEBUGTRACE", context.currentBlock());
+		llvm::CallInst::Create(context.gContext.debugTraceChar, args, "DEBUGTRACE", context.currentBlock());
 	}
 
 	return nullptr;
@@ -214,7 +214,7 @@ llvm::Value* CDebugLine::codeGen(CodeGenContext& context)		// Refactored away on
 
 	std::vector<llvm::Value*> args;
 	args.push_back(context.getConstantInt(llvm::APInt(32, '\n')));
-	llvm::CallInst* fcall = llvm::CallInst::Create(context.debugTraceChar, args, "DEBUGTRACE", context.currentBlock());
+	llvm::CallInst* fcall = llvm::CallInst::Create(context.gContext.debugTraceChar, args, "DEBUGTRACE", context.currentBlock());
 
 	llvm::BranchInst::Create(cont, context.currentBlock());
 
