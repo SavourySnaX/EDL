@@ -7,8 +7,6 @@
 #include <llvm/IR/Type.h>
 #include <llvm/IR/Value.h>
 
-extern void PrintErrorFromLocation(const YYLTYPE &location, const char *errorstring, ...);		// Todo refactor away
-
 llvm::Value* CExchange::codeGen(CodeGenContext& context)
 {
 	BitVariable lhsVar, rhsVar;
@@ -36,9 +34,7 @@ llvm::Value* CExchange::codeGen(CodeGenContext& context)
 
 			if (leftType->getBitWidth() != rightType->getBitWidth())
 			{
-				PrintErrorFromLocation(operatorLoc, "Both operands to exchange must be same size");
-				context.FlagError();
-				return nullptr;
+				return context.gContext.ReportError(nullptr, EC_ErrorAtLocation, operatorLoc, "Both operands to exchange must be same size");
 			}
 
 			CAssignment::generateAssignment(lhsVar, lhs, right, context);
@@ -48,7 +44,5 @@ llvm::Value* CExchange::codeGen(CodeGenContext& context)
 		return nullptr;
 	}
 
-	PrintErrorFromLocation(operatorLoc, "Illegal operands to exchange");
-	context.FlagError();
-	return nullptr;
+	return context.gContext.ReportError(nullptr, EC_ErrorAtLocation, operatorLoc, "Illegal operands to exchange (must both be assignable)");
 }

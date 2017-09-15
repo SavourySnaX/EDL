@@ -6,8 +6,6 @@
 
 #include <llvm/IR/Value.h>
 
-extern void PrintErrorFromLocation(const YYLTYPE &location, const char *errorstring, ...);		// Todo refactor away
-
 void CAffector::prePass(CodeGenContext& context)
 {
 	expr.prePass(context);
@@ -23,9 +21,7 @@ llvm::Value* CAffector::codeGen(CodeGenContext& context)
 
 	if (context.curAffectors.size())
 	{
-		PrintErrorFromLocation(exprLoc, "(TODO) Cannot currently supply nested affectors");
-		context.FlagError();
-		return nullptr;
+		return context.gContext.ReportError(nullptr, EC_InternalError, exprLoc, "(TODO) Cannot currently supply nested affectors");
 	}
 
 	// If there is more than 1 expr that is used to compute CARRY/OVERFLOW, we need to test at each stage.
@@ -57,9 +53,7 @@ llvm::Value* CAffector::codeGen(CodeGenContext& context)
 	{
 		if (expr.IsLeaf())
 		{
-			PrintErrorFromLocation(exprLoc, "OVERFLOW/CARRY is not supported for non carry/overflow expressions");
-			context.FlagError();
-			return nullptr;
+			return context.gContext.ReportError(nullptr, EC_ErrorAtLocation, exprLoc, "OVERFLOW/CARRY is not supported for non carry/overflow expressions");
 		}
 	}
 

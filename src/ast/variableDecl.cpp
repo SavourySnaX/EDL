@@ -11,9 +11,6 @@
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Value.h>
 
-extern void PrintErrorFromLocation(const YYLTYPE &location, const char *errorstring, ...);		// Todo refactor away
-extern void PrintErrorWholeLine(const YYLTYPE &location, const char *errorstring, ...);			// Todo refactor away
-
 CInteger CVariableDeclaration::notArray("0");
 
 void CVariableDeclaration::CreateWriteAccessor(CodeGenContext& context, BitVariable& var, const std::string& moduleName, const std::string& name, bool impedance)
@@ -117,9 +114,7 @@ llvm::Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 	{
 		if (pinType != 0)
 		{
-			PrintErrorFromLocation(declarationLoc, "Cannot declare pins anywhere but global scope");
-			context.FlagError();
-			return nullptr;
+			return context.gContext.ReportError(nullptr, EC_ErrorAtLocation, declarationLoc, "Cannot declare pins anywhere but global scope");
 		}
 		// Within a basic block - so must be a stack variable
 		llvm::AllocaInst *alloc = new llvm::AllocaInst(context.getIntType(size), 0, id.name.c_str(), context.currentBlock());
@@ -173,8 +168,7 @@ llvm::Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 			}
 			break;
 			default:
-				assert(0 && "Unhandled pin type");
-				break;
+				return context.gContext.ReportError(nullptr, EC_InternalError, declarationLoc, "Unhandled pin type");
 			}
 		}
 
@@ -266,9 +260,7 @@ llvm::Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 		{
 			if (initialiserList.size() != 1)
 			{
-				PrintErrorWholeLine(declarationLoc, "Too many initialisers (note array initialisers not currently supported in local scope)");
-				context.FlagError();
-				return nullptr;
+				return context.gContext.ReportError(nullptr, EC_ErrorWholeLine, declarationLoc, "Too many initialisers (note array initialisers not currently supported in local scope)");
 			}
 
 			llvm::APInt t = initialiserList[0]->getAPInt();
@@ -301,9 +293,7 @@ llvm::Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 			{
 				if (initialiserList.size() > power2.getLimitedValue())
 				{
-					PrintErrorWholeLine(declarationLoc, "Too many initialisers, initialiser list bigger than array storage");
-					context.FlagError();
-					return nullptr;
+					return context.gContext.ReportError(nullptr, EC_ErrorWholeLine, declarationLoc, "Too many initialisers, initialiser list bigger than array storage");
 				}
 
 				int a;
@@ -348,9 +338,7 @@ llvm::Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 			{
 				if (initialiserList.size() != 1)
 				{
-					PrintErrorWholeLine(declarationLoc, "Too many initialisers");
-					context.FlagError();
-					return nullptr;
+					return context.gContext.ReportError(nullptr, EC_ErrorWholeLine, declarationLoc, "Too many initialisers");
 				}
 
 				llvm::APInt t = initialiserList[0]->getAPInt();

@@ -10,9 +10,6 @@
 #include <llvm/IR/Type.h>
 #include <llvm/IR/Value.h>
 
-extern void PrintErrorFromLocation(const YYLTYPE &location, const char *errorstring, ...);		// Todo refactor away
-extern void PrintErrorWholeLine(const YYLTYPE &location, const char *errorstring, ...);			// Todo refactor away
-
 bool CBinaryOperator::IsCarryExpression() const
 {
 	bool allCarry=true;
@@ -81,9 +78,7 @@ llvm::Value* CBinaryOperator::codeGen(CodeGenContext& context,llvm::Value* left,
 		switch (op) 
 		{
 		default:
-			assert(0 && "Internal Error - Unimplemented binary operator!");
-			context.FlagError();
-			return nullptr;
+			return context.gContext.ReportError(nullptr, EC_InternalError, operatorLoc, "(TODO) Unimplemented binary operator!");
 		case TOK_ADD:
 		case TOK_DADD:
 		case TOK_SUB:
@@ -143,9 +138,7 @@ llvm::Value* CBinaryOperator::codeGen(CodeGenContext& context,llvm::Value* left,
 
 					if (hasMixedOperations)
 					{
-						PrintErrorFromLocation(operatorLoc,"OVERFLOW requires all operators to be either +(+) or -(-) only");
-						context.FlagError();
-						return nullptr;
+						return context.gContext.ReportError(nullptr, EC_ErrorAtLocation, operatorLoc,"OVERFLOW requires all operators to be either +(+) or -(-) only");
 					}
 				}
 
@@ -184,7 +177,5 @@ llvm::Value* CBinaryOperator::codeGen(CodeGenContext& context,llvm::Value* left,
 		}
 	}
 
-	PrintErrorWholeLine(operatorLoc, "Illegal types in expression");
-	context.FlagError();
-	return nullptr;
+	return context.gContext.ReportError(nullptr, EC_InternalError, operatorLoc, "(TODO) Illegal types in expression");
 }

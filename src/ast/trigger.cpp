@@ -114,8 +114,7 @@ llvm::Value* CTrigger::codeGen(CodeGenContext& context, BitVariable& pin, llvm::
 	case TOK_TRANSITION:
 		return GenerateTransition(context, pin, function);
 	default:
-		assert(0 && "Unhandled trigger type");
-		break;
+		return context.gContext.ReportError(nullptr, EC_InternalError, debugLocation, "Unhandled trigger type");
 	}
 
 	return nullptr;

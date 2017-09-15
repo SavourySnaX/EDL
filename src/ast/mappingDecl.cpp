@@ -16,8 +16,7 @@ llvm::Value* CMappingDeclaration::codeGen(CodeGenContext& context)
 {
 	if (context.m_mappings.find(ident.name) != context.m_mappings.end())
 	{
-		PrintErrorDuplication(ident.nameLoc, context.m_mappings[ident.name]->ident.nameLoc, "Multiple declaration for mapping");
-		context.FlagError();
+		return context.gContext.ReportDuplicationError(nullptr, ident.nameLoc, context.m_mappings[ident.name]->ident.nameLoc, "Multiple declaration for mapping");
 	}
 	else
 	{

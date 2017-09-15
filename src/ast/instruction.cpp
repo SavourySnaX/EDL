@@ -8,8 +8,6 @@
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Value.h>
 
-extern void PrintErrorWholeLine(const YYLTYPE &location, const char *errorstring, ...);			// Todo refactor away
-
 CIdentifier CInstruction::emptyTable("");
 
 std::string CInstruction::EscapeString(const std::string &in) const
@@ -97,9 +95,7 @@ llvm::Value* CInstruction::codeGen(CodeGenContext& context)
 	unsigned numOpcodes = operands[0]->GetNumComputableConstants(context);
 	if (numOpcodes == 0)
 	{
-		PrintErrorWholeLine(statementLoc, "Opcode for instruction must be able to generate constants");
-		context.FlagError();
-		return nullptr;
+		return context.gContext.ReportError(nullptr, EC_ErrorWholeLine, statementLoc, "Opcode for instruction must be able to generate constants");
 	}
 
 	for (unsigned a = 0; a < numOpcodes; a++)

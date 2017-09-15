@@ -8,9 +8,6 @@
 #include <llvm/IR/DIBuilder.h>
 #include <llvm/IR/Value.h>
 
-extern void PrintErrorFromLocation(const YYLTYPE &location, const char *errorstring, ...);		// Todo refactor away
-extern llvm::DIFile* CreateNewDbgFile(const char* filepath, llvm::DIBuilder* dbgBuilder);		// Todo refactor away
-
 extern int yyparse();
 extern CBlock* g_ProgramBlock;
 extern int resetFileInput(const char* filename);
@@ -22,15 +19,13 @@ void CInstance::prePass(CodeGenContext& context)
 
 	if (resetFileInput(includeName.c_str()) != 0)
 	{
-		PrintErrorFromLocation(filename.quotedLoc, "Unable to instance module %s", includeName.c_str());
-		context.FlagError();
+		context.gContext.ReportError(nullptr, EC_ErrorAtLocation, filename.quotedLoc, "Unable to instance module %s", includeName.c_str());
 		return;
 	}
 	yyparse();
 	if (g_ProgramBlock == 0)
 	{
-		PrintErrorFromLocation(filename.quotedLoc, "Unable to parse module %s", includeName.c_str());
-		context.FlagError();
+		context.gContext.ReportError(nullptr, EC_ErrorAtLocation, filename.quotedLoc, "Unable to parse module %s", includeName.c_str());
 		return;
 	}
 
@@ -41,7 +36,7 @@ void CInstance::prePass(CodeGenContext& context)
 
 	if (context.gContext.opts.generateDebug)
 	{
-		context.gContext.scopingStack.push(CreateNewDbgFile(includeName.c_str(), includefile->dbgBuilder));
+		context.gContext.scopingStack.push(context.gContext.CreateNewDbgFile(includeName.c_str()));
 	}
 
 	includefile->generateCode(*g_ProgramBlock);
@@ -52,8 +47,7 @@ void CInstance::prePass(CodeGenContext& context)
 	}
 	if (includefile->isErrorFlagged())
 	{
-		PrintErrorFromLocation(filename.quotedLoc, "Unable to parse module %s", includeName.c_str());
-		context.FlagError();
+		context.gContext.ReportError(nullptr , EC_ErrorAtLocation, filename.quotedLoc, "Unable to parse module %s", includeName.c_str());
 		return;
 	}
 	context.m_includes[ident.name + "."] = includefile;

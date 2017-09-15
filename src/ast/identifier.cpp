@@ -9,15 +9,11 @@
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Value.h>
 
-extern void PrintErrorFromLocation(const YYLTYPE &location, const char *errorstring, ...);		// Todo refactor away
-
 llvm::Value* CIdentifier::trueSize(llvm::Value* in, CodeGenContext& context, BitVariable& var)
 {
 	if (var.mappingRef)
 	{
-		PrintErrorFromLocation(var.refLoc, "(TODO)Cannot perform operation on a mapping reference");
-		context.FlagError();
-		return nullptr;
+		return context.gContext.ReportError(nullptr, EC_ErrorAtLocation, var.refLoc, "(TODO)Cannot perform operation on a mapping reference");
 	}
 
 	llvm::Type* varType = context.getIntType(var.trueSize);
@@ -59,9 +55,7 @@ llvm::Value* CIdentifier::codeGen(CodeGenContext& context)
 	{
 		if (var.pinType!=TOK_OUT && var.pinType!=TOK_BIDIRECTIONAL)
 		{
-			PrintErrorFromLocation(var.refLoc,"Pin marked as not readable");
-			context.FlagError();
-			return nullptr;
+			return context.gContext.ReportError(nullptr, EC_ErrorAtLocation, var.refLoc,"Pin marked as not readable");
 		}
 		else
 		{

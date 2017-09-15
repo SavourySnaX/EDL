@@ -10,8 +10,6 @@
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Value.h>
 
-extern void PrintErrorFromLocation(const YYLTYPE &location, const char *errorstring, ...);		// Todo refactor away
-
 CInteger CAffect::emptyParam("0");
 
 llvm::Value* CAffect::codeGenCarry(CodeGenContext& context, llvm::Value* exprResult, llvm::Value* lhs, llvm::Value* rhs, int optype)
@@ -25,9 +23,7 @@ llvm::Value* CAffect::codeGenCarry(CodeGenContext& context, llvm::Value* exprRes
 	{
 		if (param.getAPInt().getLimitedValue() >= resultType->getBitWidth())
 		{
-			PrintErrorFromLocation(param.getSourceLocation(), "Bit to carry is outside of range for result");
-			context.FlagError();
-			return nullptr;
+			return context.gContext.ReportError(nullptr, EC_ErrorAtLocation, param.getSourceLocation(), "Bit to carry is outside of range for result");
 		}
 
 		llvm::IntegerType* lhsType = llvm::cast<llvm::IntegerType>(lhs->getType());
@@ -80,8 +76,7 @@ llvm::Value* CAffect::codeGenCarry(CodeGenContext& context, llvm::Value* exprRes
 	break;
 
 	default:
-		assert(0 && "Unknown affector");
-		break;
+		return context.gContext.ReportError(nullptr, EC_InternalError, ident.nameLoc, "(TODO) Unknown affector");
 	}
 
 	if (tmpResult)
@@ -106,9 +101,7 @@ llvm::Value* CAffect::codeGenFinal(CodeGenContext& context, llvm::Value* exprRes
 
 	if (var.mappingRef)
 	{
-		PrintErrorFromLocation(var.refLoc, "Cannot perform operation on a mapping reference");
-		context.FlagError();
-		return nullptr;
+		return context.gContext.ReportError(nullptr, EC_ErrorAtLocation, var.refLoc, "Cannot perform operation on a mapping reference");
 	}
 
 	llvm::IntegerType* resultType = llvm::cast<llvm::IntegerType>(exprResult->getType());
@@ -220,21 +213,17 @@ llvm::Value* CAffect::codeGenFinal(CodeGenContext& context, llvm::Value* exprRes
 
 		if (param.getAPInt().getLimitedValue() >= resultType->getBitWidth())
 		{
-			PrintErrorFromLocation(param.getSourceLocation(), "Bit for overflow detection is outside of range for result");
-			context.FlagError();
-			return nullptr;
+			return context.gContext.ReportError(nullptr, EC_ErrorAtLocation, param.getSourceLocation(), "Bit for overflow detection is outside of range for result");
 		}
 		llvm::Value* lhs = ov1Val;		// Lhs and Rhs are provided in the overflow affector
 		if (lhs == nullptr)
 		{
-			context.FlagError();
-			return nullptr;
+			return context.gContext.ReportError(nullptr, EC_InternalError, param.getSourceLocation(), "(TODO) lhs should not be nullptr");
 		}
 		llvm::Value* rhs = ov2Val;
 		if (rhs == nullptr)
 		{
-			context.FlagError();
-			return nullptr;
+			return context.gContext.ReportError(nullptr, EC_InternalError, param.getSourceLocation(), "(TODO) rhs should not be nullptr");
 		}
 
 		llvm::IntegerType* lhsType = llvm::cast<llvm::IntegerType>(lhs->getType());
@@ -242,15 +231,11 @@ llvm::Value* CAffect::codeGenFinal(CodeGenContext& context, llvm::Value* exprRes
 
 		if (param.getAPInt().getLimitedValue() >= lhsType->getBitWidth())
 		{
-			PrintErrorFromLocation(param.getSourceLocation(), "Bit for overflow detection is outside of range of lhs");
-			context.FlagError();
-			return nullptr;
+			return context.gContext.ReportError(nullptr, EC_ErrorAtLocation, param.getSourceLocation(), "Bit for overflow detection is outside of range of lhs");
 		}
 		if (param.getAPInt().getLimitedValue() >= rhsType->getBitWidth())
 		{
-			PrintErrorFromLocation(param.getSourceLocation(), "Bit for overflow detection is outside of range of rhs");
-			context.FlagError();
-			return nullptr;
+			return context.gContext.ReportError(nullptr, EC_ErrorAtLocation, param.getSourceLocation(), "Bit for overflow detection is outside of range of rhs");
 		}
 
 		llvm::Instruction::CastOps lhsOp = llvm::CastInst::getCastOpcode(lhs, false, resultType, false);
@@ -307,7 +292,7 @@ llvm::Value* CAffect::codeGenFinal(CodeGenContext& context, llvm::Value* exprRes
 
 		if (tmpResult == nullptr)
 		{
-			assert(0 && "Failed to compute CARRY/OVERFLOW for expression (possible bug in compiler)");
+			return context.gContext.ReportError(nullptr, EC_InternalError, ident.nameLoc, "Failed to compute CARRY/OVERFLOW for expression (possible bug in compiler)");
 		}
 
 		if (type == TOK_CARRY)
@@ -323,8 +308,7 @@ llvm::Value* CAffect::codeGenFinal(CodeGenContext& context, llvm::Value* exprRes
 	break;
 
 	default:
-		assert(0 && "Unknown affector");
-		break;
+		return context.gContext.ReportError(nullptr, EC_InternalError, ident.nameLoc, "(TODO) Unknown affector");
 	}
 
 	return CAssignment::generateAssignment(var, ident, answer, context);

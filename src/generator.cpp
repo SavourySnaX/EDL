@@ -17,56 +17,12 @@ const size_t PATH_DEFAULT_LEN=2048;
 CIdentifier CAliasDeclaration::empty("");
 
 extern YYLTYPE CombineTokenLocations(const YYLTYPE &a, const YYLTYPE &b);
-extern void PrintErrorWholeLine(const YYLTYPE &location, const char *errorstring, ...);
-extern void PrintErrorFromLocation(const YYLTYPE &location, const char *errorstring, ...);
-extern void PrintErrorDuplication(const YYLTYPE &location, const YYLTYPE &originalLocation, const char *errorstring, ...);
-extern void PrintError(const char *errorstring, ...);
 
 std::string SanitiseNameForDebug(llvm::StringRef inputName)
 {
 	std::string t = inputName;
 	std::replace(t.begin(), t.end(), '.', '_');
 	return t;
-}
-
-llvm::DIFile* CreateNewDbgFile(const char* filepath,llvm::DIBuilder* dbgBuilder)
-{
-	llvm::SmallString<PATH_DEFAULT_LEN> fullpath(filepath);
-	llvm::sys::path::native(fullpath);
-	llvm::sys::fs::make_absolute(fullpath);
-	llvm::StringRef filename = llvm::sys::path::filename(fullpath);
-	llvm::sys::path::remove_filename(fullpath);
-	llvm::SmallString<32> Checksum;
-	Checksum.clear();
-
-	llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> CheckFileOrErr = llvm::MemoryBuffer::getFile(filepath);
-	if (std::error_code EC = CheckFileOrErr.getError())
-	{
-		assert(0 && "failed to read file");
-	}
-	llvm::MemoryBuffer &MemBuffer = *CheckFileOrErr.get();
-
-	llvm::MD5 Hash;
-	llvm::MD5::MD5Result Result;
-
-	Hash.update(MemBuffer.getBuffer());
-	Hash.final(Result);
-
-	Hash.stringifyResult(Result, Checksum);
-
-	return dbgBuilder->createFile(filename, fullpath, llvm::DIFile::CSK_MD5, Checksum);
-}
-
-llvm::Value* UndefinedStateError(StateIdentList &stateIdents,CodeGenContext &context)
-{
-	YYLTYPE combined = stateIdents[0]->nameLoc;
-	for (int a = 0; a < stateIdents.size(); a++)
-	{
-		combined = CombineTokenLocations(combined, stateIdents[a]->nameLoc);
-	}
-	PrintErrorFromLocation(combined, "Unknown state requested");
-	context.FlagError();
-	return nullptr;
 }
 
 CodeGenContext::CodeGenContext(GlobalContext& globalContext,CodeGenContext* parent) : gContext(globalContext)
@@ -77,7 +33,7 @@ CodeGenContext::CodeGenContext(GlobalContext& globalContext,CodeGenContext* pare
 		std::string err;
 		std::unique_ptr<llvm::Module> Owner = llvm::make_unique<llvm::Module>("root", gContext.getLLVMContext());
 		globalContext.llvmModule = Owner.get();
-		dbgBuilder = new llvm::DIBuilder(*globalContext.llvmModule);
+		globalContext.dbgBuilder = new llvm::DIBuilder(*globalContext.llvmModule);
 		globalContext.llvmExecutionEngine = llvm::EngineBuilder(std::move(Owner)).setErrorStr(&err).setMCJITMemoryManager(llvm::make_unique<llvm::SectionMemoryManager>()).create();
 		if (globalContext.llvmExecutionEngine == nullptr)
 		{
@@ -88,8 +44,6 @@ CodeGenContext::CodeGenContext(GlobalContext& globalContext,CodeGenContext* pare
 	}
 	else
 	{
-		dbgBuilder = parent->dbgBuilder;
-		compileUnit = parent->compileUnit; // not sure about this yet
 		isRoot=false;
 	}
 }
@@ -124,32 +78,32 @@ void CodeGenContext::StartFunctionDebugInfo(llvm::Function* func, YYLTYPE& declL
 		else if (retType->isIntegerTy())
 		{
 			std::string name = "Bit" + std::to_string(retType->getIntegerBitWidth());
-			EltTys.push_back(dbgBuilder->createBasicType(name, retType->getIntegerBitWidth(), 0));
+			EltTys.push_back(gContext.dbgBuilder->createBasicType(name, retType->getIntegerBitWidth(), 0));
 		}
 		else
 		{
-			PrintErrorFromLocation(declLoc, "Internal Compiler error, return type is not void or integer");
+			gContext.ReportError(nullptr, EC_InternalError, declLoc, "Internal Compiler error, return type is not void or integer");
 			return;
 		}
 		for (const auto& arg : func->getFunctionType()->params())
 		{
 			if (!arg->isIntegerTy())
 			{
-				PrintErrorFromLocation(declLoc, "Internal Compiler error, arg type is not integer");
+				gContext.ReportError(nullptr, EC_InternalError, declLoc, "Internal Compiler error, arg type is not integer");
 				return;
 			}
 			std::string name = "Bit" + std::to_string(arg->getIntegerBitWidth());
-			EltTys.push_back(dbgBuilder->createBasicType(name, arg->getIntegerBitWidth(), 0));
+			EltTys.push_back(gContext.dbgBuilder->createBasicType(name, arg->getIntegerBitWidth(), 0));
 		}
 
-		llvm::DISubroutineType* dbgFuncTy = dbgBuilder->createSubroutineType(dbgBuilder->getOrCreateTypeArray(EltTys));
+		llvm::DISubroutineType* dbgFuncTy = gContext.dbgBuilder->createSubroutineType(gContext.dbgBuilder->getOrCreateTypeArray(EltTys));
 
 		// Create function definition in debug information
 
 		llvm::DIScope *FContext = gContext.scopingStack.top()->getFile();	// temporary - should come from the location information
 		unsigned LineNo = declLoc.first_line;
 		unsigned ScopeLine = LineNo;
-		llvm::DISubprogram *SP = dbgBuilder->createFunction(
+		llvm::DISubprogram *SP = gContext.dbgBuilder->createFunction(
 			FContext, SanitiseNameForDebug(func->getName()), llvm::StringRef(), gContext.scopingStack.top()->getFile(), LineNo,
 			dbgFuncTy,
 			false /* internal linkage */, true /* definition */, ScopeLine,
@@ -238,9 +192,9 @@ void CodeGenContext::generateCode(CBlock& root)
 		// Testing - setup a compile unit for our root module
 		if (gContext.opts.generateDebug)
 		{
-			gContext.scopingStack.push(CreateNewDbgFile(gContext.opts.inputFile, dbgBuilder));
+			gContext.scopingStack.push(gContext.CreateNewDbgFile(gContext.opts.inputFile));
 
-			compileUnit = dbgBuilder->createCompileUnit(/*0x9999*/llvm::dwarf::DW_LANG_C99, gContext.scopingStack.top()->getFile(), "edlVxx", gContext.opts.optimisationLevel, ""/*command line flags*/, 0);
+			gContext.compileUnit = gContext.dbgBuilder->createCompileUnit(/*0x9999*/llvm::dwarf::DW_LANG_C99, gContext.scopingStack.top()->getFile(), "edlVxx", gContext.opts.optimisationLevel, ""/*command line flags*/, 0);
 
 #if defined(EDL_PLATFORM_MSVC)
 			gContext.llvmModule->addModuleFlag(llvm::Module::Warning, "CodeView", 1);
@@ -296,7 +250,7 @@ void CodeGenContext::generateCode(CBlock& root)
 			gContext.scopingStack.pop();
 			assert(gContext.scopingStack.empty() && "Programming error");
 
-			dbgBuilder->finalize();
+			gContext.dbgBuilder->finalize();
 
 			llvm::NamedMDNode *IdentMetadata = gContext.llvmModule->getOrInsertNamedMetadata("llvm.ident");
 			std::string Version = "EDLvxx";
@@ -498,29 +452,24 @@ bool CodeGenContext::LookupBitVariable(BitVariable& outVar,const std::string& mo
 					}
 					else
 					{
-						PrintErrorFromLocation(CombineTokenLocations(nameLoc, modLoc), "TODO: Globals");
-						FlagError();
-						return false;
+						return gContext.ReportError(false, EC_InternalError, CombineTokenLocations(nameLoc, modLoc), "TODO: Globals");
 					}
 				}
 				else
 				{
-					PrintErrorFromLocation(CombineTokenLocations(nameLoc,modLoc), "undeclared variable %s%s", module.c_str(), name.c_str());
-					FlagError();
-					return false;
+					return gContext.ReportError(false, EC_ErrorAtLocation, CombineTokenLocations(nameLoc,modLoc), "undeclared variable %s%s", module.c_str(), name.c_str());
 				}
 			}
 			else if (isRoot)
 			{
 				if (module == "")
 				{
-					PrintErrorFromLocation(nameLoc, "undeclared variable %s", name.c_str());
+					return gContext.ReportError(false, EC_ErrorAtLocation, nameLoc, "undeclared variable %s", name.c_str());
 				}
 				else
 				{
-					PrintErrorFromLocation(CombineTokenLocations(nameLoc,modLoc), "undeclared variable %s%s", module.c_str(), name.c_str());
+					return gContext.ReportError(false, EC_ErrorAtLocation, CombineTokenLocations(nameLoc,modLoc), "undeclared variable %s%s", module.c_str(), name.c_str());
 				}
-				FlagError();
 			}
 			return false;
 		}
@@ -555,3 +504,52 @@ llvm::GlobalVariable* CodeGenContext::makeGlobal(llvm::Type* gType, bool isConst
 {
 	return new llvm::GlobalVariable(*gContext.llvmModule, gType, isConstant, gLinkType, gInitialiser, gName);
 }
+
+//////////////////////////////////////////////////////////////////////////GLOBAL CONTEXT
+
+bool GlobalContext::generateCode(CBlock& root)
+{
+	CodeGenContext rootContext(*this,nullptr);
+	rootContext.generateCode(root);
+
+	return !errorFlagged;
+}
+
+llvm::Value* GlobalContext::ReportUndefinedStateError(StateIdentList &stateIdents)
+{
+	YYLTYPE combined = stateIdents[0]->nameLoc;
+	for (int a = 0; a < stateIdents.size(); a++)
+	{
+		combined = CombineTokenLocations(combined, stateIdents[a]->nameLoc);
+	}
+	return ReportError(nullptr, EC_ErrorAtLocation, combined, "Unknown state requested");
+}
+
+llvm::DIFile* GlobalContext::CreateNewDbgFile(const char* filepath)
+{
+	llvm::SmallString<PATH_DEFAULT_LEN> fullpath(filepath);
+	llvm::sys::path::native(fullpath);
+	llvm::sys::fs::make_absolute(fullpath);
+	llvm::StringRef filename = llvm::sys::path::filename(fullpath);
+	llvm::sys::path::remove_filename(fullpath);
+	llvm::SmallString<32> Checksum;
+	Checksum.clear();
+
+	llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> CheckFileOrErr = llvm::MemoryBuffer::getFile(filepath);
+	if (std::error_code EC = CheckFileOrErr.getError())
+	{
+		return ReportError(nullptr, EC_InternalError, YYLTYPE(), "failed to read file : %s",filepath);
+	}
+	llvm::MemoryBuffer &MemBuffer = *CheckFileOrErr.get();
+
+	llvm::MD5 Hash;
+	llvm::MD5::MD5Result Result;
+
+	Hash.update(MemBuffer.getBuffer());
+	Hash.final(Result);
+
+	Hash.stringifyResult(Result, Checksum);
+
+	return dbgBuilder->createFile(filename, fullpath, llvm::DIFile::CSK_MD5, Checksum);
+}
+

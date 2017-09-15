@@ -19,41 +19,6 @@ enum ConnectionType
 
 struct YYLTYPE;
 
-class BitVariable;
-
-class CodeGenContext;
-class CStatement;
-class CExpression;
-class CVariableDeclaration;
-class CStateDeclaration;
-class CStatesDeclaration;
-class CAliasDeclaration;
-class CDebugTrace;
-class CStateIdent;
-class COperand;
-class CMapping;
-class CAffect;
-class CString;
-class CInteger;
-class CParamDecl;
-class CConnect;
-
-typedef std::vector<CStatement*> StatementList;
-typedef std::vector<CExpression*> ExpressionList;
-typedef std::vector<CVariableDeclaration*> VariableList;
-typedef std::vector<CStateDeclaration*> StateList;
-typedef std::vector<CStatesDeclaration*> StatesList;
-typedef std::vector<CAliasDeclaration*> AliasList;
-typedef std::vector<CDebugTrace*> DebugList;
-typedef std::vector<CStateIdent*> StateIdentList;
-typedef std::vector<COperand*> OperandList;
-typedef std::vector<CMapping*> MappingList;
-typedef std::vector<CAffect*> AffectorList;
-typedef std::vector<CInteger*> ExternParamsList;
-typedef std::vector<CExpression*> ParamsList;
-typedef std::vector<CParamDecl*> NamedParamsList;
-typedef std::vector<CConnect*> ConnectList;
-
 #include "nodes.h"
 #include "ast/integer.h"
 

@@ -5,8 +5,6 @@
 
 #include <llvm/IR/Value.h>
 
-extern void PrintErrorFromLocation(const YYLTYPE &location, const char *errorstring, ...);		// Todo refactor away
-
 void CStateDefinition::prePass(CodeGenContext& context)
 {
 	CStatesDeclaration* pStates = context.currentState();
@@ -40,15 +38,11 @@ llvm::Value* CStateDefinition::codeGen(CodeGenContext& context)
 		}
 		else
 		{
-			PrintErrorFromLocation(id.nameLoc, "Attempt to define unknown state");
-			context.FlagError();
-			return nullptr;
+			return context.gContext.ReportError(nullptr, EC_ErrorAtLocation, id.nameLoc, "Attempt to define unknown state");
 		}
 	}
 	else
 	{
-		PrintErrorFromLocation(id.nameLoc, "Attempt to define state entry when no states on stack");
-		context.FlagError();
-		return nullptr;
+		return context.gContext.ReportError(nullptr, EC_ErrorAtLocation, id.nameLoc, "Attempt to define state entry when no states on stack");
 	}
 }

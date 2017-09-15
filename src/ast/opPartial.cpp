@@ -70,9 +70,7 @@ llvm::APInt COperandPartial::GetComputableConstant(CodeGenContext& context,unsig
 
 	if (operands.size()==0)
 	{
-		assert(0 && "Illegal (0) number of operands for computable constant");
-		context.FlagError();
-		return result;
+		return context.gContext.ReportError(result, EC_InternalError, YYLTYPE(), "Illegal (0) number of operands for computable constant");
 	}
 	for (int a=operands.size()-1;a>=0;a--)
 	{

@@ -4,8 +4,6 @@
 
 #include "generator.h"	// Todo refactor away
 
-extern void PrintErrorFromLocation(const YYLTYPE &location, const char *errorstring, ...);		// Todo refactor away
-
 void COperandMapping::DeclareLocal(CodeGenContext& context, unsigned num)
 {
 	context.locals()[ident.name] = GetBitVariable(context, num);
@@ -17,9 +15,7 @@ BitVariable COperandMapping::GetBitVariable(CodeGenContext& context, unsigned nu
 
 	if (context.m_mappings.find(ident.name) == context.m_mappings.end())
 	{
-		PrintErrorFromLocation(ident.nameLoc, "Undeclared mapping : %s", ident.name.c_str());
-		context.FlagError();
-		return mappingVariable;
+		return context.gContext.ReportError(mappingVariable,EC_ErrorAtLocation,ident.nameLoc, "Undeclared mapping : %s", ident.name.c_str());
 	}
 
 	CMapping* mapping = context.m_mappings[ident.name]->mappings[num];
@@ -51,9 +47,7 @@ llvm::APInt COperandMapping::GetComputableConstant(CodeGenContext& context, unsi
 
 	if (context.m_mappings.find(ident.name) == context.m_mappings.end())
 	{
-		PrintErrorFromLocation(ident.nameLoc, "Undeclared mapping : %s", ident.name.c_str());
-		context.FlagError();
-		return error;
+		return context.gContext.ReportError(error, EC_ErrorAtLocation, ident.nameLoc, "Undeclared mapping : %s", ident.name.c_str());
 	}
 
 	return context.m_mappings[ident.name]->mappings[num]->selector.getAPInt();
@@ -63,9 +57,7 @@ unsigned COperandMapping::GetNumComputableConstants(CodeGenContext& context) con
 {
 	if (context.m_mappings.find(ident.name) == context.m_mappings.end())
 	{
-		PrintErrorFromLocation(ident.nameLoc, "Undeclared mapping : %s", ident.name.c_str());
-		context.FlagError();
-		return 0;
+		return context.gContext.ReportError(0, EC_ErrorAtLocation, ident.nameLoc, "Undeclared mapping : %s", ident.name.c_str());
 	}
 
 	return context.m_mappings[ident.name]->mappings.size();
@@ -75,9 +67,7 @@ const CString* COperandMapping::GetString(CodeGenContext& context, unsigned num,
 {
 	if (context.m_mappings.find(ident.name) == context.m_mappings.end())
 	{
-		PrintErrorFromLocation(ident.nameLoc, "Undeclared mapping : %s", ident.name.c_str());
-		context.FlagError();
-		return nullptr;
+		return context.gContext.ReportError(nullptr, EC_ErrorAtLocation, ident.nameLoc, "Undeclared mapping : %s", ident.name.c_str());
 	}
 
 	return &context.m_mappings[ident.name]->mappings[num]->label;

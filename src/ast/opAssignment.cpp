@@ -11,8 +11,6 @@
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Value.h>
 
-extern void PrintErrorFromLocation(const YYLTYPE &location, const char *errorstring, ...);		// Todo refactor away
-
 llvm::Instruction* CAssignment::generateImpedanceAssignment(BitVariable& to, llvm::Value* assignTo, CodeGenContext& context)
 {
 	llvm::ConstantInt* impedance = context.getConstantOnes(to.size.getLimitedValue());
@@ -57,9 +55,7 @@ llvm::Instruction* CAssignment::generateAssignmentActual(BitVariable& to, const 
 
 	if (!assignTo->getType()->isPointerTy())
 	{
-		PrintErrorFromLocation(to.refLoc, "You cannot assign a value to a non variable (or input parameter to function)");
-		context.FlagError();
-		return nullptr;
+		context.gContext.ReportError(nullptr,EC_ErrorAtLocation, to.refLoc, "You cannot assign a value to a non variable (or input parameter to function)");
 	}
 
 	// Handle variable promotion
@@ -116,9 +112,7 @@ llvm::Instruction* CAssignment::generateAssignmentActual(BitVariable& to, const 
 	{
 		if (to.pinType != TOK_IN && to.pinType != TOK_BIDIRECTIONAL)
 		{
-			PrintErrorFromLocation(to.refLoc, "Pin marked as not writable");
-			context.FlagError();
-			return nullptr;
+			return context.gContext.ReportError(nullptr, EC_ErrorAtLocation, to.refLoc, "Pin marked as not writable");
 		}
 		else
 		{
@@ -174,9 +168,7 @@ llvm::Value* CAssignment::codeGen(CodeGenContext& context)
 
 	if (var.mappingRef)
 	{
-		PrintErrorFromLocation(var.refLoc, "Cannot assign to a mapping reference");
-		context.FlagError();
-		return nullptr;
+		return context.gContext.ReportError(nullptr, EC_ErrorAtLocation, var.refLoc, "Cannot assign to a mapping reference");
 	}
 
 	if (rhs.IsImpedance())
@@ -184,9 +176,7 @@ llvm::Value* CAssignment::codeGen(CodeGenContext& context)
 		// special case, impedance uses hidden bit variable (which is only accessed during bus muxing)	- Going to need a few fixups to support this
 		if (var.pinType != TOK_BIDIRECTIONAL)
 		{
-			PrintErrorFromLocation(var.refLoc, "HIGH_IMPEDANCE only makes sense for BIDIRECTIONAL pins");
-			context.FlagError();
-			return nullptr;
+			return context.gContext.ReportError(nullptr, EC_ErrorAtLocation, var.refLoc, "HIGH_IMPEDANCE only makes sense for BIDIRECTIONAL pins");
 		}
 
 		llvm::Instruction* I = CAssignment::generateImpedanceAssignment(var, var.impedance, context);
@@ -223,9 +213,7 @@ llvm::Value* CAssignment::codeGen(CodeGenContext& context, CCastOperator* cast)
 
 	if (var.mappingRef)
 	{
-		PrintErrorFromLocation(var.refLoc, "Cannot assign to a mapping reference");
-		context.FlagError();
-		return nullptr;
+		return context.gContext.ReportError(nullptr, EC_ErrorAtLocation, var.refLoc, "Cannot assign to a mapping reference");
 	}
 
 	var.aliased = true;		// We pretend we are assigning to an alias, even if we are not, this forces the compiler to generate the correct code

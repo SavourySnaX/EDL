@@ -2,6 +2,7 @@
 
 #include <stack>
 #include <typeinfo>
+#include <stdarg.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Type.h>
@@ -25,6 +26,7 @@
 #include <llvm/ExecutionEngine/MCJIT.h>
 #include <llvm/Support/raw_ostream.h>
 
+#include "nodes.h"
 #include "ast/integer.h"
 
 class CBlock;
@@ -80,6 +82,17 @@ public:
 	int generateDebug;
 };
 
+enum ErrorClassification
+{
+	EC_InternalError,
+	EC_ErrorWholeLine,
+	EC_ErrorAtLocation
+};
+
+void PrintErrorWholeLine(const YYLTYPE &location, const char *errorstring, va_list args);
+void PrintErrorDuplication(const YYLTYPE &location, const YYLTYPE &originalLocation, const char *errorstring, va_list args);
+void PrintErrorFromLocation(const YYLTYPE &location, const char *errorstring, va_list args);
+
 class GlobalContext
 {
 private:
@@ -100,6 +113,8 @@ public:
 	std::map<llvm::Function*,llvm::Function*>	connectFunctions;	
 	std::string									symbolPrefix;
 	CompilerOptions&							opts;
+	llvm::DIBuilder*							dbgBuilder;
+	llvm::DICompileUnit*						compileUnit;
 	llvm::ExecutionEngine*						llvmExecutionEngine;
 	llvm::Module*								llvmModule;
 	llvm::Function*								debugTraceChar;
@@ -107,7 +122,45 @@ public:
 	llvm::Function*								debugBusTap;
 	bool										errorFlagged;
 
+	bool generateCode(CBlock& root);
 
+	template<class T>
+	T ReportError(T retVal, ErrorClassification eType, const YYLTYPE& location, const char* formatString, ...)
+	{
+		va_list args;
+		va_start(args, formatString);
+		switch (eType)
+		{
+		case EC_InternalError:
+			PrintErrorWholeLine(location, formatString, args );
+			assert(0);
+			break;
+		case EC_ErrorWholeLine:
+			PrintErrorWholeLine(location, formatString, args );
+			break;
+		case EC_ErrorAtLocation:
+			PrintErrorFromLocation(location, formatString, args );
+			break;
+		}
+		va_end(args);
+		errorFlagged = true;
+		return retVal;
+	}
+
+	template<class T>
+	T ReportDuplicationError(T retVal, const YYLTYPE& location, const YYLTYPE& origLocation, const char* formatString, ...)
+	{
+		va_list args;
+		va_start(args, formatString);
+		PrintErrorDuplication(location, origLocation, formatString, args );
+		va_end(args);
+		errorFlagged = true;
+		return retVal;
+	}
+
+	llvm::Value* ReportUndefinedStateError(StateIdentList &stateIdents);
+
+	llvm::DIFile* CreateNewDbgFile(const char* filepath);
 	llvm::LLVMContext& getLLVMContext() { return llvmContext; }
 };
 
@@ -127,8 +180,6 @@ public:
 
 	CHandlerDeclaration* parentHandler;
 
-	llvm::DIBuilder *dbgBuilder;
-	llvm::DICompileUnit *compileUnit;
 	bool isRoot;
 	CodeGenContext(GlobalContext& globalContext, CodeGenContext* parent);
 
@@ -190,7 +241,7 @@ public:
 		blocks.top()->locals = tLocals;
 		if (gContext.opts.generateDebug)
 		{
-			gContext.scopingStack.push(dbgBuilder->createLexicalBlock(gContext.scopingStack.top(), gContext.scopingStack.top()->getFile(), blockStartLocation.first_line, blockStartLocation.first_column));
+			gContext.scopingStack.push(gContext.dbgBuilder->createLexicalBlock(gContext.scopingStack.top(), gContext.scopingStack.top()->getFile(), blockStartLocation.first_line, blockStartLocation.first_column));
 		}
 	}
 	void popBlock(YYLTYPE& blockEndLocation)

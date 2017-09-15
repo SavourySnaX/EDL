@@ -9,9 +9,6 @@
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Value.h>
 
-extern void PrintErrorFromLocation(const YYLTYPE &location, const char *errorstring, ...);		// Todo refactor away
-extern llvm::Value* UndefinedStateError(StateIdentList &stateIdents, CodeGenContext &context);	// Todo refactor away
-
 void CStateJump::prePass(CodeGenContext& context)
 {
 
@@ -23,9 +20,7 @@ llvm::Value* CStateJump::codeGen(CodeGenContext& context)
 
 	if (context.states().find(stateLabel) == context.states().end())
 	{
-		PrintErrorFromLocation(stateIdents[0]->nameLoc, "Unknown handler, can't look up state reference");
-		context.FlagError();
-		return nullptr;
+		return context.gContext.ReportError(nullptr, EC_ErrorAtLocation, stateIdents[0]->nameLoc, "Unknown handler, can't look up state reference");
 	}
 
 	StateVariable topState = context.states()[stateLabel];
@@ -34,7 +29,7 @@ llvm::Value* CStateJump::codeGen(CodeGenContext& context)
 	int jumpIndex;
 	if (!topState.decl->FindStateIdx(stateIdents, jumpIndex))
 	{
-		return UndefinedStateError(stateIdents, context);
+		return context.gContext.ReportUndefinedStateError(stateIdents);
 	}
 
 	llvm::Twine numStatesTwine(totalStates);

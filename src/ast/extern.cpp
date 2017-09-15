@@ -7,8 +7,6 @@
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Value.h>
 
-extern void PrintErrorFromLocation(const YYLTYPE &location, const char *errorstring, ...);		// Todo refactor away
-
 void CExternDecl::prePass(CodeGenContext& context)
 {
 
@@ -28,9 +26,7 @@ llvm::Value* CExternDecl::codeGen(CodeGenContext& context)
 		unsigned size = params[a]->getAPInt().getLimitedValue();
 		if (size != 8 && size != 16 && size != 32)
 		{
-			PrintErrorFromLocation(params[a]->getSourceLocation(), "External C functions must use C size parameters (8,16 or 32 bits)");
-			context.FlagError();
-			return nullptr;
+			return context.gContext.ReportError(nullptr, EC_ErrorAtLocation, params[a]->getSourceLocation(), "External C functions must use C size parameters (8,16 or 32 bits)");
 		}
 		FuncTy_8_args.push_back(context.getIntType(size));
 	}
@@ -44,9 +40,7 @@ llvm::Value* CExternDecl::codeGen(CodeGenContext& context)
 		unsigned size = returns[0]->getAPInt().getLimitedValue();
 		if (size != 8 && size != 16 && size != 32)
 		{
-			PrintErrorFromLocation(returns[0]->getSourceLocation(), "External C functions must use C size parameters (8,16 or 32 bits)");
-			context.FlagError();
-			return nullptr;
+			return context.gContext.ReportError(nullptr, EC_ErrorAtLocation, returns[0]->getSourceLocation(), "External C functions must use C size parameters (8,16 or 32 bits)");
 		}
 		FuncTy_8 = llvm::FunctionType::get(context.getIntType(size), FuncTy_8_args, false);
 	}

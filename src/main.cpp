@@ -190,57 +190,72 @@ void PrintDetailedError(const char* errmsg,int start,int end,int srow,int erow, 
 	}
 }
 
-void PrintErrorWholeLine(const YYLTYPE &location, const char *errorstring, ...)
+void PrintErrorWholeLine(const YYLTYPE &location, const char *errorstring, va_list args)
 {
 	static char errmsg[10000];
-	va_list args;
 
 	int start = 0;
 	int end = fileLineMap[location.filename][location.first_line-1].length();
 
-	va_start(args, errorstring);
 	vsprintf(errmsg, errorstring, args);
-	va_end(args);
 
 	PrintDetailedError(errmsg, start, end,location.first_line,location.last_line,location.filename.c_str());
 }
 
-void PrintErrorDuplication(const YYLTYPE &location, const YYLTYPE &originalLocation, const char *errorstring, ...)
+void PrintErrorWholeLine(const YYLTYPE &location, const char* errorString, ...)
+{
+	va_list args;
+	va_start(args, errorString);
+	PrintErrorWholeLine(location, errorString, args);
+	va_end(args);
+}
+
+void PrintErrorDuplication(const YYLTYPE &location, const YYLTYPE &originalLocation, const char *errorstring, va_list args)
 {
 	static char errmsg[10000];
-	va_list args;
 
 	int start = location.first_column;
 	int end = location.last_column;
 
-	va_start(args, errorstring);
 	vsprintf(errmsg, errorstring, args);
-	va_end(args);
 
 	PrintDetailedError(errmsg, start, end,location.first_line,location.last_line,location.filename.c_str());
 	PrintDetailedError("duplicated here:", originalLocation.first_column, originalLocation.last_column, originalLocation.first_line, originalLocation.last_line, originalLocation.filename.c_str());
 }
 
+void PrintErrorDuplication(const YYLTYPE &location, const YYLTYPE &originalLocation, const char *errorstring, ...)
+{
+	va_list args;
 
-void PrintErrorFromLocation(const YYLTYPE &location, const char *errorstring, ...)
+	va_start(args, errorstring);
+	PrintErrorDuplication(location,originalLocation,errorstring, args);
+	va_end(args);
+}
+
+void PrintErrorFromLocation(const YYLTYPE &location, const char *errorstring, va_list args)
 {
 	static char errmsg[10000];
-	va_list args;
 
 	int start = location.first_column;
 	int end = location.last_column;
 
-	va_start(args, errorstring);
 	vsprintf(errmsg, errorstring, args);
-	va_end(args);
 
 	PrintDetailedError(errmsg, start, end,location.first_line,location.last_line,location.filename.c_str());
 }
 
+void PrintErrorFromLocation(const YYLTYPE &location, const char *errorstring, ...)
+{
+	va_list args;
+	va_start(args, errorstring);
+	PrintErrorFromLocation(location, errorstring, args);
+	va_end(args);
+}
+
 void PrintError(const char *errorstring, ...) 
 {
-	static char errmsg[10000];
 	va_list args;
+	static char errmsg[10000];
 
 	int start = nTokenStart;
 	int end = start + nTokenLength - 1;
@@ -250,7 +265,6 @@ void PrintError(const char *errorstring, ...)
 	va_end(args);
 
 	PrintDetailedError(errmsg, start, end,nRow,nRow,currentFileName.c_str());
-
 }
 
 int main(int argc, char **argv)
@@ -352,10 +366,8 @@ int main(int argc, char **argv)
 	}
 	
 	GlobalContext globalContext(opts);
-	CodeGenContext rootContext(globalContext,nullptr);
-	rootContext.generateCode(*g_ProgramBlock);
 
-	if (rootContext.isErrorFlagged())
+	if (!globalContext.generateCode(*g_ProgramBlock))
 	{
 		std::cerr << "Compilation Failed" << std::endl;
 		return 2;

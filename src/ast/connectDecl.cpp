@@ -10,9 +10,6 @@
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Value.h>
 
-extern void PrintErrorFromLocation(const YYLTYPE &location, const char *errorstring, ...);		// Todo refactor away
-extern void PrintErrorWholeLine(const YYLTYPE &location, const char *errorstring, ...);			// Todo refactor away
-
 void CConnectDeclaration::prePass(CodeGenContext& context)
 {
 
@@ -181,23 +178,17 @@ llvm::Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 		{
 			if (outCnt[checkBus] == 0 && inCnt[checkBus] == 0 && biCnt[checkBus] == 0)
 			{
-				PrintErrorWholeLine(connects[a]->statementLoc, "No possible routing! - no connections");
-				context.FlagError();
-				return nullptr;
+				return context.gContext.ReportError(nullptr, EC_ErrorWholeLine, connects[a]->statementLoc, "No possible routing! - no connections");
 			}
 
 			if (outCnt[checkBus] == 0 && inCnt[checkBus] > 0 && biCnt[checkBus] == 0)
 			{
-				PrintErrorWholeLine(connects[a]->statementLoc, "No possible routing! - all connections are input");
-				context.FlagError();
-				return nullptr;
+				return context.gContext.ReportError(nullptr, EC_ErrorWholeLine, connects[a]->statementLoc, "No possible routing! - all connections are input");
 			}
 
 			if (outCnt[checkBus] > 0 && inCnt[checkBus] == 0 && biCnt[checkBus] == 0)
 			{
-				PrintErrorWholeLine(connects[a]->statementLoc, "No possible routing! - all connections are output");
-				context.FlagError();
-				return nullptr;
+				return context.gContext.ReportError(nullptr, EC_ErrorWholeLine, connects[a]->statementLoc, "No possible routing! - all connections are output");
 			}
 		}
 		//		std::cerr << "Total Connections : in " << inCnt << " , out " << outCnt << " , bidirect " << biCnt << std::endl;
@@ -263,9 +254,7 @@ llvm::Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 						// Should be integer types at the point
 						if (!lastType->isIntegerTy() || !tmpType->isIntegerTy())
 						{
-							PrintErrorWholeLine(connects[a]->statementLoc, "(TODO) Expected integer types");
-							context.FlagError();
-							return nullptr;
+							return context.gContext.ReportError(nullptr, EC_InternalError, connects[a]->statementLoc, "(TODO) Expected integer types");
 						}
 						if (lastType->getPrimitiveSizeInBits() < tmpType->getPrimitiveSizeInBits())
 						{
@@ -305,9 +294,7 @@ llvm::Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 					// Should be integer types at the point
 					if (!lastType->isIntegerTy() || !tmpType->isIntegerTy())
 					{
-						PrintErrorWholeLine(connects[a]->statementLoc, "(TODO) Expected integer types");
-						context.FlagError();
-						return nullptr;
+						return context.gContext.ReportError(nullptr, EC_InternalError, connects[a]->statementLoc, "(TODO) Expected integer types");
 					}
 					if (lastType->getPrimitiveSizeInBits() < tmpType->getPrimitiveSizeInBits())
 					{
@@ -336,9 +323,7 @@ llvm::Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 		}
 		if (busCount > 2)
 		{
-			PrintErrorWholeLine(connects[a]->statementLoc, "(TODO) Bus arbitration for >2 buses not implemented yet");
-			context.FlagError();
-			return nullptr;
+			return context.gContext.ReportError(nullptr, EC_InternalError, connects[a]->statementLoc, "(TODO) Bus arbitration for >2 buses not implemented yet");
 		}
 
 		for (curBus = 0; curBus < busCount; curBus++)

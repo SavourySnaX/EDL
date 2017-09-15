@@ -10,8 +10,6 @@
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Value.h>
 
-extern void PrintErrorFromLocation(const YYLTYPE &location, const char *errorstring, ...);		// Todo refactor away
-
 int CStatesDeclaration::GetNumStates() const
 {
 	int totalStates = 0;
@@ -99,9 +97,7 @@ llvm::Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 	{
 		if (context.parentHandler == nullptr)
 		{
-			PrintErrorFromLocation(statementLoc, "It is illegal to declare STATES outside of a handler");
-			context.FlagError();
-			return nullptr;
+			return context.gContext.ReportError(nullptr, EC_ErrorAtLocation, statementLoc, "It is illegal to declare STATES outside of a handler");
 		}
 
 		TopMostState = true;
@@ -177,7 +173,7 @@ llvm::Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 
 		if (!topState.decl->FindStateIdx(this, baseStateIdx))
 		{
-			assert(0 && "internal error, this should not occur - - might need to be an error -- undefined state");
+			return context.gContext.ReportError(nullptr, EC_InternalError, statementLoc, "internal error, this should not occur - - might need to be an error -- undefined state");
 		}
 
 		switchValue = topState.decl->optocurState;

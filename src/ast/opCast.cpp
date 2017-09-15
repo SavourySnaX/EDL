@@ -8,8 +8,6 @@
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Value.h>
 
-extern void PrintErrorFromLocation(const YYLTYPE &location, const char *errorstring, ...);		// Todo refactor away
-
 CInteger CCastOperator::begZero("0");
 
 void CCastOperator::prePass(CodeGenContext& context)
@@ -53,7 +51,5 @@ llvm::Value* CCastOperator::codeGen(CodeGenContext& context)
 		}
 	}
 
-	PrintErrorFromLocation(operatorLoc, "(TODO)Illegal type in cast");
-	context.FlagError();
-	return nullptr;
+	return context.gContext.ReportError(nullptr, EC_InternalError, operatorLoc, "(TODO)Illegal type in cast");
 }

@@ -8,8 +8,6 @@
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Value.h>
 
-extern void PrintErrorFromLocation(const YYLTYPE &location, const char *errorstring, ...);		// Todo refactor away
-
 void CHandlerDeclaration::prePass(CodeGenContext& context)
 {
 	block.prePass(context);
@@ -22,18 +20,14 @@ llvm::Value* CHandlerDeclaration::codeGen(CodeGenContext& context)
 
 	if (context.globals().find(id.name) == context.globals().end())
 	{
-		PrintErrorFromLocation(id.nameLoc, "undeclared pin %s - Handlers MUST be tied to pin definitions", id.name.c_str());
-		context.FlagError();
-		return nullptr;
+		return context.gContext.ReportError(nullptr, EC_ErrorAtLocation, id.nameLoc, "undeclared pin %s - Handlers MUST be tied to pin definitions", id.name.c_str());
 	}
 
 	pinVariable = context.globals()[id.name];
 
 	if (pinVariable.writeAccessor == nullptr)
 	{
-		PrintErrorFromLocation(id.nameLoc, "Handlers must be tied to Input / Bidirectional pins ONLY");
-		context.FlagError();
-		return nullptr;
+		return context.gContext.ReportError(nullptr, EC_ErrorAtLocation, id.nameLoc, "Handlers must be tied to Input / Bidirectional pins ONLY");
 	}
 
 	llvm::FunctionType *ftype = llvm::FunctionType::get(context.getVoidType(), argTypes, false);

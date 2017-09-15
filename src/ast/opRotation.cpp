@@ -9,8 +9,6 @@
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Value.h>
 
-extern void PrintErrorWholeLine(const YYLTYPE &location, const char *errorstring, ...);			// Todo refactor away
-
 void CRotationOperator::prePass(CodeGenContext& context)
 {
 	value.prePass(context);
@@ -31,16 +29,12 @@ llvm::Value* CRotationOperator::codeGen(CodeGenContext& context)
 
 	if ((!toShift->getType()->isIntegerTy()) || (!rotBy->getType()->isIntegerTy()))
 	{
-		PrintErrorWholeLine(var.refLoc, "(TODO)Unsupported operation");
-		context.FlagError();
-		return nullptr;
+		return context.gContext.ReportError(nullptr, EC_InternalError, var.refLoc, "(TODO)Unsupported operation");
 	}
 
 	if (var.mappingRef)
 	{
-		PrintErrorWholeLine(var.refLoc, "(TODO)Cannot perform operation on a mappingRef");
-		context.FlagError();
-		return nullptr;
+		return context.gContext.ReportError(nullptr, EC_InternalError, var.refLoc, "(TODO)Cannot perform operation on a mappingRef");
 	}
 
 	llvm::IntegerType* toShiftType = llvm::cast<llvm::IntegerType>(toShift->getType());

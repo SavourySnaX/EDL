@@ -8,9 +8,6 @@
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Value.h>
 
-extern void PrintErrorFromLocation(const YYLTYPE &location, const char *errorstring, ...);		// Todo refactor away
-extern void PrintErrorWholeLine(const YYLTYPE &location, const char *errorstring, ...);			// Todo refactor away
-
 void CFuncCall::prePass(CodeGenContext& context)
 {
 	for (int a = 0; a < params.size(); a++)
@@ -23,9 +20,7 @@ llvm::Value* CFuncCall::codeGen(CodeGenContext& context)
 {
 	if (context.m_externFunctions.find(name.name) == context.m_externFunctions.end())
 	{
-		PrintErrorFromLocation(name.nameLoc, "Function Declaration Required to use a Function");
-		context.FlagError();
-		return nullptr;
+		return context.gContext.ReportError(nullptr, EC_ErrorAtLocation, name.nameLoc, "Function Declaration Required to use a Function");
 	}
 	llvm::Function* func = context.m_externFunctions[name.name];
 
@@ -36,9 +31,7 @@ llvm::Value* CFuncCall::codeGen(CodeGenContext& context)
 	{
 		if (b == funcType->getNumParams())
 		{
-			PrintErrorWholeLine(name.nameLoc, "Wrong Number Of Arguments To Function");
-			context.FlagError();
-			return nullptr;
+			return context.gContext.ReportError(nullptr, EC_ErrorWholeLine, name.nameLoc, "Wrong Number Of Arguments To Function");
 		}
 
 		llvm::Value* exprResult = params[a]->codeGen(context);
