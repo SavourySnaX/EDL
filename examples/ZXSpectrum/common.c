@@ -46,7 +46,7 @@ int LoadRom(unsigned int address,size_t size,const char* fname)
 
 int InitialiseMemory()
 {
-	if (LoadRom(0x0000,0x4000,"roms/48k.rom"))
+	if (LoadRom(0x0000,0x4000,"roms/zx.rom"))
 		return 1;
 	return 0;
 }
@@ -211,7 +211,8 @@ void UpdateScreen(int numclocks)
 	numclocks<<=1;
 	while (numclocks)
 	{
-		outputTexture[hClock+vClock*WIDTH]=GetColour(curAttrByte,curScrByte&scrXMask);
+		if (vClock<312)
+			outputTexture[hClock+vClock*WIDTH]=GetColour(curAttrByte,curScrByte&scrXMask);
 		scrXMask>>=1;
 		
 		// Handle fetch/prefetch
@@ -385,7 +386,8 @@ void setupGL(int windowNum,int w, int h)
 	glDisable(GL_DEPTH_TEST);
 }
 
-unsigned char keyArray[512*3];
+#define MAX_KEY_CODE	512
+unsigned char keyArray[MAX_KEY_CODE*3];
 
 int KeyDown(int key)
 {
@@ -404,6 +406,8 @@ void ClearKey(int key)
 
 void kbHandler( GLFWwindow* window, int key, int scan, int action, int mod )		/* At present ignores which window, will add per window keys later */
 {
+	if ((key<0) || (key >= MAX_KEY_CODE))
+		return;
 	keyArray[key*3 + 0]=keyArray[key*3+1];
 	if (action==GLFW_RELEASE)
 	{
@@ -812,7 +816,7 @@ int main(int argc,char**argv)
 			ResetScreen();
 			masterClock-=ROWS_PER_VBLANK*TSTATES_PER_ROW;
 
-            		glfwMakeContextCurrent(windows[MAIN_WINDOW]);
+            glfwMakeContextCurrent(windows[MAIN_WINDOW]);
 			ShowScreen(MAIN_WINDOW,WIDTH,HEIGHT);
 			glfwSwapBuffers(windows[MAIN_WINDOW]);
 				
@@ -1059,7 +1063,7 @@ int CheckTZX()
 				break;
 			case 0x35:
 				printf("Custom Info\n");
-				curPos+=10;
+				curPos+=16;
 				blockLength=tapeFile[curPos++];
 				blockLength|=tapeFile[curPos++]<<8;
 				blockLength|=tapeFile[curPos++]<<16;
@@ -1252,7 +1256,7 @@ uint8_t GetNextBlockTZX()
 				break;
 			case 0x35:
 				printf("Custom Info\n");
-				tapePos+=10;
+				tapePos+=16;
 				blockLength=tapeFile[tapePos++];
 				blockLength|=tapeFile[tapePos++]<<8;
 				blockLength|=tapeFile[tapePos++]<<16;
