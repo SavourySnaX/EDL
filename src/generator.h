@@ -96,15 +96,14 @@ void PrintErrorFromLocation(const YYLTYPE &location, const char *errorstring, va
 class GlobalContext
 {
 private:
-	llvm::LLVMContext							llvmContext;
+	llvm::LLVMContext			llvmContext;
+	bool						InitGlobalCodeGen();
+	bool						FinaliseCodeGen(CodeGenContext& rootContext);
+	void						SetupOptimisationPasses(llvm::legacy::PassManager& pm,CodeGenContext& rootContext);
+	
 public:
 	GlobalContext(CompilerOptions& options) : opts(options) 
 	{  
-		llvm::InitializeAllTargetInfos();
-		llvm::InitializeAllTargets();
-		llvm::InitializeAllTargetMCs();
-		llvm::InitializeAllAsmParsers();
-		llvm::InitializeAllAsmPrinters();
 		errorFlagged = false;
 	}
 
@@ -162,6 +161,25 @@ public:
 
 	llvm::DIFile* CreateNewDbgFile(const char* filepath);
 	llvm::LLVMContext& getLLVMContext() { return llvmContext; }
+	
+	// Type Wrappers
+	llvm::Type* getVoidType() { return llvm::Type::getVoidTy(llvmContext); }
+	llvm::Type* getIntType(unsigned size) { return llvm::IntegerType::get(llvmContext, size); }
+	llvm::Type* getIntType(const CInteger& size) { return llvm::IntegerType::get(llvmContext, size.getAPInt().getLimitedValue()); }
+	llvm::Type* getIntType(const llvm::APInt& size) { return llvm::IntegerType::get(llvmContext, size.getLimitedValue()); }
+
+	// Constant Wrappers
+	llvm::ConstantInt*	getConstantInt(const llvm::APInt& value) { return llvm::ConstantInt::get(llvmContext, value); }
+	llvm::ConstantInt*	getConstantZero(unsigned numBits) { return llvm::ConstantInt::get(llvmContext, llvm::APInt(numBits,llvm::StringRef("0"),10)); }
+	llvm::ConstantInt*	getConstantOnes(unsigned numBits) { return llvm::ConstantInt::get(llvmContext, ~llvm::APInt(numBits,llvm::StringRef("0"),10)); }
+	llvm::Constant*		getString(const std::string& withQuotes) { return llvm::ConstantDataArray::getString(llvmContext, withQuotes.substr(1, withQuotes.length() - 2), true); }
+
+	// Function Wrappers
+	llvm::BasicBlock*		makeBasicBlock(const llvm::Twine&name, llvm::Function* parent = nullptr, llvm::BasicBlock* insertBefore = nullptr) { return llvm::BasicBlock::Create(llvmContext, name, parent, insertBefore); }
+	llvm::ReturnInst*		makeReturn(llvm::BasicBlock* insertAtEnd) { return llvm::ReturnInst::Create(llvmContext, insertAtEnd); }
+	llvm::ReturnInst*		makeReturnValue(llvm::Value* value, llvm::BasicBlock* insertAtEnd) { return llvm::ReturnInst::Create(llvmContext, value, insertAtEnd); }
+	llvm::Function*			makeFunction(llvm::FunctionType* fType, llvm::Function::LinkageTypes fLinkType, const llvm::Twine& fName);
+	llvm::GlobalVariable*	makeGlobal(llvm::Type* gType, bool isConstant, llvm::GlobalVariable::LinkageTypes gLinkType, llvm::Constant* gInitialiser, const llvm::Twine& gName);
 };
 
 class CodeGenContext
@@ -280,21 +298,21 @@ public:
 	bool isErrorFlagged() const { return gContext.errorFlagged; }
 
 	// Type Wrappers
-	llvm::Type* getVoidType() const { return llvm::Type::getVoidTy(gContext.getLLVMContext()); }
-	llvm::Type* getIntType(unsigned size) const { return llvm::IntegerType::get(gContext.getLLVMContext(), size); }
-	llvm::Type* getIntType(const CInteger& size) const { return llvm::IntegerType::get(gContext.getLLVMContext(), size.getAPInt().getLimitedValue()); }
-	llvm::Type* getIntType(const llvm::APInt& size) const { return llvm::IntegerType::get(gContext.getLLVMContext(), size.getLimitedValue()); }
+	llvm::Type* getVoidType() const { return gContext.getVoidType(); }
+	llvm::Type* getIntType(unsigned size) const { return gContext.getIntType(size); }
+	llvm::Type* getIntType(const CInteger& size) const { return gContext.getIntType(size); }
+	llvm::Type* getIntType(const llvm::APInt& size) const { return gContext.getIntType(size); }
 
 	// Constant Wrappers
-	llvm::ConstantInt*	getConstantInt(const llvm::APInt& value) { return llvm::ConstantInt::get(gContext.getLLVMContext(), value); }
-	llvm::ConstantInt*	getConstantZero(unsigned numBits) { return llvm::ConstantInt::get(gContext.getLLVMContext(), llvm::APInt(numBits,llvm::StringRef("0"),10)); }
-	llvm::ConstantInt*	getConstantOnes(unsigned numBits) { return llvm::ConstantInt::get(gContext.getLLVMContext(), ~llvm::APInt(numBits,llvm::StringRef("0"),10)); }
-	llvm::Constant*		getString(const std::string& withQuotes) { return llvm::ConstantDataArray::getString(gContext.getLLVMContext(), withQuotes.substr(1, withQuotes.length() - 2), true); }
+	llvm::ConstantInt*	getConstantInt(const llvm::APInt& value) { return gContext.getConstantInt(value); }
+	llvm::ConstantInt*	getConstantZero(unsigned numBits) { return gContext.getConstantZero(numBits); }
+	llvm::ConstantInt*	getConstantOnes(unsigned numBits) { return gContext.getConstantOnes(numBits); }
+	llvm::Constant*		getString(const std::string& withQuotes) { return gContext.getString(withQuotes); }
 
 	// Function Wrappers
-	llvm::BasicBlock*		makeBasicBlock(const llvm::Twine&name, llvm::Function* parent = nullptr, llvm::BasicBlock* insertBefore = nullptr) { return llvm::BasicBlock::Create(gContext.getLLVMContext(), name, parent, insertBefore); }
-	llvm::ReturnInst*		makeReturn(llvm::BasicBlock* insertAtEnd) { return llvm::ReturnInst::Create(gContext.getLLVMContext(), insertAtEnd); }
-	llvm::ReturnInst*		makeReturnValue(llvm::Value* value, llvm::BasicBlock* insertAtEnd) { return llvm::ReturnInst::Create(gContext.getLLVMContext(), value, insertAtEnd); }
-	llvm::Function*			makeFunction(llvm::FunctionType* fType, llvm::Function::LinkageTypes fLinkType, const llvm::Twine& fName);
-	llvm::GlobalVariable*	makeGlobal(llvm::Type* gType, bool isConstant, llvm::GlobalVariable::LinkageTypes gLinkType, llvm::Constant* gInitialiser, const llvm::Twine& gName);
+	llvm::BasicBlock*		makeBasicBlock(const llvm::Twine& name, llvm::Function* parent = nullptr, llvm::BasicBlock* insertBefore = nullptr) { return gContext.makeBasicBlock(name, parent, insertBefore); }
+	llvm::ReturnInst*		makeReturn(llvm::BasicBlock* insertAtEnd) { return gContext.makeReturn(insertAtEnd); }
+	llvm::ReturnInst*		makeReturnValue(llvm::Value* value, llvm::BasicBlock* insertAtEnd) { return gContext.makeReturnValue(value, insertAtEnd); }
+	llvm::Function*			makeFunction(llvm::FunctionType* fType, llvm::Function::LinkageTypes fLinkType, const llvm::Twine& fName) { return gContext.makeFunction(fType, fLinkType, fName); }
+	llvm::GlobalVariable*	makeGlobal(llvm::Type* gType, bool isConstant, llvm::GlobalVariable::LinkageTypes gLinkType, llvm::Constant* gInitialiser, const llvm::Twine& gName) { return gContext.makeGlobal(gType, isConstant, gLinkType, gInitialiser, gName); }
 };
