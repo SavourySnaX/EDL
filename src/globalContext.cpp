@@ -5,6 +5,7 @@
 #include "globalContext.h"
 #include "generator.h"
 
+#include <llvm/ExecutionEngine/MCJIT.h>
 #include <llvm/ExecutionEngine/SectionMemoryManager.h>
 #include <llvm/LinkAllIR.h>
 #include <llvm/LinkAllPasses.h>
@@ -336,5 +337,3 @@ llvm::GlobalVariable* GlobalContext::makeGlobal(llvm::Type* gType, bool isConsta
 {
 	return new llvm::GlobalVariable(*llvmModule, gType, isConstant, gLinkType, gInitialiser, gName);
 }
-
-
