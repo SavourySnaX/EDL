@@ -53,4 +53,3 @@ llvm::Value* CInteger::codeGen(CodeGenContext& context)
 {
 	return context.getConstantInt(integer);
 }
-

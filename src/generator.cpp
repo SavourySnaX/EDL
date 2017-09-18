@@ -113,15 +113,13 @@ void CodeGenContext::GenerateDisassmTables()
 		llvm::APInt tableSize32=tableSize.zextOrTrunc(32);
 		// Create a global variable to indicate the max size of the table
 
-		llvm::GlobalVariable* gvar_int32_DIS_max = makeGlobal(getIntType(32),true,llvm::GlobalValue::ExternalLinkage,nullptr,getSymbolPrefix()+"DIS_max_"+tableIter->first);
 		llvm::ConstantInt* const_int32_1 = getConstantInt(tableSize32+1);
-		gvar_int32_DIS_max->setInitializer(const_int32_1);
+		llvm::GlobalVariable* gvar_int32_DIS_max = makeGlobal(getIntType(32),true,llvm::GlobalValue::ExternalLinkage,const_int32_1,getSymbolPrefix()+"DIS_max_"+tableIter->first);
 
 		// Create a global array to hold the table
 		llvm::PointerType* PointerTy_5 = llvm::PointerType::get(getIntType(8), 0);
        	llvm::ArrayType* ArrayTy_4 = llvm::ArrayType::get(PointerTy_5, tableSize.getLimitedValue()+1);
 		llvm::ConstantPointerNull* const_ptr_13 = llvm::ConstantPointerNull::get(PointerTy_5);	
-		llvm::GlobalVariable* gvar_array_table = makeGlobal(ArrayTy_4,true,llvm::GlobalValue::ExternalLinkage,nullptr, getSymbolPrefix()+"DIS_"+tableIter->first);
 		std::vector<llvm::Constant*> const_array_9_elems;
 
 		std::map<llvm::APInt,std::string,myAPIntCompare>::iterator slot=tableIter->second.begin();
@@ -132,17 +130,15 @@ void CodeGenContext::GenerateDisassmTables()
 			if (CompareEquals(slot->first,trackingSlot))
 			{
 				llvm::ArrayType* ArrayTy_0 = llvm::ArrayType::get(getIntType(8), slot->second.length()-1);
-				llvm::GlobalVariable* gvar_array__str = makeGlobal(ArrayTy_0,true,llvm::GlobalValue::PrivateLinkage,0,getSymbolPrefix()+".str"+trackingSlot.toString(16,false));
+				llvm::Constant* const_array_9 = getString(slot->second);
+				llvm::GlobalVariable* gvar_array__str = makeGlobal(ArrayTy_0,true,llvm::GlobalValue::PrivateLinkage,const_array_9,getSymbolPrefix()+".str"+trackingSlot.toString(16,false));
 				gvar_array__str->setAlignment(1);
   
-				llvm::Constant* const_array_9 = getString(slot->second);
 				std::vector<llvm::Constant*> const_ptr_12_indices;
 				llvm::ConstantInt* const_int64_13 = getConstantZero(64);
 				const_ptr_12_indices.push_back(const_int64_13);
 				const_ptr_12_indices.push_back(const_int64_13);
 				llvm::Constant* const_ptr_12 = llvm::ConstantExpr::getGetElementPtr(nullptr,gvar_array__str, const_ptr_12_indices);
-
-				gvar_array__str->setInitializer(const_array_9);
 
 				const_array_9_elems.push_back(const_ptr_12);
 
@@ -156,7 +152,7 @@ void CodeGenContext::GenerateDisassmTables()
 		}
 
 		llvm::Constant* const_array_9 = llvm::ConstantArray::get(ArrayTy_4, const_array_9_elems);
-		gvar_array_table->setInitializer(const_array_9);
+		llvm::GlobalVariable* gvar_array_table = makeGlobal(ArrayTy_4,true,llvm::GlobalValue::ExternalLinkage,const_array_9, getSymbolPrefix()+"DIS_"+tableIter->first);
 	}
 }
 

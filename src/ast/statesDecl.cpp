@@ -149,7 +149,7 @@ llvm::Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 
 		// Constant Definitions
 		llvm::ConstantInt* const_int32_n = context.getConstantZero(bitsNeeded);
-		llvm::ConstantInt* const_int4_n = context.getConstantInt(llvm::APInt(MAX_SUPPORTED_STACK_BITS, 0, false));
+		llvm::ConstantInt* const_int4_n = context.getConstantZero(MAX_SUPPORTED_STACK_BITS);
 		llvm::ConstantAggregateZero* const_array_n = llvm::ConstantAggregateZero::get(ArrayTy_0);
 
 		// Global Variable Definitions
