@@ -9,13 +9,12 @@
 
 #include <llvm/ADT/APInt.h>
 #include <llvm/DebugInfo/DIContext.h>
-#include <llvm/ExecutionEngine/ExecutionEngine.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DebugInfoMetadata.h>
 #include <llvm/IR/DIBuilder.h>
+#include <llvm/IR/GlobalVariable.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/LLVMContext.h>
-#include <llvm/IR/LegacyPassManager.h>
 
 class CBlock;
 class CodeGenContext;
@@ -52,8 +51,7 @@ private:
 	llvm::LLVMContext			llvmContext;
 	bool						InitGlobalCodeGen();
 	bool						FinaliseCodeGen(CodeGenContext& rootContext);
-	void						SetupOptimisationPasses(llvm::legacy::PassManager& pm,CodeGenContext& rootContext);
-	
+	bool						SetupPassesAndRun(CodeGenContext& rootContext);
 public:
 	GlobalContext(CompilerOptions& options) : opts(options) 
 	{  
@@ -67,7 +65,6 @@ public:
 	CompilerOptions&							opts;
 	llvm::DIBuilder*							dbgBuilder;
 	llvm::DICompileUnit*						compileUnit;
-	llvm::ExecutionEngine*						llvmExecutionEngine;
 	llvm::Module*								llvmModule;
 	llvm::Function*								debugTraceChar;
 	llvm::Function*								debugTraceMissing;
