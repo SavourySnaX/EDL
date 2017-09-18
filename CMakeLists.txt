@@ -43,9 +43,9 @@ set(AST_STATEMENT_STATE_CPPS src/ast/stateDecl.cpp src/ast/statesDecl.cpp src/as
 set(AST_STATEMENT_CPPS src/ast/variableDecl.cpp src/ast/ifStatement.cpp src/ast/trigger.cpp src/ast/handlerDecl.cpp src/ast/connectDecl.cpp src/ast/mappingDecl.cpp src/ast/instruction.cpp
                        src/ast/execute.cpp src/ast/affect.cpp src/ast/affector.cpp src/ast/extern.cpp src/ast/funcDecl.cpp src/ast/funcCall.cpp src/ast/instance.cpp src/ast/exchange.cpp)
 set(AST_CPPS src/ast/integer.cpp src/ast/string.cpp src/ast/identifier.cpp src/ast/block.cpp src/ast/debugHelpers.cpp)
-set(HEADERS src/ast.h src/generator.h src/bitvariable.h src/optPasses.h src/nodes.h)
+set(HEADERS src/ast.h src/generator.h src/globalContext.h src/bitvariable.h src/optPasses.h src/nodes.h)
 set(GRAMMARS src/edl.l src/edl.y)
-set(CPPS src/main.cpp src/generator.cpp src/bitvariable.cpp src/optPasses.cpp)
+set(CPPS src/main.cpp src/generator.cpp src/globalContext.cpp src/bitvariable.cpp src/optPasses.cpp)
 
 add_executable(edl 
 	${CPPS}

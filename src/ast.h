@@ -22,24 +22,6 @@ struct YYLTYPE;
 #include "nodes.h"
 #include "ast/integer.h"
 
-class CHighImpedance : public CExpression 
-{
-public:
-
-	CHighImpedance(){};
-	
-	virtual bool IsImpedance() const { return true; }
-
-	virtual llvm::Value* codeGen(CodeGenContext& context) { return nullptr; } 
-};
-
-class CBaseIdentifier : public CExpression
-{
-public:
-	virtual CExpression *GetExpression() const=0;
-	virtual bool IsArray() const { return false;}
-};
-
 #include "ast/identifier.h"
 
 class CIdentifierArray : public CIdentifier
@@ -55,17 +37,10 @@ public:
 	virtual bool IsArray() const { return true; }
 };
 
-class CStateIdent : public CExpression {
-public:
-	std::string name;
-	YYLTYPE nameLoc;
-
-	CStateIdent(const std::string& name, YYLTYPE *nameLoc) : name(name),nameLoc(*nameLoc) { }
-};
-
 #include "ast/string.h"
 
-class COperandNumber : public COperand {
+class COperandNumber : public COperand 
+{
 public:
 	CInteger& integer;
 

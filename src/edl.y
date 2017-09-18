@@ -1,8 +1,8 @@
 %{
 #include "yyltype.h"
-	#include "ast.h"
-        #include <cstdio>
-        #include <cstdlib>
+#include "ast.h"
+#include <cstdio>
+#include <cstdlib>
 
 	CBlock *g_ProgramBlock; /* the top level root node of our final AST */
 
