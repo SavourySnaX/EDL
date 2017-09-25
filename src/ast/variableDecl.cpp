@@ -174,6 +174,22 @@ llvm::Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 
 	}
 
+	// Safety check, validate that the alias and original variable match in size
+	uint64_t bitCount = 0;
+	for (auto alias : aliases)
+	{
+		if (alias->idOrEmpty.name.size()<1)
+			bitCount += alias->sizeOrValue.getAPInt().getBitWidth();
+		else
+			bitCount += alias->sizeOrValue.getAPInt().getLimitedValue();
+	}
+	if (bitCount)
+	{
+		if (bitCount != size.getAPInt().getLimitedValue())
+		{
+			return context.gContext.ReportError(nullptr, EC_ErrorWholeLine, declarationLoc, "Alias bit count doesn't match parent bit count");
+		}
+	}
 	llvm::APInt bitPos = size.getAPInt() - 1;
 	for (int a = 0; a < aliases.size(); a++)
 	{
