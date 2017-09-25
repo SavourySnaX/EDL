@@ -48,7 +48,7 @@ llvm::Value* CIdentifier::codeGen(CodeGenContext& context)
 
 	if (var.mappingRef)
 	{
-		return var.mapping->codeGen(context);
+		return var.mapping->generateCallGetByMapping(context,modLoc,nameLoc);
 	}
 	
 	if (var.fromExternal)

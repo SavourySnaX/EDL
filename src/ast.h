@@ -38,20 +38,7 @@ public:
 };
 
 #include "ast/string.h"
-
-class COperandNumber : public COperand 
-{
-public:
-	CInteger& integer;
-
-	COperandNumber(CInteger& integer) : integer(integer) { }
-	
-	virtual void DeclareLocal(CodeGenContext& context,unsigned num) {}
-	virtual llvm::APInt GetComputableConstant(CodeGenContext& context,unsigned num) const { return integer.getAPInt(); }
-	virtual unsigned GetNumComputableConstants(CodeGenContext& context) const { return 1; }
-	virtual const CString* GetString(CodeGenContext& context,unsigned num,unsigned slot) const { return nullptr; };
-};
-
+#include "ast/opNum.h"
 #include "ast/opIdent.h"
 #include "ast/opMapping.h"
 #include "ast/opPartial.h"

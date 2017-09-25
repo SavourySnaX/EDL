@@ -115,7 +115,7 @@ public:
 	std::map<CStatesDeclaration*, StateVariable>& statesAlt() { return m_statesAlt; }
 	llvm::BasicBlock *currentBlock() { if (blocks.size() > 0) return blocks.top()->block; else return nullptr; }
 	void setBlock(llvm::BasicBlock *block) { blocks.top()->block = block; }
-	void pushBlock(llvm::BasicBlock *block, YYLTYPE& blockStartLocation)
+	void pushBlock(llvm::BasicBlock *block)
 	{
 		std::map<std::string, BitVariable> tLocals;
 		if (blocks.size() > 0)
@@ -123,20 +123,28 @@ public:
 		blocks.push(new CodeGenBlock());
 		blocks.top()->block = block;
 		blocks.top()->locals = tLocals;
+	}
+	void pushBlock(llvm::BasicBlock *block, const YYLTYPE& blockStartLocation)
+	{
+		pushBlock(block);
 		if (gContext.opts.generateDebug)
 		{
 			gContext.scopingStack.push(gContext.dbgBuilder->createLexicalBlock(gContext.scopingStack.top(), gContext.scopingStack.top()->getFile(), blockStartLocation.first_line, blockStartLocation.first_column));
 		}
 	}
-	void popBlock(YYLTYPE& blockEndLocation)
+	void popBlock()
 	{
 		CodeGenBlock *top = blocks.top();
+		blocks.pop();
+		delete top;
+	}
+	void popBlock(const YYLTYPE& blockEndLocation)
+	{
 		if (gContext.opts.generateDebug)
 		{
 			gContext.scopingStack.pop();
 		}
-		blocks.pop();
-		delete top;
+		popBlock();
 	}
 	bool isStateEmpty()
 	{
@@ -155,7 +163,7 @@ public:
 	void pushIdent(const CIdentifier* id) { identifierStack.push(id); }
 	void popIdent() { identifierStack.pop(); }
 
-	void StartFunctionDebugInfo(llvm::Function* func, YYLTYPE& declLoc);
+	void StartFunctionDebugInfo(llvm::Function* func, const YYLTYPE& declLoc);
 	void EndFunctionDebugInfo();
 
 	// Global state accessors

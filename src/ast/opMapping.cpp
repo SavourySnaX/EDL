@@ -6,39 +6,24 @@
 
 void COperandMapping::DeclareLocal(CodeGenContext& context, unsigned num)
 {
-	context.locals()[ident.name] = GetBitVariable(context, num);
-}
-
-BitVariable COperandMapping::GetBitVariable(CodeGenContext& context, unsigned num)
-{
-	BitVariable mappingVariable;
-
 	if (context.m_mappings.find(ident.name) == context.m_mappings.end())
 	{
-		return context.gContext.ReportError(mappingVariable,EC_ErrorAtLocation,ident.nameLoc, "Undeclared mapping : %s", ident.name.c_str());
+		context.gContext.ReportError(nullptr,EC_ErrorAtLocation,ident.nameLoc, "Undeclared mapping : %s", ident.name.c_str());
+		return;
 	}
 
-	CMapping* mapping = context.m_mappings[ident.name]->mappings[num];
+	BitVariable temp(context.m_mappings[ident.name]->size.getAPInt(),0);
 
-	if (mapping->expr.IsIdentifierExpression())
-	{
-		// If the expression in a mapping is a an identifier alone, then we can create a true local variable that maps directly to it, this allows
-		// assignments to work. (its done by copying the variable declaration resulting from looking up the identifier.)
+	temp.value = arg;
+	temp.value->setName(ident.name+"idx");
+	context.locals()[ident.name+"idx"] = temp;
 
-		CIdentifier* identifier = (CIdentifier*)&mapping->expr;
-		if (!context.LookupBitVariable(mappingVariable, identifier->module, identifier->name, identifier->modLoc, identifier->nameLoc))
-		{
-			return mappingVariable;
-		}
-	}
-	else
-	{
-		// Not an identifier, so we must create an expression map (this limits the mapping to only being useful for a limited set of things, (but is an accepted part of the language!)
+	BitVariable mappingRef;
 
-		mappingVariable.mappingRef = true;
-		mappingVariable.mapping = &mapping->expr;
-	}
-	return mappingVariable;
+	mappingRef.mappingRef = true;
+	mappingRef.mapping = context.m_mappings[ident.name];
+	
+	context.locals()[ident.name] = mappingRef;
 }
 
 llvm::APInt COperandMapping::GetComputableConstant(CodeGenContext& context, unsigned num) const
@@ -61,6 +46,22 @@ unsigned COperandMapping::GetNumComputableConstants(CodeGenContext& context) con
 	}
 
 	return context.m_mappings[ident.name]->mappings.size();
+}
+
+void COperandMapping::GetArgTypes(CodeGenContext& context, std::vector<llvm::Type*>& argVector) const
+{
+	if (context.m_mappings.find(ident.name) == context.m_mappings.end())
+	{
+		context.gContext.ReportError(nullptr, EC_ErrorAtLocation, ident.nameLoc, "Undeclared mapping : %s", ident.name.c_str());
+		return;
+	}
+
+	argVector.push_back(context.getIntType(context.m_mappings[ident.name]->size.getAPInt().getLimitedValue()));
+}
+
+void COperandMapping::GetArgs(CodeGenContext& context, std::vector<llvm::Value*>& argVector,unsigned num) const
+{
+	argVector.push_back(context.getConstantInt(GetComputableConstant(context, num)));
 }
 
 const CString* COperandMapping::GetString(CodeGenContext& context, unsigned num, unsigned slot) const

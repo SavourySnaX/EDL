@@ -166,11 +166,6 @@ llvm::Value* CAssignment::codeGen(CodeGenContext& context)
 		return nullptr;
 	}
 
-	if (var.mappingRef)
-	{
-		return context.gContext.ReportError(nullptr, EC_ErrorAtLocation, var.refLoc, "Cannot assign to a mapping reference");
-	}
-
 	if (rhs.IsImpedance())
 	{
 		// special case, impedance uses hidden bit variable (which is only accessed during bus muxing)	- Going to need a few fixups to support this
@@ -192,6 +187,11 @@ llvm::Value* CAssignment::codeGen(CodeGenContext& context)
 	{
 		return nullptr;
 	}
+	
+	if (var.mappingRef)
+	{
+		return var.mapping->generateCallSetByMapping(context, operatorLoc, operatorLoc, assignWith);
+	}
 
 	llvm::Instruction* I = CAssignment::generateAssignment(var, lhs, assignWith, context);
 	if (context.gContext.opts.generateDebug)
@@ -211,9 +211,11 @@ llvm::Value* CAssignment::codeGen(CodeGenContext& context, CCastOperator* cast)
 		return nullptr;
 	}
 
+	assignWith = rhs.codeGen(context);
+
 	if (var.mappingRef)
 	{
-		return context.gContext.ReportError(nullptr, EC_ErrorAtLocation, var.refLoc, "Cannot assign to a mapping reference");
+		return var.mapping->generateCallSetByMappingCast(context, var.refLoc, var.refLoc, assignWith,cast);
 	}
 
 	var.aliased = true;		// We pretend we are assigning to an alias, even if we are not, this forces the compiler to generate the correct code
@@ -234,8 +236,6 @@ llvm::Value* CAssignment::codeGen(CodeGenContext& context, CCastOperator* cast)
 
 	var.shft = start;
 	var.mask = mask;
-
-	assignWith = rhs.codeGen(context);
 
 	return CAssignment::generateAssignment(var, lhs, assignWith, context);
 }

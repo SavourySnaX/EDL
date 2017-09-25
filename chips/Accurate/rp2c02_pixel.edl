@@ -1062,9 +1062,9 @@ FUNCTION INTERNAL	ProcessSprite
 
 MAPPING RemainingClocks[2]
 {
-	%01	""	0;
-	%10	""	1;
-	%11	""	2;
+	%01	""	$0;
+	%10	""	$1;
+	%11	""	$2;
 }
 
 INSTRUCTION	OAMClock	"SpriteCompute"	%0:RemainingClocks:dontCare[6]

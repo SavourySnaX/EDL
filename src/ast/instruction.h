@@ -10,13 +10,13 @@ private:
 public:
 	CIdentifier& table;
 	CString& mnemonic;
-	OperandList operands;
+	OperandPartialList operands;
 	CBlock& block;
 	static CIdentifier emptyTable;
 	YYLTYPE statementLoc;
 
-	CInstruction(CIdentifier& table, CString& mnemonic, OperandList& operands, CBlock& block, YYLTYPE *statementLoc) : table(table), mnemonic(mnemonic), operands(operands), block(block), statementLoc(*statementLoc) { }
-	CInstruction(CString& mnemonic, OperandList& operands, CBlock& block, YYLTYPE *statementLoc) : table(emptyTable), mnemonic(mnemonic), operands(operands), block(block), statementLoc(*statementLoc) { }
+	CInstruction(CIdentifier& table, CString& mnemonic, OperandPartialList& operands, CBlock& block, YYLTYPE *statementLoc) : table(table), mnemonic(mnemonic), operands(operands), block(block), statementLoc(*statementLoc) { }
+	CInstruction(CString& mnemonic, OperandPartialList& operands, CBlock& block, YYLTYPE *statementLoc) : table(emptyTable), mnemonic(mnemonic), operands(operands), block(block), statementLoc(*statementLoc) { }
 
 	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);

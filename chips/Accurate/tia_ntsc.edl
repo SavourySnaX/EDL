@@ -1078,41 +1078,41 @@ INSTRUCTION	WriteRegister	"AUDF1"	%011000
 
 MAPPING PlayfieldZone[6]
 {
-#	%011100	"Bit0"		$1;	
-	%101110	"Bit1"		$2;	
-	%010111 "Bit2"		$3;	
-	%101011 "Bit3"		$4;	
-	%110101 "Bit4"		$5;	
-	%011010 "Bit5"		$6;	
-	%001101 "Bit6"		$7;	
-	%000110 "Bit7"		$8;	
-	%000011 "Bit8"		$9;	
-	%100001 "Bit9"		$A;	
-	%010000 "Bit10"		$B;	
-	%101000 "Bit11"		$C;	
-	%110100 "Bit12"		$D;	
-	%111010 "Bit13"		$E;	
-	%011101 "Bit14"		$F;	
+#	%011100	"Bit0"		$01;	
+	%101110	"Bit1"		$02;	
+	%010111 "Bit2"		$03;	
+	%101011 "Bit3"		$04;	
+	%110101 "Bit4"		$05;	
+	%011010 "Bit5"		$06;	
+	%001101 "Bit6"		$07;	
+	%000110 "Bit7"		$08;	
+	%000011 "Bit8"		$09;	
+	%100001 "Bit9"		$0A;	
+	%010000 "Bit10"		$0B;	
+	%101000 "Bit11"		$0C;	
+	%110100 "Bit12"		$0D;	
+	%111010 "Bit13"		$0E;	
+	%011101 "Bit14"		$0F;	
 	%001110 "Bit15"		$10;	
 	%000111 "Bit16"		$11;	
 	%100011 "Bit17"		$12;	
 	%110001 "Bit18"		$13;	
 	%011000 "Bit19"		$14;	
-#	%101100 "Bit0"		$1;	
-	%110110 "Bit1"		$2;	
-	%011011 "Bit2"		$3;	
-	%101101 "Bit3"		$4;	
-	%010110 "Bit4"		$5;	
-	%001011 "Bit5"		$6;	
-	%100101 "Bit6"		$7;	
-	%010010 "Bit7"		$8;	
-	%001001 "Bit8"		$9;	
-	%000100 "Bit9"		$A;	
-	%100010 "Bit10"		$B;	
-	%010001 "Bit11"		$C;	
-	%001000 "Bit12"		$D;	
-	%100100 "Bit13"		$E;	
-	%110010 "Bit14"		$F;	
+#	%101100 "Bit0"		$01;	
+	%110110 "Bit1"		$02;	
+	%011011 "Bit2"		$03;	
+	%101101 "Bit3"		$04;	
+	%010110 "Bit4"		$05;	
+	%001011 "Bit5"		$06;	
+	%100101 "Bit6"		$07;	
+	%010010 "Bit7"		$08;	
+	%001001 "Bit8"		$09;	
+	%000100 "Bit9"		$0A;	
+	%100010 "Bit10"		$0B;	
+	%010001 "Bit11"		$0C;	
+	%001000 "Bit12"		$0D;	
+	%100100 "Bit13"		$0E;	
+	%110010 "Bit14"		$0F;	
 	%011001 "Bit15"		$10;	
 	%001100 "Bit16"		$11;	
 	%100110 "Bit17"		$12;	
@@ -1175,9 +1175,9 @@ INSTRUCTION	HClockLogic	"RESET"		%010100
 
 MAPPING Player0StartPoints[6]
 {
-	%111000	""	3;	##	4	12	START DRAWING (NUSIZ=001,011)
-	%101111	""	7;	##	9.3	28	START DRAWING (NUSIZ=011,010,110)
-	%111001	""	15;	##	20	60	START DRAWING (NUSIZ=100,110)
+	%111000	""	$3;		##	4	12	START DRAWING (NUSIZ=001,011)
+	%101111	""	$7;		##	9.3	28	START DRAWING (NUSIZ=011,010,110)
+	%111001	""	$F;		##	20	60	START DRAWING (NUSIZ=100,110)
 }
 
 INSTRUCTION	Player0Logic	"START"		Player0StartPoints
@@ -1225,9 +1225,9 @@ INSTRUCTION	Player0Logic	"RESET"		%101101
 
 MAPPING Player1StartPoints[6]
 {
-	%111000	""	3;	##	4	12	START DRAWING (NUSIZ=001,011)
-	%101111	""	7;	##	9.3	28	START DRAWING (NUSIZ=011,010,110)
-	%111001	""	15;	##	20	60	START DRAWING (NUSIZ=100,110)
+	%111000	""	$3;	##	4	12	START DRAWING (NUSIZ=001,011)
+	%101111	""	$7;	##	9.3	28	START DRAWING (NUSIZ=011,010,110)
+	%111001	""	$F;	##	20	60	START DRAWING (NUSIZ=100,110)
 }
 
 INSTRUCTION	Player1Logic	"START"		Player1StartPoints

@@ -90,6 +90,7 @@ void CInstruction::prePass(CodeGenContext& context)
 llvm::Value* CInstruction::codeGen(CodeGenContext& context)
 {
 	std::vector<llvm::Type*> argTypes;
+	operands[0]->GetArgTypes(context,argTypes);
 
 	// First up, get the first operand (this must be a computable constant!) - remaining operands are only used for asm/disasm generation
 	unsigned numOpcodes = operands[0]->GetNumComputableConstants(context);
@@ -98,6 +99,7 @@ llvm::Value* CInstruction::codeGen(CodeGenContext& context)
 		return context.gContext.ReportError(nullptr, EC_ErrorWholeLine, statementLoc, "Opcode for instruction must be able to generate constants");
 	}
 
+	llvm::Function* function = nullptr;
 	for (unsigned a = 0; a < numOpcodes; a++)
 	{
 		llvm::APInt opcode = operands[0]->GetComputableConstant(context, a);
@@ -107,25 +109,28 @@ llvm::Value* CInstruction::codeGen(CodeGenContext& context)
 
 		context.disassemblyTable[table.name][opcode] = disassembled.quoted;
 
-		llvm::FunctionType *ftype = llvm::FunctionType::get(context.getVoidType(), argTypes, false);
-		llvm::Function* function = context.makeFunction(ftype, llvm::GlobalValue::PrivateLinkage, EscapeString(context.getSymbolPrefix() + "OPCODE_" + opcodeString.string.quoted.substr(1, opcodeString.string.quoted.length() - 2) + "_" + table.name + opcode.toString(16, false)));
+		if (a == 0)
+		{
+			llvm::FunctionType *ftype = llvm::FunctionType::get(context.getVoidType(), argTypes, false);
+			function = context.makeFunction(ftype, llvm::GlobalValue::PrivateLinkage, EscapeString(context.getSymbolPrefix() + "OPCODE_" + opcodeString.string.quoted.substr(1, opcodeString.string.quoted.length() - 2) + "_" + table.name + opcode.toString(16, false)));
 
-		context.StartFunctionDebugInfo(function, statementLoc);
+			context.StartFunctionDebugInfo(function, statementLoc);
 
-		llvm::BasicBlock *bblock = context.makeBasicBlock("entry", function);
+			llvm::BasicBlock *bblock = context.makeBasicBlock("entry", function);
 
-		context.pushBlock(bblock, block.blockStartLoc);
+			context.pushBlock(bblock, block.blockStartLoc);
 
-		operands[0]->DeclareLocal(context, a);
+			operands[0]->SetupFunctionArgs(context, function);
+			operands[0]->DeclareLocal(context, a);
 
-		block.codeGen(context);
+			block.codeGen(context);
 
-		context.makeReturn(context.currentBlock());
+			context.makeReturn(context.currentBlock());
 
-		context.popBlock(block.blockEndLoc);
+			context.popBlock(block.blockEndLoc);
 
-		context.EndFunctionDebugInfo();
-
+			context.EndFunctionDebugInfo();
+		}
 		if (context.isErrorFlagged())
 		{
 			return nullptr;
@@ -139,6 +144,7 @@ llvm::Value* CInstruction::codeGen(CodeGenContext& context)
 
 			llvm::BasicBlock* tempBlock = context.makeBasicBlock("callOut" + table.name + opcode.toString(16, false), context.executeLocations[table.name][b].blockEndForExecute->getParent());
 			std::vector<llvm::Value*> args;
+			operands[0]->GetArgs(context, args, a);
 			llvm::CallInst* fcall = llvm::CallInst::Create(function, args, "", tempBlock);
 			if (context.gContext.opts.generateDebug)
 			{

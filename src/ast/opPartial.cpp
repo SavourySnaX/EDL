@@ -107,3 +107,37 @@ unsigned COperandPartial::GetNumComputableConstants(CodeGenContext& context) con
 
 	return result;
 }
+
+void COperandPartial::GetArgTypes(CodeGenContext& context, std::vector<llvm::Type*>& argVector) const
+{
+	for (int a=operands.size()-1;a>=0;a--)
+	{
+		operands[a]->GetArgTypes(context,argVector);
+	}
+}
+
+void COperandPartial::GetArgs(CodeGenContext& context, std::vector<llvm::Value*>& argVector,unsigned num) const
+{
+	for (int a=operands.size()-1;a>=0;a--)
+	{
+		unsigned tNum=num % operands[a]->GetNumComputableConstants(context);
+		operands[a]->GetArgs(context,argVector,tNum);
+		num/=operands[a]->GetNumComputableConstants(context);
+	}
+}
+
+void COperandPartial::SetupFunctionArgs(CodeGenContext& context, llvm::Function* func)
+{
+	auto arg = func->args().begin();
+	for (int a=operands.size()-1;a>=0;a--)
+	{
+		if (operands[a]->IsFunctionArgument())
+		{
+			operands[a]->arg = arg++;
+		}
+		else
+		{
+			operands[a]->arg = nullptr;
+		}
+	}
+}

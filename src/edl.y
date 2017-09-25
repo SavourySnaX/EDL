@@ -37,7 +37,7 @@
 	CTrigger *trigger;
 	CExternDecl *extern_c_decl;
 	CConnect *connect;
-	std::vector<COperand*> *opervec;
+	std::vector<COperandPartial*> *opervec;
 	std::vector<CAliasDeclaration*> *aliasvec;
 	std::vector<CStateDeclaration*> *varvec;
 	std::vector<CExpression*> *exprvec;
@@ -250,8 +250,8 @@ operand : numeric { $$ = new COperandNumber(*$1); }
 partialOperands : partialOperands TOK_COLON operand { $$->Add($<operand>3); }
 		| operand { $$ = new COperandPartial(); $$->Add($<operand>1); }
 
-operandList : operandList TOK_COMMA partialOperands { $$->push_back($<operand>3); }
-	    | partialOperands { $$ = new OperandList(); $$->push_back($<operand>1); }
+operandList : operandList TOK_COMMA partialOperands { $$->push_back($3); }
+	    | partialOperands { $$ = new OperandPartialList(); $$->push_back($1); }
 	;
 
 instruction_decl : TOK_INSTRUCTION ident quoted operandList block { $$ = new CInstruction(*$2,*$3,*$4,*$5, &@1); }
@@ -265,7 +265,7 @@ mappingList : mappingList mapping { $$->push_back($<mapping>2); }
 	 | mapping { $$ = new MappingList(); $$->push_back($<mapping>1); }
 	;
 
-mapping_decl : TOK_MAPPING ident TOK_LSQR numeric TOK_RSQR TOK_LBRACE mappingList TOK_RBRACE { $$ = new CMappingDeclaration(*$2,*$4,*$7); } 
+mapping_decl : TOK_MAPPING ident TOK_LSQR numeric TOK_RSQR TOK_LBRACE mappingList TOK_RBRACE { $$ = new CMappingDeclaration(*$2,*$4,*$7,&@6,&@8); } 
 	     ;
 
 pin_type: TOK_IN

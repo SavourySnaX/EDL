@@ -44,7 +44,7 @@ bool CompareEquals(llvm::APInt a,llvm::APInt b)
 	return a==b;
 }
 
-void CodeGenContext::StartFunctionDebugInfo(llvm::Function* func, YYLTYPE& declLoc)
+void CodeGenContext::StartFunctionDebugInfo(llvm::Function* func, const YYLTYPE& declLoc)
 {
 	if (gContext.opts.generateDebug)
 	{
