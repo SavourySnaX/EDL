@@ -32,6 +32,7 @@ bool GlobalContext::InitGlobalCodeGen()
 		symbolPrefix = opts.symbolModifier;
 	}
 
+	irBuilder = new llvm::IRBuilder<>(llvmContext);
 	dbgBuilder = new llvm::DIBuilder(*llvmModule);
 
 	// Setup Debug Contexts

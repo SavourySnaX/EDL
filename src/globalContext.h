@@ -12,6 +12,7 @@
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DebugInfoMetadata.h>
 #include <llvm/IR/DIBuilder.h>
+#include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/GlobalVariable.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/LLVMContext.h>
@@ -65,6 +66,7 @@ public:
 	CompilerOptions&							opts;
 	llvm::DIBuilder*							dbgBuilder;
 	llvm::DICompileUnit*						compileUnit;
+	llvm::IRBuilder<>*							irBuilder;
 	llvm::Module*								llvmModule;
 	llvm::Function*								debugTraceChar;
 	llvm::Function*								debugTraceMissing;
