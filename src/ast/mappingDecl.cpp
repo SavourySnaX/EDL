@@ -178,7 +178,7 @@ llvm::Function* CMappingDeclaration::GenerateGetByMappingFunction(CodeGenContext
 		if (!asVoid)
 		{
 			// Get size of mapReturn
-			if (!mapReturn->getReturnValue()->getType()->isIntegerTy())
+			if (mapReturn->getReturnValue()==nullptr || !mapReturn->getReturnValue()->getType()->isIntegerTy())
 			{
 				delete caseBlock;
 				return nullptr;		// Does not return a value, so not suitable for getter
