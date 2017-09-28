@@ -11,18 +11,13 @@
 
 void CFunctionDecl::prePass(CodeGenContext& context)
 {
-	block.prePass(context);
-}
-
-llvm::Value* CFunctionDecl::codeGen(CodeGenContext& context)
-{
+	// Declare function in pre-pass, allows use before definition
 	int a;
-	BitVariable returnVal;
 	std::vector<llvm::Type*> FuncTy_8_args;
 
-	for (a = 0; a < params.size(); a++)
+	for (const auto& param : params)
 	{
-		FuncTy_8_args.push_back(context.getIntType(params[a]->size));
+		FuncTy_8_args.push_back(context.getIntType(param->size));
 	}
 	llvm::FunctionType* FuncTy_8;
 
@@ -45,11 +40,20 @@ llvm::Value* CFunctionDecl::codeGen(CodeGenContext& context)
 		func = context.makeFunction(FuncTy_8, llvm::GlobalValue::ExternalLinkage, context.getSymbolPrefix() + name.name);
 	}
 
-	context.StartFunctionDebugInfo(func, functionLoc);
-
 	context.m_externFunctions[name.name] = func;
 
-	llvm::BasicBlock *bblock = context.makeBasicBlock("entry", func);
+	funcDecl = func;
+
+	block.prePass(context);
+}
+
+llvm::Value* CFunctionDecl::codeGen(CodeGenContext& context)
+{
+	BitVariable returnVal;
+
+	context.StartFunctionDebugInfo(funcDecl, functionLoc);
+
+	llvm::BasicBlock *bblock = context.makeBasicBlock("entry", funcDecl);
 
 	context.pushBlock(bblock, block.blockStartLoc);
 
@@ -61,9 +65,9 @@ llvm::Value* CFunctionDecl::codeGen(CodeGenContext& context)
 		context.locals()[returns[0]->id.name] = returnVal;
 	}
 
-	llvm::Function::arg_iterator args = func->arg_begin();
-	a = 0;
-	while (args != func->arg_end())
+	llvm::Function::arg_iterator args = funcDecl->arg_begin();
+	int a = 0;
+	while (args != funcDecl->arg_end())
 	{
 		BitVariable temp(params[a]->size.getAPInt(),0);
 
@@ -89,5 +93,5 @@ llvm::Value* CFunctionDecl::codeGen(CodeGenContext& context)
 
 	context.EndFunctionDebugInfo();
 
-	return func;
+	return funcDecl;
 }

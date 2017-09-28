@@ -2,6 +2,8 @@
 
 class CFunctionDecl : public CStatement
 {
+private:
+	llvm::Function* funcDecl;
 public:
 	bool internal;
 	NamedParamsList returns;
