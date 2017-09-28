@@ -20,12 +20,29 @@ llvm::Value* CExchange::codeGen(CodeGenContext& context)
 		return nullptr;
 	}
 
-	if (lhsVar.value->getType()->isPointerTy() && rhsVar.value->getType()->isPointerTy())
+	if ((lhsVar.mappingRef || lhsVar.value->getType()->isPointerTy()) && (rhsVar.mappingRef || rhsVar.value->getType()->isPointerTy()))
 	{
-		// Both sides must be identifiers
+		// Both sides must be identifiers/valid mappingReferences
+		llvm::Value* left = nullptr;
+		llvm::Value* right = nullptr;
 
-		llvm::Value* left = lhs.codeGen(context);
-		llvm::Value* right = rhs.codeGen(context);
+		if (lhsVar.mappingRef)
+		{
+			left = lhsVar.mapping->generateCallGetByMapping(context, lhs.modLoc, lhs.nameLoc);
+		}
+		else
+		{
+			left = lhs.codeGen(context);
+		}
+
+		if (rhsVar.mappingRef)
+		{
+			right = rhsVar.mapping->generateCallGetByMapping(context, rhs.modLoc, rhs.nameLoc);
+		}
+		else
+		{
+			right = rhs.codeGen(context);
+		}
 
 		if (left->getType()->isIntegerTy() && right->getType()->isIntegerTy())
 		{
@@ -37,11 +54,24 @@ llvm::Value* CExchange::codeGen(CodeGenContext& context)
 				return context.gContext.ReportError(nullptr, EC_ErrorAtLocation, operatorLoc, "Both operands to exchange must be same size");
 			}
 
-			CAssignment::generateAssignment(lhsVar, lhs, right, context);
-			CAssignment::generateAssignment(rhsVar, rhs, left, context);
+			if (lhsVar.mappingRef)
+			{
+				lhsVar.mapping->generateCallSetByMapping(context, lhs.modLoc, lhs.nameLoc, right);
+			}
+			else
+			{
+				CAssignment::generateAssignment(lhsVar, lhs, right, context);
+			}
+			if (rhsVar.mappingRef)
+			{
+				rhsVar.mapping->generateCallSetByMapping(context, rhs.modLoc, rhs.nameLoc, left);
+			}
+			else
+			{
+				CAssignment::generateAssignment(rhsVar, rhs, left, context);
+			}
+			return nullptr;
 		}
-
-		return nullptr;
 	}
 
 	return context.gContext.ReportError(nullptr, EC_ErrorAtLocation, operatorLoc, "Illegal operands to exchange (must both be assignable)");
