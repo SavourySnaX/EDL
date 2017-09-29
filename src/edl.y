@@ -54,7 +54,7 @@
 }
 
 %token <string> TOK_IDENTIFIER TOK_INTEGER TOK_STRING
-%token <token>	TOK_DECLARE TOK_HANDLER	TOK_STATES TOK_STATE TOK_ALIAS TOK_IF TOK_NEXT TOK_PUSH TOK_POP	/* Reserved words */
+%token <token>	TOK_DECLARE TOK_HANDLER	TOK_STATES TOK_STATE TOK_ALIAS TOK_IF TOK_ELSE TOK_NEXT TOK_PUSH TOK_POP	/* Reserved words */
 %token <token>	TOK_INSTRUCTION	TOK_EXECUTE TOK_ROL TOK_ROR TOK_MAPPING TOK_AFFECT TOK_AS		/* Reserved words */
 %token <token>	TOK_PIN TOK_IN TOK_OUT TOK_BIDIRECTIONAL TOK_INSTANCE TOK_EXCHANGE TOK_DADD TOK_DSUB	/* Reserved words */
 %token <token>	TOK_ALWAYS TOK_CHANGED TOK_TRANSITION TOK_INTERNAL TOK_FUNCTION TOK_CALL		/* Reserved words */
@@ -180,6 +180,7 @@ debuglist : debuglist TOK_COMMA debug { $1->push_back($<debug>3); }
 	;
 
 ifblock : TOK_IF expr block { $$ = new CIfStatement(*$2,*$3); }
+        | TOK_IF expr block TOK_ELSE block { $$ = new CIfStatement(*$2,*$3,*$5); }
 	;
 
 state_ident : TOK_IDENTIFIER { $$ = new CStateIdent(*$1,&@1); delete $1; }
