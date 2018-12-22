@@ -226,7 +226,7 @@ bool GlobalContext::SetupPassesAndRun(CodeGenContext& rootContext)
 			std::cerr << ec.message() << std::endl;
 			return false;
 		}
-		if (targetMachine->addPassesToEmitFile(pm, dest, llvm::TargetMachine::CGFT_ObjectFile))
+		if (targetMachine->addPassesToEmitFile(pm, dest, nullptr, llvm::TargetMachine::CGFT_ObjectFile))
 		{
 			std::cerr << "Cannot emit object file" << std::endl;
 			return false;
@@ -316,7 +316,7 @@ llvm::DIFile* GlobalContext::CreateNewDbgFile(const char* filepath)
 
 	Hash.stringifyResult(Result, Checksum);
 
-	return dbgBuilder->createFile(filename, fullpath, llvm::DIFile::CSK_MD5, Checksum);
+	return dbgBuilder->createFile(filename, fullpath);
 }
 
 //////////////////////////////////////////////////////////////////////////
