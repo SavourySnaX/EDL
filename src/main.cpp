@@ -20,7 +20,10 @@ int Usage()
 	std::cerr << "Compile edl into llvm source (to stdout) / native object (-o outputobject)" <<std::endl <<std::endl;
 	std::cerr << "-s symbol      prepends symbol to all externally accessable symbols" << std::endl;
 	std::cerr << "-o output      emits a native objectfile instead of llvm assembly" << std::endl;
+#if !defined(EDL_PLATFORM_ARM)
+	// currently causing problems on raspberry pi at least
 	std::cerr << "-g             generate debug information" << std::endl;
+#endif
 	std::cerr << "-O0            disables optimisations" << std::endl;
 	std::cerr << "-O1            enables all but experimental optimisations" << std::endl;
 	std::cerr << "-O2            enables O1 plus experimental optimisations" << std::endl;
@@ -316,7 +319,9 @@ int main(int argc, char **argv)
 			}
 			if (strcmp(argv[a], "-g") == 0)
 			{
+#if !defined(EDL_PLATFORM_ARM)
 				opts.generateDebug = 1;
+#endif
 			}
 			if (strcmp(argv[a],"-h")==0 || strcmp(argv[a],"--help")==0)
 			{
