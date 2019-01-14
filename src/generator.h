@@ -16,6 +16,7 @@ class CMappingDeclaration;
 class CIdentifier;
 class CodeGenContext;
 class CAffect;
+class CExecute;
 
 typedef std::vector<CAffect*> AffectorList;
 
@@ -31,19 +32,31 @@ public:
 	CStatesDeclaration* decl;
 };
 
+class ExecuteSaved
+{
+public:
+	llvm::Function* func;
+	std::vector<llvm::Value*> args;
+	std::string name;
+	llvm::APInt caseNum;
+};
+
 class ExecuteInformation
 {
 public:
-    llvm::BasicBlock* blockEndForExecute;
-    llvm::SwitchInst* switchForExecute;
+	llvm::BasicBlock* blockEndForExecute;
+	llvm::SwitchInst* switchForExecute;
+	CExecute* execute;
 	YYLTYPE executeLoc;
+
+	std::stack<ExecuteSaved> processLater;
 };
 
 class CodeGenBlock 
 {
 public:
-    llvm::BasicBlock *block;
-    std::map<std::string, BitVariable> locals;
+	llvm::BasicBlock *block;
+	std::map<std::string, BitVariable> locals;
 };
 
 #include "globalContext.h"

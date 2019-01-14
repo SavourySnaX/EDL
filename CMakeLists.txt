@@ -128,6 +128,8 @@ add_subdirectory(tests/mb14241)
 add_subdirectory(tests/Intel8080)
 add_subdirectory(tests/contention)
 add_subdirectory(tests/states)
+add_subdirectory(tests/multialias)
+add_subdirectory(tests/bugs)
 
 #
 # For debugging

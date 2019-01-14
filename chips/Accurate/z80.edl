@@ -3642,7 +3642,7 @@ INSTRUCTION	ED	"IN F,(C)"		%01110000
 
 FUNCTION INTERNAL 	INIFlags	FromPort[8],ByteCounter[8],Adj[8]
 {
-	DECLARE TMP[8];
+	DECLARE tmp[8];
 	DECLARE	ADJC[8];
 	AFFECT s AS SIGN,z AS ZERO,b5 AS BIT(5),b3 AS BIT(3)
 	{
@@ -3651,15 +3651,15 @@ FUNCTION INTERNAL 	INIFlags	FromPort[8],ByteCounter[8],Adj[8]
 	AFFECT n AS BIT(7)
 	{
 		FromPort
-	}->TMP;
+	}->tmp;
 	ADJC<-C+Adj;
 	AFFECT c AS CARRY(7)
 	{
-		TMP + ADJC
-	}->TMP;
+		tmp + ADJC
+	}->tmp;
 	AFFECT p AS PARITYEVEN
 	{
-		(TMP&7) ^ B
+		(tmp&7) ^ B
 	};
 	h<-c;
 }
@@ -3843,22 +3843,22 @@ INSTRUCTION	ED	"OUT (C),0"		%01110001
 
 FUNCTION INTERNAL OUTIFlags	ToPort[8]
 {
-	DECLARE TMP[8];
+	DECLARE tmp[8];
 	AFFECT n AS BIT(7)
 	{
 		ToPort
-	}->TMP;
+	}->tmp;
 	AFFECT s AS SIGN,z AS ZERO,b5 AS BIT(5),b3 AS BIT(3)
 	{
 		B-1
 	}->B;
 	AFFECT c AS CARRY(7)
 	{
-		TMP + L
-	}->TMP;
+		tmp + L
+	}->tmp;
 	AFFECT p AS PARITYEVEN
 	{
-		(TMP&7) ^ B
+		(tmp&7) ^ B
 	};
 	h<-c;
 }

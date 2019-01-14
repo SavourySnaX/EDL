@@ -39,6 +39,7 @@
 	CConnect *connect;
 	std::vector<COperandPartial*> *opervec;
 	std::vector<CAliasDeclaration*> *aliasvec;
+	std::vector<std::vector<CAliasDeclaration*> > *vecaliasvec;
 	std::vector<CStateDeclaration*> *varvec;
 	std::vector<CExpression*> *exprvec;
 	std::vector<CDebugTrace*> *debugvec;
@@ -87,6 +88,7 @@
 %type <expr> expr connect_expr
 %type <varvec> states_list
 %type <aliasvec> aliases
+%type <vecaliasvec> alias_list
 %type <debugvec> debuglist
 %type <opervec> operandList
 %type <mappingvec> mappingList
@@ -236,11 +238,16 @@ state_def : TOK_STATE ident block { $$ = new CStateDefinition(*$2,*$3); }
 	  ;
 
 alias_decl : ident TOK_LSQR numeric TOK_RSQR { $$ = new CAliasDeclaration(*$1,*$3); }
-	  | numeric { $$ = new CAliasDeclaration(*$1); }
+	  | numeric { $$ = new CAliasDeclaration(*$1,false); }
+      | TOK_LSQR numeric TOK_RSQR { $$ = new CAliasDeclaration(*$2,true); }
 	;
 
 aliases : aliases TOK_COLON alias_decl { $$->push_back($<alias_decl>3); }
 	| alias_decl { $$ = new AliasList(); $$->push_back($<alias_decl>1); }
+	;
+
+alias_list : alias_list TOK_ALIAS aliases { $$->push_back(*$3); }
+	| TOK_ALIAS aliases { $$ = new MultiAliasList(); $$->push_back(*$2); }
 	;
 
 operand : numeric { $$ = new COperandNumber(*$1); }
@@ -275,15 +282,15 @@ pin_type: TOK_IN
 	;
 
 var_decl : TOK_DECLARE TOK_INTERNAL ident TOK_LSQR numeric TOK_RSQR { $$ = new CVariableDeclaration(CVariableDeclaration::notArray,true, *$3, *$5,CombineTokenLocations(@1,@6)); }
-	| TOK_DECLARE TOK_INTERNAL ident TOK_LSQR numeric TOK_RSQR TOK_ALIAS aliases { $$ = new CVariableDeclaration(CVariableDeclaration::notArray,true, *$3, *$5, *$8,CombineTokenLocations(@1,@6)); delete $8; }
+	| TOK_DECLARE TOK_INTERNAL ident TOK_LSQR numeric TOK_RSQR alias_list { $$ = new CVariableDeclaration(CVariableDeclaration::notArray,true, *$3, *$5, *$7,CombineTokenLocations(@1,@6)); delete $7; }
 	| TOK_DECLARE ident TOK_LSQR numeric TOK_RSQR { $$ = new CVariableDeclaration(CVariableDeclaration::notArray,false, *$2, *$4,CombineTokenLocations(@1,@5)); }
-	| TOK_DECLARE ident TOK_LSQR numeric TOK_RSQR TOK_ALIAS aliases { $$ = new CVariableDeclaration(CVariableDeclaration::notArray,false, *$2, *$4, *$7,CombineTokenLocations(@1,@5)); delete $7; }
+	| TOK_DECLARE ident TOK_LSQR numeric TOK_RSQR alias_list { $$ = new CVariableDeclaration(CVariableDeclaration::notArray,false, *$2, *$4, *$6,CombineTokenLocations(@1,@5)); delete $6; }
 	| TOK_DECLARE TOK_INTERNAL ident TOK_INDEXOPEN numeric TOK_INDEXCLOSE TOK_LSQR numeric TOK_RSQR { $$ = new CVariableDeclaration(*$5,true, *$3, *$8,CombineTokenLocations(@1,@9)); }
-	| TOK_DECLARE TOK_INTERNAL ident TOK_INDEXOPEN numeric TOK_INDEXCLOSE TOK_LSQR numeric TOK_RSQR TOK_ALIAS aliases { $$ = new CVariableDeclaration(*$5, true, *$3, *$8, *$11,CombineTokenLocations(@1,@9)); delete $11; }
+	| TOK_DECLARE TOK_INTERNAL ident TOK_INDEXOPEN numeric TOK_INDEXCLOSE TOK_LSQR numeric TOK_RSQR alias_list { $$ = new CVariableDeclaration(*$5, true, *$3, *$8, *$10,CombineTokenLocations(@1,@9)); delete $10; }
 	| TOK_DECLARE ident TOK_INDEXOPEN numeric TOK_INDEXCLOSE TOK_LSQR numeric TOK_RSQR { $$ = new CVariableDeclaration(*$4, false, *$2, *$7,CombineTokenLocations(@1,@8)); }
-	| TOK_DECLARE ident TOK_INDEXOPEN numeric TOK_INDEXCLOSE TOK_LSQR numeric TOK_RSQR TOK_ALIAS aliases { $$ = new CVariableDeclaration(*$4, false, *$2, *$7, *$10,CombineTokenLocations(@1,@8)); delete $10; }
+	| TOK_DECLARE ident TOK_INDEXOPEN numeric TOK_INDEXCLOSE TOK_LSQR numeric TOK_RSQR alias_list { $$ = new CVariableDeclaration(*$4, false, *$2, *$7, *$9,CombineTokenLocations(@1,@8)); delete $9; }
 	| TOK_PIN pin_type ident TOK_LSQR numeric TOK_RSQR { $$ = new CVariableDeclaration(*$3,*$5,$2,CombineTokenLocations(@1,@6)); }
-	| TOK_PIN pin_type ident TOK_LSQR numeric TOK_RSQR TOK_ALIAS aliases { $$ = new CVariableDeclaration(*$3,*$5,*$8,$2,CombineTokenLocations(@1,@6)); delete $8; }
+	| TOK_PIN pin_type ident TOK_LSQR numeric TOK_RSQR alias_list { $$ = new CVariableDeclaration(*$3,*$5,*$7,$2,CombineTokenLocations(@1,@6)); delete $7; }
 	;
 
 affector : ident TOK_AS TOK_ZERO { $$ = new CAffect(*$1,TOK_ZERO); }

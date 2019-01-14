@@ -81,9 +81,10 @@ public:
 	CIdentifier& idOrEmpty;
 	CInteger& sizeOrValue;
 	static CIdentifier empty;
+    bool size_not_value;
 
-	CAliasDeclaration(CIdentifier& id, CInteger& size) : idOrEmpty(id), sizeOrValue(size) { }
-	CAliasDeclaration(CInteger& value) : idOrEmpty(empty), sizeOrValue(value) { }
+	CAliasDeclaration(CIdentifier& id, CInteger& size) : idOrEmpty(id), sizeOrValue(size), size_not_value(true) { }
+	CAliasDeclaration(CInteger& value, bool isSize) : idOrEmpty(empty), sizeOrValue(value), size_not_value(isSize) { }
 };
 
 #include "ast/stateDecl.h"

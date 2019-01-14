@@ -136,24 +136,15 @@ llvm::Value* CInstruction::codeGen(CodeGenContext& context)
 			return nullptr;
 		}
 
-		// Glue callee back into execute (assumes execute comes before instructions at all times for now)
+		// Glue callee back into execute (locations are now fetched during prepass)
 		for (int b = 0; b < context.executeLocations[table.name].size(); b++)
 		{
-			llvm::Function *parentFunction = context.executeLocations[table.name][b].blockEndForExecute->getParent();
-			context.gContext.scopingStack.push(parentFunction->getSubprogram());
+			// Get reference to execute block and call CExecute::LinkToSwitch
+			CExecute* execute = context.executeLocations[table.name][b].execute;
 
-			llvm::BasicBlock* tempBlock = context.makeBasicBlock("callOut" + table.name + opcode.toString(16, false), context.executeLocations[table.name][b].blockEndForExecute->getParent());
 			std::vector<llvm::Value*> args;
 			operands[0]->GetArgs(context, args, a);
-			llvm::CallInst* fcall = llvm::CallInst::Create(function, args, "", tempBlock);
-			if (context.gContext.opts.generateDebug)
-			{
-				fcall->setDebugLoc(llvm::DebugLoc::get(context.executeLocations[table.name][b].executeLoc.first_line, context.executeLocations[table.name][b].executeLoc.first_column, context.gContext.scopingStack.top()));
-			}
-			llvm::BranchInst::Create(context.executeLocations[table.name][b].blockEndForExecute, tempBlock);
-			context.executeLocations[table.name][b].switchForExecute->addCase(context.getConstantInt(opcode), tempBlock);
-
-			context.gContext.scopingStack.pop();
+			execute->LinkToSwitch(context, function, args, opcode.toString(16, false),opcode);
 		}
 
 	}

@@ -84,22 +84,22 @@ FUNCTION	full[8]	LoadRom		offs[32],byte[8]
 FUNCTION	byte[8]	GetDebugByte	offs[32]
 {
 	DECLARE linear[13]	ALIAS	bnk[3]:ad[10];
-	DECLARE bk[2];
+	DECLARE dbk[2];
 
-	bk<-offs[10..11];
-	IF bk==%00
+	dbk<-offs[10..11];
+	IF dbk==%00
 	{
 		bnk<-slot0;
 	}
-	IF bk==%01
+	IF dbk==%01
 	{
 		bnk<-slot1;
 	}
-	IF bk==%10
+	IF dbk==%10
 	{
 		bnk<-slot2;
 	}
-	IF bk==%11
+	IF dbk==%11
 	{
 		bnk<-%111;
 	}

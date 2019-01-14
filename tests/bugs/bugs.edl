@@ -1,0 +1,73 @@
+
+## Cast operator bugs
+
+FUNCTION out[32] CBW     in[32]
+{
+    $00000000++(in[0..7])->out[0..15];
+}
+
+FUNCTION out[16] CWD    in[16]
+{
+    out<-($00000000++in)[16..31];
+}
+
+## Execute bug
+
+DECLARE seg[2];
+DECLARE oSize[1];
+DECLARE aSize[1];
+DECLARE cSize[1];
+
+DECLARE REPEAT[1];
+DECLARE REPEATZ[1];
+
+C_FUNC_EXTERN	[8]	GetNextByte;
+
+FUNCTION STEP
+{
+	DECLARE	IR[8];
+
+	IR<-CALL GetNextByte();
+
+	EXECUTE IR;
+}
+
+INSTRUCTION	"XX001__110(Segment Overide %M0)"	%001:regs[2]:%110
+{
+	DECLARE IR[8];
+    seg<-regs;
+	IR<-CALL GetNextByte();
+	EXECUTE IR;
+}
+
+INSTRUCTION	"OSIZE"					%01100110
+{
+	DECLARE IR[8];
+	oSize<-~cSize;
+	IR<-CALL GetNextByte();
+	EXECUTE IR;
+}
+
+INSTRUCTION	"ASIZE"					%01100111
+{
+	DECLARE IR[8];
+	aSize<-~cSize;
+	IR<-CALL GetNextByte();
+	EXECUTE IR;
+}
+
+INSTRUCTION	"REP%M0"	%1111001:repne[1],B2[8]			# interrupts must not fire on this prefix code
+{
+	DECLARE IR[8];
+	IR<-CALL GetNextByte();
+		
+	REPEAT<-1;
+	REPEATZ<-repne;
+
+	EXECUTE IR;
+}
+
+INSTRUCTION "HERE"      %10101101
+{
+	DEBUG_TRACE seg,cSize,oSize,aSize,REPEAT,REPEATZ;
+}

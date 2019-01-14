@@ -109,6 +109,7 @@ llvm::Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 
 	temp.arraySize = arraySize.getAPInt();
 	temp.pinType = pinType;
+	temp.refLoc = declarationLoc;
 
 	if (context.currentBlock())
 	{
@@ -174,92 +175,122 @@ llvm::Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 
 	}
 
-	// Safety check, validate that the alias and original variable match in size
-	uint64_t bitCount = 0;
-	for (auto alias : aliases)
+	// Safety check, validate that all of the aliases and original variable match in size
+	for (auto aliasset : aliases)
 	{
-		if (alias->idOrEmpty.name.size()<1)
-			bitCount += alias->sizeOrValue.getAPInt().getBitWidth();
-		else
-			bitCount += alias->sizeOrValue.getAPInt().getLimitedValue();
-	}
-	if (bitCount)
-	{
-		if (bitCount != size.getAPInt().getLimitedValue())
+		uint64_t bitCount = 0;
+		for (auto alias : aliasset)
 		{
-			return context.gContext.ReportError(nullptr, EC_ErrorWholeLine, declarationLoc, "Alias bit count doesn't match parent bit count");
+			if (alias->size_not_value)
+				bitCount += alias->sizeOrValue.getAPInt().getLimitedValue();
+			else
+				bitCount += alias->sizeOrValue.getAPInt().getBitWidth();
+		}
+		if (bitCount)
+		{
+			if (bitCount != size.getAPInt().getLimitedValue())
+			{
+				return context.gContext.ReportError(nullptr, EC_ErrorWholeLine, declarationLoc, "Alias bit count doesn't match parent bit count");
+			}
 		}
 	}
-	llvm::APInt bitPos = size.getAPInt() - 1;
-	for (int a = 0; a < aliases.size(); a++)
+
+	// Create our various aliases
+	for (auto aliasset : aliases)
 	{
-		if (aliases[a]->idOrEmpty.name.size() < 1)
+		llvm::APInt bitPos = size.getAPInt() - 1;
+		for (int a = 0; a < aliasset.size(); a++)
 		{
-			// For constants we need to update the mask and cnst values (we also need to set the initialiser properly - that will come later)
-
-			llvm::APInt newMask = ~llvm::APInt(aliases[a]->sizeOrValue.getAPInt().getBitWidth(), 0);
-			llvm::APInt newCnst = aliases[a]->sizeOrValue.getAPInt();
-
-			bitPos -= llvm::APInt(bitPos.getBitWidth(), aliases[a]->sizeOrValue.getAPInt().getBitWidth() - 1);
-
-			if (newMask.getBitWidth() != size.getAPInt().getLimitedValue())
+			if (!aliasset[a]->size_not_value)
 			{
-				newMask = newMask.zext(size.getAPInt().getLimitedValue());
-			}
-			if (newCnst.getBitWidth() != size.getAPInt().getLimitedValue())
-			{
-				newCnst = newCnst.zext(size.getAPInt().getLimitedValue());
-			}
-			newCnst <<= bitPos.getLimitedValue();
-			newMask <<= bitPos.getLimitedValue();
-			temp.mask &= ~newMask;
-			temp.cnst |= newCnst;
+				// For constants we need to update the mask and cnst values (we also need to set the initialiser properly - that will come later)
 
-			bitPos -= llvm::APInt(bitPos.getBitWidth(), 1);
-		}
-		else
-		{
-			// For identifiers, we need to create another entry in the correct symbol table and set up the masks appropriately
-			// e.g. BOB[4] ALIAS CAT[2]:%01
-			// would create CAT with a shift of 2 a mask of %1100 (cnst will always be 0 for these)
+				llvm::APInt newMask = ~llvm::APInt(aliasset[a]->sizeOrValue.getAPInt().getBitWidth(), 0);
+				llvm::APInt newCnst = aliasset[a]->sizeOrValue.getAPInt();
 
-			bitPos -= llvm::APInt(bitPos.getBitWidth(), aliases[a]->sizeOrValue.getAPInt().getLimitedValue() - 1);
+				bitPos -= llvm::APInt(bitPos.getBitWidth(), aliasset[a]->sizeOrValue.getAPInt().getBitWidth() - 1);
 
-			BitVariable alias;
-			alias.arraySize = temp.arraySize;
-			alias.size = temp.size;
-			alias.trueSize = aliases[a]->sizeOrValue.getAPInt();
-			alias.value = temp.value;	// the value will always point at the stored local/global
-			alias.cnst = temp.cnst;		// ignored
-			alias.mappingRef = false;
-			alias.pinType = temp.pinType;
-			alias.writeAccessor = temp.writeAccessor;
-			alias.writeInput = temp.writeInput;
-			alias.priorValue = temp.priorValue;
-			alias.fromExternal = false;
-			alias.impedance = nullptr;
+				if (newMask.getBitWidth() != size.getAPInt().getLimitedValue())
+				{
+					newMask = newMask.zext(size.getAPInt().getLimitedValue());
+				}
+				if (newCnst.getBitWidth() != size.getAPInt().getLimitedValue())
+				{
+					newCnst = newCnst.zext(size.getAPInt().getLimitedValue());
+				}
+				newCnst <<= bitPos.getLimitedValue();
+				newMask <<= bitPos.getLimitedValue();
+				temp.mask &= ~newMask;
+				temp.cnst |= newCnst;
 
-			llvm::APInt newMask = ~llvm::APInt(aliases[a]->sizeOrValue.getAPInt().getLimitedValue(), 0);
-			if (newMask.getBitWidth() != size.getAPInt().getLimitedValue())
-			{
-				newMask = newMask.zext(size.getAPInt().getLimitedValue());
-			}
-			newMask <<= bitPos.getLimitedValue();
-			alias.mask = newMask;		// need to generate correct mask
-
-			alias.shft = llvm::APInt(size.getAPInt().getLimitedValue(), bitPos.getLimitedValue());
-			alias.aliased = true;
-
-			if (context.currentBlock())
-			{
-				context.locals()[aliases[a]->idOrEmpty.name] = alias;
+				bitPos -= llvm::APInt(bitPos.getBitWidth(), 1);
 			}
 			else
 			{
-				context.globals()[aliases[a]->idOrEmpty.name] = alias;
-			}
+				if (aliasset[a]->idOrEmpty.name.size() > 0)
+				{
+					// For identifiers, we need to create another entry in the correct symbol table and set up the masks appropriately
+					// e.g. BOB[4] ALIAS CAT[2]:%01
+					// would create CAT with a shift of 2 a mask of %1100 (cnst will always be 0 for these)
 
-			bitPos -= llvm::APInt(bitPos.getBitWidth(), 1);
+					bitPos -= llvm::APInt(bitPos.getBitWidth(), aliasset[a]->sizeOrValue.getAPInt().getLimitedValue() - 1);
+
+					BitVariable alias;
+					alias.arraySize = temp.arraySize;
+					alias.size = temp.size;
+					alias.trueSize = aliasset[a]->sizeOrValue.getAPInt();
+					alias.value = temp.value;	// the value will always point at the stored local/global
+					alias.cnst = temp.cnst;		// ignored
+					alias.mappingRef = false;
+					alias.pinType = temp.pinType;
+					alias.writeAccessor = temp.writeAccessor;
+					alias.writeInput = temp.writeInput;
+					alias.priorValue = temp.priorValue;
+					alias.fromExternal = false;
+					alias.impedance = nullptr;
+					alias.refLoc = declarationLoc;
+
+					llvm::APInt newMask = ~llvm::APInt(aliasset[a]->sizeOrValue.getAPInt().getLimitedValue(), 0);
+					if (newMask.getBitWidth() != size.getAPInt().getLimitedValue())
+					{
+						newMask = newMask.zext(size.getAPInt().getLimitedValue());
+					}
+					newMask <<= bitPos.getLimitedValue();
+					alias.mask = newMask;		// need to generate correct mask
+
+					alias.shft = llvm::APInt(size.getAPInt().getLimitedValue(), bitPos.getLimitedValue());
+					alias.aliased = true;
+
+					if (context.currentBlock())
+					{
+						if (context.locals().find(aliasset[a]->idOrEmpty.name) != context.locals().end())
+						{
+							return context.gContext.ReportDuplicationError(nullptr, declarationLoc, context.locals()[aliasset[a]->idOrEmpty.name].refLoc, "Duplicate '%s' (already locally defined)",aliasset[a]->idOrEmpty.name);
+						}
+						if (context.globals().find(aliasset[a]->idOrEmpty.name) != context.globals().end())
+						{
+							return context.gContext.ReportDuplicationError(nullptr, declarationLoc, context.globals()[aliasset[a]->idOrEmpty.name].refLoc, "Duplicate '%s' (shadows global variable declaration)",aliasset[a]->idOrEmpty.name);
+						}
+						context.locals()[aliasset[a]->idOrEmpty.name] = alias;
+					}
+					else
+					{
+						if (context.globals().find(aliasset[a]->idOrEmpty.name) != context.globals().end())
+						{
+							return context.gContext.ReportDuplicationError(nullptr, declarationLoc, context.globals()[aliasset[a]->idOrEmpty.name].refLoc, "Duplicate '%s' (shadows global variable declaration)",aliasset[a]->idOrEmpty.name);
+						}
+						context.globals()[aliasset[a]->idOrEmpty.name] = alias;
+					}
+
+					bitPos -= llvm::APInt(bitPos.getBitWidth(), 1);
+				}
+				else
+				{
+					// For an anonymous alias, just skip the bits
+					bitPos -= llvm::APInt(bitPos.getBitWidth(), aliasset[a]->sizeOrValue.getAPInt().getLimitedValue() - 1);
+					bitPos -= llvm::APInt(bitPos.getBitWidth(), 1);
+				}
+			}
 		}
 	}
 
@@ -267,6 +298,14 @@ llvm::Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 	if (context.currentBlock())
 	{
 		// Initialiser Definitions for local scope (arrays are not supported at present)
+		if (context.locals().find(id.name) != context.locals().end())
+		{
+			return context.gContext.ReportDuplicationError(nullptr, declarationLoc, context.locals()[id.name].refLoc, "Duplicate'%s' (already locally defined)",id.name);
+		}
+		if (context.globals().find(id.name) != context.globals().end())
+		{
+			return context.gContext.ReportDuplicationError(nullptr, declarationLoc, context.globals()[id.name].refLoc, "Duplicate '%s' (shadows global variable declaration)",id.name);
+		}
 
 		if (initialiserList.empty())
 		{
@@ -294,6 +333,10 @@ llvm::Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 	}
 	else
 	{
+		if (context.globals().find(id.name) != context.globals().end())
+		{
+			return context.gContext.ReportDuplicationError(nullptr, declarationLoc, context.globals()[id.name].refLoc, "Duplicate '%s' (already globally defined)",id.name);
+		}
 		// Initialiser Definitions for global scope
 		if (temp.arraySize.getLimitedValue())
 		{

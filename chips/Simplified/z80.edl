@@ -63,16 +63,16 @@ DECLARE INTERNAL TMP2[8];
 
 FUNCTION STEP
 {
-	DECLARE	IR[8];
+	DECLARE	ir[8];
 
 	IF ~HALTED
 	{
-		IR<-CALL GetByte(PC);
+		ir<-CALL GetByte(PC);
 		PC<-PC+1;
 	}
 
 	R<-R+1;
-	EXECUTE	IR;
+	EXECUTE	ir;
 }
 
 FUNCTION RESET
@@ -112,21 +112,21 @@ FUNCTION INTERRUPT opcode[8]
 		IFF1<-0;
 		IF IM == 0
 		{
-			DECLARE	IR[8];
+			DECLARE	ir[8];
 		
-			IR<-opcode;
+			ir<-opcode;
 
-			EXECUTE IR;
+			EXECUTE ir;
 			
 			CYCLES<-13;
 		}
 		IF IM == 1
 		{
-			DECLARE IR[8];
+			DECLARE ir[8];
 
-			IR<-$FF;
+			ir<-$FF;
 
-			EXECUTE IR;
+			EXECUTE ir;
 			
 			CYCLES<-13;
 		}
@@ -346,56 +346,56 @@ FUNCTION INTERNAL immediate[16] GetImmediateWord
 
 INSTRUCTION		"CB"			%11001011
 {
-	DECLARE IR[8];
-	IR<-CALL GetByte(PC);
+	DECLARE ir[8];
+	ir<-CALL GetByte(PC);
 	PC<-PC+1;
 	R<-R+1;
-	EXECUTE	CB IR;
+	EXECUTE	CB ir;
 }
 
 INSTRUCTION		"DD"			%11011101
 {
-	DECLARE IR[8];
-	IR<-CALL GetByte(PC);
+	DECLARE ir[8];
+	ir<-CALL GetByte(PC);
 	PC<-PC+1;
 	R<-R+1;
-	EXECUTE	DD IR;
+	EXECUTE	DD ir;
 }
 
 INSTRUCTION		"ED"			%11101101
 {
-	DECLARE IR[8];
-	IR<-CALL GetByte(PC);
+	DECLARE ir[8];
+	ir<-CALL GetByte(PC);
 	PC<-PC+1;
 	R<-R+1;
-	EXECUTE	ED IR;
+	EXECUTE	ED ir;
 }
 
 INSTRUCTION		"FD"			%11111101
 {
-	DECLARE IR[8];
-	IR<-CALL GetByte(PC);
+	DECLARE ir[8];
+	ir<-CALL GetByte(PC);
 	PC<-PC+1;
 	R<-R+1;
-	EXECUTE	FD IR;
+	EXECUTE	FD ir;
 }
 
 INSTRUCTION	DD	"DDCB"			%11001011
 {
-	DECLARE IR[8];
-	IR<-CALL GetByte(PC+1);
+	DECLARE ir[8];
+	ir<-CALL GetByte(PC+1);
 	PC<-PC+2;				# Skips displacement
 	R<-R+1;
-	EXECUTE	DDCB IR;
+	EXECUTE	DDCB ir;
 }
 
 INSTRUCTION	FD	"FDCB"			%11001011
 {
-	DECLARE IR[8];
-	IR<-CALL GetByte(PC+1);
+	DECLARE ir[8];
+	ir<-CALL GetByte(PC+1);
 	PC<-PC+2;				# Skips displacement
 	R<-R+1;
-	EXECUTE	FDCB IR;
+	EXECUTE	FDCB ir;
 }
 
 # 8 Bit Load Group

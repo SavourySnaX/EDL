@@ -15,7 +15,7 @@ msbuild Install.vcxproj
 cd ..
 mkdir build-release
 cd build-release
-cmake -Thost=x64 -G "Visual Studio 15 2017 Win64" .. -DCMAKE_INSTALL_PREFIX=..\..\llvm-rel -DCMAKE_BUILD_TYPE=Release
+cmake -Thost=x64 -G "Visual Studio 15 2017 Win64" .. -DLLVM_ENABLE_DUMP=ON -DCMAKE_INSTALL_PREFIX=..\..\llvm-rel -DCMAKE_BUILD_TYPE=Release
 msbuild -p:Configuration=Release Install.vcxproj
 cd ..
 cd ..

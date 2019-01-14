@@ -31,6 +31,7 @@ typedef std::vector<CVariableDeclaration*> VariableList;
 typedef std::vector<CStateDeclaration*> StateList;
 typedef std::vector<CStatesDeclaration*> StatesList;
 typedef std::vector<CAliasDeclaration*> AliasList;
+typedef std::vector<std::vector<CAliasDeclaration*> > MultiAliasList;
 typedef std::vector<CDebugTrace*> DebugList;
 typedef std::vector<CStateIdent*> StateIdentList;
 typedef std::vector<COperand*> OperandList;

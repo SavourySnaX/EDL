@@ -9,7 +9,15 @@ CIdentifier CExecute::emptyTable("");
 
 void CExecute::prePass(CodeGenContext& context)
 {
-	// this will allow us to have instructions before execute and vice versa
+	ExecuteInformation temp;
+
+	temp.executeLoc = executeLoc;
+	temp.blockEndForExecute = nullptr;
+	temp.execute = this;
+	temp.switchForExecute = nullptr;
+
+	context.executeLocations[table.name].push_back(temp);
+	tableOffset = context.executeLocations[table.name].size() - 1;
 }
 
 llvm::Value* CExecute::codeGen(CodeGenContext& context)
@@ -20,11 +28,9 @@ llvm::Value* CExecute::codeGen(CodeGenContext& context)
 	{
 		const llvm::IntegerType* typeForExecute = llvm::cast<llvm::IntegerType>(load->getType());
 
-		ExecuteInformation temp;
+		ExecuteInformation& temp = context.executeLocations[table.name][tableOffset];
 
-		temp.executeLoc = executeLoc;
 		temp.blockEndForExecute = context.makeBasicBlock("execReturn", context.currentBlock()->getParent());
-
 		if (context.gContext.opts.traceUnimplemented)
 		{
 			llvm::BasicBlock* tempBlock = context.makeBasicBlock("default", context.currentBlock()->getParent());
@@ -51,7 +57,44 @@ llvm::Value* CExecute::codeGen(CodeGenContext& context)
 
 		context.setBlock(temp.blockEndForExecute);
 
-		context.executeLocations[table.name].push_back(temp);
+        while (!temp.processLater.empty())
+        {
+            ExecuteSaved t = temp.processLater.top();
+            LinkToSwitch(context, t.func, t.args, t.name, t.caseNum);
+            temp.processLater.pop();
+        }
 	}
 	return nullptr;
+}
+    
+void CExecute::LinkToSwitch(CodeGenContext& context, llvm::Function* func, std::vector<llvm::Value*> args,std::string name, llvm::APInt& caseNum)
+{
+	ExecuteInformation& temp = context.executeLocations[table.name][tableOffset];
+
+    if (temp.blockEndForExecute)
+    {
+		llvm::Function *parentFunction = temp.blockEndForExecute->getParent();
+		context.gContext.scopingStack.push(parentFunction->getSubprogram());
+
+		llvm::BasicBlock* tempBlock = context.makeBasicBlock("callOut" + table.name + name, temp.blockEndForExecute->getParent());
+		llvm::CallInst* fcall = llvm::CallInst::Create(func, args, "", tempBlock);
+		if (context.gContext.opts.generateDebug)
+		{
+			fcall->setDebugLoc(llvm::DebugLoc::get(temp.executeLoc.first_line, temp.executeLoc.first_column, context.gContext.scopingStack.top()));
+		}
+		llvm::BranchInst::Create(temp.blockEndForExecute, tempBlock);
+		temp.switchForExecute->addCase(context.getConstantInt(caseNum), tempBlock);
+
+		context.gContext.scopingStack.pop();
+	}
+    else
+    {
+        // We haven't yet initialised this EXECUTE statement (instruction appears before EXECUTE in source)
+        ExecuteSaved t;
+        t.func = func;
+        t.args = args;
+        t.name = name;
+        t.caseNum = caseNum;
+        temp.processLater.push(t);
+    }
 }
