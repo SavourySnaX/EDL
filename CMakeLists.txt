@@ -15,7 +15,7 @@ find_package(OpenAL)
 enable_testing()
 
 if (UNIX)
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-rtti -fno-exceptions")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fpic -fno-rtti -fno-exceptions")
 endif()
 if (MSVC)
 	add_definitions(-DEDL_PLATFORM_MSVC)
