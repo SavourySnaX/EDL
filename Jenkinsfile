@@ -2,7 +2,7 @@
 
 stage 'build'
 
-node('master') {
+node('linux') {
     try 
     {
         notifyBuild('STARTED')
@@ -25,6 +25,31 @@ node('master') {
 	notifyBuild(currentBuild.result)
     }
 }
+
+node('windows') {
+    try 
+    {
+        notifyBuild('STARTED')
+
+       	checkout scm
+
+       	sh '''rm -rf build
+		mkdir build
+		cd build
+		cmake -DCMAKE_BUILD_TYPE="Debug" ..
+		make all 
+		ctest -V --output-on-failure'''
+    }
+    catch (e)
+    {
+	currentBuild.result = "FAILED"
+    }
+    finally
+    {
+	notifyBuild(currentBuild.result)
+    }
+}
+
 
 def notifyBuild(String buildStatus = 'STARTED') {
   // build status of null means successful
