@@ -1,5 +1,5 @@
 #!groovy
-
+/*
 stage('build linux')
 {
 	node('linux') {
@@ -25,7 +25,7 @@ stage('build linux')
 			notifyBuild(currentBuild.result)
 		}
 	}
-}
+}*/
 stage('build windows')
 {
 	node('windows') {
@@ -35,7 +35,8 @@ stage('build windows')
 
 			checkout scm
 
-			bat '''rmdir /S/Q build
+			bat '''"C:/Program Files (x86)/Microsoft Visual Studio/2017/Build/Tools/Common7/Tools/VsDevCmd.bat"
+			        rmdir /S/Q build
 				mkdir build
 				cd build
 				cmake -DCMAKE_BUILD_TYPE="Release" ..
