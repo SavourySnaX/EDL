@@ -35,7 +35,7 @@ stage('build windows')
 
 			checkout scm
 
-			bat '''"C:\Program Files (x86)\Microsoft Visual Studio\2017\BuildTools\Common7\Tools\VsDevCmd.bat"
+			bat '''"C:/Program Files (x86)/Microsoft Visual Studio/2017/BuildTools/Common7/Tools/VsDevCmd.bat"
 			        rmdir /S/Q build
 				mkdir build
 				cd build
