@@ -35,11 +35,11 @@ stage('build windows')
 
 			checkout scm
 
-			sh '''rm -rf build
+			bat '''rmdir /S/Q build
 				mkdir build
 				cd build
-				cmake -DCMAKE_BUILD_TYPE="Debug" ..
-				make all 
+				cmake -DCMAKE_BUILD_TYPE="Release" ..
+				cmake --build . --target all --config Debug
 				ctest -V --output-on-failure'''
 		}
 		catch (e)
