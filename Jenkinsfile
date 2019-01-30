@@ -1,61 +1,57 @@
 #!groovy
 
-stages {
-	stage('build linux')
-	{
-		node('linux') {
-    			try 
-    			{
-        			notifyBuild('STARTED')
+stage('build linux')
+{
+	node('linux') {
+		try 
+		{
+			notifyBuild('STARTED')
 
-       				checkout scm
+			checkout scm
 
-       				sh '''rm -rf build
-					mkdir build
-					cd build
-					cmake -DCMAKE_BUILD_TYPE="Debug" ..
-					make all 
-					ctest -V --output-on-failure'''
-    			}
-    			catch (e)
-    			{
-				currentBuild.result = "FAILED"
-    			}
-    			finally
-    			{
-				notifyBuild(currentBuild.result)
-    			}
+			sh '''rm -rf build
+				mkdir build
+				cd build
+				cmake -DCMAKE_BUILD_TYPE="Debug" ..
+				make all 
+				ctest -V --output-on-failure'''
 		}
-	}
-	stage('build windows')
-	{
-		node('windows') {
-    			try 
-    			{
-        			notifyBuild('STARTED')
-
-       				checkout scm
-
-       				sh '''rm -rf build
-					mkdir build
-					cd build
-					cmake -DCMAKE_BUILD_TYPE="Debug" ..
-					make all 
-					ctest -V --output-on-failure'''
-    			}
-    			catch (e)
-    			{
-				currentBuild.result = "FAILED"
-    			}
-    			finally
-    			{
-				notifyBuild(currentBuild.result)
-    			}
+		catch (e)
+		{
+			currentBuild.result = "FAILED"
+		}
+		finally
+		{
+			notifyBuild(currentBuild.result)
 		}
 	}
 }
+stage('build windows')
+{
+	node('windows') {
+		try 
+		{
+			notifyBuild('STARTED')
 
+			checkout scm
 
+			sh '''rm -rf build
+				mkdir build
+				cd build
+				cmake -DCMAKE_BUILD_TYPE="Debug" ..
+				make all 
+				ctest -V --output-on-failure'''
+		}
+		catch (e)
+		{
+			currentBuild.result = "FAILED"
+		}
+		finally
+		{
+			notifyBuild(currentBuild.result)
+		}
+	}
+}
 
 def notifyBuild(String buildStatus = 'STARTED') {
   // build status of null means successful
