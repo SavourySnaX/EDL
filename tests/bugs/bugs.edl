@@ -3,6 +3,7 @@
 
 FUNCTION out[32] CBW     in[32]
 {
+    out<-in;
     $00000000++(in[0..7])->out[0..15];
 }
 
