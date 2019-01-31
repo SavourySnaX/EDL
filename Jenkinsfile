@@ -24,11 +24,11 @@ pipeline {
 	            post {
 	                failure
                         {
-			    currentBuild.result = "FAILED"
+			    notifyBuild("FAILED")
 		        }
 		        success
 		        {
-			    notifyBuild(currentBuild.result)
+			    notifyBuild("SUCCESS")
 			}
 		    }
 		}
