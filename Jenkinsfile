@@ -39,7 +39,7 @@ stage('build windows')
 				mkdir build
 				cd build
 				cmake -DCMAKE_BUILD_TYPE="Release" -DLLVM_DIR=%TOOLS_ROOT%\\llvm-rel\\lib\\cmake\\llvm -DFLEX_EXECUTABLE=%TOOLS_ROOT%\\flexbison-ins\\win_flex.exe -DBISON_EXECUTABLE=%TOOLS_ROOT%\\flexbison-ins\\win_bison.exe -Dglfw3_DIR=%TOOLS_ROOT%\\glfw-ins\\lib\\cmake\\glfw3 -DOPENAL_LIBRARY=%TOOLS_ROOT%\\openal-ins\\lib\\openal32.lib -DOPENAL_INCLUDE_DIR=%TOOLS_ROOT%\\openal-ins\\include ..
-				cmake --build . --target all --config Release
+				cmake --build . --target ALL_BUILD --config Release
 				ctest -V --output-on-failure'''
 		}
 		catch (e)
