@@ -32,16 +32,11 @@ pipeline {
 			}
 		    }
 		}
-	    }
-	}
-    }
-}
-/*
-stage('build windows 64')
-{
-	node('windows') {
-		try 
+		stage('build windows 64')
 		{
+	            agent { label "windows" }
+		    steps
+		    {
 			notifyBuild('STARTED')
 
 			checkout scm
@@ -52,22 +47,23 @@ stage('build windows 64')
 				cmake -Thost=x64 -G "Visual Studio 15 2017 Win64" -DCMAKE_BUILD_TYPE="Release" -DLLVM_DIR=%TOOLS_ROOT64%\\llvm-rel\\lib\\cmake\\llvm -DFLEX_EXECUTABLE=%TOOLS_ROOT64%\\flexbison-ins\\win_flex.exe -DBISON_EXECUTABLE=%TOOLS_ROOT64%\\flexbison-ins\\win_bison.exe -Dglfw3_DIR=%TOOLS_ROOT64%\\glfw-ins\\lib\\cmake\\glfw3 -DOPENAL_LIBRARY=%TOOLS_ROOT64%\\openal-ins\\lib\\openal32.lib -DOPENAL_INCLUDE_DIR=%TOOLS_ROOT64%\\openal-ins\\include ..
 				cmake --build . --target ALL_BUILD --config Release
 				ctest -V --output-on-failure'''
+		    }
+	            post {
+	                failure
+                        {
+			    notifyBuild("FAILED")
+		        }
+		        success
+		        {
+			    notifyBuild("SUCCESS")
+			}
+		    }
 		}
-		catch (e)
+		stage('build windows 32')
 		{
-			currentBuild.result = "FAILED"
-		}
-		finally
-		{
-			notifyBuild(currentBuild.result)
-		}
-	}
-}
-stage('build windows 32')
-{
-	node('windows') {
-		try 
-		{
+	            agent { label "windows" }
+		    steps
+		    {
 			notifyBuild('STARTED')
 
 			checkout scm
@@ -78,17 +74,22 @@ stage('build windows 32')
 				cmake -G "Visual Studio 15 2017" -DCMAKE_BUILD_TYPE="Release" -DLLVM_DIR=%TOOLS_ROOT32%\\llvm-rel\\lib\\cmake\\llvm -DFLEX_EXECUTABLE=%TOOLS_ROOT32%\\flexbison-ins\\win_flex.exe -DBISON_EXECUTABLE=%TOOLS_ROOT32%\\flexbison-ins\\win_bison.exe -Dglfw3_DIR=%TOOLS_ROOT32%\\glfw-ins\\lib\\cmake\\glfw3 -DOPENAL_LIBRARY=%TOOLS_ROOT32%\\openal-ins\\lib\\openal32.lib -DOPENAL_INCLUDE_DIR=%TOOLS_ROOT32%\\openal-ins\\include ..
 				cmake --build . --target ALL_BUILD --config Release
 				ctest -V --output-on-failure'''
+		    }
+	            post {
+	                failure
+                        {
+			    notifyBuild("FAILED")
+		        }
+		        success
+		        {
+			    notifyBuild("SUCCESS")
+			}
+		    }
 		}
-		catch (e)
-		{
-			currentBuild.result = "FAILED"
-		}
-		finally
-		{
-			notifyBuild(currentBuild.result)
-		}
+	    }
 	}
-}*/
+    }
+}
 
 def notifyBuild(String buildStatus = 'STARTED') {
   // build status of null means successful
