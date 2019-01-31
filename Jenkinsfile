@@ -1,28 +1,93 @@
 #!groovy
 
-stage 'build'
+pipeline {
+    agent none
+    stages {
+        stage('Build And Test') {
+            parallel {
+		stage('build linux')
+		{
+	            agent { label "linux" }
+		    steps
+		    {
+			notifyBuild('STARTED')
 
-node('master') {
-    try 
-    {
-        notifyBuild('STARTED')
+			checkout scm
 
-       	checkout scm
+			sh '''rm -rf build
+				mkdir build
+				cd build
+				cmake -DCMAKE_BUILD_TYPE="Debug" ..
+				make all 
+				ctest -V --output-on-failure'''
+		    }
+	            post {
+	                failure
+                        {
+			    notifyBuild("FAILED")
+		        }
+		        success
+		        {
+			    notifyBuild("SUCCESS")
+			}
+		    }
+		}
+		stage('build windows 64')
+		{
+	            agent { label "windows" }
+		    steps
+		    {
+			notifyBuild('STARTED')
 
-       	sh '''rm -rf build
-		mkdir build
-		cd build
-		cmake -DCMAKE_BUILD_TYPE="Debug" ..
-		make all 
-		ctest -V --output-on-failure'''
-    }
-    catch (e)
-    {
-	currentBuild.result = "FAILED"
-    }
-    finally
-    {
-	notifyBuild(currentBuild.result)
+			checkout scm
+
+			bat ''' rmdir /S/Q build
+				mkdir build
+				cd build
+				cmake -Thost=x64 -G "Visual Studio 15 2017 Win64" -DCMAKE_BUILD_TYPE="Release" -DLLVM_DIR=%TOOLS_ROOT64%\\llvm-rel\\lib\\cmake\\llvm -DFLEX_EXECUTABLE=%TOOLS_ROOT64%\\flexbison-ins\\win_flex.exe -DBISON_EXECUTABLE=%TOOLS_ROOT64%\\flexbison-ins\\win_bison.exe -Dglfw3_DIR=%TOOLS_ROOT64%\\glfw-ins\\lib\\cmake\\glfw3 -DOPENAL_LIBRARY=%TOOLS_ROOT64%\\openal-ins\\lib\\openal32.lib -DOPENAL_INCLUDE_DIR=%TOOLS_ROOT64%\\openal-ins\\include ..
+				cmake --build . --target ALL_BUILD --config Release
+				ctest -V --output-on-failure'''
+		    }
+	            post {
+	                failure
+                        {
+			    notifyBuild("FAILED")
+		        }
+		        success
+		        {
+			    notifyBuild("SUCCESS")
+			}
+		    }
+		}
+		stage('build windows 32')
+		{
+	            agent { label "windows" }
+		    steps
+		    {
+			notifyBuild('STARTED')
+
+			checkout scm
+
+			bat ''' rmdir /S/Q build
+				mkdir build
+				cd build
+				cmake -G "Visual Studio 15 2017" -DCMAKE_BUILD_TYPE="Release" -DLLVM_DIR=%TOOLS_ROOT32%\\llvm-rel\\lib\\cmake\\llvm -DFLEX_EXECUTABLE=%TOOLS_ROOT32%\\flexbison-ins\\win_flex.exe -DBISON_EXECUTABLE=%TOOLS_ROOT32%\\flexbison-ins\\win_bison.exe -Dglfw3_DIR=%TOOLS_ROOT32%\\glfw-ins\\lib\\cmake\\glfw3 -DOPENAL_LIBRARY=%TOOLS_ROOT32%\\openal-ins\\lib\\openal32.lib -DOPENAL_INCLUDE_DIR=%TOOLS_ROOT32%\\openal-ins\\include ..
+				cmake --build . --target ALL_BUILD --config Release
+				ctest -V --output-on-failure'''
+		    }
+	            post {
+	                failure
+                        {
+			    notifyBuild("FAILED")
+		        }
+		        success
+		        {
+			    notifyBuild("SUCCESS")
+			}
+		    }
+		}
+	    }
+	}
     }
 }
 
@@ -35,7 +100,7 @@ def notifyBuild(String buildStatus = 'STARTED') {
   def colorCode = '#FF0000'
   def subject = "${buildStatus}: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'"
   def summary = "${subject} (${env.BUILD_URL})"
-  def details = '${SCRIPT, template="template.groovy"}'
+  def details = '${SCRIPT, template="groovy-text.template"}'
  
   // Override default values based on build status
   if (buildStatus == 'STARTED') {
