@@ -1,10 +1,15 @@
 #!groovy
-/*
-stage('build linux')
-{
-	node('linux') {
-		try 
+
+pipeline {
+    agent none
+    stages {
+        stage('Build And Test') {
+            parallel {
+		stage('build linux')
 		{
+	            agent { label "linux" }
+		    steps
+		    {
 			notifyBuild('STARTED')
 
 			checkout scm
@@ -15,17 +20,23 @@ stage('build linux')
 				cmake -DCMAKE_BUILD_TYPE="Debug" ..
 				make all 
 				ctest -V --output-on-failure'''
+		    }
+	            post {
+	                failure
+                        {
+			    currentBuild.result = "FAILED"
+		        }
+		        success
+		        {
+			    notifyBuild(currentBuild.result)
+			}
+		    }
 		}
-		catch (e)
-		{
-			currentBuild.result = "FAILED"
-		}
-		finally
-		{
-			notifyBuild(currentBuild.result)
-		}
+	    }
 	}
+    }
 }
+/*
 stage('build windows 64')
 {
 	node('windows') {
@@ -51,7 +62,7 @@ stage('build windows 64')
 			notifyBuild(currentBuild.result)
 		}
 	}
-}*/
+}
 stage('build windows 32')
 {
 	node('windows') {
@@ -77,7 +88,7 @@ stage('build windows 32')
 			notifyBuild(currentBuild.result)
 		}
 	}
-}
+}*/
 
 def notifyBuild(String buildStatus = 'STARTED') {
   // build status of null means successful
