@@ -28,6 +28,7 @@ pipeline {
 		        }
 		        success
 		        {
+			    archiveArtifacts artifacts: 'build/edl'
 			    notifyBuild("SUCCESS")
 			}
 		    }
@@ -55,6 +56,7 @@ pipeline {
 		        }
 		        success
 		        {
+			    archiveArtifacts artifacts: 'build/Release/*.exe'
 			    notifyBuild("SUCCESS")
 			}
 		    }
@@ -82,6 +84,7 @@ pipeline {
 		        }
 		        success
 		        {
+			    archiveArtifacts artifacts: 'build/Release/*.exe'
 			    notifyBuild("SUCCESS")
 			}
 		    }
