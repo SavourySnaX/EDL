@@ -42,9 +42,9 @@ pipeline {
 
 			checkout scm
 
-			bat ''' rmdir /S/Q build
-				mkdir build
-				cd build
+			bat ''' rmdir /S/Q build64
+				mkdir build64
+				cd build64
 				cmake -Thost=x64 -G "Visual Studio 15 2017 Win64" -DCMAKE_BUILD_TYPE="Release" -DLLVM_DIR=%TOOLS_ROOT64%\\llvm-rel\\lib\\cmake\\llvm -DFLEX_EXECUTABLE=%TOOLS_ROOT64%\\flexbison-ins\\win_flex.exe -DBISON_EXECUTABLE=%TOOLS_ROOT64%\\flexbison-ins\\win_bison.exe -Dglfw3_DIR=%TOOLS_ROOT64%\\glfw-ins\\lib\\cmake\\glfw3 -DOPENAL_LIBRARY=%TOOLS_ROOT64%\\openal-ins\\lib\\openal32.lib -DOPENAL_INCLUDE_DIR=%TOOLS_ROOT64%\\openal-ins\\include ..
 				cmake --build . --target ALL_BUILD --config Release
 				ctest -V --output-on-failure'''
@@ -56,7 +56,7 @@ pipeline {
 		        }
 		        success
 		        {
-			    archiveArtifacts artifacts: 'build/Release/*.exe'
+			    archiveArtifacts artifacts: 'build64/Release/*.exe'
 			    notifyBuild("SUCCESS")
 			}
 		    }
@@ -70,9 +70,9 @@ pipeline {
 
 			checkout scm
 
-			bat ''' rmdir /S/Q build
-				mkdir build
-				cd build
+			bat ''' rmdir /S/Q build32
+				mkdir build32
+				cd build32
 				cmake -G "Visual Studio 15 2017" -DCMAKE_BUILD_TYPE="Release" -DLLVM_DIR=%TOOLS_ROOT32%\\llvm-rel\\lib\\cmake\\llvm -DFLEX_EXECUTABLE=%TOOLS_ROOT32%\\flexbison-ins\\win_flex.exe -DBISON_EXECUTABLE=%TOOLS_ROOT32%\\flexbison-ins\\win_bison.exe -Dglfw3_DIR=%TOOLS_ROOT32%\\glfw-ins\\lib\\cmake\\glfw3 -DOPENAL_LIBRARY=%TOOLS_ROOT32%\\openal-ins\\lib\\openal32.lib -DOPENAL_INCLUDE_DIR=%TOOLS_ROOT32%\\openal-ins\\include ..
 				cmake --build . --target ALL_BUILD --config Release
 				ctest -V --output-on-failure'''
@@ -84,7 +84,7 @@ pipeline {
 		        }
 		        success
 		        {
-			    archiveArtifacts artifacts: 'build/Release/*.exe'
+			    archiveArtifacts artifacts: 'build32/Release/*.exe'
 			    notifyBuild("SUCCESS")
 			}
 		    }
