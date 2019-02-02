@@ -2,9 +2,9 @@
 Emulation Description Language
 ------------------------------
 
-Requires Bison/Yacc,lex/flex,llvm (6.0) to build the compiler.
+Requires Bison/Yacc,lex/flex,llvm (7.0) to build the compiler.
 
-Most of the examples require plus opengl and glfw (3.0.4).
+Most of the examples require plus opengl and glfw (3.x).
 
 I've now switched over to use cmake for development.
 
