@@ -5,7 +5,7 @@ pipeline {
     stages {
         stage('Build And Test') {
             parallel {
-		stage('build linux')
+		/*stage('build linux')
 		{
 	            agent { label "linux" }
 		    steps
@@ -32,7 +32,7 @@ pipeline {
 			    notifyBuild("SUCCESS")
 			}
 		    }
-		}
+		}*/
 		stage('build macos')
 		{
 	            agent { label "macos" }
@@ -61,7 +61,7 @@ pipeline {
 			}
 		    }
 		}
-		stage('build windows 64')
+		/*stage('build windows 64')
 		{
 	            agent { label "windows" }
 		    steps
@@ -116,7 +116,7 @@ pipeline {
 			    notifyBuild("SUCCESS")
 			}
 		    }
-		}
+		}*/
 	    }
 	}
     }
