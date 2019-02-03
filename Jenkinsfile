@@ -14,9 +14,9 @@ pipeline {
 
 			checkout scm
 
-			sh '''rm -rf build
-				mkdir build
-				cd build
+			sh '''rm -rf buildlinux
+				mkdir buildlinux
+				cd buildlinux
 				cmake -DCMAKE_BUILD_TYPE="Debug" ..
 				make all 
 				ctest -V --output-on-failure'''
@@ -28,7 +28,35 @@ pipeline {
 		        }
 		        success
 		        {
-			    archiveArtifacts artifacts: 'build/edl'
+			    archiveArtifacts artifacts: 'buildlinux/edl'
+			    notifyBuild("SUCCESS")
+			}
+		    }
+		}
+		stage('build macos')
+		{
+	            agent { label "macos" }
+		    steps
+		    {
+			notifyBuild('STARTED')
+
+			checkout scm
+
+			sh '''rm -rf buildmacos
+				mkdir buildmacos
+				cd buildmacos
+				cmake -DCMAKE_BUILD_TYPE="Debug" ..
+				make all 
+				ctest -V --output-on-failure'''
+		    }
+	            post {
+	                failure
+                        {
+			    notifyBuild("FAILED")
+		        }
+		        success
+		        {
+			    archiveArtifacts artifacts: 'buildmacos/edl'
 			    notifyBuild("SUCCESS")
 			}
 		    }
