@@ -12,7 +12,10 @@
 #include <GLFW/glfw3.h>
 #include <glext.h>
 
-#if defined(EDL_PLATFORM_OPENAL)
+#if defined(EDL_PLATFORM_APPLE)
+#include <OpenAL/al.h>
+#include <OpenAL/alc.h>
+#else
 #include <AL/al.h>
 #include <AL/alc.h>
 #endif

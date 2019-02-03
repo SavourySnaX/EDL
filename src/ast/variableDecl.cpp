@@ -265,11 +265,11 @@ llvm::Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 					{
 						if (context.locals().find(aliasset[a]->idOrEmpty.name) != context.locals().end())
 						{
-							return context.gContext.ReportDuplicationError(nullptr, declarationLoc, context.locals()[aliasset[a]->idOrEmpty.name].refLoc, "Duplicate '%s' (already locally defined)",aliasset[a]->idOrEmpty.name);
+							return context.gContext.ReportDuplicationError(nullptr, declarationLoc, context.locals()[aliasset[a]->idOrEmpty.name].refLoc, "Duplicate '%s' (already locally defined)",aliasset[a]->idOrEmpty.name.c_str());
 						}
 						if (context.globals().find(aliasset[a]->idOrEmpty.name) != context.globals().end())
 						{
-							return context.gContext.ReportDuplicationError(nullptr, declarationLoc, context.globals()[aliasset[a]->idOrEmpty.name].refLoc, "Duplicate '%s' (shadows global variable declaration)",aliasset[a]->idOrEmpty.name);
+							return context.gContext.ReportDuplicationError(nullptr, declarationLoc, context.globals()[aliasset[a]->idOrEmpty.name].refLoc, "Duplicate '%s' (shadows global variable declaration)",aliasset[a]->idOrEmpty.name.c_str());
 						}
 						context.locals()[aliasset[a]->idOrEmpty.name] = alias;
 					}
@@ -277,7 +277,7 @@ llvm::Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 					{
 						if (context.globals().find(aliasset[a]->idOrEmpty.name) != context.globals().end())
 						{
-							return context.gContext.ReportDuplicationError(nullptr, declarationLoc, context.globals()[aliasset[a]->idOrEmpty.name].refLoc, "Duplicate '%s' (shadows global variable declaration)",aliasset[a]->idOrEmpty.name);
+							return context.gContext.ReportDuplicationError(nullptr, declarationLoc, context.globals()[aliasset[a]->idOrEmpty.name].refLoc, "Duplicate '%s' (shadows global variable declaration)",aliasset[a]->idOrEmpty.name.c_str());
 						}
 						context.globals()[aliasset[a]->idOrEmpty.name] = alias;
 					}
@@ -300,11 +300,11 @@ llvm::Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 		// Initialiser Definitions for local scope (arrays are not supported at present)
 		if (context.locals().find(id.name) != context.locals().end())
 		{
-			return context.gContext.ReportDuplicationError(nullptr, declarationLoc, context.locals()[id.name].refLoc, "Duplicate'%s' (already locally defined)",id.name);
+			return context.gContext.ReportDuplicationError(nullptr, declarationLoc, context.locals()[id.name].refLoc, "Duplicate'%s' (already locally defined)",id.name.c_str());
 		}
 		if (context.globals().find(id.name) != context.globals().end())
 		{
-			return context.gContext.ReportDuplicationError(nullptr, declarationLoc, context.globals()[id.name].refLoc, "Duplicate '%s' (shadows global variable declaration)",id.name);
+			return context.gContext.ReportDuplicationError(nullptr, declarationLoc, context.globals()[id.name].refLoc, "Duplicate '%s' (shadows global variable declaration)",id.name.c_str());
 		}
 
 		if (initialiserList.empty())
@@ -335,7 +335,7 @@ llvm::Value* CVariableDeclaration::codeGen(CodeGenContext& context)
 	{
 		if (context.globals().find(id.name) != context.globals().end())
 		{
-			return context.gContext.ReportDuplicationError(nullptr, declarationLoc, context.globals()[id.name].refLoc, "Duplicate '%s' (already globally defined)",id.name);
+			return context.gContext.ReportDuplicationError(nullptr, declarationLoc, context.globals()[id.name].refLoc, "Duplicate '%s' (already globally defined)",id.name.c_str());
 		}
 		// Initialiser Definitions for global scope
 		if (temp.arraySize.getLimitedValue())

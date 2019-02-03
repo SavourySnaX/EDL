@@ -18,7 +18,7 @@ public:
 
 	void Decrement()
 	{
-		integer--;
+		integer-=1;
 	}
 
 	const llvm::APInt& getAPInt() const { return integer; }
