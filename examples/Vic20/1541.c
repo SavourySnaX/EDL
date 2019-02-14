@@ -76,6 +76,7 @@ int curTrack=-1;
 void MoveHead(int);
 
 #define USE_DRW_IMAGE	1
+int LoadD64(const char* filename);
 
 int DISK_InitialiseMemory()
 {

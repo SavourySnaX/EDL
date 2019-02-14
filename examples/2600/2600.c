@@ -1211,8 +1211,6 @@ void UpdateAudio()
 
 		while (processed>0)
 		{
-			ALuint buffer;
-
 			amountAdded=0;
 			alSourceUnqueueBuffers(uiSource,1, &bufferFree[numBufferFree++]);
 			processed--;

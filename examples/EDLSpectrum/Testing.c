@@ -695,6 +695,9 @@ static void glfwError(int id, const char* description)
 	printf("GLFW ERROR : [%d] %s",id,description);
 }
 
+void LoadTapeFormat(const char* filename);
+void UpdateTape(uint8_t cycles);
+
 int main(int argc,char**argv)
 {
 	uint16_t lastIns=0xAAAA;
