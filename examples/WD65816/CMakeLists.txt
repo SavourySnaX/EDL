@@ -12,14 +12,14 @@ if (${glfw3_FOUND} AND ${OPENGL_FOUND})
 		WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 		COMMAND edl -g -O2 test.eds -o ${CMAKE_CURRENT_BINARY_DIR}/test.obj
 		COMMENT "--- EDL Compiling : cpu_rom_test.eds ---"
-		DEPENDS edl chips/rom.edl chips/wd65816.edl)
+		DEPENDS edl chips/dummy.edl chips/rom.edl chips/wd65816.edl)
 
 	# Now build our tools
 	add_executable(WD65816 
 		Testing.c gui/debugger.c
 		gui/debugger.h gui/font.h
 		${CMAKE_CURRENT_BINARY_DIR}/test.obj
-		chips/rom.edl chips/wd65816.edl
+		chips/dummy.edl chips/rom.edl chips/wd65816.edl
 		)
 
 	target_link_libraries(WD65816 ${OPENGL_gl_LIBRARY})
@@ -29,5 +29,6 @@ if (${glfw3_FOUND} AND ${OPENGL_FOUND})
 
 	source_group(Chips FILES chips/rom.edl)
 	source_group(Chips FILES chips/WD65816.edl)
+	source_group(Chips FILES chips/dummy.edl)
 	source_group(Generated FILES ${CMAKE_CURRENT_BINARY_DIR}/test.obj)
 endif()

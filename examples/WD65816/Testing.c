@@ -162,6 +162,7 @@ int main(int argc,char**argv)
 	glfwSetKeyCallback(windows[TIMING_WINDOW], kbHandler);
 
 	int runFor = 128;
+	int resetCnt = 2;
 	while (1==1)
 	{
 		if (runFor == 0)
@@ -178,8 +179,10 @@ int main(int argc,char**argv)
 		else
 		{
 			runFor--;
-			TEST(1, 1);
-			TEST(0, 1);
+			TEST(1, resetCnt==0?1:0);
+			TEST(0, resetCnt==0?1:0);
+			if (resetCnt!=0)
+				resetCnt--;
 		}
 	}
 

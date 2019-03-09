@@ -11,4 +11,26 @@ DECLARE rom[[16]][8]
 	$80, $FE
 };
 
+FUNCTION INTERNAL UpdateD
+{
+	IF ~(_CS1)
+	{
+		D<-rom[[A]];
+		#DEBUG_TRACE BASE 16,"ROM ",A,D;
+	}
+	IF _CS1
+	{
+		D<-HIGH_IMPEDANCE;
+		#DEBUG_TRACE BASE 16,"ROM ",A,"HI_Z";
+	}
+}
 
+HANDLER _CS1	ALWAYS
+{
+	CALL UpdateD();
+}
+
+HANDLER A	ALWAYS
+{
+	CALL UpdateD();
+}

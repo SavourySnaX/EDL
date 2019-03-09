@@ -5,27 +5,124 @@
 #
 #
 
-PIN IN			PIN_ABORTB[1];			# Active low, (external interrupt, plus register modification inhibit)
-PIN OUT			PIN_A[16];			# Address Bus (lower 16 bits of address)
-PIN IN			PIN_BE[1];			# Bus Enable - disables Data/Address buffers (unused on proto board)
+PIN IN				PIN_ABORTB[1];			# Active low, (external interrupt, plus register modification inhibit)
+PIN OUT				PIN_A[16];			# Address Bus (lower 16 bits of address)
+PIN IN				PIN_BE[1];			# Bus Enable - disables Data/Address buffers (unused on proto board)
 PIN BIDIRECTIONAL	PIN_D[8];			# Data/Bank Address Bus - multiplexed bank during first half of memory cycle
-PIN OUT			PIN_E[1];			# Emulation status bit (reflects the state of E flag)
-PIN IN			PIN_IRQB[1];			# Active low - level triggered
-PIN OUT			PIN_MLB[1];			# Active low - used for multiprocessor systems
-PIN OUT			PIN_MX[1];			# Multiplexed M/X status - M is valid during phi2 negative transition, X
-							#  during position transition
-PIN IN			PIN_NMIB[1];			# Active low, negative edge triggered interrupt
-PIN IN			PIN_PHI2[1];			# Phase 2 Input clock
+PIN OUT				PIN_E[1];			# Emulation status bit (reflects the state of E flag)
+PIN IN				PIN_IRQB[1];		# Active low - level triggered
+PIN OUT				PIN_MLB[1];			# Active low - used for multiprocessor systems
+PIN OUT				PIN_MX[1];			# Multiplexed M/X status - M is valid during phi2 negative transition, X
+										#  during position transition
+PIN IN				PIN_NMIB[1];		# Active low, negative edge triggered interrupt
+PIN IN				PIN_PHI2[1];		# Phase 2 Input clock
+PIN OUT				PIN_RWB[1];			# Read or Write (1 - reading)
 PIN BIDIRECTIONAL	PIN_RDY[1];			# in - low logic input halts the processor.
-							# out - indicates wait for interrupt signal
-PIN IN			PIN_RESB[1];			# Active low, Reset CPU to known state
-PIN OUT			PIN_VDA[1];			# Valid data address
-PIN OUT			PIN_VPA[1];			# Valid program address
-							#   VDA VPA
-							#   0	0	- Internal operation
-							#   0	1	- Valid program address
-							#   1	0	- Valid data address
-							#   1	1	- Opcode fetch
-PIN OUT			PIN_VPB[1];			# Active low - Vector Pull - indicates vector location is being addressed
-							#   during an interrupt sequence e.g. reset/nmi/irq/BRK?
+										# out - indicates wait for interrupt signal
+PIN IN				PIN_RESB[1];		# Active low, Reset CPU to known state
+PIN OUT				PIN_VDA[1];			# Valid data address
+PIN OUT				PIN_VPA[1];			# Valid program address
+										#   VDA VPA
+										#   0	0	- Internal operation
+										#   0	1	- Valid program address
+										#   1	0	- Valid data address
+										#   1	1	- Opcode fetch
+PIN OUT			PIN_VPB[1];				# Active low - Vector Pull - indicates vector location is being addressed
+										#   during an interrupt sequence e.g. reset/nmi/irq/BRK?
+
+
+# Programmer Accessable Register Set
+
+DECLARE		DBR[8];			# Data Bank Register
+DECLARE		PBR[8];			# Program Bank Register
+
+DECLARE		C[16]	ALIAS	B[8]:A[8];
+DECLARE		X[16]	ALIAS	XH[8]:XL[8];
+DECLARE		Y[16]	ALIAS	YH[8]:YL[8];
+DECLARE		S[24]	ALIAS	$00:SH[8]:SL[8];		# Stack Register
+DECLARE		D[24]	ALIAS	$00:DH[8]:DL[8];		# Direct Register
+DECLARE		PC[16]	ALIAS	PCH[8]:PCL[8];			# Program Counter
+
+DECLARE		P[9]	ALIAS	e[1]:n[1]:v[1]:m[1]:x[1]:d[1]:i[1]:z[1]:c[1];	# Status register - 
+																		#	E - emulation bit
+																		#	N - Negative flag 
+																		#	V - Overflow flag
+																		#	M - Memory/Accumulator Mode - 1 8bit/ 0 16bit
+																		#	X - Index Mode - 1 8bit/ 0 16bit
+																		#   D - Decimal mode  - 1 decimal
+																		#	I - IRQ disable - 1 disabled
+																		#   Z - Zero flag - 1 result is zero
+																		#	C - Carry flag - 1 carry occured
+
+
+## See Reset Capture For what actually happens when reset begins
+# For starters there is a signficant period that goes by without any activity (bus values float - maybe an artifact of my test bench)
+# At some point after RESET goes high we see the following Activity
+
+# OPCODE Fetch - ADDRESS FFFF (BK to be verified - suspect 00)
+
+
+# Reset requires 2 cycles to complete properly
+
+HANDLER PIN_PHI2	TRANSITION(0,1)
+{
+	STATES	RESET|FETCH
+	{
+		STATE RESET
+		{
+			STATES	FIRST|SECOND|WAIT
+			{
+				STATE FIRST
+				{
+					D<-$0000;
+					DBR<-$00;
+					PBR<-$00;
+					m<-1;
+					x<-1;
+					d<-0;
+					i<-1;
+					c<-1;
+					e<-1;
+				}
+				STATE SECOND
+				{
+					SH<-$01;
+					XH<-$00;
+					YH<-$00;
+					PIN_VDA<-0;
+					PIN_VPA<-0;
+					PIN_VPB<-1;
+					PIN_RWB<-1;
+				}
+				STATE WAIT
+				{
+				}
+			}
+		}
+
+		STATE FETCH
+		{
+		}
+	}
+	PIN_MX<-x;
+}
+
+# Inputs/outputs are read/written during negative transition
+
+HANDLER PIN_PHI2	TRANSITION(1,0)
+{
+	PIN_MX<-m;
+}
+
+HANDLER PIN_RESB	TRANSITION(1,0)
+{
+	# Need to switch state machine into reset
+	NEXT PIN_PHI2.RESET.FIRST;
+}
+
+HANDLER	PIN_RESB	TRANSITION(0,1)
+{
+	PIN_D <- HIGH_IMPEDANCE;
+}
+
 
