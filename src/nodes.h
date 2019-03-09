@@ -24,6 +24,7 @@ class CString;
 class CInteger;
 class CParamDecl;
 class CConnect;
+class CIdentifier;
 
 typedef std::vector<CStatement*> StatementList;
 typedef std::vector<CExpression*> ExpressionList;
@@ -42,6 +43,7 @@ typedef std::vector<CInteger*> ExternParamsList;
 typedef std::vector<CExpression*> ParamsList;
 typedef std::vector<CParamDecl*> NamedParamsList;
 typedef std::vector<CConnect*> ConnectList;
+typedef std::vector<CIdentifier*> IdentifierList;
 
 class CodeGenContext;
 class CString;

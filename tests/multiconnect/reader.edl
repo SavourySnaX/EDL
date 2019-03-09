@@ -1,0 +1,16 @@
+
+
+#
+# BUS_REQ/ACK cycles are not handled yet
+#
+#
+
+# PINS 
+
+PIN IN			PIN_RESET[1];			# Rest
+PIN IN			PIN__CLK[1];			# clock
+
+HANDLER PIN__CLK	TRANSITION(0,1)
+{
+}
+

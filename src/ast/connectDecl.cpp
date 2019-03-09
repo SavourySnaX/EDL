@@ -21,16 +21,22 @@ llvm::Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 	llvm::FunctionType* FuncTy_8;
 	llvm::Function* func = nullptr;
 
-	// 1 argument at present, same as the ident - contains a single bit
-	FuncTy_8_args.push_back(context.getIntType(1));
+	// Any number of inputs are supported, defined by the names on the CONNECT definition (still all single bits)
+
+	int numberOfInputs = inputsToSchematic.size();
+
+	for (int a = 0; a < numberOfInputs; a++)
+	{
+		FuncTy_8_args.push_back(context.getIntType(1));
+	}
 
 	FuncTy_8 = llvm::FunctionType::get(context.getVoidType(), FuncTy_8_args, false);
 
-	func = context.makeFunction(FuncTy_8, llvm::GlobalValue::ExternalLinkage, context.moduleName + context.getSymbolPrefix() + ident.name);
+	func = context.makeFunction(FuncTy_8, llvm::GlobalValue::ExternalLinkage, context.moduleName + context.getSymbolPrefix() + inputsToSchematic[0]->name);
 
 	context.StartFunctionDebugInfo(func, statementLoc);
 
-	context.m_externFunctions[ident.name] = func;
+	context.m_externFunctions[inputsToSchematic[0]->name] = func;
 	context.gContext.connectFunctions[func] = func;
 
 	llvm::BasicBlock *bblock = context.makeBasicBlock("entry", func);
@@ -38,14 +44,16 @@ llvm::Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 	context.pushBlock(bblock, blockStartLoc);
 
 	llvm::Function::arg_iterator args = func->arg_begin();
+	int argNum = 0;
 	while (args != func->arg_end())
 	{
 		BitVariable temp(llvm::APInt(1,1),0);
 
 		temp.value = &*args;
-		temp.value->setName(ident.name);
-		context.locals()[ident.name] = temp;
+		temp.value->setName(inputsToSchematic[argNum]->name);
+		context.locals()[inputsToSchematic[argNum]->name] = temp;
 		args++;
+		argNum++;
 	}
 
 	// Quickly spin through connection list and find the last bus tap
