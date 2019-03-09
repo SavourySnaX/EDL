@@ -1,0 +1,14 @@
+#
+# Need a quick test rom - infinite loop will do
+#
+
+PIN IN			A[16];
+PIN BIDIRECTIONAL	D[8];
+PIN IN			_CS1[1];
+
+DECLARE rom[[16]][8]
+{
+	$80, $FE
+};
+
+

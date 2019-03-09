@@ -114,6 +114,7 @@ llvm_map_components_to_libnames(llvm_libs Core MC Support MCParser BinaryFormat 
 # Link against LLVM libraries
 target_link_libraries(edl ${llvm_libs})
 
+add_subdirectory(examples/WD65816)
 add_subdirectory(examples/2600)
 add_subdirectory(examples/c64)
 add_subdirectory(examples/EDLSpectrum)

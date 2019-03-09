@@ -1,0 +1,31 @@
+# Western Digital 65816
+#
+# This should be used like the real CPU, ie interact with the PIN_'s
+#
+#
+#
+
+PIN IN			PIN_ABORTB[1];			# Active low, (external interrupt, plus register modification inhibit)
+PIN OUT			PIN_A[16];			# Address Bus (lower 16 bits of address)
+PIN IN			PIN_BE[1];			# Bus Enable - disables Data/Address buffers (unused on proto board)
+PIN BIDIRECTIONAL	PIN_D[8];			# Data/Bank Address Bus - multiplexed bank during first half of memory cycle
+PIN OUT			PIN_E[1];			# Emulation status bit (reflects the state of E flag)
+PIN IN			PIN_IRQB[1];			# Active low - level triggered
+PIN OUT			PIN_MLB[1];			# Active low - used for multiprocessor systems
+PIN OUT			PIN_MX[1];			# Multiplexed M/X status - M is valid during phi2 negative transition, X
+							#  during position transition
+PIN IN			PIN_NMIB[1];			# Active low, negative edge triggered interrupt
+PIN IN			PIN_PHI2[1];			# Phase 2 Input clock
+PIN BIDIRECTIONAL	PIN_RDY[1];			# in - low logic input halts the processor.
+							# out - indicates wait for interrupt signal
+PIN IN			PIN_RESB[1];			# Active low, Reset CPU to known state
+PIN OUT			PIN_VDA[1];			# Valid data address
+PIN OUT			PIN_VPA[1];			# Valid program address
+							#   VDA VPA
+							#   0	0	- Internal operation
+							#   0	1	- Valid program address
+							#   1	0	- Valid data address
+							#   1	1	- Opcode fetch
+PIN OUT			PIN_VPB[1];			# Active low - Vector Pull - indicates vector location is being addressed
+							#   during an interrupt sequence e.g. reset/nmi/irq/BRK?
+
