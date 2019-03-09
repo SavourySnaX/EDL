@@ -50,6 +50,7 @@
 	std::vector<CExpression*> *params;
 	std::vector<CConnect*> *connectvec;
 	std::vector<CParamDecl*> *namedParams;
+	std::vector<CIdentifier*> *identifierList;
 	std::string *string;
 	int token;
 }
@@ -95,6 +96,7 @@
 %type <affectvec> affectors
 %type <staterefvec> state_ident_list
 %type <connectvec> connect_list
+%type <identifierList> ident_list
 
 /* %type <exprvec> call_args */
 %type <block> program block stmts 
@@ -220,7 +222,10 @@ connect_list : connect_list connect				{ $$->push_back($2); }
 	| connect			{ $$ = new ConnectList(); $$->push_back($1); }
 	;
 
-connect_decl : TOK_CONNECT ident TOK_LBRACE connect_list TOK_RBRACE	{ $$ = new CConnectDeclaration(*$2,*$4,&@1,&@3,&@5); }
+ident_list : ident_list TOK_COMMA ident			{ $$->push_back($3); }
+	| ident				{ $$ = new IdentifierList(); $$ ->push_back($1); }
+
+connect_decl : TOK_CONNECT ident_list TOK_LBRACE connect_list TOK_RBRACE	{ $$ = new CConnectDeclaration(*$2,*$4,&@1,&@3,&@5); }
 
 handler_decl : TOK_HANDLER ident trigger block	{ $$ = new CHandlerDeclaration(*$2,*$3,*$4,&@1); }
 

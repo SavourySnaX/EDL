@@ -1,0 +1,14 @@
+
+#
+# Verify it compiles for now
+#
+
+INSTANCE "reader.edl" AS READER;
+
+# void TEST(uint8_t TEST)
+CONNECT TEST , RESET
+{
+	BUS_TAP("CLK",0) READER PIN__CLK , TEST;
+	BUS_TAP("RESET",0) READER PIN_RESET, RESET;
+}
+

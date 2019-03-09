@@ -134,6 +134,7 @@ add_subdirectory(tests/contention)
 add_subdirectory(tests/states)
 add_subdirectory(tests/multialias)
 add_subdirectory(tests/bugs)
+add_subdirectory(tests/multiconnect)
 
 #
 # For debugging

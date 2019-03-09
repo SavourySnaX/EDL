@@ -4,13 +4,13 @@ class CConnectDeclaration : public CStatement
 {
 public:
 	ConnectList connects;
-	const CIdentifier& ident;
+	IdentifierList inputsToSchematic;
 	YYLTYPE statementLoc;
 	YYLTYPE blockStartLoc;
 	YYLTYPE blockEndLoc;
 
-	CConnectDeclaration(const CIdentifier& ident, ConnectList& connects, YYLTYPE *statementLoc, YYLTYPE *blockStartLoc, YYLTYPE *blockEndLoc) :
-		connects(connects), ident(ident), statementLoc(*statementLoc), blockStartLoc(*blockStartLoc), blockEndLoc(*blockEndLoc) { }
+	CConnectDeclaration(IdentifierList& inputs, ConnectList& connects, YYLTYPE *statementLoc, YYLTYPE *blockStartLoc, YYLTYPE *blockEndLoc) :
+		connects(connects), inputsToSchematic(inputs), statementLoc(*statementLoc), blockStartLoc(*blockStartLoc), blockEndLoc(*blockEndLoc) { }
 
 	virtual void prePass(CodeGenContext& context);
 	virtual llvm::Value* codeGen(CodeGenContext& context);
