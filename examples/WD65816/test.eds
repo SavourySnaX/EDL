@@ -1,7 +1,7 @@
 # Test harness for 65816
 
 INSTANCE "chips/WD65816.edl" AS CPU;
-INSTANCE "chips/ROM.EDL" AS ROM;
+INSTANCE "chips/rom.edl" AS ROM;
 
 INSTANCE "chips/dummy.edl" AS CONSUME;
 
