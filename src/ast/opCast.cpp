@@ -35,14 +35,14 @@ llvm::Value* CCastOperator::codeGen(CodeGenContext& context)
 			llvm::APInt loop = start;
 			llvm::APInt endloop = end.getAPInt().zextOrTrunc(leftType->getBitWidth());
             llvm::APInt width = end.getAPInt().zextOrTrunc(leftType->getBitWidth());
-            width++;
+            ++width;
             width -= start;
 			while (1 == 1)
 			{
 				mask.setBit(loop.getLimitedValue());
 				if (loop.uge(endloop))
 					break;
-				loop++;
+				++loop;
 			}
 
 			llvm::Value *masked = llvm::BinaryOperator::Create(llvm::Instruction::And, left, context.getConstantInt(mask), "castMask", context.currentBlock());

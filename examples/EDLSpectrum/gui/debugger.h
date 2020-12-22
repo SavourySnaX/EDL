@@ -31,4 +31,6 @@ void RecordPin(int pinPos,uint8_t pinVal);
 void RecordPinA(int pinPos,uint8_t pinVal);
 void UpdatePinTick();
 int isBreakpoint(int chip,uint16_t address);
+void DrawTiming(unsigned char* buffer,unsigned int width,unsigned int height);
+void UpdateTimingWindow(GLFWwindow* window);
 

@@ -157,10 +157,15 @@ llvm::Function* CMappingDeclaration::GenerateGetByMappingFunction(CodeGenContext
 	// Input argument for getByMapping is the selector size
 	FuncTy_8_args.push_back(context.getIntType(size));
 
+	// We are forced to create a temporary function with latest llvm because we don't specify alignments which causes asserts in LoadInst
+	//Since we throw away the information we generate in the first loop, it doesn't matter.
+	auto tempFtype = llvm::FunctionType::get(context.getVoidType(), FuncTy_8_args, false);
+	auto tempFunction = context.makeFunction(tempFtype, llvm::GlobalValue::PrivateLinkage, context.getSymbolPrefix() + (!asVoid?"get":"do") + "ByMapping_Discard" + ident.name);
+
 	// First step compute the case blocks, so we can examine the return types - only done for non void return
 	for (auto mapping : mappings)
 	{
-		llvm::BasicBlock *caseBlock = context.makeBasicBlock("case"+llvm::Twine(mapping->selector.getAPInt().getLimitedValue()).str(), nullptr);
+		llvm::BasicBlock *caseBlock = context.makeBasicBlock("case"+llvm::Twine(mapping->selector.getAPInt().getLimitedValue()).str(), tempFunction);
 
 		context.pushBlock(caseBlock, mapping->selector.getSourceLocation());
 		llvm::Value* mapResult = mapping->expr.codeGen(context);
@@ -180,7 +185,10 @@ llvm::Function* CMappingDeclaration::GenerateGetByMappingFunction(CodeGenContext
 			// Get size of mapReturn
 			if (mapReturn->getReturnValue()==nullptr || !mapReturn->getReturnValue()->getType()->isIntegerTy())
 			{
+				caseBlock->removeFromParent();
 				delete caseBlock;
+				tempFunction->removeFromParent();
+				delete tempFunction;
 				return nullptr;		// Does not return a value, so not suitable for getter
 			}
 
@@ -194,13 +202,20 @@ llvm::Function* CMappingDeclaration::GenerateGetByMappingFunction(CodeGenContext
 			{
 				if (returnWidth != retBitWidth)
 				{
+					caseBlock->removeFromParent();
 					delete caseBlock;
+					tempFunction->removeFromParent();
+					delete tempFunction;
 					return context.gContext.ReportError(nullptr, EC_ErrorWholeLine, mapping->selector.getSourceLocation(), "Mapping result must be same width for all expressions in a MAPPING");
 				}
 			}
 		}
+		caseBlock->removeFromParent();
 		delete caseBlock;
 	}
+
+	tempFunction->removeFromParent();
+	delete tempFunction;
 
 	if (!asVoid)
 	{
@@ -380,7 +395,7 @@ llvm::Value* CMappingDeclaration::generateCallSetByMappingCast(CodeGenContext& c
 		mask.setBit(loop.getLimitedValue());
 		if (loop.uge(endloop))
 			break;
-		loop++;
+		++loop;
 	}
 
 	args.push_back(context.getConstantInt(start));	// Shift

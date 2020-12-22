@@ -94,11 +94,11 @@ llvm::Value* CIdentifier::codeGen(CodeGenContext& context)
  			indices.push_back(truncOrExtTo64);
 			llvm::Instruction* elementPtr = llvm::GetElementPtrInst::Create(nullptr,var.value,indices,"array index",context.currentBlock());
 
-			loadInstruction = new llvm::LoadInst(elementPtr, "", false, context.currentBlock());
+			loadInstruction = new llvm::LoadInst(elementPtr->getType()->getPointerElementType(), elementPtr, "", false, context.currentBlock());
 		}
 		else
 		{
-			loadInstruction = new llvm::LoadInst(var.value, "", false, context.currentBlock());
+			loadInstruction = new llvm::LoadInst(var.value->getType()->getPointerElementType(), var.value, "", false, context.currentBlock());
 		}
 		return GetAliasedData(context,loadInstruction,var);
 	}

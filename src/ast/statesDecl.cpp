@@ -189,10 +189,10 @@ llvm::Value* CStatesDeclaration::codeGen(CodeGenContext& context)
 	// Step 1, load next state into current state
 	if (TopMostState)
 	{
-		llvm::LoadInst* getNextState = new llvm::LoadInst(nxtState, "", false, bb);
+		llvm::LoadInst* getNextState = new llvm::LoadInst(nxtState->getType()->getPointerElementType(), nxtState, "", false, bb);
 		llvm::StoreInst* storeState = new llvm::StoreInst(getNextState, curState, false, bb);
 
-		optocurState = new llvm::LoadInst(curState, "", false, bb);
+		optocurState = new llvm::LoadInst(curState->getType()->getPointerElementType(), curState, "", false, bb);
 		switchValue = optocurState;
 	}
 	// Step 2, generate switch statement

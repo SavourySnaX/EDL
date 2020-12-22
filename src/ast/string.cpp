@@ -17,7 +17,7 @@ llvm::Value* CString::codeGen(CodeGenContext& context)
 	llvm::Constant* constString = context.getString(quoted);
 	llvm::ArrayType* arrayType = llvm::ArrayType::get(context.getIntType(8), quoted.length() - 1);
 	llvm::GlobalVariable* globalString = context.makeGlobal(arrayType, true, llvm::GlobalValue::PrivateLinkage, constString, context.getSymbolPrefix() + ".str");
-	globalString->setAlignment(1);
+	globalString->setAlignment(llvm::MaybeAlign(1));
 
 	// Finally return a ptr to the start of the string (using GEP)
 	std::vector<llvm::Constant*> gepIndices;

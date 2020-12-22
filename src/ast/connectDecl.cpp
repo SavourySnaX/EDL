@@ -234,7 +234,7 @@ llvm::Value* CConnectDeclaration::codeGen(CodeGenContext& context)
 					}
 					else
 					{
-						llvm::Value* fetchDriving = new llvm::LoadInst(var.impedance, "fetchImpedanceForIsolation", false, bblock);
+						llvm::Value* fetchDriving = new llvm::LoadInst(var.impedance->getType()->getPointerElementType(), var.impedance, "fetchImpedanceForIsolation", false, bblock);
 						fetchDriving = llvm::CmpInst::Create(llvm::Instruction::ICmp, llvm::ICmpInst::ICMP_EQ, fetchDriving, context.getConstantZero(var.size.getLimitedValue()), "isNotImpedance", bblock);
 
 						llvm::Instruction* I = llvm::BinaryOperator::Create(llvm::Instruction::Or, fetchDriving, busIsDrivingResult[curBus], "isDriving", context.currentBlock());

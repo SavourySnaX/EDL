@@ -19,7 +19,7 @@ extern YYLTYPE CombineTokenLocations(const YYLTYPE &a, const YYLTYPE &b);
 
 std::string SanitiseNameForDebug(llvm::StringRef inputName)
 {
-	std::string t = inputName;
+	std::string t = inputName.str();
 	std::replace(t.begin(), t.end(), '.', '_');
 	return t;
 }
@@ -85,11 +85,12 @@ void CodeGenContext::StartFunctionDebugInfo(llvm::Function* func, const YYLTYPE&
 		llvm::DIScope *FContext = gContext.scopingStack.top()->getFile();	// temporary - should come from the location information
 		unsigned LineNo = declLoc.first_line;
 		unsigned ScopeLine = LineNo;
+		auto spFlags = llvm::DISubprogram::toSPFlags(false, true, false);
 		llvm::DISubprogram *SP = gContext.dbgBuilder->createFunction(
 			FContext, SanitiseNameForDebug(func->getName()), llvm::StringRef(), gContext.scopingStack.top()->getFile(), LineNo,
 			dbgFuncTy,
-			false /* internal linkage */, true /* definition */, ScopeLine,
-			llvm::DINode::FlagZero, false);
+			ScopeLine,
+			llvm::DINode::FlagZero, spFlags);
 		func->setSubprogram(SP);
 
 		gContext.scopingStack.push(SP);
@@ -133,7 +134,7 @@ void CodeGenContext::GenerateDisassmTables()
 				llvm::ArrayType* ArrayTy_0 = llvm::ArrayType::get(getIntType(8), slot->second.length()-1);
 				llvm::Constant* const_array_9 = getString(slot->second);
 				llvm::GlobalVariable* gvar_array__str = makeGlobal(ArrayTy_0,true,llvm::GlobalValue::PrivateLinkage,const_array_9,getSymbolPrefix()+".str"+trackingSlot.toString(16,false));
-				gvar_array__str->setAlignment(1);
+				gvar_array__str->setAlignment(llvm::MaybeAlign(1));
   
 				std::vector<llvm::Constant*> const_ptr_12_indices;
 				llvm::ConstantInt* const_int64_13 = getConstantZero(64);
@@ -149,7 +150,7 @@ void CodeGenContext::GenerateDisassmTables()
 			{
 				const_array_9_elems.push_back(const_ptr_13);
 			}
-			trackingSlot++;
+			++trackingSlot;
 		}
 
 		llvm::Constant* const_array_9 = llvm::ConstantArray::get(ArrayTy_4, const_array_9_elems);

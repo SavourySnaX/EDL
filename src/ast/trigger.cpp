@@ -12,13 +12,13 @@
 
 CInteger CTrigger::zero("0");
 
-llvm::Value* CTrigger::GenerateAlways(CodeGenContext& context, BitVariable& pin, llvm::Value* function)
+llvm::Value* CTrigger::GenerateAlways(CodeGenContext& context, BitVariable& pin, llvm::FunctionType* ftype, llvm::Value* function)
 {
 	llvm::BasicBlock *oldBlock = (*pin.writeAccessor)->getParent();
 	llvm::Function* parentFunction = oldBlock->getParent();
 	context.gContext.scopingStack.push(parentFunction->getSubprogram());
 
-	llvm::CallInst* fcall = llvm::CallInst::Create(function, "", *pin.writeAccessor);
+	llvm::CallInst* fcall = llvm::CallInst::Create(ftype, function, "", *pin.writeAccessor);
 	if (context.gContext.opts.generateDebug)
 	{
 		fcall->setDebugLoc(llvm::DebugLoc::get(debugLocation.first_line, debugLocation.first_column, context.gContext.scopingStack.top()));
@@ -29,7 +29,7 @@ llvm::Value* CTrigger::GenerateAlways(CodeGenContext& context, BitVariable& pin,
 	return nullptr;
 }
 
-llvm::Value* CTrigger::GenerateChanged(CodeGenContext& context, BitVariable& pin, llvm::Value* function)
+llvm::Value* CTrigger::GenerateChanged(CodeGenContext& context, BitVariable& pin, llvm::FunctionType* ftype, llvm::Value* function)
 {
 	// Compare input value to old value, if different then call function 
 	llvm::BasicBlock *oldBlock = (*pin.writeAccessor)->getParent();
@@ -47,7 +47,7 @@ llvm::Value* CTrigger::GenerateChanged(CodeGenContext& context, BitVariable& pin
 	llvm::BranchInst::Create(nocall, ifcall, answer, context.currentBlock());
 	context.popBlock(debugLocation);
 
-	llvm::CallInst* fcall = llvm::CallInst::Create(function, "", ifcall);
+	llvm::CallInst* fcall = llvm::CallInst::Create(ftype, function, "", ifcall);
 	if (context.gContext.opts.generateDebug)
 	{
 		fcall->setDebugLoc(llvm::DebugLoc::get(debugLocation.first_line, debugLocation.first_column, context.gContext.scopingStack.top()));
@@ -64,7 +64,7 @@ llvm::Value* CTrigger::GenerateChanged(CodeGenContext& context, BitVariable& pin
 	return nullptr;
 }
 
-llvm::Value* CTrigger::GenerateTransition(CodeGenContext& context, BitVariable& pin, llvm::Value* function)
+llvm::Value* CTrigger::GenerateTransition(CodeGenContext& context, BitVariable& pin, llvm::FunctionType* ftype, llvm::Value* function)
 {
 	// Compare input value to param2 and old value to param1 , if same call function 
 	llvm::BasicBlock *oldBlock = (*pin.writeAccessor)->getParent();
@@ -86,7 +86,7 @@ llvm::Value* CTrigger::GenerateTransition(CodeGenContext& context, BitVariable& 
 	llvm::BranchInst::Create(ifcall, nocall, answer, context.currentBlock());
 	context.popBlock(debugLocation);
 
-	llvm::CallInst* fcall = llvm::CallInst::Create(function, "", ifcall);
+	llvm::CallInst* fcall = llvm::CallInst::Create(ftype, function, "", ifcall);
 	if (context.gContext.opts.generateDebug)
 	{
 		fcall->setDebugLoc(llvm::DebugLoc::get(debugLocation.first_line, debugLocation.first_column, context.gContext.scopingStack.top()));
@@ -103,16 +103,16 @@ llvm::Value* CTrigger::GenerateTransition(CodeGenContext& context, BitVariable& 
 	return nullptr;
 }
 
-llvm::Value* CTrigger::codeGen(CodeGenContext& context, BitVariable& pin, llvm::Value* function)
+llvm::Value* CTrigger::codeGen(CodeGenContext& context, BitVariable& pin, llvm::FunctionType* ftype, llvm::Value* function)
 {
 	switch (type)
 	{
 	case TOK_ALWAYS:
-		return GenerateAlways(context, pin, function);
+		return GenerateAlways(context, pin, ftype, function);
 	case TOK_CHANGED:
-		return GenerateChanged(context, pin, function);
+		return GenerateChanged(context, pin, ftype, function);
 	case TOK_TRANSITION:
-		return GenerateTransition(context, pin, function);
+		return GenerateTransition(context, pin, ftype, function);
 	default:
 		return context.gContext.ReportError(nullptr, EC_InternalError, debugLocation, "Unhandled trigger type");
 	}

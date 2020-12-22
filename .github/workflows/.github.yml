@@ -1,0 +1,62 @@
+name: CI
+
+on: [push]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        configs: [Release, Debug]
+    steps:
+    - name: Install LLVM (non windows)
+      if: matrix.os != 'windows-latest'
+      uses: KyleMayes/install-llvm-action@v1
+      with:
+        version: "11.0"
+        directory: ${{ runner.temp }}/llvm
+    - name: Install LLVM windows - Grab Release
+      if: matrix.os == 'windows-latest' && matrix.configs == 'Release'
+      run: |
+        cd ${{ runner.temp }}
+        curl -LO https://github.com/SavourySnaX/llvm-win-for-actions/releases/download/release-11/llvm-rel.7z
+        mv llvm-rel.7z llvm.7z
+    - name: Install LLVM windows - Grab Debug
+      if: matrix.os == 'windows-latest' && matrix.configs == 'Debug'
+      run: |
+        cd ${{ runner.temp }}
+        curl -LO https://github.com/SavourySnaX/llvm-win-for-actions/releases/download/debug_11/llvm-deb.7z
+        mv llvm-deb.7z llvm.7z
+    - name: Install LLVM Windows - Unpack
+      if: matrix.os == 'windows-latest'
+      run: 7z x ${{ runner.temp }}/llvm.7z -o${{ runner.temp }}/llvm
+    - name: Ubuntu Dependencies
+      if: matrix.os == 'ubuntu-latest'
+      run: sudo apt-get install libopenal-dev libglfw3-dev -y
+    - name: MacOS Dependencies
+      if: matrix.os == 'macos-latest'
+      run: brew install glfw
+    - name: Windows Dependencies
+      if: matrix.os == 'windows-latest'
+      run: choco install winflexbison
+    - name: Checkout
+      uses: actions/checkout@v2.0.0
+    - name: Build project (mac/ubuntu)
+      if: matrix.os != 'windows-latest'
+      uses: nicledomaS/cmake_build_action@v1.3
+      with:
+        config: ${{ matrix.configs }}
+        run_tests: ON
+        cmake_args: ${{ env.cmake_args }}
+    - name: Build project (windows)
+      if: matrix.os == 'windows-latest'
+      uses: nicledomaS/cmake_build_action@v1.3
+      with:
+        config: ${{ matrix.configs }}
+        run_tests: ON
+        cmake_args: -DLLVM_DIR=${{ runner.temp }}/llvm/lib/cmake/llvm/
+    - uses: actions/upload-artifact@v2
+      with:
+        path: build
+        name: artifact_${{ matrix.os }}_${{ matrix.configs }}

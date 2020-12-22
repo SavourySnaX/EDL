@@ -127,7 +127,7 @@ public:
 	llvm::Constant*		getString(const std::string& withQuotes) { return llvm::ConstantDataArray::getString(llvmContext, withQuotes.substr(1, withQuotes.length() - 2), true); }
 
 	// Function Wrappers
-	llvm::BasicBlock*		makeBasicBlock(const llvm::Twine&name, llvm::Function* parent = nullptr, llvm::BasicBlock* insertBefore = nullptr) { return llvm::BasicBlock::Create(llvmContext, name, parent, insertBefore); }
+	llvm::BasicBlock*		makeBasicBlock(const llvm::Twine&name, llvm::Function* parent, llvm::BasicBlock* insertBefore = nullptr) { return llvm::BasicBlock::Create(llvmContext, name, parent, insertBefore); }
 	llvm::ReturnInst*		makeReturn(llvm::BasicBlock* insertAtEnd) { return llvm::ReturnInst::Create(llvmContext, insertAtEnd); }
 	llvm::ReturnInst*		makeReturnValue(llvm::Value* value, llvm::BasicBlock* insertAtEnd) { return llvm::ReturnInst::Create(llvmContext, value, insertAtEnd); }
 	llvm::Function*			makeFunction(llvm::FunctionType* fType, llvm::Function::LinkageTypes fLinkType, const llvm::Twine& fName);

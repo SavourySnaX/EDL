@@ -46,7 +46,7 @@ llvm::Value* CHandlerDeclaration::codeGen(CodeGenContext& context)
 
 	context.parentHandler = this;
 
-	trigger.codeGen(context, pinVariable, function);
+	trigger.codeGen(context, pinVariable, ftype, function);
 
 	block.codeGen(context);
 

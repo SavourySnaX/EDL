@@ -86,7 +86,7 @@ llvm::Value* CFunctionDecl::codeGen(CodeGenContext& context)
 	}
 	else
 	{
-		context.makeReturnValue(new llvm::LoadInst(returnVal.value, "", context.currentBlock()), context.currentBlock());
+		context.makeReturnValue(new llvm::LoadInst(returnVal.value->getType()->getPointerElementType(), returnVal.value, "", context.currentBlock()), context.currentBlock());
 	}
 
 	context.popBlock(block.blockEndLoc);
