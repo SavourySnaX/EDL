@@ -65,7 +65,10 @@ jobs:
         config: ${{ matrix.configs }}
         run_tests: ON
         cmake_args: -DLLVM_DIR=${{ runner.temp }}/llvm/lib/cmake/llvm/;-Dglfw3_DIR=${{ runner.temp }}/glfw/lib/cmake/glfw3/;-DOPENAL_LIBRARY=${{ runner.temp }}/openal/lib/openal32.lib;-DOPENAL_INCLUDE_DIR=${{ runner.temp }}/openal/include
-    - uses: actions/upload-artifact@v2
+    - name: Tar build
+      run: tar -xvf build.tar build
+    - name: Update Tar
+      uses: actions/upload-artifact@v2
       with:
-        path: build
+        path: build.tar
         name: artifact_${{ matrix.os }}_${{ matrix.configs }}
