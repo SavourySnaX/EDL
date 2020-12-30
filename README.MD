@@ -15,6 +15,7 @@ tests/ folder includes a simple test harness for validating the 8080 example cor
 
 examples/ folder includes a few examples :)
 
+```
 	Invaders - Uses the pin accurate 8080 core, shows a logic analyser while running.
 	Simple Invaders - Uses the step based 8080 core.
 	Language - Contains a few small examples of constructs available in EDL.
@@ -25,4 +26,4 @@ examples/ folder includes a few examples :)
 	2600 - WIP
 	zx80 - WIP (no display, currently just runs the rom)
 	EDLSpectrum - Another spectrum emulator, but this time using bus connections etc.
-
+```
