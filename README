@@ -1,10 +1,13 @@
+![CI](https://github.com/SavourySnaX/EDL/workflows/CI/badge.svg)
 
 Emulation Description Language
 ------------------------------
 
-Requires Bison/Yacc,lex/flex,llvm (7.0) to build the compiler.
+Requires Bison/Yacc,lex/flex,llvm (11.0) to build the compiler.
 
 Most of the examples require plus opengl and glfw (3.x).
+
+If on windows you can use setupWin64.bat to clone and build the dependencies, otherwise use the platform package system to install the required dependencies.
 
 I've now switched over to use cmake for development.
 
