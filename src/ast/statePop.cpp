@@ -34,7 +34,7 @@ llvm::Value* CStatePop::codeGen(CodeGenContext& context)
 	unsigned bitsNeeded = overSized.getActiveBits();
 
 	// We need to pop from our stack and put next back
-	llvm::Value* index = new llvm::LoadInst(topState.stateStackIndex, "stackIndex", false, context.currentBlock());
+	llvm::Value* index = new llvm::LoadInst(topState.stateStackIndex->getType()->getPointerElementType(), topState.stateStackIndex, "stackIndex", false, context.currentBlock());
 	llvm::Value* dec = llvm::BinaryOperator::Create(llvm::Instruction::Sub, index, context.getConstantInt(llvm::APInt(MAX_SUPPORTED_STACK_BITS, 1)), "decrementIndex", context.currentBlock());
 	new llvm::StoreInst(dec, topState.stateStackIndex, false, context.currentBlock());	// store new stack index
 
@@ -44,7 +44,7 @@ llvm::Value* CStatePop::codeGen(CodeGenContext& context)
 	indices.push_back(dec);
 	llvm::Value* ref = llvm::GetElementPtrInst::Create(nullptr, topState.stateStackNext, indices, "stackPos", context.currentBlock());
 
-	llvm::Value* oldNext = new llvm::LoadInst(ref, "oldNext", false, context.currentBlock());	// retrieve old next value
+	llvm::Value* oldNext = new llvm::LoadInst(ref->getType()->getPointerElementType(), ref, "oldNext", false, context.currentBlock());	// retrieve old next value
 
 	return new llvm::StoreInst(oldNext, topState.nextState, false, context.currentBlock());	// restore next state to old value
 }

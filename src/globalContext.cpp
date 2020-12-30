@@ -10,6 +10,8 @@
 #include <llvm/LinkAllPasses.h>
 #include <llvm/Pass.h>
 #include <llvm/Support/Path.h>
+#include <llvm/Support/Host.h>
+#include <llvm/Support/FileSystem.h>
 #include <llvm/Support/MemoryBuffer.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/TargetSelect.h>
@@ -226,7 +228,7 @@ bool GlobalContext::SetupPassesAndRun(CodeGenContext& rootContext)
 			std::cerr << ec.message() << std::endl;
 			return false;
 		}
-		if (targetMachine->addPassesToEmitFile(pm, dest, nullptr, llvm::TargetMachine::CGFT_ObjectFile))
+		if (targetMachine->addPassesToEmitFile(pm, dest, nullptr, llvm::CGFT_ObjectFile))
 		{
 			std::cerr << "Cannot emit object file" << std::endl;
 			return false;
@@ -268,7 +270,7 @@ bool GlobalContext::FinaliseCodeGen(CodeGenContext& rootContext)
 
 bool GlobalContext::generateCode(CBlock& root)
 {
-	std::unique_ptr<llvm::Module> Owner = llvm::make_unique<llvm::Module>("root", llvmContext);
+	std::unique_ptr<llvm::Module> Owner = std::make_unique<llvm::Module>("root", llvmContext);
 	llvmModule = Owner.get();
 
 	if (!InitGlobalCodeGen())

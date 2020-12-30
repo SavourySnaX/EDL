@@ -39,11 +39,11 @@ void CVariableDeclaration::CreateWriteAccessor(CodeGenContext& context, BitVaria
 	llvm::Value* setVal = &*args;
 	setVal->setName("InputVal");
 
-	llvm::LoadInst* load = new llvm::LoadInst(var.value, "", false, bblock);
+	llvm::LoadInst* load = new llvm::LoadInst(var.value->getType()->getPointerElementType(), var.value, "", false, bblock);
 
 	if (impedance)
 	{
-		llvm::LoadInst* loadImp = new llvm::LoadInst(var.impedance, "", false, bblock);
+		llvm::LoadInst* loadImp = new llvm::LoadInst(var.impedance->getType()->getPointerElementType(), var.impedance, "", false, bblock);
 		llvm::CmpInst* check = llvm::CmpInst::Create(llvm::Instruction::ICmp, llvm::ICmpInst::ICMP_NE, loadImp, context.getConstantZero(var.size.getLimitedValue()), "impedance", bblock);
 
 		setVal = llvm::SelectInst::Create(check, setVal, load, "impOrReal", bblock);
@@ -82,10 +82,10 @@ void CVariableDeclaration::CreateReadAccessor(CodeGenContext& context, BitVariab
 
 	context.pushBlock(bblock, declarationLoc);
 
-	llvm::Value* load = new llvm::LoadInst(var.value, "", false, bblock);
+	llvm::Value* load = new llvm::LoadInst(var.value->getType()->getPointerElementType(), var.value, "", false, bblock);
 	if (impedance)
 	{
-		llvm::LoadInst* loadImp = new llvm::LoadInst(var.impedance, "", false, bblock);
+		llvm::LoadInst* loadImp = new llvm::LoadInst(var.impedance->getType()->getPointerElementType(), var.impedance, "", false, bblock);
 		llvm::CmpInst* check = llvm::CmpInst::Create(llvm::Instruction::ICmp, llvm::ICmpInst::ICMP_EQ, loadImp, context.getConstantZero(var.size.getLimitedValue()), "impedance", bblock);
 
 		load = llvm::SelectInst::Create(check, load, loadImp, "impOrReal", bblock);

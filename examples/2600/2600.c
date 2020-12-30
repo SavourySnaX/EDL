@@ -102,17 +102,48 @@ uint16_t MAIN_PinGetAB();
 uint8_t MAIN_PinGetDB();
 void MAIN_PinSetDB(uint8_t);
 void MAIN_PinSetO0(uint8_t);
+void MAIN_PinSetRDY(uint8_t);
 uint8_t MAIN_PinGetRW();
 uint8_t MAIN_PinGetO2();
 void MAIN_PinSet_RES(uint8_t);
 
 void TIA_PinSetOSC(uint8_t);
 void TIA_PinSetO2(uint8_t);
+uint8_t TIA_PinGetSYNC();
+uint8_t TIA_PinGetCOL();
+uint8_t TIA_PinGetLUM0();
+uint8_t TIA_PinGetLUM1();
+uint8_t TIA_PinGetLUM2();
 uint8_t TIA_PinGetO0();
+uint8_t TIA_PinGetDB05();
+uint8_t TIA_PinGetDB67();
+uint8_t TIA_PinGet_RDY();
+uint8_t TIA_PinGetAUD0();
+uint8_t TIA_PinGetAUD1();
+void TIA_PinSetDI(uint8_t);
+void TIA_PinSetLI(uint8_t);
+void TIA_PinSetO0(uint8_t);
+void TIA_PinSetAB(uint8_t);
+void TIA_PinSetRW(uint8_t);
+void TIA_PinSetDB05(uint8_t);
+void TIA_PinSetDB67(uint8_t);
+void TIA_PinSet_CS0(uint8_t);
+void TIA_PinSetCS1(uint8_t);
+void TIA_PinSet_CS2(uint8_t);
+void TIA_PinSet_CS3(uint8_t);
 
 extern uint8_t TIA_CClock;
 
+uint8_t RIOT_PinGetDB();
+void RIOT_PinSetPA(uint8_t);
+void RIOT_PinSetPB(uint8_t);
 void RIOT_PinSetO2(uint8_t);
+void RIOT_PinSetRW(uint8_t);
+void RIOT_PinSetAD(uint8_t);
+void RIOT_PinSetDB(uint8_t);
+void RIOT_PinSet_RS(uint8_t);
+void RIOT_PinSetCS1(uint8_t);
+void RIOT_PinSet_CS2(uint8_t);
 
 extern uint8_t RIOT_RAM[128];
 
@@ -847,7 +878,7 @@ void DummyTV()
             			glfwMakeContextCurrent(windows[MAIN_WINDOW]);
 				ShowScreen(MAIN_WINDOW,WIDTH,HEIGHT);
 				glfwSwapBuffers(windows[MAIN_WINDOW]);
-				memset(videoMemory,WIDTH*HEIGHT*4,0);
+				memset(videoMemory,0,WIDTH*HEIGHT*4);
 			}
 		}
 		syncCounter=0;

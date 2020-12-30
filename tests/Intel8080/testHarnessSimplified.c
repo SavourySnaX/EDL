@@ -419,24 +419,24 @@ void Disassemble(unsigned char* memory,unsigned int address)
 	printf("%s\n",retVal);
 }
 
-unsigned char GetByte(unsigned short addr)
+unsigned char GetByte(unsigned int addr)
 {
-	return someMemory[addr];
+	return someMemory[addr&0xFFFF];
 }
 
-unsigned char GetStackByte(unsigned short addr)
+unsigned char GetStackByte(unsigned int addr)
 {
-	return GetByte(addr);
+	return GetByte(addr&0xFFFF);
 }
 
-void SetByte(unsigned short addr,unsigned char byte)
+void SetByte(unsigned int addr,unsigned char byte)
 {
-	someMemory[addr]=byte;
+	someMemory[addr&0xFFFF]=byte;
 }
 
-void SetStackByte(unsigned short addr,unsigned char byte)
+void SetStackByte(unsigned int addr,unsigned char byte)
 {
-	SetByte(addr,byte);
+	SetByte(addr&0xFFFF,byte);
 }
 
 unsigned char GetPort(unsigned short addr)

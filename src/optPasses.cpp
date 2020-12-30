@@ -88,7 +88,7 @@ bool StateReferenceSquasher::runOnFunction(llvm::Function &F)
 bool InOutReferenceSquasher::DoWork(llvm::Function &F, CodeGenContext* context)
 {
 	llvm::BasicBlock& hoistHere = F.getEntryBlock();
-	llvm::TerminatorInst* hoistBefore = hoistHere.getTerminator();
+	llvm::Instruction* hoistBefore = hoistHere.getTerminator();
 
 	// InOut squasher re-orders the inputs, this is not a safe operation for CONNECT lists, so we exclude them here
 	if (context->gContext.connectFunctions.find(&F) != context->gContext.connectFunctions.end())

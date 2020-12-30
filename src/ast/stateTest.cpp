@@ -40,7 +40,7 @@ llvm::Value* CStateTest::codeGen(CodeGenContext& context)
 	unsigned bitsNeeded = overSized.getActiveBits();
 
 	// Load value from state variable, test against range of values
-	llvm::Value* load = new llvm::LoadInst(topState.currentState, "", false, context.currentBlock());
+	llvm::Value* load = new llvm::LoadInst(topState.currentState->getType()->getPointerElementType(), topState.currentState, "", false, context.currentBlock());
 
 	if (totalInBlock>1)
 	{

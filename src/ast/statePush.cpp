@@ -38,14 +38,14 @@ llvm::Value* CStatePush::codeGen(CodeGenContext& context)
 	llvm::APInt overSized(4 * numStates.length(), numStates, 10);
 	unsigned bitsNeeded = overSized.getActiveBits();
 
-	llvm::Value* index = new llvm::LoadInst(topState.stateStackIndex, "stackIndex", false, context.currentBlock());
+	llvm::Value* index = new llvm::LoadInst(topState.stateStackIndex->getType()->getPointerElementType(), topState.stateStackIndex, "stackIndex", false, context.currentBlock());
 	std::vector<llvm::Value*> indices;
 	llvm::ConstantInt* const_intn = context.getConstantZero(bitsNeeded);
 	indices.push_back(const_intn);
 	indices.push_back(index);
 	llvm::Value* ref = llvm::GetElementPtrInst::Create(nullptr, topState.stateStackNext, indices, "stackPos", context.currentBlock());
 
-	llvm::Value* curNext = new llvm::LoadInst(topState.nextState, "currentNext", false, context.currentBlock());
+	llvm::Value* curNext = new llvm::LoadInst(topState.nextState->getType()->getPointerElementType(), topState.nextState, "currentNext", false, context.currentBlock());
 
 	new llvm::StoreInst(curNext, ref, false, context.currentBlock());			// Save current next point to stack
 

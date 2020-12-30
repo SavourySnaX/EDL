@@ -50,7 +50,7 @@ llvm::Instruction* CAssignment::generateAssignmentActual(BitVariable& to, const 
 		indices.push_back(truncExt);
 		llvm::Instruction* elementPtr = llvm::GetElementPtrInst::Create(nullptr, to.value, indices, "array index", context.currentBlock());
 
-		assignTo = elementPtr;//new LoadInst(elementPtr, "", false, context.currentBlock());
+		assignTo = elementPtr;
 	}
 
 	if (!assignTo->getType()->isPointerTy())
@@ -102,7 +102,7 @@ llvm::Instruction* CAssignment::generateAssignmentActual(BitVariable& to, const 
 			dest = elementPtr;
 		}
 		// Now if the assignment is assigning to an aliased register part, we need to have loaded the original register, masked off the inverse of the section mask, and or'd in the result before we store
-		llvm::LoadInst* loadInst = new llvm::LoadInst(dest, "", false, context.currentBlock());
+		llvm::LoadInst* loadInst = new llvm::LoadInst(dest->getType()->getPointerElementType(), dest, "", false, context.currentBlock());
 		llvm::ConstantInt* const_intInvMask = context.getConstantInt(~to.mask);
 		llvm::BinaryOperator* primaryAndInst = llvm::BinaryOperator::Create(llvm::Instruction::And, loadInst, const_intInvMask, "InvMasking", context.currentBlock());
 		final = llvm::BinaryOperator::Create(llvm::Instruction::Or, primaryAndInst, andInst, "Combining", context.currentBlock());
@@ -230,7 +230,7 @@ llvm::Value* CAssignment::codeGen(CodeGenContext& context, CCastOperator* cast)
 		mask.setBit(loop.getLimitedValue());
 		if (loop.uge(endloop))
 			break;
-		loop++;
+		++loop;
 	}
 
 
