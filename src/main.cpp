@@ -8,6 +8,8 @@
 #include "generator.h"
 #include "ast.h"
 
+#include <llvm/Support/Host.h>
+
 extern int yyparse();
 extern CBlock* g_ProgramBlock;
 
@@ -18,19 +20,18 @@ int Usage()
 {
 	std::cerr << "Usage: edl [opts] inputfile" << std::endl;
 	std::cerr << "Compile edl into llvm source (to stdout) / native object (-o outputobject)" <<std::endl <<std::endl;
-	std::cerr << "-s symbol      prepends symbol to all externally accessable symbols" << std::endl;
-	std::cerr << "-o output      emits a native objectfile instead of llvm assembly" << std::endl;
-#if !defined(EDL_PLATFORM_ARM)
+	std::cerr << "-s symbol       prepends symbol to all externally accessable symbols" << std::endl;
+	std::cerr << "-o output       emits a native objectfile instead of llvm assembly" << std::endl;
+	std::cerr << "-T targetTriple override the default target triple (cross compile) ("<< llvm::sys::getDefaultTargetTriple() << ")" << std::endl;
 	// currently causing problems on raspberry pi at least
-	std::cerr << "-g             generate debug information" << std::endl;
-#endif
-	std::cerr << "-O0            disables optimisations" << std::endl;
-	std::cerr << "-O1            enables all but experimental optimisations" << std::endl;
-	std::cerr << "-O2            enables O1 plus experimental optimisations" << std::endl;
-	std::cerr << "-t             trace on unimplemented instructions" << std::endl;
-	std::cerr << "-n             disables disassembly generation" << std::endl;
-	std::cerr << "-v             print version" << std::endl;
-	std::cerr << "-h --help      print usage" << std::endl;
+	std::cerr << "-g              generate debug information" << std::endl;
+	std::cerr << "-O0             disables optimisations" << std::endl;
+	std::cerr << "-O1             enables all but experimental optimisations" << std::endl;
+	std::cerr << "-O2             enables O1 plus experimental optimisations" << std::endl;
+	std::cerr << "-t              trace on unimplemented instructions" << std::endl;
+	std::cerr << "-n              disables disassembly generation" << std::endl;
+	std::cerr << "-v              print version" << std::endl;
+	std::cerr << "-h --help       print usage" << std::endl;
 
 	return 0;
 }
@@ -273,6 +274,11 @@ void PrintError(const char *errorstring, ...)
 int main(int argc, char **argv)
 {
 	CompilerOptions	opts;
+	char* tmp;
+	auto tt = llvm::sys::getDefaultTargetTriple();
+	tmp=new char [tt.length()+1];
+	strcpy(tmp,tt.c_str());
+	opts.targetTriple=tmp;
 
 	for (int a=1;a<argc;a++)
 	{
@@ -283,6 +289,19 @@ int main(int argc, char **argv)
 				if ((a+1)<argc)
 				{
 					opts.outputFile=argv[a+1];
+				}
+				else
+				{
+					return Usage();
+				}
+				a+=1;
+				continue;
+			}
+			if (strcmp(argv[a],"-T")==0)
+			{
+				if ((a+1)<argc)
+				{
+					opts.targetTriple=argv[a+1];
 				}
 				else
 				{
@@ -319,9 +338,7 @@ int main(int argc, char **argv)
 			}
 			if (strcmp(argv[a], "-g") == 0)
 			{
-#if !defined(EDL_PLATFORM_ARM)
 				opts.generateDebug = 1;
-#endif
 			}
 			if (strcmp(argv[a],"-h")==0 || strcmp(argv[a],"--help")==0)
 			{
