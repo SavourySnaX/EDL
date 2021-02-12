@@ -84,7 +84,7 @@ bool GlobalContext::SetupPassesAndRun(CodeGenContext& rootContext)
 {
 	// Setup target machine
 	std::string error;
-	auto triple = llvm::sys::getDefaultTargetTriple();
+	auto triple = opts.targetTriple;
 	auto target = llvm::TargetRegistry::lookupTarget(triple, error);
 	if (!target)
 	{

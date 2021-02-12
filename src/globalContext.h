@@ -29,6 +29,7 @@ public:
 	char *symbolModifier;
 	char *inputFile;
 	char *outputFile;
+	char *targetTriple;
 	int optimisationLevel;
 	int traceUnimplemented;
 	int generateDisassembly;
